@@ -671,10 +671,45 @@ void gc_ai_enemy_party(gc_run *run)
     }
 }
 
+/* TrainerConfig.setRandomTeraModifiers' genAIFunc (the gym leaders' from wave 100, the Elite Four's always): one party member
+ * Terastallizes at its first move. The slot is teraSlot wrapped to the party size when it is not a Shedinja that cannot (Shedinja
+ * only with no specialty type or Bug), otherwise randSeedItem over the eligible members; the pick gets the specialty type as its Tera
+ * type. Upstream pushes the pick into the shared config's list, so it also stays on for that trainer's later battles in the same
+ * session; here it belongs to the battle's party (saved with the member) and a new battle starts clean. */
+void gc_trainer_gen_ai(gc_run *run)
+{
+    for (int i = 0; i < run->n_enemy; i++) run->enemy[i].tera_instant = false;
+    const gc_trainer_config *tc = gc_trainer_config_of(run->trainer_type);
+    const int n = run->n_enemy;
+    if (!tc || !tc->tera_random || run->wave < tc->tera_min_wave || n < 1 || n > 6) return;
+    const bool shedinja_ok = tc->tera_type < 0 || tc->tera_type == POKEMON_TYPE_BUG;
+    int idx[6], ni = 0;
+    for (int i = 0; i < n; i++)
+        if (shedinja_ok || run->enemy[i].b.species != SPECIES_ID_SHEDINJA) idx[ni++] = i;
+    if (!ni) return;   /* upstream would index the party with undefined */
+    const int slot = tc->tera_slot[n];
+    bool fixed = false;
+    for (int k = 0; k < ni; k++) fixed |= slot >= 0 && idx[k] == slot;
+    const int pick = fixed ? slot : idx[ni == 1 ? 0 : pr_rng_integer_in_range(&run->run.rng, 0, ni - 1)];
+    if (tc->tera_type >= 0) run->enemy[pick].b.tera_type = tc->tera_type;
+    run->enemy[pick].tera_instant = true;
+}
+
+/* config.trainerAI.instantTeras: the slots setInstantTera listed when the config was made, then the one genAI picked */
+int gc_trainer_instant_teras(const gc_run *run, int8_t *out, int cap)
+{
+    const gc_trainer_config *tc = run->battle_type == BATTLE_TYPE_TRAINER ? gc_trainer_config_of(run->trainer_type) : NULL;
+    int n = 0;
+    if (!tc) return 0;
+    for (int i = 0; i < 8 && n < cap; i++) if (tc->tera_static & (1u << i)) out[n++] = (int8_t)i;
+    for (int i = 0; i < run->n_enemy && n < cap; i++) if (run->enemy[i].tera_instant) out[n++] = (int8_t)i;
+    return n;
+}
+
 /* currentBattle.trainer for the AI's calls (NULL in a wild battle); ai.trainer goes back to NULL after
  * each call. isBoss is the trainer config's (gym leaders, the Elite Four, champions, the later rivals: they switch at 2x the
- * matchup, not 3x); nobody terastallizes yet (config.trainerAI's tera modes are not in the trainer data), which is what
- * the NO_TERA default says. Trainer pairs retain separate reserve ownership. */
+ * matchup, not 3x); teraMode is INSTANT_TERA when the config or genAI listed a slot (instantTeras is empty otherwise).
+ * Trainer pairs retain separate reserve ownership. */
 static void ai_trainer_on(gc_run *run)
 {
     gc_internal *in = gc_int(run);
@@ -682,8 +717,8 @@ static void ai_trainer_on(gc_run *run)
     in->ai_trainer.is_boss = tc && tc->is_boss;
     in->ai_trainer.is_double = gc_trainer_is_double(run);
     run->bt.trainer_partner = in->ai_trainer.is_double;
-    in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;
-    in->ai_trainer.n_instant_teras = 0;
+    in->ai_trainer.n_instant_teras = (uint8_t)gc_trainer_instant_teras(run, in->ai_trainer.instant_teras, 6);
+    in->ai_trainer.tera_mode = in->ai_trainer.n_instant_teras ? PR_TERA_AI_INSTANT_TERA : PR_TERA_AI_NO_TERA;
     in->ai.trainer = run->battle_type == BATTLE_TYPE_TRAINER ? &in->ai_trainer : NULL;
 }
 

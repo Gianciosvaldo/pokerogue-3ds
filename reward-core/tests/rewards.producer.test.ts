@@ -117,6 +117,19 @@ it("rewards producer", async () => {
     SpeciesId.SINISTEA, SpeciesId.PANCHAM, SpeciesId.GOOMY, SpeciesId.RIOLU, SpeciesId.MIME_JR, SpeciesId.HAPPINY,
     SpeciesId.GLIGAR, SpeciesId.SNEASEL, SpeciesId.MILCERY, SpeciesId.DIPPLIN, SpeciesId.POLIWHIRL, SpeciesId.GLOOM,
   ];
+  // DIFF_FOCUS=formitems: parties of Mega / Gigantamax capable species that always own the Mega Bracelet and the Dynamax Band, at wave 10+,
+  // so the form change item generators (Mega Stones, Max Mushrooms and the rest) are asked far more often than a random party asks them.
+  const focus = process.env.DIFF_FOCUS === "formitems";
+  const megaGmax = [
+    SpeciesId.CHARIZARD, SpeciesId.VENUSAUR, SpeciesId.BLASTOISE, SpeciesId.GENGAR, SpeciesId.KINGLER, SpeciesId.LAPRAS,
+    SpeciesId.MEOWTH, SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.SNORLAX, SpeciesId.MACHAMP, SpeciesId.BUTTERFREE,
+    SpeciesId.GARBODOR, SpeciesId.CORVIKNIGHT, SpeciesId.ALAKAZAM, SpeciesId.GARDEVOIR, SpeciesId.LUCARIO, SpeciesId.GARCHOMP,
+    SpeciesId.MEWTWO, SpeciesId.RAYQUAZA, SpeciesId.KYOGRE, SpeciesId.GROUDON, SpeciesId.AGGRON, SpeciesId.SCIZOR,
+    SpeciesId.HERACROSS, SpeciesId.GYARADOS, SpeciesId.PINSIR, SpeciesId.ABSOL, SpeciesId.METAGROSS, SpeciesId.SALAMENCE,
+    SpeciesId.TYRANITAR, SpeciesId.BLAZIKEN, SpeciesId.SWAMPERT, SpeciesId.SCEPTILE, SpeciesId.CENTISKORCH, SpeciesId.DURALUDON,
+    SpeciesId.TOXTRICITY, SpeciesId.COPPERAJAH, SpeciesId.URSHIFU, SpeciesId.DREADNAUGHT, SpeciesId.ETERNATUS,
+    SpeciesId.ZYGARDE, SpeciesId.DIANCIE, SpeciesId.NECROZMA, SpeciesId.GRIMMSNARL, SpeciesId.HATTERENE, SpeciesId.ORBEETLE,
+  ];
   const hotMoves = [
     MoveId.FACADE, MoveId.PSYCHO_SHIFT, MoveId.SUNNY_DAY, MoveId.RAIN_DANCE, MoveId.SANDSTORM, MoveId.SNOWSCAPE, MoveId.HAIL,
     MoveId.CHILLY_RECEPTION, MoveId.ELECTRIC_TERRAIN, MoveId.PSYCHIC_TERRAIN, MoveId.GRASSY_TERRAIN, MoveId.MISTY_TERRAIN,
@@ -205,7 +218,7 @@ it("rewards producer", async () => {
       battle.gameMode = gm;
       scene.seed = seedStr();
       const hot = [1, 10, 165, 179, 180, 188, 189, 190, 198, 199, 200, 50, 150, 250];
-      const wave = rnd(6) === 0 ? pick(hot) : rnd(10) === 0 ? 1 + rnd(1200) : 1 + rnd(210);
+      const wave = focus ? 10 + rnd(190) : rnd(6) === 0 ? pick(hot) : rnd(10) === 0 ? 1 + rnd(1200) : 1 + rnd(210);
       battle.waveIndex = wave;
       scene.gameData.unlocks[Unlockables.EVIOLITE] = rnd(2) === 0;
       scene.gameData.unlocks[Unlockables.MINI_BLACK_HOLE] = rnd(2) === 0;
@@ -234,7 +247,7 @@ it("rewards producer", async () => {
         const p = pool[k];
         p.resetSummonData();
         p.resetBattleAndWaveData();
-        const sid = rnd(2) === 0 ? pick(hotSpecies) : pick(speciesIds);
+        const sid = focus ? (rnd(4) === 0 ? pick(speciesIds) : pick(megaGmax)) : rnd(2) === 0 ? pick(hotSpecies) : pick(speciesIds);
         const sp = speciesDataRegistry.getSpecies(sid);
         p.species = sp;
         p.formIndex = sp.forms.length ? rnd(sp.forms.length) : 0;
@@ -307,6 +320,14 @@ it("rewards producer", async () => {
           const maxHeld = m.getMaxHeldItemCount(p);
           m.stackCount = rnd(2) === 0 ? maxHeld : 1 + rnd(Math.max(maxHeld, 1));
           scene.modifiers.push(m);
+        }
+      }
+      if (focus) {
+        for (const key of ["MEGA_BRACELET", "DYNAMAX_BAND"]) {
+          if (rnd(5) !== 0) {
+            seen.add(key);
+            scene.modifiers.push(makeType(key).newModifier());
+          }
         }
       }
       for (let n = rnd(9); n > 0; n--) {

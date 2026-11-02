@@ -3,7 +3,8 @@
  * is run-core's gym/E4 producer (tests/gym_e4.producer.test.ts, left as it is) with the fixed waves swapped for
  * DIFF_WAVES (a comma list; default the Town Youngster at 5 and the grunt fights at 35, 62, 64 and 112): the real
  * fixed config's trainer under its seed offset, then the party template, the levels, the party species and the
- * first EnemyPokemon constructor snapshot (before the moveset and the post-process callbacks).
+ * first EnemyPokemon constructor snapshot (before the moveset and the post-process callbacks, "M"), and what the post-process callbacks
+ * left ("P": ability slot, gender, form, boss segments, friendship, the four moves).
  *
  * getRandomTrainerFunc rolls an evil team's gender and a grunt's double variant with randInt, which is
  * Math.random upstream: not seeded. The producer feeds it two known values and writes them in an "R" line before
@@ -15,6 +16,7 @@ import { GameModes } from "#enums/game-modes";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
 import { EnemyPokemon } from "#field/pokemon";
+import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";
@@ -49,9 +51,10 @@ it("evil team producer", async () => {
   const biomeIds = Array.from({ length: 32 }, (_, i) => i).concat([40, 41, 50]);
 
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
-    // Trainer post-process callbacks inspect this container after regeneration.
-    // Keep it valid without adding moves or consuming any moveset RNG.
-    this.moveset = [];
+    // Trainer post-process callbacks inspect this container after regeneration. Moves 1..4 (Pound, Karate Chop, Double Slap, Comet Punch)
+    // stand in for the generated moveset, so that the callbacks' own moves, replacements and "has no X" conditions act on something, and
+    // no moveset RNG is consumed.
+    this.moveset = [1, 2, 3, 4].map(id => new PokemonMove(id as MoveId));
     if (this.__task49Snapshot === undefined) {
       this.__task49Snapshot = [
         this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType,
@@ -128,6 +131,7 @@ it("evil team producer", async () => {
       const p: any = trainer.genPartyMember(e);
       battle.enemyParty[e] = p;
       members.push(`M ${p.species.speciesId} ${p.__task49Snapshot ?? "none"}`);
+      members.push(`P ${p.abilityIndex} ${p.gender} ${p.formIndex} ${p.bossSegments ?? 0} ${p.friendship} ${[0, 1, 2, 3].map(k => p.moveset[k]?.moveId ?? 0).join(" ")}`);
     }
 
     lines.push([

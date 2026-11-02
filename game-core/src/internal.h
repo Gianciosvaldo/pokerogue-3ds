@@ -82,6 +82,7 @@ typedef struct {
     /* tests only: pin the unseeded rolls of an evil team grunt fight (randInt(2) gender, randInt(3) double) instead of drawing them from stub_rng */
     bool evil_roll_pinned;
     uint8_t evil_roll[2];
+    bool post_sentinel_moves;   /* tests: a closure member's constructor-time and regenerated movesets are moves 1..4 (the upstream producer's stub) */
     int reroll_count;
     int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
     /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,
@@ -344,6 +345,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
  * MAX_TERAS_PER_ARENA (1) used in this arena; and the command menu's own canTera() for field slot `field`, which also counts the
  * Tera already chosen for slot 0 this turn */
 bool gc_can_species_tera(const gc_run *run, const pr_pokemon *p);
+/* Trainer.genAI for a trainer battle's party (EncounterPhase, after the enemy's items): picks the slot setRandomTeraModifiers makes
+ * Terastallize and gives it the specialty type; gc_trainer_instant_teras = config.trainerAI.instantTeras (the config's own slots plus that one) */
+void gc_trainer_gen_ai(gc_run *run);
+int gc_trainer_instant_teras(const gc_run *run, int8_t *out, int cap);
 bool gc_can_terastallize(const gc_run *run, const pr_pokemon *p);
 bool gc_can_tera_command(const gc_run *run, int field);
 void gc_battle_command_screen(gc_run *run);       /* fills run->screen for COMMAND */

@@ -377,6 +377,10 @@ typedef struct {
     bool event_active;            /* timedEventManager.isEventActive() */
     double event_shiny_multiplier;    /* getShinyEncounterMultiplier() */
     double event_trainer_shiny_chance;   /* getClassicTrainerShinyChance() */
+    /* postProcess's p.generateAndPopulateMoveset(): the caller regenerates the moveset (g is the pr_enemy_gen, moveset[] in, moveset[] out) on
+     * the rng it is given; NULL leaves the moveset as it is (the differential's stub) */
+    int (*post_regen)(void *user, void *g, pr_rng *rng);
+    void *post_regen_user;
 } pr_enemy_gen_ctx;
 typedef struct {
     int ability_index;
@@ -396,6 +400,12 @@ typedef struct {
     int8_t rival_fight, rival_slot;
     pr_rng rival_rng;
     int moveset[4];               /* moveset (0 = none) */
+    /* an evil team admin's or boss's member: its closure's postProcess runs at the end of pr_run_enemy_pokemon_finish, on the member's own RNG
+     * (executeWithSeedOffset spans the constructor and the postProcess) */
+    bool evil_pending;
+    int evil_closure;             /* index in pr_evil_closures */
+    pr_rng evil_rng;
+    int pokeball;                 /* PokeballType (postProcess), 0 = Poke Ball */
 } pr_enemy_gen;
 
 /* Returns fixed moveset for Eternatus */
@@ -515,10 +525,20 @@ int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
  * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
 /* The evil team admins' and bosses' partyMemberFuncs (src/evil_team.c, data gen/out/run_evil_closures.c from tools/gen-evil-closures.py): the species of
  * getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution) for one member. Same 1/0/-1 convention; the postProcess callbacks are not ported. */
-typedef struct { uint16_t type; uint8_t slot, ignore_evolution; uint16_t start, n; } pr_evil_closure;
+typedef struct { uint16_t type; uint8_t slot, ignore_evolution; uint16_t start, n; uint16_t op_start, op_n; } pr_evil_closure;
+/* postProcess as data: ops run in order, each only when its guard holds */
+enum { PR_EOP_IF, PR_EOP_REGEN, PR_EOP_BALL, PR_EOP_BOSS, PR_EOP_ABILITY, PR_EOP_GENDER, PR_EOP_FORM, PR_EOP_FORM_RAND, PR_EOP_FRIENDSHIP,
+       PR_EOP_MOVE, PR_EOP_MOVE_RAND, PR_EOP_REPLACE_MOVE, PR_EOP_MOVESET };
+enum { PR_EG_NONE, PR_EG_SPECIES_EQ, PR_EG_SPECIES_NE, PR_EG_WAVE_EQ, PR_EG_WAVE_NE, PR_EG_FORM_EQ, PR_EG_LACKS_MOVE };
+/* op: a, b, c by kind. MOVE: slot a, move b. MOVE_RAND: slot a, then the n = b items at pr_evil_op_items[c]. REPLACE_MOVE: a -> b. MOVESET: four moves at
+ * pr_evil_op_items[a]. FORM_RAND: randSeedInt(a, b). Guard: kind g, value gv */
+typedef struct { uint8_t op, g; uint16_t gv; int16_t a, b, c; } pr_evil_op;
+extern const pr_evil_op pr_evil_ops[];
+extern const uint16_t pr_evil_op_items[];
 extern const pr_evil_closure pr_evil_closures[];
 extern const int pr_evil_closure_count;
 extern const uint16_t pr_evil_closure_species[];
+int pr_run_evil_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 int pr_run_gen_evil_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx, int index, int func_key, pr_enemy_gen *out, int *out_species);
 int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
                                      int index, int func_key, pr_enemy_gen *out, int *out_species);

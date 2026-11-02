@@ -188,7 +188,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters become wild battles of the wave's level when run-core can't make them; the six classic rivals (`enable_fixed_rivals`), the gym leaders of the boss trainer waves, the Elite Four and the Champion (`enable_gym_e4`), the Town Youngster, the evil team grunts (`enable_evil_grunts`), admins and bosses (`enable_evil_bosses`) are real fights | run-core, later the encounters |
 | The held items of the Champions Red, Steven, Wallace and Kieran (and rivals 5 and 6): their configs have a `genModifiersFunc`, which run-core's item generation reports as `PR_RUN_UNPORTED_TRAINER`, so they hold nothing (counted as `enemy run-core can't generate`) | run-core |
-| Terastallization of the gym leaders, the Elite Four and the Champion (`config.trainerAI.teraMode` and the random Tera modifiers are not in the trainer data): the AI's tera mode stays NO_TERA | trainer data dump |
+| A trainer's genAI pick is kept with the battle's party, not pushed into a shared config: upstream's `trainerAI.teraLogic` keeps every pick of every battle of that trainer for the rest of the session (a gym leader met twice Terastallizes two members the second time); a new battle here starts clean. A trainer's slot also stays as picked after a save and a load, where upstream rolls it again | deliberate, `tests/trainer_tera_test.c` |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | The biome's weather and terrain are set on the arena without the engine's phases: no start animation, and no PostWeatherChange abilities for a Daily Run's per-wave roll with a Pokémon already out; the weather text comes out as game-core's own messages before "A wild ... appeared"; timed-event pools are left out | `gc_arena_new_battle` |
@@ -200,7 +200,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
-battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers (the player's own is in), and the prevolution-move messages.
+battle-core's `pr_move_usable` lands), and the prevolution-move messages.
 
 ## Data
 
@@ -796,18 +796,24 @@ team: `getRandomTrainerFunc(pool, true, 0/1/2)` for an admin (the pool's group i
 the three admins of a team differ: a group no longer than the offset picks at random on the current RNG, a longer one shuffles a copy on the unshifted run
 seed's RNG and takes the entry at the offset) and `getRandomTrainerFunc(pool)` for a boss (the first form at 115, the same team's second form at 165, never
 female). Their parties are made of closures (`getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution, postProcess)`) that run-core's generator
-`run-core/tools/gen-evil-closures.py <upstream dir>` reads out of the upstream config (`--check` fails when `gen/out/run_evil_closures.c` is stale); only the
-species pool and `ignoreEvolution` are ported, not the `postProcess` (ability index, gender, a form such as Mega Kangaskhan, the boss segments, balls and
-movesets), which stays a gap. A trainer with a `genModifiersFunc` (Guzma's second form) still holds no items and counts the one stand-in left.
+`run-core/tools/gen-evil-closures.py <upstream dir>` reads out of the upstream config (`--check` fails when `gen/out/run_evil_closures.c` is stale); the
+`postProcess` is parsed into ops as well (`pr_evil_ops`: ability slot, gender, form (also `randSeedInt`, by wave, by species), `setBoss(true, 2)` shields,
+Poke Ball, friendship, fixed and `randSeedItem` moves, `replaceInMoveset`, whole movesets, `generateAndPopulateMoveset()`; anything outside that grammar
+fails the generator). The member keeps its seed-offset RNG (`evil_pending`/`evil_rng`), so `pr_run_enemy_pokemon_finish` finishes the constructor on it and
+then runs the ops, as upstream does inside `executeWithSeedOffset`; `generateAndPopulateMoveset()` calls back into game-core (`ctx.post_regen`), which is
+the last-four-level-moves stand-in until the boss trainers' moveset generator (egg moves, passives, signature moves) is ported. A trainer with a
+`genModifiersFunc` (Guzma's second form) still holds no items and counts the one stand-in left.
 
 Winning is shared with upstream's `FaintPhase`: every Pokemon of the player's field (party slots 0 and 1 in a double battle) that is active or fainted joins
 the participants that split the experience, so an ally that fainted still gets its share (`add_faint_participants`, run at the victory in `after_stop`).
 This was a divergence in doubles that the longer fights (saved and loaded battles replay it) made visible; it changes who gets experience in those fights.
 
 `tools/evildiff.sh <upstream dir> [N] [seed]` runs `tests/evil.producer.test.ts` (the real fixed config's trainer of those waves for random seeds, wave cycle
-offsets and ids, with `Math.random` fed two known values that are written in an `R` line) and compares in the same `tests/gym_e4_diff_test.c` as the gym
+offsets and ids, with `Math.random` fed two known values that are written in an `R` line; its moveset stub gives moves 1..4 and rolls nothing, a `P` line
+per member records what the real `postProcess` left: ability slot, gender, form, boss segments, friendship, moves; game-core's `post_sentinel_moves` test
+flag makes the closure members' constructor-time and regenerated movesets the same 1..4) and compares in the same `tests/gym_e4_diff_test.c` as the gym
 leaders, pinning the same rolls (`evil_roll_pinned`): the trainer type and variant, double or single, the name entries, the levels and every member's
-constructor state, and that no stand-in was used. `tools/evilplant.sh <trace>` shows twenty-five one-line breakages, in game-core and in run-core's `newbattle.c` and `evil_team.c`,
+constructor state, and that no stand-in was used. `tools/evilplant.sh <trace>` shows forty-three one-line breakages, in game-core and in run-core's `newbattle.c` and `evil_team.c`,
 fail the differential or `tests/gym_e4_test.c`, which also plays the ten fights (Youngster, grunts, admins, bosses) of eight runs and the six pinned (gender, double) combinations.
 
 ### Trainer dialogue (`GC_EV_DIALOGUE`)
@@ -1159,8 +1165,24 @@ planned for slot 0, random species, forms, fusion halves, Ultra Necrozma on eith
 `tests/tera_command_diff_test.c` replays it through game-core. `tools/teracmdplant.sh` plants 14 bugs. `tests/tera_command_test.c` plays it through a
 run: the text and the Terastallized state after the turn, the counter at the next wave and in a save, the doubles flow with the cancel, and the refusals.
 
-Not covered by this: the app's button (a separate change in `game/`), Terastallization by trainers (below, the gym leaders', Elite Four's and Champion's AI
-tera mode is still NO_TERA), the Tera sprite effect, and the SelectTargetPhase conditions of the fight command (the same code as a plain FIGHT).
+Not covered by this: the app's button (a separate change in `game/`), the Tera sprite effect, and the SelectTargetPhase conditions of the fight command (the same code as a plain FIGHT).
+
+### Trainers' Terastallization (gym leaders, Elite Four, Champion)
+
+`gen/dump-trainers.test.ts` now also dumps, per trainer config, the slots `setInstantTera` listed when the config was made (`tera_static`, the Champions' and a few
+named trainers') and what `setRandomTeraModifiers`' genAI function does (`tera_random`): read by running the real function on fake parties, it starts at wave
+`tera_min_wave` (1 for the Elite Four and the Paldean gyms, 100 for the other gym leaders: `GYM_LEADER_TERA_WAVE`), takes the fixed slot `tera_slot[party size]`
+(`teraSlot` wrapped) or a random one, and gives it the specialty type (`tera_type`). `gc_trainer_gen_ai` (run from `finish_party` for a trainer battle, after the
+enemy's items, as EncounterPhase runs `Trainer.genAI` after `generateEnemyModifiers`) does that with the run's RNG: a Shedinja is not eligible unless the specialty
+type is Bug or there is none, `randSeedItem` rolls only with two or more eligible members, and a party of nothing but Shedinja leaves nobody (upstream throws there, the
+battle goes on with the config's own slots). The pick is `gc_mon.tera_instant`, saved with the member. `gc_trainer_instant_teras` (the config's slots, then the pick)
+is what the AI is told (`ai_trainer_on`: tera mode INSTANT_TERA when it is not empty), so ai-core's `should_tera` makes that member Terastallize at its first move.
+
+`tools/trainerteradiff.sh <upstream 8555c08> [N=600] [seed]` runs the real `Trainer.genAI`, `config.trainerAI.instantTeras` and `Trainer.shouldTera` on random trainer
+configs, waves 1 to 250 (and 99, 100, 101), party sizes 1 to 6 and parties with Shedinja (`tests/trainer-tera.producer.test.ts`) and
+`tests/trainer_tera_diff_test.c` compares the slots, every member's Tera type and the RNG state after. `tools/trainerteraplant.sh` plants 11 bugs.
+`tests/trainer_tera_test.c` plays the gym leaders, Elite Four and Champions of 8 seeds: what the AI is told, a listed member that gets a command in the field
+Terastallizes once (text and all), a gym leader before wave 100 has nobody, a save and a load keep the pick.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 

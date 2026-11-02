@@ -201,7 +201,7 @@ static const int evil_grunt_types[10] = {
     TRAINER_TYPE_ROCKET_GRUNT, TRAINER_TYPE_MAGMA_GRUNT, TRAINER_TYPE_AQUA_GRUNT, TRAINER_TYPE_GALACTIC_GRUNT, TRAINER_TYPE_PLASMA_GRUNT,
     TRAINER_TYPE_FLARE_GRUNT, TRAINER_TYPE_AETHER_GRUNT, TRAINER_TYPE_SKULL_GRUNT, TRAINER_TYPE_MACRO_GRUNT, TRAINER_TYPE_STAR_GRUNT,
 };
-static int n_youngster, n_grunt, n_grunt_double, n_grunt_female, n_grunt_male, n_evil_won, n_admin, n_boss;
+static int n_youngster, n_grunt, n_grunt_double, n_grunt_female, n_grunt_male, n_evil_won, n_admin, n_boss, n_shielded, n_shield_segments;
 static const int evil_bosses_1[10] = {
     TRAINER_TYPE_ROCKET_BOSS_GIOVANNI_1, TRAINER_TYPE_MAXIE, TRAINER_TYPE_ARCHIE, TRAINER_TYPE_CYRUS, TRAINER_TYPE_GHETSIS, TRAINER_TYPE_LYSANDRE,
     TRAINER_TYPE_LUSAMINE, TRAINER_TYPE_GUZMA, TRAINER_TYPE_ROSE, TRAINER_TYPE_PENNY,
@@ -255,6 +255,12 @@ static int evil_fight(const char *seed, int wave, int team)
         n_grunt++;
     }
     for (int i = 0; i < run.n_enemy; i++) CHECK(run.enemy[i].b.species > 0 && run.enemy[i].b.level >= 1);
+    /* postProcess's setBoss(true, 2): a member with shields is a boss with that many segments and one fewer shield index */
+    for (int i = 0; i < run.n_enemy; i++) {
+        const pr_pokemon *b = &run.enemy[i].b;
+        CHECK(b->is_boss == (b->boss_segments > 0));
+        if (b->boss_segments) { CHECK(b->boss_segment_index == b->boss_segments - 1 && (boss_wave || admin_wave)); n_shielded++; n_shield_segments += b->boss_segments; }
+    }
     const int type = run.trainer_type;
     check_save_load();
     const double money = run.money, mult = cfg->money_multiplier;
@@ -324,12 +330,13 @@ int main(void)
     CHECK(n_ordinary > 0 && n_ai_plain > 0 && n_ai_boss > 0);
     CHECK(n_youngster == runs && n_grunt == 4 * runs + 6 && n_evil_won == 10 * runs + 6);
     CHECK(n_admin == 3 * runs && n_boss == 2 * runs);
+    CHECK(n_shielded > 0 && n_shield_segments == 2 * n_shielded);   /* every setBoss in the evil teams' closures is (true, 2) */
     CHECK(n_grunt_double > 0 && n_grunt_female > 0 && n_grunt_male > 0);
     /* the gym leaders' and Elite Four's wins with no reward screen: the beaten trainer is named by the events themselves */
     CHECK(n_defeated_moved_on == 7 * runs);   /* the six gym waves and the Champion's 190 (the Elite Four's 182..188 have their reward screen) */
     CHECK(n_talk > 0 && n_talk_moved_on > 0);
-    printf("evil teams: %d Town Youngsters, %d grunt fights (%d single male, %d single female, %d double), %d admins, %d bosses, all won with their prize money\n",
-           n_youngster, n_grunt, n_grunt_male, n_grunt_female, n_grunt_double, n_admin, n_boss);
+    printf("evil teams: %d Town Youngsters, %d grunt fights (%d single male, %d single female, %d double), %d admins, %d bosses (%d shielded members), all won with their prize money\n",
+           n_youngster, n_grunt, n_grunt_male, n_grunt_female, n_grunt_double, n_admin, n_boss, n_shielded);
     printf("gym/e4: %d seeds, %d gym leaders, %d Elite Four, %d Champions won (prize money, no battle stand-ins), %d ordinary trainers, AI boss flag read %d times "
            "(%d bosses, %d not), %d battles saved and loaded back, %d victory lines (%d played after the run had moved on, as the events say); %d checks passed\n",
            runs, n_gym, n_e4, n_champion, n_ordinary, n_ai_boss + n_ai_plain, n_ai_boss, n_ai_plain, n_saved, n_talk, n_talk_moved_on, checks);

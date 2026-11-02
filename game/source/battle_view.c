@@ -98,7 +98,8 @@ static struct {
   msgbox msg;
   float msg_wrap;
   mode mode;
-  int cmd_cursor, move_cursor;
+  int cmd_cursor, move_cursor;   /* cmd_cursor 4 = the Tera button (upstream Command.TERA) */
+  bool tera_fight;               /* the fight menu was opened from the Tera button: a move picked is a Terastallize */
   /* events */
   bv_event ev[EV_MAX];
   char ev_text[EV_MAX][EV_TEXT];
@@ -865,7 +866,28 @@ static void draw_command_menu(bool top) {
     i18n_t(s, sizeof s, KEYS[c], NULL);
     text_draw(TS_WINDOW_BATTLE_COMMAND, 217 + dx + (c % 2 ? 55.8f : 0), -38.7f + (c < 2 ? 0 : 16), s, NULL);
   }
-  if (B.bar_sel < 0) ui_cursor(217 - 5 + dx + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0)); /* the bar has it otherwise */
+  if (B.bar_sel < 0 && B.cmd_cursor < 4) ui_cursor(217 - 5 + dx + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0)); /* the bar has it otherwise */
+}
+
+/* The Terastallize button (upstream's teraButton, scale 1.3, its frame named after the Pokemon's Tera type), left of the party tray.
+ * Upstream puts it at (185, -23.7) with the message shortened to 910/1110; the tray takes that place here, so it sits left of the tray and
+ * the message is shortened by the same 33 px. The selected button (cursor on it, upstream's isTerastallized glow) is drawn larger. */
+#define TERA_BTN_X 133.0f
+#define TERA_BTN_Y -23.7f
+static void draw_tera_button(void) {
+  if (!B.opts.can_tera) return;
+  char fr[24];
+  const rr_frame* f = mui_frame("ui/button_tera", gm_enum_lower(GM_E_POKEMON_TYPE, B.opts.tera_type, fr, sizeof fr));
+  const bool on = B.cmd_cursor == 4 && B.bar_sel < 0;
+  const float x = TERA_BTN_X;
+  if (f) {
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.origin_x = o.origin_y = 0.5f;
+    o.scale_x = o.scale_y = on ? 1.6f : 1.3f;
+    rr_draw(f, x, TERA_BTN_Y, &o);
+  } else {
+    rr_rect(x - 10, TERA_BTN_Y - 9, 20, 18, on ? RR_RGBA(0xf8, 0xf8, 0xf8, 255) : RR_RGBA(0x80, 0x80, 0x98, 255));
+  }
 }
 
 static text_style pp_style(int left, int max) {
@@ -885,7 +907,20 @@ static void draw_fight_menu(bool top) {
     const char* nm = i < m->n_moves ? i18n_move_name(m->moves[i]) : "-";
     text_draw(TS_WINDOW, 18 + lx + (i % 2 ? 114 : 0), -38.7f + (i < 2 ? 0 : 16), nm, NULL);
   }
-  ui_cursor(13 + lx + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0));
+  if (B.tera_fight) {
+    /* upstream's cursor_tera, scaled 0.7 */
+    const rr_frame* cf = img_frame("images/ui/cursor_tera", NULL);
+    if (cf) {
+      rr_draw_opts o = RR_DEFAULT_OPTS;
+      o.origin_x = o.origin_y = 0.5f;
+      o.scale_x = o.scale_y = 0.7f;
+      rr_draw(cf, 13 + lx + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0), &o);
+    } else {
+      ui_cursor(13 + lx + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0));
+    }
+  } else {
+    ui_cursor(13 + lx + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0));
+  }
   if (B.move_cursor >= m->n_moves) return;
   int mv = m->moves[B.move_cursor];
   const pr_move* pm = mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
@@ -1100,6 +1135,7 @@ static void draw_bottom(bool top) {
   const bool summary_info = B.info_on && (B.mode == M_IDLE || B.mode == M_COMMAND);
   const bool info = bar_info || summary_info;
   if (cmd_shown() && !info) draw_command_menu(top);
+  if (cmd_shown() && !info) draw_tera_button();
   if (B.mode == M_FIGHT) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
@@ -2007,8 +2043,10 @@ static bool bv_input(ui_screen* s, ui_button b) {
   if (B.mode == M_COMMAND) {
     if(undo_command(b))return true;
     int c = B.cmd_cursor;
+    if (c == 4 && !B.opts.can_tera) c = B.cmd_cursor = 0;
     switch (b) {
       case BTN_UP:
+        if (c == 4) break;
         if (c >= 2) {
           B.cmd_cursor -= 2;
         } else if (bar_n() > 0) {
@@ -2018,6 +2056,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
         }
         break;
       case BTN_DOWN:
+        if (c == 4) break;
         if (c < 2) {
           B.cmd_cursor += 2;
         } else if (bar_n() > 0) { /* the bar under the command window on the top screen */
@@ -2027,21 +2066,26 @@ static bool bv_input(ui_screen* s, ui_button b) {
         }
         break;
       case BTN_LEFT:
+        if (c == 4) break;
         if (c % 2) B.cmd_cursor--;
+        else if (B.opts.can_tera) B.cmd_cursor = 4; /* FIGHT and POKEMON have the Tera button on their left */
         break;
       case BTN_RIGHT:
-        if (!(c % 2)) B.cmd_cursor++;
+        if (c == 4) B.cmd_cursor = 0;
+        else if (!(c % 2)) B.cmd_cursor++;
         break;
       case BTN_ACTION:
         ui_play_select();
-        if (c == 0) {
+        if (c == 0 || c == 4) {
           if (B.opts.struggle) {
-            /* every move is unusable: FIGHT uses Struggle (upstream's CommandPhase.handleFightCommand) */
+            /* every move is unusable: FIGHT uses Struggle (upstream's CommandPhase.handleFightCommand); from the Tera button it
+             * Terastallizes too */
             B.mode = M_IDLE;
             msgbox_clear(&B.msg);
-            if (B.on_command) B.on_command((bv_command){0, 0}, B.command_arg);
+            if (B.on_command) B.on_command((bv_command){0, 0, c == 4}, B.command_arg);
             return true;
           }
+          B.tera_fight = c == 4;
           B.mode = M_FIGHT;
           B.reason_ms = 0;
           return true;
@@ -2105,7 +2149,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
         ui_play_select();
         B.mode = M_IDLE;
         msgbox_clear(&B.msg);
-        if (B.on_command) B.on_command((bv_command){0, c}, B.command_arg);
+        if (B.on_command) B.on_command((bv_command){0, c, B.tera_fight}, B.command_arg);
         return true;
       }
       default:
@@ -2235,6 +2279,12 @@ static bool bv_touch(ui_screen* s, float px, float py) {
    * nothing while a message is still typing or not waiting) */
   if (B.mode == M_EVENTS) return bv_input(NULL, BTN_ACTION);
   if (B.mode == M_COMMAND) {
+    if (B.opts.can_tera && x >= TERA_BTN_X - 16 && x < TERA_BTN_X + 16 && y >= TERA_BTN_Y - 14 && y < TERA_BTN_Y + 14) {
+      B.bar_sel = -1;
+      B.bar_open = false;
+      B.cmd_cursor = 4; /* a tap on the Tera button is A on it */
+      return bv_input(NULL, BTN_ACTION);
+    }
     if (x >= 202 && y >= -48) {
       B.bar_sel = -1; /* a tap on a command leaves the item bar (and closes its description) */
       B.bar_open = false;
@@ -2360,8 +2410,11 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   B.mode = M_COMMAND;
   B.hold_cmd = false;
   if (B.cmd_cursor == 2) B.cmd_cursor = 0; /* upstream resets POKEMON to FIGHT */
+  if (B.cmd_cursor == 4 && !B.opts.can_tera) B.cmd_cursor = 0; /* and the Tera button's cursor when it is not offered */
+  B.tera_fight = false;
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */
   B.msg.opts.wrap_w = B.has_balls ? 128 : 1110 / 6.0f; /* narrower beside the party tray */
+  if (B.opts.can_tera) B.msg.opts.wrap_w -= (1110 - 910) / 6.0f; /* and beside the Tera button (upstream: 910 instead of 1110) */
   char s[128];
   i18n_t(s, sizeof s, "commandUiHandler:actionMessage", "pokemonName", command_side()->mon.name, NULL);
   msgbox_show(&B.msg, s, 0, false);
