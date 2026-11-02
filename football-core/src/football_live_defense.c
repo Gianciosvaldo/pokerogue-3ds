@@ -11,8 +11,10 @@ void football_live_defense_setup(FootballLive *m)
     /* DL rush, LB covers WR3/RB/TE, corners cover WR1/WR2, two deep safeties.
      * A five-man blitz rotates the free safety onto the RB and keeps one high. */
     static const uint8_t man[11]={255,255,255,255,4,1,5,2,3,255,255};
-    static const float depth[11]={2,2,2,2,7,8,7,10,10,18,18};
-    static const float lane[11]={20,24,29,33,9,26.67f,44,12,41,16,38};
+    /* Hook defenders stay inside; flat corners own the two sidelines.
+     * Starting the corners in the seams made them duplicate the inside marks. */
+    static const float depth[11]={2,2,2,2,7,8,7,5,5,18,18};
+    static const float lane[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
     for(unsigned rank=0;rank<11;++rank){
         m->coverage[rank]=man[rank]==255?255:(uint8_t)(off+man[rank]);
         m->zone_x[rank]=clamp(m->los+dir*depth[rank],1,119);m->zone_y[rank]=lane[rank];
@@ -51,7 +53,8 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
         }
         m->coverage[rank]=(uint8_t)threat;
         if(threat!=255){const FootballLiveActor *r=&m->actors[threat];
-            tx=r->x+dir*(rank>=9?2:1);ty=clamp(r->y+r->vy*.15f,m->zone_y[rank]-(rank>=9?15:9),m->zone_y[rank]+(rank>=9?15:9));
+            /* Coverage can close a window without targeting the receiver's solid body. */
+            tx=r->x+dir*(rank>=9?2:FB_BODY_DIAMETER+.4f);ty=clamp(r->y+r->vy*.15f,m->zone_y[rank]-(rank>=9?15:9),m->zone_y[rank]+(rank>=9?15:9));
             if(rank<9)tx=m->los+dir*clamp((tx-m->los)*dir,0,18);
         }
         /* Break on a thrown pass only in this defender's responsibility. */
