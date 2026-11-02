@@ -91,6 +91,6 @@ bool gc_form_item_toggle(gc_run *run, int party, int item, const char **why)
     /* Source modal FormChangePhase returns to the same SelectModifierPhase.
      * Its animation completion maps to the existing form-state/event owner;
      * no reward is consumed and the waiting reward queue remains in place. */
-    if (rule >= 0) gc_reward_change_form(run, party, pr_item_form_rules[rule].to);
+    if (rule >= 0) gc_reward_change_form(run, party, pr_item_form_rules[rule].to, pr_item_form_rule_half(&run->bt, pokemon, rule));
     return true;
 }

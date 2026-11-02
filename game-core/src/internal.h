@@ -280,7 +280,7 @@ int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor
  * queue battle:rewardGain naming it. */
 bool gc_reward_add_pokeballs(gc_run *run, const char *key);
 void gc_reward_gain(gc_run *run, const char *key);
-void gc_reward_change_form(gc_run *run, int party, int form);
+void gc_reward_change_form(gc_run *run, int party, int form, int half);   /* half 1: the fusion's second species */
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */

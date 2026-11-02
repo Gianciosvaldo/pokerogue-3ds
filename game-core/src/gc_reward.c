@@ -276,6 +276,9 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
     c->weather = run->bt.weather;
     c->unlocked_eviolite = run->sys && run->sys->unlocks.eviolite;
     c->unlocked_mini_black_hole = run->sys && run->sys->unlocks.mini_black_hole;
+    /* PR_DEV_FUSION_ABILITIES: Plates (Multitype) and Memories (RKS System) for a fusion's second species */
+    c->fusion_form_items = (uint8_t)((pr_fusion_ability_enabled(&run->bt, ABILITY_ID_MULTITYPE) ? 1 : 0)
+                                     | (pr_fusion_ability_enabled(&run->bt, ABILITY_ID_RKS_SYSTEM) ? 2 : 0));
     c->caught = caught;
     c->caught_user = run;
     return c;

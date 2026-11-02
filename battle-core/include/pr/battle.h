@@ -748,6 +748,8 @@ bool pr_mod_is_ported_item(const pr_modifier *m);
 bool pr_form_item_known(int item);
 bool pr_item_form_rule_eligible(pr_battle *bt, const pr_pokemon *p, int rule);
 int pr_item_form_rule_index(pr_battle *bt, const pr_pokemon *p);
+/* 1 when the rule changes the fusion's second species (PR_DEV_FUSION_ABILITIES: Plates and Memories), 0 for the first */
+int pr_item_form_rule_half(pr_battle *bt, const pr_pokemon *p, int rule);
 bool pr_trigger_item_form_change(pr_battle *bt, pr_pokemon *p, bool delayed, int *selected_rule);
 bool pr_apply_form_change_item(pr_battle *bt, pr_pokemon *p, pr_modifier *modifier,
                                bool active, int *selected_rule);

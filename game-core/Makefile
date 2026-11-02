@@ -875,6 +875,14 @@ $(BUILD)/fusion_abilities_host_test: tests/fusion_abilities_host_test.c $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: fusion-abilities-host-test
 
+all: $(BUILD)/fusion_form_items_host_test
+test: fusion-form-items-host-test
+fusion-form-items-host-test: $(BUILD)/fusion_form_items_host_test
+	$(BUILD)/fusion_form_items_host_test
+$(BUILD)/fusion_form_items_host_test: tests/fusion_form_items_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: fusion-form-items-host-test
+
 all: $(BUILD)/aftermath_host_test
 test: aftermath-host-test
 aftermath-host-test: $(BUILD)/aftermath_host_test

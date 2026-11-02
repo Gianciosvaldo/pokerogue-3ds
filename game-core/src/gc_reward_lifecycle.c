@@ -89,31 +89,45 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         const int rule = pr_item_form_rule_index(&run->bt, &m->b);
         /* A failed activation still retains the new held item and finishes a
          * free reward selection. Conditions are not reward selection gates. */
-        if (rule >= 0) gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, pr_item_form_rules[rule].to, 0));
+        if (rule >= 0)
+            gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, pr_item_form_rules[rule].to, pr_item_form_rule_half(&run->bt, &m->b, rule)));
     }
     return GC_APPLY_DONE;
 }
 
-void gc_reward_change_form(gc_run *run, int party, int form)
+void gc_reward_change_form(gc_run *run, int party, int form, int half)
 {
     gc_mon *m = &run->party[party];
     const pr_msg_arg pre_name = gc_m_mon(run,"preName",0,party);
-    m->b.form = (uint8_t)form;
-    const pr_form *f = gc_form(m->b.species, form);
-    const int count = f->ability_hidden ? 3 : 2;
-    if (m->ability_index >= count) m->ability_index = count - 1;
-    m->b.ability_index = (int8_t)m->ability_index;
-    m->b.base_ability = (uint16_t)gc_form_ability(m->b.species, f, m->ability_index);
-    if (m->b.ability_override <= 0) m->b.ability = m->b.base_ability;
-    pr_refresh_ability(&m->b);
+    half = half && m->b.fusion_species;
+    const pr_form *f;
+    if (half) {
+        /* the fusion's second species: its form and its ability slot (a fusion's ability comes straight from the slot, getAbility's fusion branch) */
+        m->b.fusion_form = (uint8_t)form;
+        f = gc_form(m->b.fusion_species, form);
+        const int count = f->ability_hidden ? 3 : 2;
+        if (m->b.fusion_ability_index >= count) m->b.fusion_ability_index = (int8_t)(count - 1);
+        m->b.base_ability = m->b.fusion_ability_index == 0 ? f->ability1 : m->b.fusion_ability_index == 1 ? f->ability2 : f->ability_hidden;
+        if (m->b.ability_override <= 0) m->b.ability = m->b.base_ability;
+        pr_refresh_ability(&m->b);
+    } else {
+        m->b.form = (uint8_t)form;
+        f = gc_form(m->b.species, form);
+        const int count = f->ability_hidden ? 3 : 2;
+        if (m->ability_index >= count) m->ability_index = count - 1;
+        m->b.ability_index = (int8_t)m->ability_index;
+        m->b.base_ability = (uint16_t)gc_form_ability(m->b.species, f, m->ability_index);
+        if (m->b.ability_override <= 0) m->b.ability = m->b.base_ability;
+        pr_refresh_ability(&m->b);
+    }
     /* PlayerPokemon.changeForm marks seen/caught before stats. Unlike evolution
      * it neither records IVs nor learns moves. Origin preserves Terastallization. */
     if (run->sys) {
         gc_system_set_pokemon_seen(run->sys, m, false, false);
         gc_system_set_pokemon_caught(run->sys, m, false, false);
     }
-    pr_change_form_state(&run->bt, &m->b, form);
-    if (m->b.ability_lookup_known) m->ability_index = (uint8_t)m->b.ability_index;
+    pr_change_half_form_state(&run->bt, &m->b, half, form);
+    if (m->b.ability_lookup_known && !half) m->ability_index = (uint8_t)m->b.ability_index;
     if (strstr(f->form_key, "mega"))
         gc_ev_msg(run,"battlePokemonForm:megaChange",2,pre_name,gc_m_mon(run,"pokemonName",0,party));
     else if (strstr(f->form_key, "gigantamax"))

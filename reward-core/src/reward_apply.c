@@ -374,35 +374,31 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
             pr_reward_mon *m = &ctx->party[party_idx];
-            const pr_reward_species *s = pr_reward_species_find(m->species);
-            if (!s || !(s->flags & 2)) {
-                if (msg) *msg = NO_EFFECT_MSG;
-                return false;
-            }
-
-            const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, m->species);
-            if (!sl) {
-                if (msg) *msg = NO_EFFECT_MSG;
-                return false;
-            }
-
-            const int key = pr_reward_form_key(m->species, m->form);
-
+            /* the first species, then (the departure) a fusion's second one when Plates or Memories work on it */
             bool can_change = false;
-            for (int i = 0; i < sl->n; i++) {
-                const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
-                if (fc->item != arg) continue;
-                if (fc->pre_form_key != key) continue;
-                /* Item selection only matches preform and item; activation conditions belong to the later phase. */
+            for (int half = 0; half < 2 && !can_change; half++) {
+                const int species = half ? m->fusion_species : m->species;
+                if (half && !pr_reward_fusion_item_species(ctx, species)) break;
+                const pr_reward_species *s = pr_reward_species_find(species);
+                if (!s || !(s->flags & 2)) continue;
+                const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, species);
+                if (!sl) continue;
+                const int key = pr_reward_form_key(species, half ? m->fusion_form : m->form);
+                for (int i = 0; i < sl->n; i++) {
+                    const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
+                    if (fc->item != arg) continue;
+                    if (fc->pre_form_key != key) continue;
+                    /* Item selection only matches preform and item; activation conditions belong to the later phase. */
 
-                /* Check if already held */
-                if (pr_reward_held(ctx, party_idx, PR_ITEM_FORM_CHANGE_ITEM, arg) ||
-                    pr_reward_held(ctx, party_idx, PR_ITEM_RARE_FORM_CHANGE_ITEM, arg)) {
-                    continue;
+                    /* Check if already held */
+                    if (pr_reward_held(ctx, party_idx, PR_ITEM_FORM_CHANGE_ITEM, arg) ||
+                        pr_reward_held(ctx, party_idx, PR_ITEM_RARE_FORM_CHANGE_ITEM, arg)) {
+                        continue;
+                    }
+
+                    can_change = true;
+                    break;
                 }
-
-                can_change = true;
-                break;
             }
 
             if (!can_change) {
