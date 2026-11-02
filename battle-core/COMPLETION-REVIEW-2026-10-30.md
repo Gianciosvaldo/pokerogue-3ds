@@ -71,3 +71,11 @@ cannot certify every run or every RNG input.
 
 Only dedicated Task63 remains excluded. No Windows builder is produced. There
 is no full battle-core completion claim or defensible completion percentage yet.
+
+## Later integration evidence
+
+[Wide Endless journey regression](../game-core/ENDLESS-JOURNEY-VALIDATION.md)
+joins actual generated encounters, battle, EXP/reward, save/load and next
+encounter at the 65,535/65,536 player boundary in both modes. Its 16 prepared API
+contexts retain losses and are not native full-run parity or learning/evolution,
+terminal or hardware acceptance. The source ledger remains open.
