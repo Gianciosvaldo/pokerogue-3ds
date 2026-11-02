@@ -254,6 +254,7 @@ typedef struct pr_pokemon {
     uint8_t form;
     uint16_t fusion_species;   /* 0 = null (not fused) */
     uint8_t fusion_form;
+    uint8_t form_half;         /* PR_DEV_FUSION_ABILITIES: 1 while form logic reads the fusion's species and form (never saved) */
     int8_t fusion_gender;      /* secondary Pokemon.gender, when supplied by the owner */
     bool fusion_gender_known; /* old saves/imports may lack it; do not infer from the primary */
     pr_illusion illusion;
@@ -585,6 +586,7 @@ typedef struct pr_battle {
 /* pr_battle.deviations */
 #define PR_DEV_ENEMY_ZERO_TO_HERO 0x1u  /* an off-field enemy Palafin still takes its Hero form on switch-out */
 #define PR_DEV_ILLUSION           0x2u  /* Illusion works (the pin leaves it unimplemented): see DEVIATIONS.md */
+#define PR_DEV_FUSION_ABILITIES   0x4u  /* the abilities NoFusionAbilityAbAttr switches off work on a fusion: see DEVIATIONS.md */
 
 /* PR_DEV_ILLUSION: on entry, the disguise; after a damaging hit, its end (true when it broke) */
 void pr_illusion_on_summon(pr_battle *bt, pr_pokemon *p);
@@ -900,6 +902,20 @@ bool pr_are_allies(int a, int b);
 const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
 const pr_form *pr_pokemon_base_form(const pr_pokemon *p);
+/* PR_DEV_FUSION_ABILITIES: the species and form that form logic reads while p->form_half is 1 (the fusion's), else its own */
+uint16_t pr_half_species(const pr_pokemon *p);
+uint8_t pr_half_form(const pr_pokemon *p);
+const pr_species *pr_half_species_data(const pr_pokemon *p);
+const pr_form *pr_half_base_form(const pr_pokemon *p);
+/* PR_DEV_FUSION_ABILITIES: whether the ability that NoFusionAbilityAbAttr switches off in the pin works on a fusion, and whether the form logic
+ * of a species that has one of those abilities runs for a fusion's second species */
+bool pr_fusion_ability_enabled(const pr_battle *bt, uint16_t ability);
+bool pr_fusion_species_enabled(const pr_battle *bt, uint16_t species);
+/* the half (0 or 1) whose species the form-changing ability `ability` belongs to: the fusion's, as a fusion's own ability comes from it;
+ * 0 when it is not */
+int pr_ability_form_half(const pr_battle *bt, const pr_pokemon *p, uint16_t ability);
+/* pr_change_form_state for one half: 0 the Pokemon's own form, 1 the fusion's */
+void pr_change_half_form_state(pr_battle *bt, pr_pokemon *p, int half, int form);
 int pr_get_gender(const pr_pokemon *p);
 double pr_get_sprite_scale(const pr_pokemon *p);
 bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target);

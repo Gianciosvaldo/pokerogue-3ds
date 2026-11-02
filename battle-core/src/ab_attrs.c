@@ -200,10 +200,24 @@ bool pr_weather_effect_suppressed(pr_battle *bt)
     return false;
 }
 
+/* getPokemonWithWeatherBasedForms(): Castform with Forecast, Cherrim with Flower Gift. With PR_DEV_FUSION_ABILITIES either half of a
+ * fusion counts (its own ability comes from the fusion's half): the half that does, the fusion's first, or -1. */
+static int weather_form_half(pr_battle *bt, const pr_pokemon *q)
+{
+    for (int h = pr_fusion_species_enabled(bt, q->fusion_species) ? 1 : 0; h >= 0; h--) {
+        const uint16_t sp = h ? q->fusion_species : q->species;
+        if ((sp == SPECIES_ID_CASTFORM && pr_has_ability_active(bt, q, ABILITY_ID_FORECAST))
+            || (sp == SPECIES_ID_CHERRIM && pr_has_ability_active(bt, q, ABILITY_ID_FLOWER_GIFT))) return h;
+    }
+    return -1;
+}
+
 /* Pokemon.canApplyAbility(passive): form restrictions precede ordinary suppression. */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
 {
-    if (p->fusion_species && pr_ability_first_attr(ability, PR_AC_NoFusionAbilityAbAttr)) return false;
+    /* PR_DEV_FUSION_ABILITIES: the abilities NoFusionAbilityAbAttr marks work on a fusion (lorenzo, 2026-11-02), the ones pr_fusion_ability_enabled lists */
+    if (p->fusion_species && !pr_fusion_ability_enabled(bt, ability)
+        && pr_ability_first_attr(ability, PR_AC_NoFusionAbilityAbAttr)) return false;
     if (p->transformed && pr_ability_first_attr(ability, PR_AC_NoTransformAbilityAbAttr)) return false;
     const pr_ability *ab = &pr_abilities[ability];
     /* Mold Breaker, Sunsteel Strike...: the move in progress ignores ignorable abilities
@@ -973,8 +987,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
             if (!q || q->hp <= 0 || !q->on_field || q->switch_out_status) continue;
-            any |= (q->species == SPECIES_ID_CASTFORM && pr_has_ability_active(bt, q, ABILITY_ID_FORECAST))
-                || (q->species == SPECIES_ID_CHERRIM && pr_has_ability_active(bt, q, ABILITY_ID_FLOWER_GIFT));
+            any |= weather_form_half(bt, q) >= 0;
         }
         GATE(any);
         if (!pp->simulated) pr_weather_form_changes(bt, false, NULL);
@@ -987,9 +1000,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
             if (!q || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;   /* getField(true) */
-            if ((q->species == SPECIES_ID_CASTFORM && pr_has_ability_active(bt, q, ABILITY_ID_FORECAST))
-                || (q->species == SPECIES_ID_CHERRIM && pr_has_ability_active(bt, q, ABILITY_ID_FLOWER_GIFT)))
-                forms[nf++] = q;
+            if (weather_form_half(bt, q) >= 0) forms[nf++] = q;
         }
         if (!c->e) return -1;
         GATE(nf > 0);
@@ -1283,14 +1294,14 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
     }
     case PR_AC_PostSummonFormChangeByWeatherAbAttr: {
-        int wanted = p->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
-                   : p->species == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
+        const int half = weather_form_half(bt, p);
+        const uint16_t sp = half > 0 ? p->fusion_species : p->species;
         int form = bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN ? 1
-                 : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) ? 2
-                 : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) ? 3 : -1;
+                 : sp == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) ? 2
+                 : sp == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) ? 3 : -1;
         /* canApply must finish before any ability display is queued. */
-        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
-             && pr_has_ability_active(bt, p, wanted) && form >= 0 && form != p->form);
+        GATE(half >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
+             && form >= 0 && form != (half > 0 ? p->fusion_form : p->form));
         if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeWeatherTrigger);
         return 1;
     }
@@ -1316,7 +1327,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostWeatherChangeFormChangeAbAttr: {                     /* Forecast, Flower Gift */
         const pr_attr_PostWeatherChangeFormChangeAbAttr *x = P(PostWeatherChangeFormChangeAbAttr, a);
         GATE((p->species == SPECIES_ID_CASTFORM && x->ability == ABILITY_ID_FORECAST)
-             || (p->species == SPECIES_ID_CHERRIM && x->ability == ABILITY_ID_FLOWER_GIFT));
+             || (p->species == SPECIES_ID_CHERRIM && x->ability == ABILITY_ID_FLOWER_GIFT)
+             || (p->fusion_species && pr_fusion_ability_enabled(bt, x->ability)
+                 && ((p->fusion_species == SPECIES_ID_CASTFORM && x->ability == ABILITY_ID_FORECAST)
+                     || (p->fusion_species == SPECIES_ID_CHERRIM && x->ability == ABILITY_ID_FLOWER_GIFT))));
         if (!pp->simulated) {
             bool revert = bt->weather != WEATHER_TYPE_NONE && type_in(&x->formRevertingWeathers, bt->weather);
             pr_weather_form_changes(bt, revert, NULL);
