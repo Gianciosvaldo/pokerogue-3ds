@@ -82,6 +82,7 @@ typedef struct {
     /* tests only: pin the unseeded rolls of an evil team grunt fight (randInt(2) gender, randInt(3) double) instead of drawing them from stub_rng */
     bool evil_roll_pinned;
     uint8_t evil_roll[2];
+    bool post_sentinel_moves;   /* tests: a closure member's constructor-time and regenerated movesets are moves 1..4 (the upstream producer's stub) */
     int reroll_count;
     int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
     /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,

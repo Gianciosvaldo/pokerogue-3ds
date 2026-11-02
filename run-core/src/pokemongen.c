@@ -261,6 +261,8 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     out->boss_segments = 0;
     out->friendship = -1;
     out->rival_pending = false;
+    out->evil_pending = false;
+    out->pokeball = 0;
     out->rival_fight = out->rival_slot = 0;
 
     double chance = BASE_HIDDEN_ABILITY_RATE;
@@ -351,7 +353,7 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
     if (!sp) { run->unported |= PR_RUN_UNPORTED_SPECIES; return -1; }
     /* Rival genPartyMember runs inside executeWithSeedOffset for the whole constructor + postProcess.
      * Generic enemies use the ambient run RNG; rival members resume the saved per-slot offset RNG. */
-    pr_rng *finish_rng = out->rival_pending ? &out->rival_rng : &run->rng;
+    pr_rng *finish_rng = out->rival_pending ? &out->rival_rng : out->evil_pending ? &out->evil_rng : &run->rng;
     const bool has_trainer = ctx->trainer_slot != 0;   /* now this.trainerSlot is set */
     if (ctx->shiny_lock) {
         out->shiny = false;
@@ -416,5 +418,6 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
         for (int i = 0; i < 6; i++) out->ivs[i] = 31;
     }
     if (out->rival_pending) pr_run_rival_finish(run, ctx, out);
+    if (out->evil_pending) return pr_run_evil_finish(run, ctx, out);
     return 0;
 }

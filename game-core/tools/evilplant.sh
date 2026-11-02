@@ -3,6 +3,9 @@
 # each with one line of src/newbattle.c (run-core) or src/gc_encounter.c (game-core) changed, and runs both the differential (tests/gym_e4_diff_test.c)
 # and the host test (tests/gym_e4_test.c) on it. Every copy must fail at least one of them (exit 1); the first column says which caught it.
 # Admin and boss plants cover the group choice (pool, offset, shuffle), the gender roll, the boss pool index and form, the flags and the closure members.
+# Post-process plants cover the ops interpreter (guards, each field, the random form and move, the move slots), the pending member RNG and the game-core
+# glue. Not planted (equivalent): a skipped REGEN (the producer stub and the constructor both leave moves 1..4), a generateName, the wave-equal guard alone (with the stub the two branches of a
+# wave if/else end in the same form), a found move making LACKS_MOVE false (no test move is in 1..4).
 # Not planted (equivalent under both): the order of the ctx assignments, the comments, the party template roll in trainer_ctor (the Youngster and the grunts have
 # one template, so randSeedItem rolls nothing).
 # Usage: tools/evilplant.sh <trace>   (EVIL_PLANT_FROM=<name> starts at that plant)
@@ -68,5 +71,23 @@ plant bosses-off            's/    ctx.enable_evil_bosses = true;/    ctx.enable
 plant closure-evolves       's/if (!cl->ignore_evolution) {/if (1) {/' run-core:evil_team.c
 plant closure-never-evolves 's/if (!cl->ignore_evolution) {/if (0) {/' run-core:evil_team.c
 plant closure-no-pick       's/const int pick = cl->n == 1 ? 0 : pr_rng_integer_in_range(\&run->rng, 0, cl->n - 1);/const int pick = 0;/' run-core:evil_team.c
+plant ops-never-run         's/for (int i = 0; i < cl->op_n; i++) {/for (int i = 0; i < 0; i++) {/' run-core:evil_team.c
+plant if-skip-short         's/if (!guard_holds(op, ctx, out)) i += op->a; break;/if (!guard_holds(op, ctx, out)) i += op->a - 1; break;/' run-core:evil_team.c
+plant guard-species-flipped 's/case PR_EG_SPECIES_EQ: return ctx->species == op->gv;/case PR_EG_SPECIES_EQ: return ctx->species != op->gv;/' run-core:evil_team.c
+plant guard-wave-ne-flipped 's/case PR_EG_WAVE_NE: return ctx->wave != op->gv;/case PR_EG_WAVE_NE: return ctx->wave == op->gv;/' run-core:evil_team.c
+plant guard-lacks-never     '/if (g->moveset\[k\] == op->gv) return false;/{n;s/return true;/return false;/}' run-core:evil_team.c
+plant boss-segments-ignored 's/case PR_EOP_BOSS: out->boss_segments = op->a; break;/case PR_EOP_BOSS: break;/' run-core:evil_team.c
+plant ability-ignored       's/case PR_EOP_ABILITY: out->ability_index = op->a; break;/case PR_EOP_ABILITY: break;/' run-core:evil_team.c
+plant gender-ignored        's/case PR_EOP_GENDER: out->gender = op->a; break;/case PR_EOP_GENDER: break;/' run-core:evil_team.c
+plant form-ignored          's/case PR_EOP_FORM: out->form = op->a; break;/case PR_EOP_FORM: break;/' run-core:evil_team.c
+plant friendship-ignored    's/case PR_EOP_FRIENDSHIP: out->friendship = op->a; break;/case PR_EOP_FRIENDSHIP: break;/' run-core:evil_team.c
+plant form-rand-range       's/op->a - 1 + op->b); break;/op->a + op->b); break;/' run-core:evil_team.c
+plant move-rand-no-roll     's/(n == 1 ? 0 : pr_rng_integer_in_range(rng, 0, n - 1))/0/' run-core:evil_team.c
+plant move-slot-shifted     's/case PR_EOP_MOVE: out->moveset\[op->a\] = op->b; break;/case PR_EOP_MOVE: out->moveset[(op->a + 1) % 4] = op->b; break;/' run-core:evil_team.c
+plant moveset-array-reversed 's/out->moveset\[k\] = pr_evil_op_items\[op->a + k\];/out->moveset[3 - k] = pr_evil_op_items[op->a + k];/' run-core:evil_team.c
+plant pending-never-set     's/out->evil_pending = true;/out->evil_pending = false;/' run-core:evil_team.c
+plant finish-ambient-rng    's/out->evil_pending ? \&out->evil_rng : \&run->rng/\&run->rng/' run-core:pokemongen.c
+plant moves-not-applied     's/^        post_apply_moves(m, \&party.mons\[e\]);.*$/        ;/'
+plant ctor-moveset-skipped  's/^        post_moveset(run, m, \&party.mons\[e\]);.*$/        ;/'
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"
