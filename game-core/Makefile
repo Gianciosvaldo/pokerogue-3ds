@@ -223,6 +223,13 @@ test: fusion-host-test
 fusion-host-test: $(BUILD)/fusion_host_test
 	$(BUILD)/fusion_host_test
 .PHONY: fusion-host-test
+all: $(BUILD)/fusion_after_host_test
+$(BUILD)/fusion_after_host_test: tests/fusion_after_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: fusion-after-host-test
+fusion-after-host-test: $(BUILD)/fusion_after_host_test
+	$(BUILD)/fusion_after_host_test
+.PHONY: fusion-after-host-test
 # the 600 cases upstream's PlayerPokemon.fuse() produced (tests/fusion.producer.test.ts at 8555c08, seed 777), replayed without upstream
 test: fusion-replay
 fusion-replay: $(BUILD)/fusion_diff_test tests/fixtures/fusion-splicers.native.txt.gz
