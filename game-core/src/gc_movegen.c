@@ -691,6 +691,21 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
     return true;
 }
 
+/* All ten grunt configs have ordinary constructor pools, no egg moves or
+ * member postProcess callbacks. Keep interleaved admin/boss IDs excluded. */
+static bool plain_grunt(int type)
+{
+    switch (type) {
+    case TRAINER_TYPE_ROCKET_GRUNT: case TRAINER_TYPE_MAGMA_GRUNT:
+    case TRAINER_TYPE_AQUA_GRUNT: case TRAINER_TYPE_GALACTIC_GRUNT:
+    case TRAINER_TYPE_PLASMA_GRUNT: case TRAINER_TYPE_FLARE_GRUNT:
+    case TRAINER_TYPE_AETHER_GRUNT: case TRAINER_TYPE_SKULL_GRUNT:
+    case TRAINER_TYPE_MACRO_GRUNT: case TRAINER_TYPE_STAR_GRUNT:
+        return true;
+    default: return false;
+    }
+}
+
 /* The pinned plain Gym profiles whose configs are single battles but for Tate and Liza (a double there is not a state upstream produces). */
 static bool plain_egg_gym(int type)
 {
@@ -705,6 +720,9 @@ bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon
 {
     if (run->run.has_challenges) return false;
     const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
+    if (trainer && plain_grunt(run->trainer_type)
+        && (run->trainer_variant < TRAINER_VARIANT_DEFAULT || run->trainer_variant > TRAINER_VARIANT_DOUBLE
+            || run->double_battle != (run->trainer_variant == TRAINER_VARIANT_DOUBLE))) return false;
     /* Classic trainer pools: ordinary trainers, and the egg-enabled ones (gym leaders, Elite Four, champions, evil team admins and bosses:
      * setBoss / setEggMovesAllowed). A trainer's Pokemon is not a boss in its constructor; only a postProcess regenerating the moveset (stats_of)
      * after setBoss(true, n) makes one. Instant Tera (the caller checks the

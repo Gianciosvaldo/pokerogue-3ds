@@ -1472,3 +1472,20 @@ endless-lifecycle-host-test: $(BUILD)/endless_lifecycle_host_test
 $(BUILD)/endless_lifecycle_host_test: tests/endless_lifecycle_host_test.c tests/endless_journey_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/endless_lifecycle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: endless-lifecycle-host-test
+
+$(BUILD)/grunt.native.inc: tests/fixtures/grunt-constructor.native.json.gz tools/build-grunt-constructor-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-grunt-constructor-proof.py $< $@
+$(BUILD)/grunt_constructor_test: tests/grunt_constructor_test.c $(BUILD)/grunt.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/grunt_constructor_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_run_enemy_pokemon_base,--wrap=gc_generate_moveset,--wrap=pr_run_enemy_pokemon_finish,--wrap=pr_calculate_stats -lm -o $@
+grunt-constructor-test: $(BUILD)/grunt_constructor_test
+	$(BUILD)/grunt_constructor_test
+test: grunt-constructor-test
+.PHONY: grunt-constructor-test
+
+grunt-constructor-capture:
+	python3 tools/check_grunt_constructor_capture.py
+grunt-constructor-faults: $(BUILD)/grunt.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	python3 tools/check_grunt_constructor_faults.py --build $(BUILD)
+test: grunt-constructor-capture grunt-constructor-faults
+.PHONY: grunt-constructor-capture grunt-constructor-faults
