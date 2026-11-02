@@ -207,3 +207,10 @@ The [fusion variable-type follow-up](../game-core/FUSION-VARIABLE-TYPES-VALIDATI
 adds the missing Raging Bull partner lookup and retains complete pinned query
 matrices for species/form move types and their item projection. Broader
 conditional ability interactions remain subject to source validation.
+
+The [registered move-attribute inventory](MOVE-ATTRIBUTE-INVENTORY.md) now
+compares all 921 registrations, normal/charge ordering, disabled flags and class
+inheritance with native source observations. Nine family switches cover all
+registered enabled subclasses admitted by their filters. This closes that
+registration/exhaustiveness question, not semantic behavior, caller interactions
+or the remaining unsupported-path review.
