@@ -75,7 +75,7 @@ static void on_exit(void* ctx) {
 }
 
 /* The options stay alive until ui_push_options pops and calls us back. */
-enum { EDIT_TOP, EDIT_NATURE, EDIT_SHINY, EDIT_ABILITY, EDIT_SLOTS, EDIT_MOVES, EDIT_CANDY };
+enum { EDIT_TOP, EDIT_NATURE, EDIT_SHINY, EDIT_ABILITY, EDIT_SLOTS, EDIT_MOVES, EDIT_CANDY, EDIT_FORM, EDIT_GENDER };
 extern const char* const menu_nature_keys[];
 static void editor_show(int mode);
 static void editor_add(int value,const char* label) {
@@ -137,6 +137,8 @@ static void editor_done(int row,void* arg) {
     }
   } else if(mode==EDIT_CANDY && value==3) ok=gc_system_buy_starter_reduction(H.sys,H.editing);
   else if(mode==EDIT_CANDY) ok=gc_system_buy_starter_unlock(H.sys,H.editing,value==1);
+  else if(mode==EDIT_FORM) ok=ok && ss_set_form(H.sys,H.editing,value);
+  else if(mode==EDIT_GENDER) ok=ok && ss_set_gender(H.sys,H.editing,value!=0);
   else if(mode==EDIT_TOP && value==-3) {p->passive_attr^=2;selected.passive=(p->passive_attr&2)!=0;}
   if(mode!=EDIT_CANDY) ok=ok && gc_starter_is_available(H.sys,&selected,NULL,NULL);
   if(!ok) {*p=before;H.rng=rng_before;ui_play_error();editor_show(mode);return;}
@@ -156,6 +158,8 @@ static void editor_show(int mode) {
   if(mode==EDIT_TOP) {
     editor_add(EDIT_SLOTS,"Moves");editor_add(EDIT_NATURE,"Nature");
     editor_add(EDIT_SHINY,"Shiny tier");editor_add(EDIT_ABILITY,"Ability");
+    if(ss_can_cycle_form(H.sys,H.editing))editor_add(EDIT_FORM,"Form");
+    if(ss_can_cycle_gender(H.sys,H.editing))editor_add(EDIT_GENDER,"Gender");
     snprintf(label,sizeof label,"Use candies (%d)",p->candy_count);editor_add(EDIT_CANDY,label);
     if(p->passive_attr&1)editor_add(-3,(p->passive_attr&2)?"Disable passive":"Enable passive");
     editor_add(-1,"Back");
@@ -177,6 +181,17 @@ static void editor_show(int mode) {
         snprintf(label,sizeof label,"%s%s%s",selected.ability_index==v?"* ":"",i18n_ability_name(ability),v==2?" (Hidden)":"");}
       editor_add(v,label);
     }
+  } else if(mode==EDIT_FORM) {
+    const pr_species* species=menu_species(H.editing);
+    for(int f=0;species && f<species->nforms;f++) {
+      if(!ss_form_offered(H.sys,H.editing,f))continue;
+      const pr_form* form=&pr_forms[species->form0+f];
+      const char* name=form->form_name&&*form->form_name?form->form_name:*form->form_key?form->form_key:"Normal";
+      snprintf(label,sizeof label,"%s%s",selected.form==f?"* ":"",name);editor_add(f,label);
+    }
+  } else if(mode==EDIT_GENDER) {
+    snprintf(label,sizeof label,"%sMale",selected.female?"":"* ");editor_add(0,label);
+    snprintf(label,sizeof label,"%sFemale",selected.female?"* ":"");editor_add(1,label);
   } else if(mode==EDIT_SLOTS) {
     for(int i=0;i<4;i++)if(selected.moves[i]) {
       snprintf(label,sizeof label,"%d: %s",i+1,i18n_move_name(selected.moves[i]));editor_add(i,label);
@@ -207,6 +222,20 @@ static void editor_show(int mode) {
   }
   if(!H.count)editor_add(-1,"No unlocked choices");
   ui_push_options(H.options,H.count,true,editor_done,NULL);
+}
+/* L / ZL on a species in the grid (starter-select-ui-handler.ts processCycleButtonsInput): the change is saved with the system data; one
+ * that cannot be saved is undone, as in the Customize lists */
+static bool cycle(void* ctx,uint16_t species,mui_button b) {
+  (void)ctx;
+  if(species==0 || species>GC_MAX_SPECIES_ID)return false;
+  if(b==MB_CYCLE_FORM ? !ss_can_cycle_form(H.sys,species) : !ss_can_cycle_gender(H.sys,species))return false;
+  if(!editor_save()) {starter_message("The profile could not be saved. Nothing was changed.");return false;}
+  gc_starter_entry* p=&H.sys->starters[species];
+  const gc_starter_entry before=*p;
+  if(!(b==MB_CYCLE_FORM ? ss_cycle_form(H.sys,species) : ss_cycle_gender(H.sys,species))) {*p=before;return false;}
+  if(!editor_save()) {*p=before;rebuild();starter_message("The profile could not be saved. Nothing was changed.");return false;}
+  rebuild();
+  return true;
 }
 static void configure(void* ctx,uint16_t species) {
   (void)ctx;H.editing=species;H.page=0;editor_show(EDIT_TOP);
@@ -393,7 +422,7 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
   const starter_args args = {H.entries, H.n, gc_starter_budget(GAME_MODES_CLASSIC), H.all, H.n_all};
-  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label};
+  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle};
   starter_open(&args, &events);
   ui_set(&g_screen);
   if (notice && *notice) starter_message(notice);

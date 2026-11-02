@@ -278,6 +278,15 @@ bool starter_input(mui_button b) {
   }
   if (S.menu.open) return menu_input(b);
 
+  /* processInput: a cycle button acts on the species under the grid cursor (not on the team, Start or Randomize) */
+  if (b == MB_CYCLE_FORM || b == MB_CYCLE_GENDER) {
+    const uint16_t sp = S.m.focus == SM_GRID ? sm_species(&S.m) : 0;
+    if (!sp || !S.ev.cycle || !S.ev.cycle(S.ev.ctx, sp, b)) return false;
+    mui_sfx("ui/select");
+    starter_refresh(); /* the panel, its sprite and the icon show the new form */
+    return true;
+  }
+
   const sm_result r = sm_input(&S.m, b);
   switch (r) {
     case SM_MENU:

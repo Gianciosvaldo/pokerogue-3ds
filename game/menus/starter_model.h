@@ -12,8 +12,9 @@
  *     species order. Upstream's UP from the first row goes to the filter bar and DOWN from a single row too; with none here
  *     UP from the first row wraps to the last row and DOWN from a single row does nothing. DOWN from the Start button and
  *     UP/DOWN from Randomize pass through the filter bar upstream: here they go where two presses would end up.
- *   - the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename. The host handles Customize overlays for moves, nature, shiny tier, ability and candy.
- *     Every species is picked with the defaults upstream chooses for a species with no stored preference.
+ *   - IVs, favourites, rename. The cycle buttons for the form and the gender (L, ZL) are the screen's (starter.c) and the host's: they change what is
+ *     stored for the species, not the cursor. The host handles Customize overlays for moves, nature, shiny tier, ability, form, gender and candy.
+ *     A species is picked with what upstream chooses from its stored preferences, else the defaults.
  */
 #ifndef GAME_MENUS_STARTER_MODEL_H
 #define GAME_MENUS_STARTER_MODEL_H

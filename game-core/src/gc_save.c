@@ -1455,6 +1455,7 @@ static const sfield starter_fields[] = {
     SF(sv_starter_entry, entry.egg_moves), SF(sv_starter_entry, entry.moveset), SF(sv_starter_entry, entry.classic_win_count),
     SF(sv_starter_entry, entry.preference_flags), SF(sv_starter_entry, entry.nature_preference),
     SF(sv_starter_entry, entry.appearance_preference), SF(sv_starter_entry, entry.ability_preference),
+    SF(sv_starter_entry, entry.form_preference), SF(sv_starter_entry, entry.gender_preference),
 };
 
 static const sfield unlock_fields[] = {
@@ -1693,7 +1694,8 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
                 uint16_t sp = st_buf[i].species;
                 if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
                     const gc_starter_entry *p=&st_buf[i].entry;
-                    if (p->preference_flags>7 || p->nature_preference>24 || p->appearance_preference>3 || p->ability_preference>2) {
+                    if (p->preference_flags>31 || p->nature_preference>24 || p->appearance_preference>3 || p->ability_preference>2 ||
+                        p->form_preference>56 || p->gender_preference>1) {
                         free(st_buf); *why="invalid starter preferences"; return false;
                     }
                     sys->starters[sp] = st_buf[i].entry;

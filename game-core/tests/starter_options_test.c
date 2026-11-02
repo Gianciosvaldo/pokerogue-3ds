@@ -39,6 +39,19 @@ static void purchases(void) {
  CHECK(!memcmp(&sys.starters[1],&loaded.starters[1],sizeof(gc_starter_entry)));
  sys.starters[1].nature_preference=25;n=gc_system_save(&sys,profile,sizeof profile);
  CHECK(n&&!gc_system_load(&loaded,profile,n,&why));
+ /* the stored form and gender (flags 8 and 16): they come back, and values no starter can have are refused like the others */
+ sys.starters[1].nature_preference=3;
+ sys.starters[1].preference_flags|=8|16;sys.starters[1].form_preference=56;sys.starters[1].gender_preference=1;
+ n=gc_system_save(&sys,profile,sizeof profile);
+ CHECK(n&&gc_system_load(&loaded,profile,n,&why)&&!memcmp(&sys.starters[1],&loaded.starters[1],sizeof(gc_starter_entry)));
+ CHECK(loaded.starters[1].form_preference==56&&loaded.starters[1].gender_preference==1&&(loaded.starters[1].preference_flags&24)==24);
+ sys.starters[1].form_preference=57;n=gc_system_save(&sys,profile,sizeof profile);
+ CHECK(n&&!gc_system_load(&loaded,profile,n,&why));
+ sys.starters[1].form_preference=0;sys.starters[1].gender_preference=2;n=gc_system_save(&sys,profile,sizeof profile);
+ CHECK(n&&!gc_system_load(&loaded,profile,n,&why));
+ sys.starters[1].gender_preference=0;sys.starters[1].preference_flags=32;n=gc_system_save(&sys,profile,sizeof profile);
+ CHECK(n&&!gc_system_load(&loaded,profile,n,&why));
+ sys.starters[1].preference_flags=3;
  uint16_t moves[64];CHECK(gc_starter_moves(&sys,0,0,moves,64)==-1);
  CHECK(gc_starter_moves(&sys,1,-1,moves,64)==-1);
  CHECK(gc_starter_moves(&sys,1,0,moves,0)==-1);
