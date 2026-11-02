@@ -528,6 +528,7 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
             if (full) run->enemy[i].b.hp = run->enemy[i].b.stats[STAT_HP];
         }
     }
+    if (run->battle_type == BATTLE_TYPE_TRAINER) gc_trainer_gen_ai(run);   /* EncounterPhase: currentBattle.trainer.genAI(enemyParty) */
     gc_ai_enemy_party(run);
     gc_trainer_names(run);
 }

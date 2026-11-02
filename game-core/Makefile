@@ -159,6 +159,16 @@ $(BUILD)/tera_command_test: tests/tera_command_test.c $(BUILD)/libgc.a $(REWARD_
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 $(BUILD)/tera_command_diff_test: tests/tera_command_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/trainer_tera_test
+$(BUILD)/trainer_tera_test: tests/trainer_tera_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: trainer-tera-host-test
+trainer-tera-host-test: $(BUILD)/trainer_tera_test
+	$(BUILD)/trainer_tera_test
+.PHONY: trainer-tera-host-test
+all: $(BUILD)/trainer_tera_diff_test
+$(BUILD)/trainer_tera_diff_test: tests/trainer_tera_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 test: tera-command-host-test
 tera-command-host-test: $(BUILD)/tera_command_test
 	$(BUILD)/tera_command_test
