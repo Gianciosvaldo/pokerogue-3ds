@@ -7,7 +7,7 @@ def capture(folder,kind):
 def runner(kind):return root/'build'/f'{kind}-callback-test'
 src=(root/'src/ab_attrs.c').read_text()
 for name,a,b,test,trace in [
- ('no-fusion-gate','if (p->fusion_species && pr_ability_first_attr','if (0 && p->fusion_species && pr_ability_first_attr','fusion-callback-test.c',capture(out,'fusion')),
+ ('no-fusion-gate','if (p->fusion_species && !pr_fusion_ability_enabled(bt, ability)','if (0 && p->fusion_species && !pr_fusion_ability_enabled(bt, ability)','fusion-callback-test.c',capture(out,'fusion')),
  ('no-transform-gate','if (p->transformed && pr_ability_first_attr','if (0 && p->transformed && pr_ability_first_attr','transform-callback-test.c',capture(trans,'transform'))]:
  assert a in src;f=out/f'mutant-{name}.c';f.write_text(src.replace(a,b,1));exe=out/f'mutant-{name}'
  subprocess.run(['gcc','-O2','-std=c99','-I'+str(root/'include'),'-I'+str(root/'gen/out'),str(root/'tests'/test),str(f),str(root/'build/libprcore.a'),'-lm','-o',str(exe)],check=True,capture_output=True)

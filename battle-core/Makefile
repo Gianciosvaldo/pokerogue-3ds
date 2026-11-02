@@ -828,3 +828,7 @@ $(BUILD)/move-inventory-dump: tools/move-inventory-dump.c $(BUILD)/libprcore.a
 .PHONY: move-inventory-audit
 move-inventory-audit: $(BUILD)/move-inventory-dump
 	python3 tools/audit-move-inventory.py --dump $(BUILD)/move-inventory-dump
+
+all: $(BUILD)/final-boss-faint-test
+$(BUILD)/final-boss-faint-test: tests/final-boss-faint-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

@@ -564,7 +564,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
     case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
     case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
         return (t->source_move==MOVE_ID_SURF||t->source_move==MOVE_ID_DIVE)
-            && p->species==SPECIES_ID_CRAMORANT && p->form==0
+            && ((p->species==SPECIES_ID_CRAMORANT && p->form==0)
+                || (pr_fusion_ability_enabled(bt,ABILITY_ID_GULP_MISSILE) && p->fusion_species==SPECIES_ID_CRAMORANT && p->fusion_form==0))
             && !pr_get_battler_tag(p,BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA)
             && !pr_get_battler_tag(p,BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU);
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: {
@@ -712,12 +713,20 @@ static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_batt
 
 static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 
+/* Gulp Missile's form change, for the species of a fusion the ability belongs to (PR_DEV_FUSION_ABILITIES) */
+static void gulp_missile_form_change(pr_battle *bt, pr_pokemon *p)
+{
+    p->form_half = (uint8_t)pr_ability_form_half(bt, p, ABILITY_ID_GULP_MISSILE);
+    pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+    p->form_half = 0;
+}
+
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
     case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
     case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
-        pr_form_change(bt,p,PR_FCT_SpeciesFormChangeAbilityTrigger);
+        gulp_missile_form_change(bt,p);
         return;
     case BATTLER_TAG_TYPE_COMMANDED: {
         const pr_pokemon *source = tag_source(bt, t);
@@ -1459,7 +1468,7 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     switch (t->type) {
     case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
     case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
-        pr_form_change(bt,p,PR_FCT_SpeciesFormChangeAbilityTrigger);
+        gulp_missile_form_change(bt,p);
         return;
     case BATTLER_TAG_TYPE_COMMANDED: {
         const pr_pokemon *source = tag_source(bt, t);
@@ -1616,7 +1625,8 @@ bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_c
  * The callback reports true even when addTag refuses an overlap/form/source move. */
 bool pr_gulp_missile_tag(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move)
 {
-    if(user->hp<=0 || user->species!=SPECIES_ID_CRAMORANT
+    if(user->hp<=0 || (user->species!=SPECIES_ID_CRAMORANT
+        && !(pr_fusion_ability_enabled(bt,ABILITY_ID_GULP_MISSILE) && user->fusion_species==SPECIES_ID_CRAMORANT))
         || !pr_has_ability_active(bt,user,ABILITY_ID_GULP_MISSILE))return false;
     pr_add_tag(bt,e,user,pr_get_hp_ratio(user,false)>=0.5
         ?BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU,0,move,-1);

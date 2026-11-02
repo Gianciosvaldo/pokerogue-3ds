@@ -9,8 +9,8 @@ def fault(name,old,new):
  assert leaf.count(old)==1,(name,leaf.count(old));faults.append((name,'ab_attrs.c',s[:a]+leaf.replace(old,new,1)+s[b:],False))
 fault('missing-zero-damage','*pp->value = 0;','/* no damage block */')
 fault('missing-simulation-gate','if (pp->simulated) return 1;','/* no simulation guard */')
-fault('missing-form-gate','p->form == x->formIndex','true')
-fault('wrong-form-gate','p->form == x->formIndex','p->form != x->formIndex')
+fault('missing-form-gate','pr_ability_form(bt, p, c->ability) == x->formIndex','true')
+fault('wrong-form-gate','pr_ability_form(bt, p, c->ability) == x->formIndex','pr_ability_form(bt, p, c->ability) != x->formIndex')
 fault('missing-damage-gate','*pp->value > 0','true')
 fault('missing-category-condition','call_bool(bt, x->condition, a->cls, p, o, move)','true')
 fault('missing-substitute-gate','!pr_move_hits_substitute(bt, move, o, p)','true')
@@ -22,18 +22,18 @@ fault('missing-recoil','if (x->recoil > 0)\n            pr_damage_and_update_seg
 fault('clamped-boss-recoil','HIT_RESULT_INDIRECT, true, true, NULL','HIT_RESULT_INDIRECT, false, true, NULL')
 fault('queued-faint','HIT_RESULT_INDIRECT, true, true, NULL','HIT_RESULT_INDIRECT, true, false, NULL')
 fault('wrong-result','HIT_RESULT_INDIRECT, true, true, NULL','HIT_RESULT_EFFECTIVE, true, true, NULL')
-fault('missing-form-queue','pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);','/* no form change */')
+fault('missing-form-queue','ability_form_change(bt, p, c->ability);','/* no form change */')
 old='''        if (x->recoil > 0)
             pr_damage_and_update_segments(bt, c->e, (pr_pokemon *)p,
                 to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil), HIT_RESULT_INDIRECT, true, true, NULL);
-        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);'''
-fault('wrong-form-recoil-order',old,'''        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        ability_form_change(bt, p, c->ability);'''
+fault('wrong-form-recoil-order',old,'''        ability_form_change(bt, p, c->ability);
         if (x->recoil > 0)
             pr_damage_and_update_segments(bt, c->e, (pr_pokemon *)p,
                 to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil), HIT_RESULT_INDIRECT, true, true, NULL);''')
 faults.append(('missing-owning-block','ab_attrs.c',s[:a]+leaf.replace('GATE(*pp->value > 0','GATE(false && *pp->value > 0',1)+s[b:],True))
 p=(r/'battle-core/src/phases.c').read_text()
-for name,old,new in [('missing-postdamage','if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);','/* no postdamage */'),('wrong-form-target','if(p->form<2)*target=1-p->form;','if(p->form<2)*target=0;'),('deferred-form','else pr_phase_unshift(bt, e, ph);','else pr_phase_push(bt, e, ph);')]:
+for name,old,new in [('missing-postdamage','if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);','/* no postdamage */'),('wrong-form-target','if(pr_half_form(p)<2)*target=1-pr_half_form(p);','if(pr_half_form(p)<2)*target=0;'),('deferred-form','else pr_phase_unshift(bt, e, ph);','else pr_phase_push(bt, e, ph);')]:
  assert p.count(old)==1,(name,p.count(old));faults.append((name,'phases.c',p.replace(old,new,1),False))
 flags=['-O2','-g','-std=c99','-ffp-contract=off',*['-I'+str(r/x) for x in ['battle-core/include','battle-core/gen/out','battle-core/build','battle-core/tests']]]
 with tempfile.TemporaryDirectory(prefix='form-block-guards-',dir=r/'work') as tmp:
