@@ -129,10 +129,11 @@ int football_live_ai_qb(FootballLive *m)
         float depth=(r->x-m->los)*dir,range=gap(qb,r),near=100;
         if(depth<-2 || range>arm+8)continue;
         for(unsigned d=def;d<def+11;++d)near=fminf(near,gap(r,&m->actors[d]));
-        /* A QB misjudges how open a receiver is, more the poorer his reads (tha). */
-        near+=(((int)(football_live_random(m)%2001)-1000)/1000.0f)*(1.4f-qb->attributes.tha*.011f);
+        /* Apply read uncertainty after capping openness, so equally open windows
+         * remain distinguishable instead of always choosing the first slot. */
+        float read_error=(((int)(football_live_random(m)%2001)-1000)/1000.0f)*(1.4f-qb->attributes.tha*.011f);
         /* Open is what matters; a receiver past the sticks on 3rd/4th down is worth waiting for. */
-        float value=fminf(near,5)-fmaxf(0,depth-10)*.07f+(m->rules.down>=3 && depth>=to_go?1.5f:0)-fmaxf(0,range-arm)*.25f;
+        float value=fminf(near,5)-fmaxf(0,depth-10)*.07f+(m->rules.down>=3 && depth>=to_go?1.5f:0)-fmaxf(0,range-arm)*.25f+read_error;
         if(value>best){best=value;pick=(int)t;}
     }
     /* Patience runs out with the clock in the pocket; a sharp QB takes smaller windows. */

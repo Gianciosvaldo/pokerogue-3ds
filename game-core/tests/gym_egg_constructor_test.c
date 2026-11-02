@@ -182,8 +182,8 @@ static void unsupported(void)
         case 18:m.trainer_slot=m.b.trainer_slot=3;break;
         case 19:inject_stats_failure=true;break;
         case 20:run.double_battle=true;break;
-        case 21:run.trainer_type=TRAINER_TYPE_ROCKET_BOSS_GIOVANNI_1;break;
-        case 22:run.trainer_type=TRAINER_TYPE_MISTY;break;
+        case 21:run.trainer_type=TRAINER_TYPE_RIVAL_2;break;
+        case 22:run.trainer_type=TRAINER_TYPE_RIVAL_6;break;
         }
         gc_mon before=m;pr_rng rng=n->moves_before;
         CHECK(!gc_generate_moveset(&run,&rng,&m));

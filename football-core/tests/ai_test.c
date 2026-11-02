@@ -60,10 +60,52 @@ static Stats play_games(unsigned first_seed,unsigned games)
     }
     return st;
 }
+/* Receiver windows with equal value must not collapse to the first capped
+ * candidate. These are isolated QB-read contexts, not overlapping live routes. */
+static void receiver_reads(void)
+{
+    const unsigned slot[5]={2,3,4,5,1};
+    const unsigned accuracy[3]={30,60,99};
+    for(unsigned side=0;side<2;++side)for(unsigned profile=0;profile<3;++profile){
+        set_situation((Situation){1,10,50,0,2,90},1);
+        m.rules.offense=(FootballSide)side;m.play=FB_PASS_SLANTS;m.elapsed=2;
+        unsigned off=side?11:0,def=11-off;float dir=side?-1.f:1.f;
+        m.carrier=(uint8_t)off;m.thrown=m.flying=m.scramble=false;m.los=60;
+        for(unsigned i=0;i<22;++i){m.actors[i].x=60+dir*50;m.actors[i].y=26.67f;m.actors[i].attributes=(FootballAttributes){60,60,60,60,60,60,60,60};}
+        m.actors[off].x=60-dir*5;m.actors[off].attributes.tha=(uint8_t)accuracy[profile];
+        for(unsigned r=0;r<5;++r){m.actors[off+slot[r]].x=60+dir*5;m.actors[off+slot[r]].y=26.67f;}
+        unsigned count[5]={0};
+        for(unsigned seed=1;seed<=4000;++seed){m.rng=seed;int read=football_live_ai_qb(&m);assert(read>=0&&read<5);count[read]++;}
+        for(unsigned r=0;r<5;++r)assert(count[r]>400&&count[r]<1200);
+        /* A single open receiver still wins over four covered ones, at every
+         * position; fairness between ties cannot override the actual window. */
+        for(unsigned open=0;open<5;++open){
+            const float lane[5]={4,49,13,39,26.67f};
+            for(unsigned r=0;r<5;++r){m.actors[off+slot[r]].y=lane[r];m.actors[def+r].x=r==open?60+dir*50:60+dir*5.2f;m.actors[def+r].y=lane[r];}
+            for(unsigned seed=1;seed<=100;++seed){m.rng=seed;assert(football_live_ai_qb(&m)==(int)open);}
+        }
+    }
+}
+static void outside_zone_responsibilities(void)
+{
+    for(unsigned side=0;side<2;++side)for(unsigned play=0;play<FB_PLAY_COUNT;++play){
+        if(football_playbook_get((FootballPlayId)play)->type!=FB_PLAY_PASS)continue;
+        set_situation((Situation){1,10,50,0,2,90},1);m.rules.offense=(FootballSide)side;m.autoplay=1;
+        assert(football_live_call(&m,(FootballPlayId)play));m.defense=FB_DEF_ZONE;football_live_defense_setup(&m);
+        unsigned off=side?11:0,def=11-off;
+        for(unsigned corner=7;corner<=8;++corner){float x,y;football_live_defense_intent(&m,def+corner,&x,&y);
+            unsigned receiver=off+(corner==7?2:3);assert(m.coverage[corner]==receiver);
+            float dx=m.actors[def+corner].x+x-m.actors[receiver].x,dy=m.actors[def+corner].y+y-m.actors[receiver].y;
+            assert(hypotf(dx,dy)>FB_BODY_DIAMETER+.1f);
+        }
+    }
+}
 int main(void)
 {
     assert(football_roster_init(&roster));roster.count=22;
     for(unsigned i=0;i<22;++i)roster.player[i].attributes=(FootballAttributes){60,60,60,60,60,60,60,60};
+
+    receiver_reads();outside_zone_responsibilities();
 
     /* First and ten in a tied game at midfield: every play is in the book, and it is not a coin flip between two of them. */
     Mix neutral=sample_calls((Situation){1,10,50,0,2,90});

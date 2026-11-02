@@ -822,3 +822,9 @@ $(BUILD)/sleep-invulnerability-test: tests/sleep-invulnerability-test.c $(BUILD)
 sleep-invulnerability-host-test: $(BUILD)/sleep-invulnerability-test
 	python3 tools/check-sleep-invulnerability-proof.py --runner $(BUILD)/sleep-invulnerability-test
 .PHONY: sleep-invulnerability-host-test
+
+$(BUILD)/move-inventory-dump: tools/move-inventory-dump.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: move-inventory-audit
+move-inventory-audit: $(BUILD)/move-inventory-dump
+	python3 tools/audit-move-inventory.py --dump $(BUILD)/move-inventory-dump

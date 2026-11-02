@@ -3,12 +3,20 @@
 # each with one line of src/newbattle.c (run-core) or src/gc_encounter.c (game-core) changed, and runs both the differential (tests/gym_e4_diff_test.c)
 # and the host test (tests/gym_e4_test.c) on it. Every copy must fail at least one of them (exit 1); the first column says which caught it.
 # Admin and boss plants cover the group choice (pool, offset, shuffle), the gender roll, the boss pool index and form, the flags and the closure members.
-# Post-process plants cover the ops interpreter (guards, each field, the random form and move, the move slots), the pending member RNG and the game-core
-# glue. Not planted (equivalent): a skipped REGEN (the producer stub and the constructor both leave moves 1..4), a generateName, the wave-equal guard alone (with the stub the two branches of a
-# wave if/else end in the same form), a found move making LACKS_MOVE false (no test move is in 1..4).
+# Post-process plants cover the ops interpreter (guards, each field, the random form and move, the move slots, the regeneration), the pending member RNG and
+# the game-core glue. Moveset plants cover the native generator's egg pool (level, weight, cap, counts, ordering against the TMs), the instant Tera slots, and
+# the regeneration's own state (final IVs for Hidden Power, the constructor's stats, the boss status, the current form, ability and gender). The real-generator
+# trace is the argument; a trace of evil fights followed by one made with DIFF_MODE=gym (cat both) also reaches the levels where the rare egg moves begin. The
+# fallback for a member the generator declines (Keldeo) is not planted: no evil fight has one and its moves are not compared.
+# Not planted (equivalent): a generateName, the wave-equal guard alone (with the stub the two branches of a wave if/else end in the same form).
+# Not planted (the game data never reaches it, measured on 12000 cases): an egg-enabled member at exactly the egg level 80 (the levels jump past it), an egg-enabled
+# boss at the rare-egg level 170 (the highest boss is 156), the regeneration's ctor-time gender instead of the final one (only gender abilities like Rivalry read it,
+# and no regenerated member has one), and the Tera type's STAB bonus (every instant-Tera member's Tera type is already one of its own types).
+# Not planted (needs a rare combination the traces do not reach): Snowscape/Hail and Sandstorm with an instant Tera, Tera Blast's STAB, Revelation Dance.
 # Not planted (equivalent under both): the order of the ctx assignments, the comments, the party template roll in trainer_ctor (the Youngster and the grunts have
 # one template, so randSeedItem rolls nothing).
-# Usage: tools/evilplant.sh <trace>   (EVIL_PLANT_FROM=<name> starts at that plant)
+# Usage: tools/evilplant.sh <trace>   (EVIL_PLANT_FROM=<name> starts at that plant; DIFF_MODE=gym traces cover the gym leaders' and
+# Elite Four's constructor movesets: pass one as <trace> to run the moveset plants against it)
 set -e
 TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
 HERE=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
@@ -87,7 +95,31 @@ plant move-slot-shifted     's/case PR_EOP_MOVE: out->moveset\[op->a\] = op->b; 
 plant moveset-array-reversed 's/out->moveset\[k\] = pr_evil_op_items\[op->a + k\];/out->moveset[3 - k] = pr_evil_op_items[op->a + k];/' run-core:evil_team.c
 plant pending-never-set     's/out->evil_pending = true;/out->evil_pending = false;/' run-core:evil_team.c
 plant finish-ambient-rng    's/out->evil_pending ? \&out->evil_rng : \&run->rng/\&run->rng/' run-core:pokemongen.c
-plant moves-not-applied     's/^        post_apply_moves(m, \&party.mons\[e\]);.*$/        ;/'
-plant ctor-moveset-skipped  's/^        post_moveset(run, m, \&party.mons\[e\]);.*$/        ;/'
+plant regen-skipped         's/if (ctx->post_regen \&\& ctx->post_regen(ctx->post_regen_user, out, rng) < 0) return -1;/;/' run-core:evil_team.c
+plant ctor-rng-ambient      's/pr_rng \*rng = g->evil_pending ? \&g->evil_rng : \&r->rng;/pr_rng *rng = \&r->rng;/'
+plant ctor-moves-not-applied 's/^    post_apply_moves(m, g);.*$/    ;/'
+plant regen-ctor-ivs        's/^    for (int i = 0; i < 6; i++) p->ivs\[i\] = (uint8_t)g->ivs\[i\];.*$/    ;/'
+plant regen-fresh-stats     's/\&cur, st->m, st->will_tera/\&cur, NULL, st->will_tera/'
+plant regen-not-boss        's/    p->is_boss = g->boss_segments > 0;/    p->is_boss = false;/'
+plant regen-stale-form      's/    p->form = (uint8_t)g->form;/    p->form = st->m->b.form;/'
+plant regen-stale-ability   's/gc_form(p->species, g->form), g->ability_index);/gc_form(p->species, g->form), st->m->ability_index);/'
+plant tera-slot-ignored     's/const bool will_tera = tc \&\& (tc->tera_static \& (1u << member));.*$/const bool will_tera = false;/'
+M=gc_movegen.c
+plant egg-pool-dropped      's/if (!c->eggs_allowed || c->p.level < gc_mg_trainer_const.egg_level) return true;/if (1) return true;/' $M
+plant egg-weight-unrounded  's/egg_to_level_weight + .5)/egg_to_level_weight)/' $M
+plant egg-weight-uncapped   's/, gc_mg_trainer_const.egg_weight_max);/, 1e9);/' $M
+plant egg-rare-always       's/const bool exclude_rare = c->boss || c->p.level < gc_mg_trainer_const.rare_egg_level;/const bool exclude_rare = false;/' $M
+plant egg-rare-never        's/const bool exclude_rare = c->boss || c->p.level < gc_mg_trainer_const.rare_egg_level;/const bool exclude_rare = true;/' $M
+plant egg-rare-weight       's/const double rare = normal \* (5.0 \/ 6);/const double rare = normal;/' $M
+plant egg-tm-duplicate      's/ || pool_find(\&egg, move) >= 0 || pool_find(\&tm, move) >= 0) continue;/ || pool_find(\&tm, move) >= 0) continue;/' $M
+plant egg-superceded-tm     's/filter_superceded_extra(\&tm, level, \&egg);/filter_superceded_extra(\&tm, level, NULL);/' $M
+plant egg-source-untagged   's/c->source_of\[egg.e\[k\].move\] = 2;/c->source_of[egg.e[k].move] = 0;/' $M
+plant egg-count-dropped     's/else if (c->source_of\[move\] == 2) c->egg_count++;/else if (0) c->egg_count++;/' $M
+plant egg-cap-ignored       's/ || (nonlevel >= egg_cap \&\& c->source_of\[move\] == 2)) continue;/) continue;/' $M
+plant nonlevel-tm-only      's/const int nonlevel = c->tm_count + c->egg_count;/const int nonlevel = c->tm_count;/' $M
+plant tera-ignored          's/c.will_tera = trainer \&\& will_tera;/c.will_tera = false;/' $M
+plant tera-blast-untyped    's/if (move == MOVE_ID_TERA_BLAST) return c->p.tera_type;/if (move == MOVE_ID_TERA_BLAST) return type;/' $M
+plant tera-existing-types   's/const uint32_t existing = existing_damage_types(c, true);/const uint32_t existing = existing_damage_types(c, false);/' $M
+plant regen-boss-declined   's/ || (m->b.is_boss \&\& !stats_of) || m->b.passive_flag/ || m->b.is_boss || m->b.passive_flag/' $M
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"

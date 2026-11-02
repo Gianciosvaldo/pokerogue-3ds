@@ -84,3 +84,13 @@ terminal or hardware acceptance. The source ledger remains open.
 executed evolution/move learning and played wave-5,849/5,850 clears with save/load.
 This supersedes the earlier absence of those particular joined C contexts;
 it does not close source parity, complete token history or presentation acceptance.
+
+[Registered move inventory](MOVE-ATTRIBUTE-INVENTORY.md) accounts for all
+921 move entries, 86 disabled flags and enabled normal/charge attribute ordering
+and inheritance. Nine family-switch defaults have no missing registered enabled
+subclass. Source/runtime semantics and the other diagnostic branches still need
+review. The original generation row above predates #508/#513/#515: ordinary
+Classic constructors and four plain Gym profiles now have native moveset proofs;
+other special profile and postProcess moveset admission remain separate.
+[Ten grunt profiles](../game-core/GRUNT-CONSTRUCTOR-VALIDATION.md) now also have
+6,000 native constructor comparisons across all three variants.

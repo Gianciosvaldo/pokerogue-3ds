@@ -376,43 +376,60 @@ typedef struct {
     bool ready[6];
 } trainer_constructor_state;
 
-static int finish_trainer_constructor(pr_run *r, const pr_enemy_gen_ctx *ec,
-                                      int member, pr_enemy_gen *g, void *user)
-{
-    trainer_constructor_state *state = user;
-    if (member < 0 || member >= 6 || ec->trainer_type != state->run->trainer_type) return 0;
-    gc_mon *m = &state->mons[member];
-    gc_mon_new_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
-    if (!gc_generate_moveset(state->run, &r->rng, m)) return 0;
-    memset(g->moveset, 0, sizeof g->moveset);
-    for (int k = 0; k < m->b.n_moves; k++) g->moveset[k] = m->b.moves[k];
-    if (pr_run_enemy_pokemon_finish(r, ec, g) < 0) return -1;
-    gc_refresh_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
-    state->ready[member] = true;
-    return 1;
-}
-
 /* A closure member's postProcess (run-core's ops, at the end of pr_run_enemy_pokemon_finish) reads and writes the moveset of the Pokemon being made
- * and may regenerate it (p.generateAndPopulateMoveset()). The moveset is the stand-in until the boss trainers' generator is ported; the tests make
- * it moves 1..4, which is what the upstream producer's stub leaves. */
-typedef struct { gc_run *run; gc_mon *m; } post_regen_state;
+ * and may regenerate it (p.generateAndPopulateMoveset()), which upstream does with the form, ability, gender and boss status the ops have assigned
+ * so far and the stats the constructor calculated. `m` is the staged Pokemon of the constructor; the regenerated moves go to it and to `g`. A member
+ * the owner could not make (instant Tera, rivals) has the stand-in moveset instead. */
+typedef struct { gc_run *run; gc_mon *m; int species, level, slot; bool real, will_tera; } post_regen_state;
 
-static void post_moveset(gc_run *run, gc_mon *m, pr_enemy_gen *g)
+static void post_moveset_from(gc_mon *m, pr_enemy_gen *g)
 {
-    if (gc_int(run)->post_sentinel_moves) {
-        for (int k = 0; k < 4; k++) gc_mon_set_move(m, k, k + 1);
-    } else {
-        gc_port_enemy_moveset(run, m);
-    }
     memset(g->moveset, 0, sizeof g->moveset);
     for (int k = 0; k < m->b.n_moves && k < 4; k++) g->moveset[k] = m->b.moves[k];
 }
 
+static void post_moveset(gc_run *run, gc_mon *m, pr_enemy_gen *g)
+{
+    gc_port_enemy_moveset(run, m);
+    post_moveset_from(m, g);
+}
+
 static int post_regen(void *user, void *gen, pr_rng *rng)
 {
-    (void)rng;   /* the stand-in rolls nothing */
     post_regen_state *st = user;
-    post_moveset(st->run, st->m, gen);
+    pr_enemy_gen *g = gen;
+    if (!st->real) {   /* the stand-in rolls nothing */
+        post_moveset(st->run, st->m, g);
+        return 0;
+    }
+    /* the Pokemon as it is now: the postProcess's form, ability slot, gender and boss segments and the IVs the constructor rerolled (Hidden
+     * Power's type reads them); its stats are still the ones the constructor calculated */
+    static gc_mon cur;   /* 4 KB: off the 3DS stack */
+    cur = *st->m;
+    pr_pokemon *p = &cur.b;
+    p->form = (uint8_t)g->form;
+    cur.ability_index = (uint8_t)g->ability_index;
+    p->base_ability = p->ability = (uint16_t)gc_form_ability(p->species, gc_form(p->species, g->form), g->ability_index);
+    p->gender = (int8_t)g->gender;
+    for (int i = 0; i < 6; i++) p->ivs[i] = (uint8_t)g->ivs[i];   /* the rerolled IVs: Hidden Power's type */
+    p->is_boss = g->boss_segments > 0;
+    p->boss_segments = (uint8_t)(g->boss_segments > 0 ? g->boss_segments : 0);
+    memset(p->moves, 0, sizeof p->moves);
+    memset(p->pp_used, 0, sizeof p->pp_used);
+    memset(p->pp_up, 0, sizeof p->pp_up);
+    p->n_moves = 0;
+    if (!gc_generate_moveset_stale(st->run, rng, &cur, st->m, st->will_tera)) return -1;
+    gc_mon *m = st->m;
+    memset(m->b.moves, 0, sizeof m->b.moves);
+    memset(m->b.pp_used, 0, sizeof m->b.pp_used);
+    memset(m->b.pp_up, 0, sizeof m->b.pp_up);
+    m->b.n_moves = 0;
+    for (int i = 0; i < 4; i++) m->b.max_pp_override[i] = -1;
+    for (int i = 0; i < cur.b.n_moves; i++) {
+        gc_mon_set_move(m, i, cur.b.moves[i]);
+        m->b.pp_up[i] = cur.b.pp_up[i];
+    }
+    post_moveset_from(m, g);
     return 0;
 }
 
@@ -420,6 +437,35 @@ static void post_apply_moves(gc_mon *m, const pr_enemy_gen *g)
 {
     for (int k = 0; k < 4; k++)
         if (g->moveset[k] && (k >= m->b.n_moves || m->b.moves[k] != g->moveset[k])) gc_mon_set_move(m, k, g->moveset[k]);
+}
+
+static int finish_trainer_constructor(pr_run *r, const pr_enemy_gen_ctx *ec,
+                                      int member, pr_enemy_gen *g, void *user)
+{
+    trainer_constructor_state *state = user;
+    if (member < 0 || member >= 6 || ec->trainer_type != state->run->trainer_type) return 0;
+    memset(gc_int(state->run)->ctor_moves[member], 0, sizeof gc_int(state->run)->ctor_moves[member]);
+    const gc_trainer_config *tc = gc_trainer_config_of(ec->trainer_type);
+    const bool will_tera = tc && (tc->tera_static & (1u << member));   /* willTerastallize(): the config's setInstantTera slots */
+    gc_mon *m = &state->mons[member];
+    gc_mon_new_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
+    /* a closure member's whole constructor and postProcess run on its own RNG (g->evil_rng), the others' on the member RNG installed in r */
+    pr_rng *rng = g->evil_pending ? &g->evil_rng : &r->rng;
+    gc_int(state->run)->ctor_will_tera = will_tera;
+    const bool made = gc_generate_moveset(state->run, rng, m);
+    gc_int(state->run)->ctor_will_tera = false;
+    if (!made) return 0;
+    memset(g->moveset, 0, sizeof g->moveset);
+    for (int k = 0; k < m->b.n_moves; k++) g->moveset[k] = gc_int(state->run)->ctor_moves[member][k] = m->b.moves[k];
+    pr_enemy_gen_ctx lec = *ec;
+    post_regen_state regen = {state->run, m, ec->species, ec->level, ec->trainer_slot, true, will_tera};
+    lec.post_regen = post_regen;
+    lec.post_regen_user = &regen;
+    if (pr_run_enemy_pokemon_finish(r, &lec, g) < 0) return -1;
+    post_apply_moves(m, g);   /* what the closure's postProcess did to it */
+    gc_refresh_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
+    state->ready[member] = true;
+    return 1;
 }
 
 /* the ordinary party of a trainer: `tpl`'s members at `levels`, as EncounterPhase generates them (unfinished: gc_enemy_finish_party follows) */
@@ -457,7 +503,7 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
         gc_mon *m = &run->enemy[run->n_enemy];
         gc_mon_new_enemy(run, m, party.species[e], levels[e], &party.mons[e], ec.trainer_slot);
         post_moveset(run, m, &party.mons[e]);   /* the constructor's moveset */
-        post_regen_state regen = {run, m};
+        post_regen_state regen = {run, m, party.species[e], levels[e], ec.trainer_slot, false, false};
         ec.post_regen = post_regen;
         ec.post_regen_user = &regen;
         if (pr_run_enemy_pokemon_finish(&run->run, &ec, &party.mons[e]) < 0) return false;
