@@ -3,6 +3,7 @@
  *
  *   TEXT          -> a message, rendered by pr_msg_format from the locale files in data.pak
  *                    (messages battle-core has no key for yet are skipped)
+ *   DIALOGUE      -> a prompted dialogue with the frozen species speaker's name
  *   MOVE_ANIM     -> the move animation (a stand-in lunge until the animation interpreter)
  *   DAMAGE / HP   -> the hit and the HP bar, to the HP in the event's field snapshot
  *   STAT_STAGES   -> one stat stage event per stat changed

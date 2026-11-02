@@ -95,7 +95,7 @@ typedef enum {
   BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
                     * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
   BEV_FIELD_SWAP, /* ToggleDoublePosition: player slots 0 and 1 exchange places */
-  BEV_DIALOGUE,    /* a trainer speaks (ui.showDialogue): `text` is the line with its "$" pages and @c{expression} markers (up to
+  BEV_DIALOGUE,    /* ui.showDialogue (a trainer or the final boss): `text` is the line with its "$" pages and @c{expression} markers (up to
                     * BV_DIALOGUE_TEXT bytes), `name` the speaker's name for the name box, `atlas` the gfx.pak key of the portrait
                     * that slides in beside it (upstream's CharSprite, with the field darkened for the talk) or NULL for a
                     * dialogue with the name box alone. A button for each page; the portrait goes out and the field clears when

@@ -52,7 +52,11 @@ static const char* text_get(void* ctx, const char* file, int fallback, size_t* l
   if (!strcmp(lang, "es-419")) chain[n++] = "es-ES";
   if (strcmp(lang, "en")) chain[n++] = "en";
   if (fallback < 0 || fallback >= n) return NULL;
-  return loc_file(chain[fallback], file, len);
+  const char *json = loc_file(chain[fallback], file, len);
+  /* NULL means the fallback chain ended to pr_msg_format. A missing pack file
+   * is an empty language entry, so later languages still get their turn. */
+  if (!json) { *len = 2; return "{}"; }
+  return json;
 }
 
 const pr_text_source* be_text_source(void) {
@@ -304,6 +308,15 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         current[view_slot(b)] = *mon;
         break;
       }
+      case PR_EV_DIALOGUE:
+        if (!ev->msg.key || nt + 1 >= TXT_MAX) break;
+        be_format_message(&ev->msg, g_txt[nt], sizeof g_txt[nt]);
+        /* Freeze the base species name too: later events can change forms,
+         * replace the field slot, or reuse the localization scratch buffer. */
+        snprintf(g_txt[nt + 1], sizeof g_txt[nt + 1], "%s", i18n_species_name(ev->id));
+        PUT(.type = BEV_DIALOGUE, .battler = b, .a = ev->id, .text = g_txt[nt], .name = g_txt[nt + 1]);
+        nt += 2;
+        break;
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
         /* "Will you switch Pokemon?" is asked as a prompt in upstream (SET battle style only); the run doesn't
@@ -469,7 +482,12 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     if (p->hp < seen[k].hp) PUT(.type = BEV_DAMAGE, .battler = k, .a = p->hp, .b = HIT_RESULT_INDIRECT);
     else if (p->hp > seen[k].hp) PUT(.type = BEV_HEAL, .battler = k, .a = p->hp);
     if (p->status != seen[k].status) PUT(.type = BEV_STATUS, .battler = k, .a = p->status);
-    if (p->hp <= 0 && !seen[k].fainted) {
+    /* A party-choice pause may hand control back before FaintPhase. The final
+     * boss must stay visible for its pending dialogue (or first-form faint
+     * cancellation); its explicit FAINT event owns the eventual disappearance. */
+    bool final_boss_pending = k >= 2 && p->on_field && bt->wave_index == 200 &&
+        (bt->game_mode == GAME_MODES_CLASSIC || bt->game_mode == GAME_MODES_CHALLENGE);
+    if (p->hp <= 0 && !seen[k].fainted && !final_boss_pending) {
       /* The faint the screen shows now is the faint it has shown: when a pause (a Wimp Out switch prompt) comes between the
        * killing hit and battle-core's FAINT event, that event arrives in the next batch and must find the Pokemon gone */
       PUT(.type = BEV_FAINT, .battler = k);
