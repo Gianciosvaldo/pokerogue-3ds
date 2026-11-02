@@ -155,6 +155,13 @@ uint64_t gc_species_full_unlocks_data(uint16_t species_id) {
     return 0;
 }
 
+uint64_t gc_species_starter_forms(uint16_t species_id) {
+    for (int i = 0; i < gc_species_dex_info_count; i++) {
+        if (gc_species_dex_info_data[i].species == species_id) return gc_species_dex_info_data[i].starter_forms;
+    }
+    return 1;
+}
+
 int getStarterValueFriendshipCap(int starter_cost) {
     switch (starter_cost) {
     case 1: return 25;

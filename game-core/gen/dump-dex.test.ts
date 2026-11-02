@@ -52,7 +52,20 @@ it("dump dex", () => {
     const hasAb2 = s.ability2 !== undefined && s.ability2 !== null && s.ability2 !== s.ability1 ? "true" : "false";
     // getFullUnlocksData(): what setPokemonSpeciesCaught ANDs a catch's attributes with (its own sexes, variants and
     // obtainable forms, which no other column gives)
-    dexInfoRows.push(`    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}, ${s.getFullUnlocksData()}ULL},`);
+    // PokemonForm.isStarterSelectable per form index (bit f = form f): the starter select's form cycling and its
+    // stored form preference only take these (starter-select-ui-handler.ts:710, :1209, :2882). A species with no
+    // form list has the one form, bit 0.
+    let starterForms = 0n;
+    if (s.forms.length > 1) {
+      s.forms.forEach((f, i) => {
+        if (f.isStarterSelectable) starterForms |= 1n << BigInt(i);
+      });
+    } else {
+      starterForms = 1n;
+    }
+    dexInfoRows.push(
+      `    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}, ${s.getFullUnlocksData()}ULL, ${starterForms}ULL},`,
+    );
   }
 
   // the form keys each species' form changes lead to: setPokemonSpeciesCaught unlocks a species' base form when the

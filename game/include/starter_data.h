@@ -10,7 +10,8 @@
  * pinned commit, src/ui/utils/starter-select-ui-utils.ts): shiny when a shiny is caught (the highest variant caught), female only
  * for a species that is always female, form 0, the first ability unlocked, the lowest nature caught, the passive when it is
  * unlocked and on, the species' first type as the tera type, the IVs the dex holds, and the default moveset. The cycle buttons that
- * change them are available through Customize. Stored unlocked preferences override these defaults; invalid or stale choices fall back safely.
+ * change them are available through Customize (and L / ZL for the form and gender). Stored unlocked preferences override these defaults;
+ * invalid or stale choices fall back safely.
  */
 #ifndef GM_STARTER_DATA_H
 #define GM_STARTER_DATA_H
@@ -47,6 +48,22 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out);
 
 /* The gc_starter for `species` with the defaults above (what gc_run_set_starters takes). False when the species is not a starter. */
 bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out);
+
+/* The form and gender cycle buttons (L and ZL on the 3DS), as upstream's starter select has them: updateCanCycle, then processCycleButtonsInput.
+ * ss_can_cycle_form / ss_can_cycle_gender say whether the button does anything for `species` (two or more caught forms the way updateCanCycle
+ * counts them; both sexes caught). ss_cycle_form steps to the next form that the starter select offers (PokemonForm.isStarterSelectable) and
+ * that is caught, wrapping; ss_cycle_gender flips the gender. For the four species whose sexes are forms (Meowstic, Indeedee, Basculegion,
+ * Oinkologne) each one moves the other, as setNewFormIndex and setNewGender do. The choice is stored in the system data as the starter's
+ * preference (the caller saves it); a change game-core would refuse is not made. True when upstream reports the button as pressed
+ * (a cycle). */
+bool ss_can_cycle_form(const gc_system* sys, uint16_t species);
+bool ss_can_cycle_gender(const gc_system* sys, uint16_t species);
+bool ss_cycle_form(gc_system* sys, uint16_t species);
+bool ss_cycle_gender(gc_system* sys, uint16_t species);
+/* Pick a form / a gender directly (the Customize lists). ss_form_offered: the form is one the starter select offers and it is caught. */
+bool ss_form_offered(const gc_system* sys, uint16_t species, int form);
+bool ss_set_form(gc_system* sys, uint16_t species, int form);
+bool ss_set_gender(gc_system* sys, uint16_t species, bool female);
 
 /* The team the player confirmed, as game-core takes it: each one through ss_starter and gc_starter_is_available, the cost against
  * gc_starter_budget. False with `why` (a locale key such as "starterSelectUiHandler:cost" or game-core's own text) when game-core

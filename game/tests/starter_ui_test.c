@@ -822,6 +822,165 @@ static void test_customization(void) {
   CHECK(drawn("Luck: B- (3/14)"),"selected epic shiny contributes three pre-run luck");
 }
 
+/* the form and gender buttons (L, ZL) on the grid, and the Form / Gender rows of Customize, for the species lorenzo asked about:
+ * Pikachu (forms), Oricorio (styles), Salandit (sexes only), Indeedee (sexes that are forms) */
+static bool cycle_input(mui_button b) { return g_screen->input(g_screen, (ui_button)b); }
+static const sm_entry* entry_of(uint16_t species) { return sm_find(starter_model(), species); }
+static void only_these_species(void) {
+  gc_system_init_defaults(&SYS);
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    SYS.dex[id].caught_attr = SYS.dex[id].seen_attr = 0;
+    SYS.dex[id].nature_attr = 0;
+    SYS.starters[id].ability_attr = 0;
+  }
+  static const uint16_t four[] = {25, 741, 757, 876};
+  for (int i = 0; i < 4; i++) {
+    SYS.dex[four[i]].caught_attr = SYS.dex[four[i]].seen_attr = gc_species_full_unlocks_data(four[i]) | 1ull;
+    SYS.dex[four[i]].nature_attr = 0x3FFFFFEu;
+    SYS.starters[four[i]].ability_attr = 7;
+  }
+}
+static void test_cycle_buttons(void) {
+  only_these_species();
+  CHECK(open_screen(NULL) && starter_model()->n == 4, "four species listed");
+  CHECK(starter_model()->entries[0].species == 25 && starter_model()->entries[1].species == 741 && starter_model()->entries[3].species == 876, "in order");
+
+  /* Pikachu is under the cursor: L steps through its eight forms and back */
+  reset_logs();
+  const int saves = save_calls;
+  CHECK(cycle_input(MB_CYCLE_FORM), "L is taken");
+  CHECK(count_in(g_sfx, "ui/select") == 1, "and plays the select sound: %s", g_sfx);
+  CHECK(entry_of(25)->form == 1 && SYS.starters[25].form_preference == 1 && (SYS.starters[25].preference_flags & 8), "Pikachu is in its second form, stored");
+  CHECK(save_calls > saves, "the choice is written to the SD card");
+  CHECK(entry_of(25)->species == 25 && starter_model()->n == 4, "the list is the same");
+  for (int k = 2; k <= 7; k++) {
+    cycle_input(MB_CYCLE_FORM);
+    CHECK(entry_of(25)->form == k, "form %d", k);
+  }
+  cycle_input(MB_CYCLE_FORM);
+  CHECK(entry_of(25)->form == 0, "after the eight offered forms Pikachu is back in the first (Gigantamax is never offered)");
+  CHECK(cycle_input(MB_CYCLE_GENDER), "ZL is taken");
+  CHECK(entry_of(25)->female && (SYS.starters[25].preference_flags & 16) && SYS.starters[25].gender_preference == 1, "Pikachu is female, stored");
+  cycle_input(MB_CYCLE_GENDER);
+  CHECK(!entry_of(25)->female, "and male again");
+
+  /* the panel reads the new choice: the described form is the one drawn and the sprite is asked again */
+  cycle_input(MB_CYCLE_FORM);
+  starter_info info;
+  ss_describe(&SYS, 25, &info);
+  CHECK(info.mon.form == 1, "the panel is described with form 1");
+  cycle_input(MB_CYCLE_FORM);
+  cycle_input(MB_CYCLE_FORM);
+  CHECK(entry_of(25)->form == 3, "three forms");
+
+  /* Oricorio: four styles */
+  press(MB_RIGHT);
+  CHECK(sm_species(starter_model()) == 741, "the cursor is on Oricorio");
+  for (int k = 1; k <= 3; k++) {
+    CHECK(cycle_input(MB_CYCLE_FORM) && entry_of(741)->form == k, "Oricorio style %d", k);
+  }
+  cycle_input(MB_CYCLE_FORM);
+  CHECK(entry_of(741)->form == 0, "and round");
+
+  /* Salandit has two sexes and one form: L does nothing, ZL flips */
+  press(MB_RIGHT);
+  CHECK(sm_species(starter_model()) == 757, "the cursor is on Salandit");
+  reset_logs();
+  const gc_starter_entry sal = SYS.starters[757];
+  CHECK(!cycle_input(MB_CYCLE_FORM) && !memcmp(&sal, &SYS.starters[757], sizeof sal) && !strstr(g_sfx, "ui/"), "L does nothing for a species with one form, silently");
+  CHECK(cycle_input(MB_CYCLE_GENDER) && entry_of(757)->female, "ZL makes Salandit female");
+
+  /* Indeedee: the sexes are the forms */
+  press(MB_RIGHT);
+  CHECK(sm_species(starter_model()) == 876 && !entry_of(876)->female && entry_of(876)->form == 0, "Indeedee is male");
+  CHECK(cycle_input(MB_CYCLE_GENDER) && entry_of(876)->female && entry_of(876)->form == 1, "ZL gives the female and the female's form");
+  CHECK(cycle_input(MB_CYCLE_FORM) && !entry_of(876)->female && entry_of(876)->form == 0, "L back to the male form and the male");
+
+  /* only with the cursor on a species in the grid */
+  {
+    const gc_starter_entry before = SYS.starters[876];
+    press(MB_ACTION); /* the screen's options menu opens */
+    cycle_input(MB_CYCLE_FORM);
+    cycle_input(MB_CYCLE_GENDER);
+    CHECK(!memcmp(&before, &SYS.starters[876], sizeof before) && starter_model()->n_party == 0, "the buttons change nothing under the options menu");
+    press(MB_CANCEL);
+  }
+  press(MB_LEFT);
+  press(MB_LEFT);
+  press(MB_LEFT); /* Pikachu again */
+  press(MB_ACTION);
+  press(MB_ACTION); /* Add to Party */
+  CHECK(starter_model()->n_party == 1 && starter_model()->party[0] == 25, "Pikachu is on the team");
+  CHECK(cycle_input(MB_CYCLE_FORM) && entry_of(25)->form == 4, "the team member's icon follows the new form (%d)", entry_of(25)->form);
+  tap(290, (float)sm_party_icon_y(0) + 4); /* the team member's icon: the cursor goes to the team */
+  CHECK(starter_model()->focus == SM_PARTY, "the cursor is on the team");
+  {
+    const gc_starter_entry before = SYS.starters[25];
+    CHECK(!cycle_input(MB_CYCLE_FORM) && !cycle_input(MB_CYCLE_GENDER) && !memcmp(&before, &SYS.starters[25], sizeof before), "not with the cursor on the team");
+  }
+  press(MB_UP); /* the first team member's up: Randomize */
+  CHECK(starter_model()->focus == SM_RANDOM && !cycle_input(MB_CYCLE_FORM) && !cycle_input(MB_CYCLE_GENDER) && entry_of(25)->form == 4, "not on Randomize");
+  press(MB_DOWN);
+  press(MB_DOWN); /* the team, then Start */
+  CHECK(starter_model()->focus == SM_START && !cycle_input(MB_CYCLE_FORM) && !cycle_input(MB_CYCLE_GENDER) && entry_of(25)->form == 4, "not on Start");
+  /* the team that begins carries the chosen form */
+  press(MB_MENU);
+  tick(2500);
+  press(MB_ACTION);
+  CHECK(R.started == 1 && R.n_team == 1 && R.team[0].species == 25 && R.team[0].form == 4, "the team starts with Pikachu in form %d", R.team[0].form);
+  const char* why = NULL;
+  CHECK(core_takes(R.team, R.n_team, &why) && RUN.party[0].b.form == 4, "game-core takes it and the run's Pikachu has the form: %s", why ? why : "");
+
+  /* a profile that cannot be written: the change is undone and said so */
+  only_these_species();
+  CHECK(open_screen(NULL), "reopen");
+  const gc_starter_entry old = SYS.starters[25];
+  fail_save_call = save_calls + 2; /* the settling save passes, the save of the change fails */
+  reset_logs();
+  CHECK(!cycle_input(MB_CYCLE_FORM), "a form that could not be saved is not taken");
+  fail_save_call = 0;
+  CHECK(!memcmp(&old, &SYS.starters[25], sizeof old) && entry_of(25)->form == 0, "and the choice is undone");
+  CHECK(!strstr(g_sfx, "ui/select"), "without the select sound");
+  tick(4000);
+  press(MB_ACTION); /* the failure message */
+
+  /* the Customize lists: Form for Pikachu and Oricorio, Gender for the species with two sexes, neither where there is nothing to pick */
+  only_these_species();
+  CHECK(open_screen(NULL), "reopen");
+  press(MB_ACTION);
+  press(MB_DOWN);
+  press(MB_ACTION); /* Customize */
+  bool form_row = false, gender_row = false;
+  for (int i = 0; i < g_option_count; i++) {
+    form_row |= !strcmp(g_option_labels[i], "Form");
+    gender_row |= !strcmp(g_option_labels[i], "Gender");
+  }
+  CHECK(form_row && gender_row, "Pikachu's Customize has Form and Gender");
+  choose_option("Form");
+  CHECK(g_option_count == 8, "eight forms offered, not the Gigantamax: %d", g_option_count);
+  CHECK(strstr(g_option_labels[0], "* "), "the current one is marked: %s", g_option_labels[0]);
+  choose_option("Cool Cosplay");
+  CHECK(entry_of(25)->form == 3 && SYS.starters[25].form_preference == 3, "chosen from the list: form 3");
+  choose_option("Gender");
+  CHECK(g_option_count == 2, "two sexes");
+  choose_option("Female");
+  CHECK(entry_of(25)->female && entry_of(25)->form == 3, "female, form kept");
+  option_answer(-2); /* leave Customize */
+  press(MB_RIGHT);
+  press(MB_RIGHT);
+  press(MB_ACTION);
+  press(MB_DOWN);
+  press(MB_ACTION); /* Salandit's Customize */
+  form_row = gender_row = false;
+  for (int i = 0; i < g_option_count; i++) {
+    form_row |= !strcmp(g_option_labels[i], "Form");
+    gender_row |= !strcmp(g_option_labels[i], "Gender");
+  }
+  CHECK(!form_row && gender_row, "Salandit's Customize has Gender and no Form");
+  option_answer(-2);
+}
+
 static void test_no_hidden_ability_purchase(void){
   gc_system_init_defaults(&SYS);
   SYS.dex[1].caught_attr=SYS.dex[4].caught_attr=SYS.dex[7].caught_attr=0;
@@ -907,6 +1066,7 @@ int main(int argc, char** argv) {
   test_candy_cost_reductions();
   test_filter_menu();
   test_customization();
+  test_cycle_buttons();
   test_no_hidden_ability_purchase();
   test_happy_path();
   test_touch();

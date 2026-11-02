@@ -447,6 +447,293 @@ static void test_random_systems(int systems) {
   CHECK(refused == 0, "%d teams the screen would offer were refused", refused);
 }
 
+/* ------------------------------------------------------------------ the form and gender cycle buttons
+ * starter-select-ui-handler.ts at 8555c08: updateCanCycle (:2846), processCycleButtonsInput (:1151), setNewFormIndex (:1313),
+ * setNewGender (:1330), initStarterPrefs (:634). The forms the starter select offers are PokemonForm.isStarterSelectable: a form's
+ * explicit flag in src/data/balance/species/generation-0N.ts, else "has no form key" (pokemon-species.ts:1304). */
+
+/* the forms offered for the species the player asked about, read by hand from the generation-0N.ts files at the pin (the form index
+ * is the form's place in its species' forms list) */
+static void test_starter_form_table(void) {
+  static const struct { uint16_t species; uint64_t mask; const char* name; } known[] = {
+      {25, 0xFF, "Pikachu: Normal, Partner and the six cosplay forms; not Gigantamax"},
+      {741, 0xF, "Oricorio: Baile, Pom-Pom, Pa'u, Sensu"},
+      {550, 0x3, "Basculin: Red- and Blue-Striped"},
+      {678, 0x3, "Meowstic: Male, Female"},
+      {876, 0x3, "Indeedee: Male, Female"},
+      {902, 0x3, "Basculegion: Male, Female"},
+      {916, 0x3, "Oinkologne: Male, Female"},
+      {3, 0x1, "Venusaur: Normal; not Mega or Gigantamax"},
+      {6, 0x1, "Charizard: Normal only"},
+      {133, 0x3, "Eevee: Normal, Partner; not Gigantamax"},
+      {172, 0x3, "Pichu: Normal, Spiky-Eared"},
+      {925, 0x0, "Maushold: neither family size is offered"},
+      {982, 0x0, "Dudunsparce: neither segment count is offered"},
+      {1, 0x1, "Bulbasaur: one form"},
+  };
+  for (size_t i = 0; i < sizeof known / sizeof known[0]; i++)
+    CHECK(gc_species_starter_forms(known[i].species) == known[i].mask, "%s: got %llx", known[i].name,
+          (unsigned long long)gc_species_starter_forms(known[i].species));
+  const pr_species* pika = menu_species(25);
+  CHECK(!strcmp(pr_forms[pika->form0 + 1].form_key, "partner") && !strcmp(pr_forms[pika->form0 + 2].form_key, "cosplay") &&
+            !strcmp(pr_forms[pika->form0 + 8].form_key, "gigantamax"),
+        "Pikachu's form indices");
+  /* every species: only forms it has; a form without a key is always offered (!formKey), a species with one form offers it */
+  int multi = 0;
+  for (int i = 0; i < PR_SPECIES_COUNT; i++) {
+    const pr_species* sp = &pr_species_table[i];
+    const uint64_t m = gc_species_starter_forms((uint16_t)sp->id);
+    CHECK((m >> sp->nforms) == 0, "species %u offers a form it does not have: %llx of %d", sp->id, (unsigned long long)m, sp->nforms);
+    if (sp->nforms == 1) CHECK(m == 1, "species %u has one form, mask %llx", sp->id, (unsigned long long)m);
+    for (int f = 0; f < sp->nforms; f++)
+      if (!*pr_forms[sp->form0 + f].form_key) CHECK((m >> f) & 1, "species %u form %d has no key and must be offered", sp->id, f);
+    if (sp->nforms > 1) multi++;
+  }
+  CHECK(multi == 191, "191 species with more than one form: %d", multi);
+}
+
+/* updateCanCycle's form expression, written out as it reads upstream: forms.filter(isStarterSelectable || no form change leads to a
+ * form key).map((_, f) => caughtAttr & getFormAttr(f)).filter(truthy).length > 1 */
+static bool oracle_can_cycle_form(const gc_system* sys, uint16_t id) {
+  const pr_species* sp = menu_species(id);
+  bool keyed = false;
+  for (int i = 0; i < gc_form_change_targets_count; i++)
+    if (gc_form_change_targets_data[i].species == id && *gc_form_change_targets_data[i].form_key) keyed = true;
+  int kept = 0, n = 0;
+  for (int f = 0; f < sp->nforms; f++)
+    if (((gc_species_starter_forms(id) >> f) & 1) || !keyed) {
+      if ((sys->dex[id].caught_attr >> (7 + kept)) & 1) n++; /* the index after the filter */
+      kept++;
+    }
+  return n > 1;
+}
+
+static bool form_caught_offered(const gc_system* sys, uint16_t id, int f) {
+  return ((gc_species_starter_forms(id) >> f) & 1) && ((sys->dex[id].caught_attr >> (7 + f)) & 1);
+}
+
+/* the form button, pressed until the species is back where it started: the forms it went through. -1 when the button did nothing. */
+static int cycle_forms(gc_system* sys, uint16_t id, int* visited, int cap) {
+  gc_starter s;
+  if (!ss_starter(sys, id, &s)) return -1;
+  const int start = s.form;
+  int n = 0;
+  do {
+    if (!ss_cycle_form(sys, id) || !ss_starter(sys, id, &s)) return -1;
+    visited[n++] = s.form;
+  } while (s.form != start && n < cap);
+  return n;
+}
+
+static long form_cycles, gender_cycles;
+
+/* every promise of the two buttons for one species of `sys`, restoring its preferences after */
+static void check_cycles_for(gc_system* sys, uint16_t id, bool deep) {
+  const pr_species* sp = menu_species(id);
+  const gc_starter_entry saved = sys->starters[id];
+  gc_starter s, t;
+  const char* why = NULL;
+  if (!ss_starter(sys, id, &s)) return;
+  const bool can_form = ss_can_cycle_form(sys, id), can_gender = ss_can_cycle_gender(sys, id);
+  CHECK(can_form == oracle_can_cycle_form(sys, id), "species %u (%s): can cycle form %d, upstream's expression says %d", id, sp->name, can_form,
+        oracle_can_cycle_form(sys, id));
+  const uint64_t a = sys->dex[id].caught_attr;
+  CHECK(can_gender == (((a & 4) != 0) && ((a & 8) != 0)), "species %u: can cycle gender %d with caught %llx", id, can_gender, (unsigned long long)a);
+
+  /* the form button */
+  if (!can_form) {
+    CHECK(!ss_cycle_form(sys, id) && !memcmp(&saved, &sys->starters[id], sizeof saved), "species %u: the form button does nothing when it is not offered", id);
+    CHECK(!ss_set_form(sys, id, s.form) || ss_form_offered(sys, id, s.form), "species %u: a form that is not offered cannot be set", id);
+    sys->starters[id] = saved;
+  } else {
+    int seen[64];
+    const int start = s.form;
+    const int n = cycle_forms(sys, id, seen, 64);
+    CHECK(n >= 1 && n < 64, "species %u (%s): the form button came back to the start after %d presses", id, sp->name, n);
+    form_cycles += n > 0 ? n : 0;
+    /* upstream's loop: the next offered, caught form after this one, wrapping; the same form if there is none */
+    int cur = start;
+    for (int k = 0; k < n && k < 64; k++) {
+      int next = cur;
+      do {
+        next = (next + 1) % sp->nforms;
+      } while (!form_caught_offered(sys, id, next) && next != cur);
+      CHECK(seen[k] == next, "species %u (%s): press %d went to form %d, upstream's loop goes to %d", id, sp->name, k, seen[k], next);
+      if (seen[k] != next) break;
+      cur = next;
+    }
+    CHECK(ss_starter(sys, id, &t) && t.form == start, "species %u: back where it started", id);
+    sys->starters[id] = saved;
+    /* every form on the way is one game-core takes, and the panel's data and the team carry it */
+    for (int k = 0; k < n && k < 64; k++) {
+      CHECK(ss_set_form(sys, id, seen[k]) && ss_starter(sys, id, &t) && t.form == seen[k], "species %u: form %d chosen", id, seen[k]);
+      CHECK(gc_starter_is_available(sys, &t, NULL, &why), "species %u form %d is refused by game-core: %s", id, seen[k], why ? why : "?");
+      starter_info info;
+      ss_describe(sys, id, &info);
+      CHECK(info.mon.form == seen[k], "species %u: the panel shows form %d", id, seen[k]);
+      if (deep || k == 0) {
+        uint16_t one = id;
+        gc_starter team[6];
+        CHECK(ss_team(sys, &one, 1, team, &why) && core_takes(sys, team, 1, &why), "species %u form %d does not start a run: %s", id, seen[k], why ? why : "?");
+        CHECK(team[0].form == seen[k], "the team carries the form");
+      }
+    }
+    sys->starters[id] = saved;
+  }
+
+  /* the gender button */
+  if (!can_gender) {
+    CHECK(!ss_cycle_gender(sys, id) && !memcmp(&saved, &sys->starters[id], sizeof saved), "species %u: the gender button does nothing when not offered", id);
+    CHECK(!ss_set_gender(sys, id, true) && !memcmp(&saved, &sys->starters[id], sizeof saved), "species %u: no gender is set without both caught", id);
+  } else {
+    const bool female_form = sp->nforms > 1 && !strcmp(pr_forms[sp->form0 + 1].form_key, "female");
+    const bool was = s.female;
+    CHECK(ss_cycle_gender(sys, id) && ss_starter(sys, id, &t) && t.female == !was, "species %u (%s): the gender button flips %d", id, sp->name, was);
+    gender_cycles++;
+    /* (a fixture can catch a female with the form of a male, which upstream's catches never do: the form follows only when its bit is caught) */
+    if (female_form && form_caught_offered(sys, id, 1))
+      CHECK(t.form == (t.female ? 1 : 0), "species %u: a gender that is a form moves the form (form %d, female %d)", id, t.form, t.female);
+    CHECK(gc_starter_is_available(sys, &t, NULL, &why), "species %u: the other gender is refused by game-core: %s", id, why ? why : "?");
+    if (deep) {
+      uint16_t one = id;
+      gc_starter team[6];
+      CHECK(ss_team(sys, &one, 1, team, &why) && core_takes(sys, team, 1, &why) && team[0].female == !was, "species %u: the other gender starts a run: %s", id, why ? why : "?");
+    }
+    CHECK(ss_cycle_gender(sys, id) && ss_starter(sys, id, &t) && t.female == was, "species %u: and back", id);
+    sys->starters[id] = saved;
+  }
+}
+
+static void test_cycle_everything_unlocked(void) {
+  unlock_all(&S1);
+  form_cycles = gender_cycles = 0;
+  int can_form = 0, can_gender = 0;
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    can_form += ss_can_cycle_form(&S1, id);
+    can_gender += ss_can_cycle_gender(&S1, id);
+    check_cycles_for(&S1, id, true);
+  }
+  CHECK(can_form >= 20 && can_gender > 200, "the buttons are offered for %d species (form) and %d (gender)", can_form, can_gender);
+  printf("  everything unlocked: the form button offered for %d species (%ld presses checked), the gender button for %d (%ld)\n", can_form, form_cycles,
+         can_gender, gender_cycles);
+
+  /* the species the player asked about */
+  gc_starter s;
+  const int pikachu[] = {1, 2, 3, 4, 5, 6, 7, 0};
+  int seen[64];
+  CHECK(ss_can_cycle_form(&S1, 25) && cycle_forms(&S1, 25, seen, 64) == 8, "Pikachu goes through its forms");
+  for (int k = 0; k < 8; k++) CHECK(seen[k] == pikachu[k], "Pikachu press %d: form %d", k, seen[k]);
+  S1.starters[25].preference_flags = 0;
+  const int oricorio[] = {1, 2, 3, 0};
+  CHECK(cycle_forms(&S1, 741, seen, 64) == 4, "Oricorio goes through its four styles");
+  for (int k = 0; k < 4; k++) CHECK(seen[k] == oricorio[k], "Oricorio press %d: form %d", k, seen[k]);
+  S1.starters[741].preference_flags = 0;
+  /* Mewtwo has both Megas caught but only its normal form is offered, and a form change leads to the Megas: nothing to cycle to */
+  CHECK(((S1.dex[150].caught_attr >> 8) & 1) && ((S1.dex[150].caught_attr >> 9) & 1), "Mewtwo's Mega bits are caught in this system");
+  CHECK(!ss_can_cycle_form(&S1, 150) && !ss_cycle_form(&S1, 150), "Mewtwo has nothing to cycle to");
+  /* Indeedee: the sexes are the forms, each button moves the other */
+  CHECK(ss_starter(&S1, 876, &s) && !s.female && s.form == 0, "Indeedee starts male in form 0");
+  CHECK(ss_cycle_form(&S1, 876) && ss_starter(&S1, 876, &s) && s.form == 1 && s.female, "Indeedee's other form is the female");
+  CHECK(ss_cycle_gender(&S1, 876) && ss_starter(&S1, 876, &s) && s.form == 0 && !s.female, "and the gender button sends it back");
+  CHECK(ss_set_gender(&S1, 876, true) && ss_starter(&S1, 876, &s) && s.form == 1 && s.female, "choosing female chooses the form");
+  CHECK(ss_set_form(&S1, 876, 0) && ss_starter(&S1, 876, &s) && s.form == 0 && !s.female, "choosing the male form chooses the sex");
+  S1.starters[876].preference_flags = 0;
+  /* Salandit: a species with sexes but one form: the button flips the sex only */
+  CHECK(ss_can_cycle_gender(&S1, 757) && !ss_can_cycle_form(&S1, 757), "Salandit: sexes, no forms");
+  CHECK(ss_starter(&S1, 757, &s) && !s.female && ss_cycle_gender(&S1, 757) && ss_starter(&S1, 757, &s) && s.female && s.form == 0, "Salandit flips");
+}
+
+/* initStarterPrefs: a stored preference that is not unlocked is dropped, not obeyed */
+static void test_stale_form_and_gender(void) {
+  unlock_all(&S1);
+  gc_starter s;
+  /* Pikachu: Gigantamax is caught but never offered; Oricorio: form 1 uncaught */
+  S1.starters[25].preference_flags = 8;
+  S1.starters[25].form_preference = 8;
+  CHECK(ss_starter(&S1, 25, &s) && s.form == 0, "a stored form the starter select does not offer is ignored");
+  S1.starters[25].form_preference = 200;
+  CHECK(ss_starter(&S1, 25, &s) && s.form == 0, "a stored form the species does not have is ignored");
+  S1.starters[25].form_preference = 3;
+  CHECK(ss_starter(&S1, 25, &s) && s.form == 3, "a stored form that is offered and caught is used");
+  S1.dex[25].caught_attr &= ~(1ull << (7 + 3));
+  CHECK(ss_starter(&S1, 25, &s) && s.form == 0, "a stored form that is no longer caught is ignored");
+  S1.starters[741].preference_flags = 8;
+  S1.starters[741].form_preference = 2;
+  S1.dex[741].caught_attr &= ~(1ull << (7 + 2));
+  CHECK(ss_starter(&S1, 741, &s) && s.form == 0, "Oricorio: the style that was never caught is ignored");
+  /* gender: only while its bit is caught */
+  S1.starters[757].preference_flags = 16;
+  S1.starters[757].gender_preference = 1;
+  CHECK(ss_starter(&S1, 757, &s) && s.female, "Salandit: a stored female with both sexes caught");
+  S1.dex[757].caught_attr &= ~8ull;
+  CHECK(ss_starter(&S1, 757, &s) && !s.female, "a stored female with no female caught is ignored");
+  S1.starters[757].gender_preference = 0;
+  S1.dex[757].caught_attr &= ~4ull;
+  CHECK(ss_starter(&S1, 757, &s) && !s.female, "a stored male with no male caught is ignored too (the default needs no bit)");
+  /* a flag that is not set means nothing, whatever the value */
+  S1.starters[550].form_preference = 1;
+  S1.starters[550].gender_preference = 1;
+  CHECK(ss_starter(&S1, 550, &s) && s.form == 0 && !s.female, "values without their flags are ignored");
+}
+
+/* the stored choice is the screen's next start and survives the SD card */
+static void test_form_and_gender_survive_a_save(void) {
+  unlock_all(&S1);
+  ss_cycle_form(&S1, 741);
+  ss_cycle_form(&S1, 741);
+  ss_cycle_gender(&S1, 757);
+  ss_cycle_form(&S1, 25);
+  static unsigned char profile[1024 * 1024];
+  const char* why = NULL;
+  const size_t n = gc_system_save(&S1, profile, sizeof profile);
+  CHECK(n && gc_system_load(&S2, profile, n, &why), "save and load: %s", why ? why : "");
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    gc_starter a, b;
+    CHECK(ss_starter(&S1, id, &a) && ss_starter(&S2, id, &b) && a.form == b.form && a.female == b.female, "species %u keeps its form and gender", id);
+  }
+  gc_starter s;
+  CHECK(ss_starter(&S2, 741, &s) && s.form == 2 && ss_starter(&S2, 757, &s) && s.female && ss_starter(&S2, 25, &s) && s.form == 1, "the cycled choices are back");
+  /* and a list built from the loaded system shows them on the grid */
+  static sm_entry list[SS_MAX_ENTRIES];
+  const int count = ss_list(&S2, list, SS_MAX_ENTRIES, NULL);
+  int found = 0;
+  for (int i = 0; i < count; i++) {
+    if (list[i].species == 741) found += list[i].form == 2;
+    if (list[i].species == 757) found += list[i].female;
+  }
+  CHECK(found == 2, "the grid icons show the stored form and gender (%d of 2)", found);
+}
+
+static void test_cycle_random_systems(int systems) {
+  long checked = 0;
+  form_cycles = gender_cycles = 0;
+  for (int s = 0; s < systems; s++) {
+    random_system(&S1, (int)rnd(400));
+    /* a run that met several forms of the starters that have them, as a player who looked for Oricorio's styles would have */
+    for (int c = 0; c < gc_starter_cost_count; c++) {
+      const uint16_t id = gc_starter_costs[c].id;
+      const pr_species* sp = menu_species(id);
+      if (sp->nforms < 2 || rnd(2)) continue;
+      for (int k = (int)rnd(5); k >= 0; k--) {
+        const int form = (int)rnd((uint32_t)sp->nforms);
+        if (pr_forms[sp->form0 + form].unobtainable) continue;
+        const gc_mon m = make_mon(id, form, rnd(4) == 0, 0, 0, (int)rnd(25));
+        gc_system_set_pokemon_caught(&S1, &m, true, false);
+      }
+    }
+    static sm_entry list[SS_MAX_ENTRIES];
+    const int n = ss_list(&S1, list, SS_MAX_ENTRIES, NULL);
+    for (int i = 0; i < n; i++) {
+      check_cycles_for(&S1, list[i].species, rnd(10) == 0);
+      checked++;
+    }
+  }
+  printf("  %d random systems: %ld listed species, %ld form presses and %ld gender presses checked\n", systems, checked, form_cycles, gender_cycles);
+  CHECK(form_cycles > 0 && gender_cycles > 0, "the random systems must reach both buttons");
+}
+
 static void test_pokerus_rotation(void){
  unlock_all(&S1);
  for(int epoch=0;epoch<64;epoch++){
@@ -671,6 +958,11 @@ int main(int argc, char** argv) {
   test_everything_unlocked();
   test_prevolution_without_form_bit();
   test_random_systems(systems);
+  test_starter_form_table();
+  test_cycle_everything_unlocked();
+  test_stale_form_and_gender();
+  test_form_and_gender_survive_a_save();
+  test_cycle_random_systems(systems);
   test_filter();
 
   printf("%d checks, %d failed\n", checks, failed);

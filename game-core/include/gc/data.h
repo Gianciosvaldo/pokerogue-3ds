@@ -52,6 +52,7 @@ typedef struct {
     bool has_variants;
     bool has_ability2;
     uint64_t full_unlocks;      /* PokemonSpecies.getFullUnlocksData(): every dex attribute a catch of it can set */
+    uint64_t starter_forms;     /* bit f: forms[f].isStarterSelectable (a species with one form: bit 0) */
 } gc_species_dex_info;
 extern const gc_species_dex_info gc_species_dex_info_data[];
 extern const int gc_species_dex_info_count;
