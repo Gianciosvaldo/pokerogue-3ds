@@ -76,6 +76,26 @@ it("dump dex updates", async () => {
     }
   }
 
+  /* Pokemon.addFriendship on a Pokemon made with DNA Splicers: each of the two root species gets its candy, at half the rate. A
+   * stream of its own and placed after the operations above, so those stay as they were. Every eighth one fuses a Pokemon with a
+   * species of its own line, which feeds the one bar twice. */
+  const fusedRnd = new Phaser.Math.RandomDataGenerator(["dex_fused_friendship_777"]);
+  for (let i = 0; i < 400; i++) {
+    const speciesObj = fusedRnd.pick(speciesList);
+    let fusionObj = fusedRnd.pick(speciesList);
+    if (i % 8 === 0) {
+      fusionObj =
+        speciesList.find(s => s !== speciesObj && s.getRootSpeciesId() === speciesObj.getRootSpeciesId()) ?? fusionObj;
+    }
+    const amount = fusedRnd.between(-10, 50);
+    const capped = fusedRnd.frac() < 0.5;
+    const mon = globalScene.addPlayerPokemon(speciesObj, fusedRnd.between(5, 50), 0, 0, 0, false, 0, [0, 0, 0, 0, 0, 0], 0);
+    mon.fusionSpecies = fusionObj;
+    mon.fusionFormIndex = 0;
+    opLines.push(`OP_FRIENDSHIP_FUSED ${speciesObj.speciesId} ${fusionObj.speciesId} ${amount} ${capped ? 1 : 0}`);
+    mon.addFriendship(amount, capped);
+  }
+
   // Dump final GameData
   const dumpLines: string[] = [...opLines];
 

@@ -131,6 +131,19 @@ int main(int argc, char **argv) {
                 }
                 messages_compared++;
             }
+        } else if (strncmp(line, "OP_FRIENDSHIP_FUSED ", 20) == 0) {
+            /* a Pokemon made with DNA Splicers: the candy of both root species, each at half the rate */
+            unsigned int species, fusion, capped;
+            int amount;
+            if (sscanf(line + 20, "%u %u %d %u", &species, &fusion, &amount, &capped) == 4) {
+                gc_mon m;
+                memset(&m, 0, sizeof(m));
+                m.b.species = (uint16_t)species;
+                m.b.fusion_species = (uint16_t)fusion;
+                m.b.friendship = 0;
+                gc_system_add_friendship(&sys, &dummy_run, &m, amount, (bool)capped);
+                ops_executed++;
+            }
         } else if (strncmp(line, "OP_FRIENDSHIP ", 13) == 0) {
             unsigned int species, capped;
             int amount;
