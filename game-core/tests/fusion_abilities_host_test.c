@@ -320,6 +320,35 @@ static void battle_bond(void)
     CHECK(foe->hp == 0 && p->fusion_form == 0);                           /* the pin */
 }
 
+/* Tera Shift (Terapagos): the normal form takes the Terastal form quietly on entering the field, and the form's own ability (Tera Shell) takes over */
+static void tera_shift(void)
+{
+    pr_pokemon *p = start(SPECIES_ID_SQUIRTLE, SPECIES_ID_TERAPAGOS, slot(SPECIES_ID_TERAPAGOS, 0, ABILITY_ID_TERA_SHIFT), 0, PR_DEV_FUSION_ABILITIES);
+    CHECK(p->ability == ABILITY_ID_TERA_SHIFT);
+    const int32_t def = p->stats[STAT_DEF];
+    choose(GC_CH_POKEMON, 1);                                             /* out ... */
+    choose(GC_CH_POKEMON, 0);                                             /* ... and in again: the summon runs Tera Shift */
+    p = run.bt.field[0];
+    CHECK(p->fusion_species == SPECIES_ID_TERAPAGOS && p->form == 0);
+    CHECK(p->fusion_form == 1);                                           /* terastal */
+    CHECK(p->ability == 308);                                             /* Tera Shell, the Terastal form's slot */
+    CHECK(p->stats[STAT_DEF] != def);
+
+    /* Terastallizing takes the Terastal form on to the Stellar form (the Tera trigger), the fusion's half only */
+    gc_item_add(&run, "TERA_ORB", -1, 0, 1);
+    const char *why = NULL;
+    gc_choice tera = {GC_CH_FIGHT, 0, -1, 1};
+    CHECK(gc_run_choose(&run, &tera, &why));
+    settle(&run);
+    CHECK(p->terastallized && p->fusion_form == 2 && p->form == 0);
+
+    p = start(SPECIES_ID_SQUIRTLE, SPECIES_ID_TERAPAGOS, slot(SPECIES_ID_TERAPAGOS, 0, ABILITY_ID_TERA_SHIFT), 0, 0);
+    choose(GC_CH_POKEMON, 1);
+    choose(GC_CH_POKEMON, 0);
+    p = run.bt.field[0];
+    CHECK(p->fusion_form == 0);                                           /* the pin */
+}
+
 int main(void)
 {
     weather_forms();
@@ -330,6 +359,7 @@ int main(void)
     ice_face();
     gulp_missile();
     battle_bond();
+    tera_shift();
     printf("fusion abilities: %u checks\n", checks);
     return 0;
 }

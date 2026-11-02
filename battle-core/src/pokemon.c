@@ -58,10 +58,10 @@ static const struct fusion_ability {
     {ABILITY_ID_ICE_FACE, {SPECIES_ID_EISCUE}, true},
     {ABILITY_ID_HUNGER_SWITCH, {SPECIES_ID_MORPEKO}, true},
     {ABILITY_ID_ZERO_TO_HERO, {SPECIES_ID_PALAFIN}, true},
-    {ABILITY_ID_TERA_SHIFT, {SPECIES_ID_TERAPAGOS}, false},
+    {ABILITY_ID_TERA_SHIFT, {SPECIES_ID_TERAPAGOS}, true},
     {ABILITY_ID_BATTLE_BOND, {SPECIES_ID_BATTLE_BOND_GRENINJA}, true},
-    {ABILITY_ID_MULTITYPE, {SPECIES_ID_ARCEUS}, false},
-    {ABILITY_ID_RKS_SYSTEM, {SPECIES_ID_SILVALLY}, false},
+    {ABILITY_ID_MULTITYPE, {SPECIES_ID_ARCEUS}, true},
+    {ABILITY_ID_RKS_SYSTEM, {SPECIES_ID_SILVALLY}, true},
 };
 
 bool pr_fusion_ability_enabled(const pr_battle *bt, uint16_t ability)

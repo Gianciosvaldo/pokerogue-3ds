@@ -251,6 +251,9 @@ typedef struct {
                                    * challenges reach the rolls only through the caller's fields */
     bool unlocked_eviolite, unlocked_mini_black_hole;   /* gameData.isUnlocked(...) */
     bool fusions_boosted;         /* timedEventManager.areFusionsBoosted() */
+    /* caller (a departure from the pin, lorenzo 2026-11-02, battle-core's PR_DEV_FUSION_ABILITIES): bit 0 a fusion whose second species is
+     * Arceus is offered and takes Plates (Multitype), bit 1 one whose second species is Silvally Memories (RKS System). 0 is the pin. */
+    uint8_t fusion_form_items;
     /* gameData.dexData[species].caughtAttr != 0; NULL = nothing caught */
     bool (*caught)(void *user, int species);
     void *caught_user;

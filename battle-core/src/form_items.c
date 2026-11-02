@@ -35,16 +35,41 @@ static bool item_trigger(const pr_battle *bt, const pr_pokemon *p, const pr_item
     return false;
 }
 
+/* PR_DEV_FUSION_ABILITIES (lorenzo, 2026-11-02): Multitype's Plates and RKS System's Memories also change the form of a fusion's second
+ * species, Arceus or Silvally, whose ability is the fused Pokemon's main one. */
+static bool fusion_item_species(const pr_battle *bt, uint16_t species)
+{
+    return (species == SPECIES_ID_ARCEUS && pr_fusion_ability_enabled(bt, ABILITY_ID_MULTITYPE))
+        || (species == SPECIES_ID_SILVALLY && pr_fusion_ability_enabled(bt, ABILITY_ID_RKS_SYSTEM));
+}
+
+/* The species of the Pokemon a rule is about: 0 the first, 1 the fusion's second (the first wins when both are), -1 neither */
+static int rule_half(const pr_battle *bt, const pr_pokemon *p, const pr_item_form_rule *r)
+{
+    /* Source uses the permanent primary species/form keys here, independently
+     * of fusion species and the visual species/form supplied by Transform. */
+    if (p->species == r->species && p->form == r->from && p->form != r->to) return 0;
+    if (p->fusion_species == r->species && fusion_item_species(bt, r->species)
+        && p->fusion_form == r->from && p->fusion_form != r->to) return 1;
+    return -1;
+}
+
+int pr_item_form_rule_half(pr_battle *bt, const pr_pokemon *p, int rule)
+{
+    if (!bt || !p || rule < 0 || rule >= PR_ITEM_FORM_RULE_COUNT) return 0;
+    return rule_half(bt, p, &pr_item_form_rules[rule]) > 0;
+}
+
 bool pr_item_form_rule_eligible(pr_battle *bt, const pr_pokemon *p, int rule)
 {
     if (!bt || !p || rule < 0 || rule >= PR_ITEM_FORM_RULE_COUNT) return false;
     if (bt->n_mods[0] > PR_MAX_MODIFIERS) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return false; }
     const pr_item_form_rule *r = &pr_item_form_rules[rule];
-    /* Source uses the permanent primary species/form keys here, independently
-     * of fusion species and the visual species/form supplied by Transform. */
-    if (p->species != r->species || p->form != r->from || p->form == r->to) return false;
-    const pr_species *species = pr_pokemon_species(p);
-    if (!species || species->nforms < 2 || p->form >= species->nforms) return false;
+    const int half = rule_half(bt, p, r);
+    if (half < 0) return false;
+    const pr_species *species = half ? pr_pokemon_fusion_species(p) : pr_pokemon_species(p);
+    const int form = half ? p->fusion_form : p->form;
+    if (!species || species->nforms < 2 || form >= species->nforms) return false;
     if (!item_trigger(bt, p, r)) return false;
     if (r->ability && !pr_has_ability_active(bt, p, r->ability)) return false;
     if (r->caught_species) {
@@ -97,6 +122,7 @@ bool pr_trigger_item_form_change(pr_battle *bt, pr_pokemon *p, bool delayed, int
     if (phase < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return false; }
     e->pool[phase].pokemon = p;
     e->pool[phase].move_id = r->to;
+    e->pool[phase].form_half = (uint8_t)pr_item_form_rule_half(bt, p, rule);
     if (delayed) pr_phase_push(bt, e, phase);
     else pr_phase_unshift(bt, e, phase);
     return true;

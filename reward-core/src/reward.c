@@ -358,6 +358,12 @@ bool pr_reward_fc_condition(pr_reward_ctx *ctx, int p, const pr_fc_cond *c)
     return false;
 }
 
+/* The departure: the species of a fusion that takes Plates (Arceus) or Memories (Silvally), when the caller turned it on */
+bool pr_reward_fusion_item_species(const pr_reward_ctx *ctx, int species)
+{
+    return (species == SPECIES_ID_ARCEUS && (ctx->fusion_form_items & 1)) || (species == SPECIES_ID_SILVALLY && (ctx->fusion_form_items & 2));
+}
+
 /* FormChangeItemModifierTypeGenerator(isRare): for each member whose species has form changes, the item triggers of
  * its form changes that pass (Mega/Primal need the Mega Bracelet, G-Max/Eternamax the Dynamax Band; no conditions or
  * one that holds; preFormKey === getFormKey()), active, and whose item the member doesn't hold; Necrozma's Ultranecrozium
@@ -370,29 +376,35 @@ static int gen_form_change_item(pr_reward_ctx *ctx, bool rare)
     const bool mega = pr_reward_has_item(ctx, PR_ITEM_MEGA_BRACELET), gmax = pr_reward_has_item(ctx, PR_ITEM_DYNAMAX_BAND);
     for (int p = 0; p < ctx->n_party; p++) {
         const pr_reward_mon *m = &ctx->party[p];
-        const pr_reward_species *s = pr_reward_species_find(m->species);
-        if (!s || !(s->flags & 2)) continue;
-        const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, m->species);
-        if (!sl) continue;
-        const int key = pr_reward_form_key(m->species, m->form);
         uint16_t mine[64];
         int nm = 0;
-        for (int i = 0; i < sl->n; i++) {
-            const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
-            if ((fc->flags & 1) && !mega) continue;
-            if ((fc->flags & 2) && !gmax) continue;
-            if (fc->n_cond) {
-                bool any = false;
-                for (int c = 0; c < fc->n_cond && !any; c++) any = pr_reward_fc_condition(ctx, p, &pr_fc_conds[fc->cond_start + c]);
-                if (!any) continue;
+        /* the first species, then (the departure) a fusion's second one when Plates or Memories work on it */
+        for (int half = 0; half < 2; half++) {
+            const int species = half ? m->fusion_species : m->species;
+            if (half && !pr_reward_fusion_item_species(ctx, species)) break;
+            const int form = half ? m->fusion_form : m->form;
+            const pr_reward_species *s = pr_reward_species_find(species);
+            if (!s || !(s->flags & 2)) continue;
+            const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, species);
+            if (!sl) continue;
+            const int key = pr_reward_form_key(species, form);
+            for (int i = 0; i < sl->n; i++) {
+                const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
+                if ((fc->flags & 1) && !mega) continue;
+                if ((fc->flags & 2) && !gmax) continue;
+                if (fc->n_cond) {
+                    bool any = false;
+                    for (int c = 0; c < fc->n_cond && !any; c++) any = pr_reward_fc_condition(ctx, p, &pr_fc_conds[fc->cond_start + c]);
+                    if (!any) continue;
+                }
+                if (fc->pre_form_key != key) continue;
+                if (!(fc->flags & 4)) continue;   /* t.active */
+                /* !findModifier(PokemonFormChangeItemModifier of this Pokemon with this item) */
+                if (pr_reward_held(ctx, p, PR_ITEM_FORM_CHANGE_ITEM, fc->item) || pr_reward_held(ctx, p, PR_ITEM_RARE_FORM_CHANGE_ITEM, fc->item))
+                    continue;
+                if (nm < 64) mine[nm++] = (uint16_t)(sl->start + i);
+                else ctx->run->unported |= PR_REWARD_UNPORTED_OPTIONS;
             }
-            if (fc->pre_form_key != key) continue;
-            if (!(fc->flags & 4)) continue;   /* t.active */
-            /* !findModifier(PokemonFormChangeItemModifier of this Pokemon with this item) */
-            if (pr_reward_held(ctx, p, PR_ITEM_FORM_CHANGE_ITEM, fc->item) || pr_reward_held(ctx, p, PR_ITEM_RARE_FORM_CHANGE_ITEM, fc->item))
-                continue;
-            if (nm < 64) mine[nm++] = (uint16_t)(sl->start + i);
-            else ctx->run->unported |= PR_REWARD_UNPORTED_OPTIONS;
         }
         if (m->species == SPECIES_ID_NECROZMA) {
             bool z = false, luna = false, solar = false;

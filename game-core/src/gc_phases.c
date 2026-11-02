@@ -737,7 +737,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_EVOLUTION:
         return evolution_start(run, p);
     case RP_REWARD_FORM:
-        gc_reward_change_form(run, p->a, p->b);
+        gc_reward_change_form(run, p->a, p->b, p->c);
         return true;
     case RP_EGG_LAPSE:
         if (run->sys) {
