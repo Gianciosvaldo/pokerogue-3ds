@@ -295,6 +295,7 @@ static void enemy_items(gc_run *run)
             memset(it, 0, sizeof *it); /* fresh generated stock must not inherit prior-holder state */
             const bool token = out.items[i][k].item >= 14;   /* the ENEMY_* tokens and the Mini Black Hole */
             it->key = pr_item_names[out.items[i][k].item];
+            it->non_transferable = gc_item_key_locked(it->key);
             it->arg = out.items[i][k].arg;
             it->stack = 1;
             it->pokemon_id = token && out.items[i][k].item != (uint8_t)pr_item_mini_black_hole ? 0 : run->enemy[i].b.id;
