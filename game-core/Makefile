@@ -1464,3 +1464,11 @@ endless-journey-host-test: $(BUILD)/endless_journey_host_test
 $(BUILD)/endless_journey_host_test: tests/endless_journey_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: endless-journey-host-test
+
+all: $(BUILD)/endless_lifecycle_host_test
+test: endless-lifecycle-host-test
+endless-lifecycle-host-test: $(BUILD)/endless_lifecycle_host_test
+	$(BUILD)/endless_lifecycle_host_test
+$(BUILD)/endless_lifecycle_host_test: tests/endless_lifecycle_host_test.c tests/endless_journey_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/endless_lifecycle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: endless-lifecycle-host-test
