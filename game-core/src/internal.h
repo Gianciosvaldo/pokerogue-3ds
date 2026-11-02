@@ -344,6 +344,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
  * MAX_TERAS_PER_ARENA (1) used in this arena; and the command menu's own canTera() for field slot `field`, which also counts the
  * Tera already chosen for slot 0 this turn */
 bool gc_can_species_tera(const gc_run *run, const pr_pokemon *p);
+/* Trainer.genAI for a trainer battle's party (EncounterPhase, after the enemy's items): picks the slot setRandomTeraModifiers makes
+ * Terastallize and gives it the specialty type; gc_trainer_instant_teras = config.trainerAI.instantTeras (the config's own slots plus that one) */
+void gc_trainer_gen_ai(gc_run *run);
+int gc_trainer_instant_teras(const gc_run *run, int8_t *out, int cap);
 bool gc_can_terastallize(const gc_run *run, const pr_pokemon *p);
 bool gc_can_tera_command(const gc_run *run, int field);
 void gc_battle_command_screen(gc_run *run);       /* fills run->screen for COMMAND */

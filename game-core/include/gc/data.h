@@ -95,6 +95,16 @@ typedef struct {
     /* getEncounterMessages / getVictoryMessages by TrainerVariant (DEFAULT, FEMALE, DOUBLE), then 0 = encounter, 1 = victory:
      * the dialogue's locale keys (a Trainer's variant falls back to the default lists where upstream's `||` does). n = 0: none */
     gc_dialogue_list dialogue[3][2];
+    /* How the trainer Terastallizes (config.trainerAI, and the genAIFuncs of setRandomTeraModifiers: the gym leaders' and the Elite Four's).
+     * tera_static: bit i = party slot i is listed by setInstantTera at config time. tera_random: genAI makes one more slot Terastallize
+     * (and gives it tera_type, -1 = keeps its own) from wave tera_min_wave on (1 = always, 100 = GYM_LEADER_TERA_WAVE); tera_slot[n] =
+     * the slot it takes for a party of n (teraSlot wrapped), -1 = a random one (randSeedItem), Shedinja excluded unless the specialty
+     * type is Bug or there is none. */
+    uint8_t tera_static;
+    bool tera_random;
+    uint8_t tera_min_wave;
+    int8_t tera_slot[7];
+    int8_t tera_type;
 } gc_trainer_config;
 extern const char *const gc_trainer_dialogue_keys[];
 extern const gc_trainer_config gc_trainer_configs[];   /* ascending TrainerType */

@@ -234,6 +234,7 @@ typedef struct gc_mon {
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
+    bool tera_instant;          /* enemies: the slot a trainer's genAI picked to Terastallize (setRandomTeraModifiers), on top of the config's own */
     int32_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
     int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
     uint16_t met_species;       /* Pokemon.metSpecies */

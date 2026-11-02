@@ -79,6 +79,9 @@ static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fu
     SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
 /* What a DNA Splicers fusion keeps of the second member (gc_mon's fusion_shiny, fusion_variant, fusion_luck): a section of its own, so a
  * save from before the splice screen loads with them at zero and counts nothing as dropped */
+/* The slot a trainer's genAI picked to Terastallize (gc_mon.tera_instant), enemies only: a section of its own, so a save from before it loads with
+ * nobody picked and counts nothing as dropped */
+static const sfield enemy_tera_fields[]={SF(gc_mon,tera_instant)};
 static const sfield fusion_fields[]={SF(gc_mon,fusion_shiny),SF(gc_mon,fusion_variant),SF(gc_mon,fusion_luck)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
@@ -620,6 +623,9 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     section_end(&w,s);
     s=section_start(&w,"fusion");
     put_block(&w,fusion_fields,NF(fusion_fields),run->party,sizeof(gc_mon),run->n_party);
+    section_end(&w,s);
+    s=section_start(&w,"enemy_tera");
+    put_block(&w,enemy_tera_fields,NF(enemy_tera_fields),run->enemy,sizeof(gc_mon),run->n_enemy);
     section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
@@ -1241,6 +1247,14 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             ||fusion.bad||fusion.pos!=fusion.n){*why="the stored fusion halves are damaged";return false;}
         for(int k=0;k<run->n_party;k++)
             if(!fusion_half_ok(&run->party[k])){*why="a stored fusion half is damaged";return false;}
+    }
+
+    /* Older saves have no trainer Tera pick either: nobody is picked then */
+    reader enemy_tera=section(&body,"enemy_tera");
+    if(!enemy_tera.bad){
+        if(get_block(&enemy_tera,enemy_tera_fields,NF(enemy_tera_fields),run->enemy,sizeof(gc_mon),run->n_enemy,&dropped)!=run->n_enemy
+            ||enemy_tera.bad||enemy_tera.pos!=enemy_tera.n){*why="the stored trainer Tera picks are damaged";return false;}
+        for(int k=0;k<run->n_enemy;k++){uint8_t b;memcpy(&b,&run->enemy[k].tera_instant,1);if(b>1){*why="a stored trainer Tera pick is damaged";return false;}}
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead

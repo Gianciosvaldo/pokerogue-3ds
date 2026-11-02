@@ -3,7 +3,9 @@
  * trainerConfigs, config.moneyMultiplier, isBoss, doubleOnly, hasCharSprite, how many modifierRewardFuncs it has,
  * the trainersCommon class its personal names come from, the names Trainer.getName gives it, and the
  * dialogue keys Trainer.getEncounterMessages / getVictoryMessages give each variant (initTrainerTypeDialogue
- * has run, as it does when upstream's scene starts).
+ * has run, as it does when upstream's scene starts), and how the trainer Terastallizes: the slots config.trainerAI lists
+ * from the start (setInstantTera at config time), and what setRandomTeraModifiers' genAIFuncs do (read by running them on
+ * fake parties: which wave they start at, the fixed slot per party size or random, the Tera type they give).
  *
  * The names are upstream's own getName, run on each variant for the slot / title pairs the game asks
  * for, with i18next.t swapped for one that returns $t(key) (trainerConfigs and the Trainer class are
@@ -69,6 +71,54 @@ it("dump trainers", async () => {
     }
     return dialogueRuns.get(id)!;
   };
+  const gs = await import("#app/global-scene");
+  const sceneAt = (waveIndex: number) => gs.initGlobalScene({ currentBattle: { waveIndex } } as any);
+  const RND = Phaser.Math.RND;
+  /* genAIFuncs, probed: party sizes 1..6 of a Pokemon that is not Shedinja, many seeds, the waves either side of GYM_LEADER_TERA_WAVE */
+  const probeTera = (c: any) => {
+    const funcs: ((party: any[]) => void)[] = c.genAIFuncs;
+    if (funcs.length === 0) return { random: false, minWave: 1, slot: [-1, -1, -1, -1, -1, -1, -1], type: -1 };
+    if (funcs.length !== 1) throw new Error(`a config with ${funcs.length} genAIFuncs`);
+    const ai = c.trainerAI;
+    const saved = { mode: ai.teraMode, logic: ai.teraLogic.slice() };
+    const run = (wave: number, len: number, seed: string) => {
+      sceneAt(wave);
+      RND.sow([seed]);
+      const party = Array.from({ length: len }, () => ({ species: { speciesId: 1 }, teraType: -1 }));
+      ai.teraLogic.length = saved.logic.length;
+      funcs[0](party);
+      const picked = ai.teraLogic.slice(saved.logic.length);
+      ai.teraMode = saved.mode;
+      ai.teraLogic.length = saved.logic.length;
+      return { picked, party };
+    };
+    const countAt = (wave: number) => {
+      const n = new Set<number>();
+      for (let len = 1; len <= 6; len++) n.add(run(wave, len, "x").picked.length);
+      if (n.size !== 1 || [...n][0] > 1) throw new Error("tera count is not 0 or 1");
+      return [...n][0];
+    };
+    const c1 = countAt(1), c99 = countAt(99), c100 = countAt(100), c5000 = countAt(5000);
+    if (c99 !== c1 || c5000 !== c100) throw new Error("tera count changes at a wave other than 100");
+    const minWave = c1 ? 1 : c100 ? 100 : -1;
+    if (minWave < 0) throw new Error("a config that never Terastallizes");
+    const slot = [-1];
+    let type = -2;
+    for (let len = 1; len <= 6; len++) {
+      const seen = new Set<number>();
+      for (let k = 0; k < 40; k++) {
+        const r = run(100, len, `seed${k}`);
+        seen.add(r.picked[0] as number);
+        const types = r.party.filter(m => m.teraType !== -1).map(m => m.teraType);
+        if (types.length > 1) throw new Error("more than one tera type set");
+        const t = types.length ? types[0] : -1;
+        if (type !== -2 && type !== t) throw new Error("the tera type changes");
+        type = t;
+      }
+      slot.push(seen.size === 1 ? [...seen][0] : -1);
+    }
+    return { random: true, minWave, slot, type };
+  };
   const types = Object.keys(trainerConfigs).map(Number).sort((a, b) => a - b);
   const rows: string[] = [];
   for (const t of types) {
@@ -98,10 +148,18 @@ it("dump trainers", async () => {
       const victory = (Trainer.prototype.getVictoryMessages as () => string[]).call(fake);
       return `{${dialogueList(encounter)}, ${dialogueList(victory)}}`;
     });
+    /* the AI's tera slots from the config's own setInstantTera calls (a condition only a Mystery Encounter sets) */
+    let staticMask = 0;
+    for (const e of (c.trainerAI as any).teraLogic as (number | [number, () => boolean])[]) {
+      if (typeof e !== "number" || e < 0 || e > 7) throw new Error(`trainer ${t}: a conditional or out of range tera slot`);
+      staticMask |= 1 << e;
+    }
+    const tera = probeTera(c);
     rows.push(
       `{${t}, ${hasNames ? cstr(classKey) : "NULL"}, ${c.moneyMultiplier}, ${c.isBoss}, ${c.doubleOnly}, `
         + `${c.modifierRewardFuncs.length}, {${[0, 4, 8].map(i => `{${names.slice(i, i + 4).join(", ")}}`).join(", ")}}, `
-        + `${c.hasCharSprite}, {${dialogue.join(", ")}}}`,
+        + `${c.hasCharSprite}, {${dialogue.join(", ")}}, `
+        + `${staticMask}, ${tera.random}, ${tera.minWave}, {${tera.slot.join(", ")}}, ${tera.type}}`,
     );
   }
   vi.doUnmock("i18next");
