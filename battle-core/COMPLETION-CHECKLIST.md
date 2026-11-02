@@ -95,6 +95,10 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [controller storage follow-up](../game-core/CONTROLLER-EVENT-STORAGE-VALIDATION.md)
    delivers that turn's 555 events through the app with optional caller-owned
    growth. Default inline clients and other engine/app capacities remain bounded.
+   The [sleep interruption follow-up](SLEEP-INVULNERABILITY-VALIDATION.md)
+   closes the status setter's semi-invulnerable tag/queued-move cancellation
+   gap with 3,072 native API cases. Natural battle/presentation interactions
+   remain separate from that state/queue/RNG comparison.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
    The [closure identity audit](CLOSURE-IDENTITY-VALIDATION.md) keeps helper
