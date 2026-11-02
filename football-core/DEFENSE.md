@@ -1,3 +1,10 @@
+The shared catalog now contains eight defenses: 2-Man, Cover 2 Zone, Man Blitz,
+Cover 1 Robber, Cover 3, Cover 4 Quarters, Zone Blitz and Cover 0 Blitz. Existing
+IDs 0–2 are stable. Live units have distinct coverage/rush assignments and two
+pages of selectable cards. See [live controls](LIVE.md) and
+[expanded playbook validation](EXPANDED-PLAYBOOK-VALIDATION.md). The original
+three-scheme resolver design is documented below.
+
 # Defensive playcalling
 
 The mode now waits for a defensive call on every opponent possession. The bottom

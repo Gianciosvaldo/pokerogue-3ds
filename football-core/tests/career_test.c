@@ -32,6 +32,19 @@ int main(void)
     assert(football_career_start(&career));n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));
     assert(loaded.live.rules.ball==career.live.rules.ball && loaded.live.rng==career.live.rng && loaded.live.actors[0].x==career.live.actors[0].x);
     assert(loaded.live.rules.td_points==6 && career.live.rules.td_points==6); /* a touchdown is six wherever the match resumes */
+    /* A safe checkpoint intentionally forgets the completed call. Appended play/
+     * scheme IDs must not alter the version-2 bytes or the resumed RNG stream. */
+    {
+        static unsigned char checkpoint[FB_CAREER_SAVE_MAX];
+        size_t base=football_career_save(&career,checkpoint,sizeof checkpoint);assert(base);
+        for(unsigned id=0;id<FB_PLAY_COUNT;++id)for(unsigned d=0;d<FB_DEF_COUNT;++d){
+            career.live.play=(FootballPlayId)id;career.live.defense=(FootballDefenseId)d;
+            n=football_career_save(&career,bytes,sizeof bytes);assert(n==base && !memcmp(checkpoint,bytes,n));
+            assert(football_career_load(&loaded,&other,&profile,bytes,n));
+            assert(loaded.live.phase==FB_LIVE_CALL && loaded.live.rng==career.live.rng);
+            assert(football_live_call(&loaded.live,(FootballPlayId)id));loaded.live.defense=(FootballDefenseId)d;
+        }
+    }
     /* The try after a touchdown is not a safe checkpoint: a resumed match always opens a playcall, never a try. */
     career.live.conversion=1;assert(!football_career_save_ready(&career));career.live.conversion=2;assert(!football_career_save_ready(&career));career.live.conversion=0;assert(football_career_save_ready(&career));
     assert(football_live_call(&career.live,FB_RUN_DIVE));assert(!football_career_save_ready(&career));

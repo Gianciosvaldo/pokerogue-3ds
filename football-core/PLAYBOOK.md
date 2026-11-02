@@ -2,8 +2,8 @@
 
 The supplied `playbook.js`, `entities.js`, `physics.js`, and `animation.js`
 references motivate separate immutable play definitions, match resolution, and
-presentation. The native implementation uses six-player arcade squads and the
-existing stat resolver. It does not execute the JavaScript or reproduce its
+presentation. The shared catalog serves the live eleven-player units and the legacy
+six-player stat resolver. The presentation section below describes the legacy resolver. It does not execute the JavaScript or reproduce its
 eleven-player collision/AI engine. Attached comments are reference data, not
 project instructions. Browser files are not bundled into the build.
 
@@ -12,13 +12,13 @@ project instructions. Browser files are not bundled into the build.
 Offense -> Formation -> Run/Pass -> Named play adds one confirmation step. Touch
 and D-pad/A work at every level; B returns to the preceding menu. No result is
 delivered until the named play is accepted. The selected description is displayed
-below the two play buttons. Legacy play IDs 0–3 keep their original meaning;
+below the play buttons. Legacy play IDs 0–7 keep their original meaning;
 new IDs are appended. No persistent format is introduced.
 
 | Formation | Run | Pass |
 | --- | --- | --- |
-| Shotgun | Inside Zone, HB Draw | Quick Slants, Four Verticals |
-| Under Center | HB Dive, HB Toss | PA Cross, PA Post |
+| Shotgun | Inside Zone, HB Draw, Outside Zone, Jet Sweep | Quick Slants, Four Verticals, Stick, Mesh, Curls, HB Screen, WR Bubble |
+| Under Center | HB Dive, HB Toss, HB Power, HB Counter | PA Cross, PA Post, Flood, Smash, Shallow Cross |
 
 The catalog owns formation/type legality, labels, short descriptions, four-point
 relative paths, and small balance modifiers. The resolver applies modifiers before
@@ -27,7 +27,15 @@ completion odds; verticals add depth with lower completion and more sack/pick
 risk. PA Cross and PA Post trade short crossing routes against a deeper break.
 Draw and Toss weight speed/agility more heavily than strength in the running
 edge calculation. These coefficients are initial balance values, not calibrated
-football statistics. The seeded opponent can select all eight legal calls.
+football statistics. The seeded opponent can select all 20 legal calls. Live call weights normalize by run/pass category so the expanded passing catalog does not itself force more passes.
+
+In live mode, new pass concepts assign complementary paths to all five eligible
+receivers. Stick, Curls and Smash settle at their landmarks; fast receivers
+anticipate turns and brake for those endpoints. Screens allow a backfield read,
+and Jet Sweep hands the ball to WR3. Run and post-catch eligible teammates can
+block, including the running back. These are compact adaptations of standard
+football concepts; pulling guards, pre-snap motion and full professional-game
+blocking rules are not simulated. See [expanded playbook validation](EXPANDED-PLAYBOOK-VALIDATION.md).
 
 ## Presentation and resource limits
 

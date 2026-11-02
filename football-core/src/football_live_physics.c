@@ -14,9 +14,9 @@ bool football_live_is_blocker(const FootballLive *m,unsigned actor)
         if(m->stage!=FB_STAGE_SNAP || m->special==FB_SPECIAL_KICKOFF)return false;
         return actor>=off+6 || (m->special!=FB_SPECIAL_PUNT && actor>=off+2);
     }
-    /* Five linemen always block; on a called run the receivers and the tight end do too. */
+    /* Eligible teammates block on runs and after the catch, never while running a pass route. */
     const FootballPlayDefinition *p=football_playbook_get(m->play);
-    return actor>=off+6 || (p && p->type==FB_PLAY_RUN && actor>=off+2 && actor<=off+5);
+    return actor>=off+6 || (p && (p->type==FB_PLAY_RUN || m->caught) && actor>=off+1 && actor<=off+5);
 }
 static bool pass_protection(const FootballLive *m)
 {
@@ -41,7 +41,7 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
             for(unsigned d=def;d<def+11;++d){
                 bool user_rush=d==m->controlled && fabsf(m->actors[d].x-m->actors[off].x)<10;
                 if(used_rusher[d-def] || m->actors[d].block_peer<22 ||
-                   (d>=def+4 && !(m->defense==FB_DEF_BLITZ && d==def+5) && !user_rush))continue;
+                   (!football_defense_is_rusher(m->defense,d-def) && !user_rush))continue;
                 unsigned count=0;
                 for(unsigned k=0;k<5;++k){const FootballLiveActor *line=&m->actors[off+6+k];
                     float dx=m->actors[d].x-line->x,dy=m->actors[d].y-line->y;
@@ -67,7 +67,7 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
     }
     for(unsigned d=def;d<def+11;++d){const FootballLiveActor *a=&m->actors[d];
         bool user_rush=d==m->controlled && fabsf(a->x-m->actors[off].x)<10;
-        if(!running && d>=def+4 && !(m->defense==FB_DEF_BLITZ && d==def+5) && !user_rush)continue;
+        if(!running && !football_defense_is_rusher(m->defense,d-def) && !user_rush)continue;
         float dx=a->x-b->x,dy=a->y-b->y,range=dx*dx+dy*dy;
         if(a->block_peer<22)range+=25;
         if(range<score){score=range;best=d;}
@@ -86,7 +86,7 @@ void football_live_physics(FootballLive *m)
     unsigned off=offense(m),def=11-off;float dir=off?-1:1;
     bool protecting=pass_protection(m);
     for(unsigned i=0;i<22;++i)if(m->actors[i].block_cooldown>0)m->actors[i].block_cooldown-=FB_LIVE_STEP;
-    for(unsigned i=off+2;i<off+11;++i){FootballLiveActor *b=&m->actors[i];if(!football_live_is_blocker(m,i))continue;
+    for(unsigned i=off+1;i<off+11;++i){FootballLiveActor *b=&m->actors[i];if(!football_live_is_blocker(m,i))continue;
         if(b->block_peer<22){
             FootballLiveActor *a=&m->actors[b->block_peer];b->block_time-=FB_LIVE_STEP;
             float dx=a->x-b->x,dy=a->y-b->y;

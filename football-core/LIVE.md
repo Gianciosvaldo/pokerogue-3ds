@@ -91,6 +91,22 @@ none evolves in round 1, each plain one evolves on the round its friendship allo
 design choice, and that test is what fails if it is made too fast or too slow. Mid-stages with a friendship evolution (Golbat,
 Chansey, Swadloon) are not draftable, so they matter only once levels have brought a member there; the sweep does not cover them.
 
+## Expanded playbook
+
+Offense has 20 calls (eight runs, twelve passes), in five pages of four diagram
+cards. L/R or the bottom footer changes page; D-pad/A or touch chooses a card.
+Special teams follow the five offensive pages and are omitted on a two-point
+try. Defense has two pages covering 2-Man, Cover 2 Zone, Man Blitz, Cover 1 Robber,
+Cover 3, Cover 4 Quarters, Zone Blitz and Cover 0 Blitz. Their actual rush counts,
+man assignments and deep/underneath zones differ; preview diagrams show those
+counts. The CPU selects from the same catalogs by situation.
+
+The new standard concepts include Stick, Mesh, Flood, Curls, Smash, HB Screen,
+WR Bubble and Shallow Cross, plus Power, Counter, Outside Zone and Jet Sweep.
+Receivers follow complementary routes; Jet Sweep uses WR3 as carrier. Existing
+IDs and checkpoint version 2 remain compatible. See the
+[playbook validation and limits](EXPANDED-PLAYBOOK-VALIDATION.md).
+
 ## Live engine and controls
 
 `football_live.c` is a fixed-size 60 Hz simulation in yard coordinates, with

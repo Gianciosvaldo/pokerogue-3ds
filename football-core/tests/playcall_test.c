@@ -18,7 +18,7 @@ int main(void)
     PlayInfo out;
     for (unsigned formation=0;formation<2;++formation)
         for (unsigned type=0;type<2;++type)
-          for (unsigned choice=0;choice<2;++choice) {
+          for (unsigned choice=0;choice<football_playbook_count((FootballFormation)formation,(FootballPlayType)type);++choice) {
             football_playcall_reset(&ui);
             assert(!football_playcall_take(&ui,&out));
             tap(&ui,300,60); /* Right boundary is outside. */
@@ -34,7 +34,9 @@ int main(void)
             assert(!football_playcall_take(&ui,&out));
             const FootballPlayDefinition *p=football_playbook_option(formation,type,choice);
             assert(p && !strcmp(football_playcall_label(&ui,choice),p->name));
-            tap(&ui,30,70+64*choice);
+            FootballTouchRect rect=football_playcall_option_rect(&ui,choice);
+            assert(rect.w>0&&rect.h>0&&rect.x>=0&&rect.y>=0&&rect.x+rect.w<=320&&rect.y+rect.h<=200);
+            tap(&ui,rect.x+10,rect.y+10);
             assert(football_playcall_take(&ui,&out));
             assert((unsigned)out.formation==formation && (unsigned)out.type==type);
             assert(out.id==p->id && football_playbook_valid(out));
@@ -61,7 +63,7 @@ int main(void)
     assert(ui.state==FB_CALL_MAIN);
     assert(!football_playbook_get((FootballPlayId)-1));
     assert(!football_playbook_get(FB_PLAY_COUNT));
-    assert(!football_playbook_option(FB_FORM_SHOTGUN,FB_PLAY_RUN,2));
+    assert(!football_playbook_option(FB_FORM_SHOTGUN,FB_PLAY_RUN,football_playbook_count(FB_FORM_SHOTGUN,FB_PLAY_RUN)));
     assert(!football_playbook_count((FootballFormation)99,FB_PLAY_RUN));
     for (unsigned i=0;i<FB_PLAY_COUNT;++i) {
         const FootballPlayDefinition *p=football_playbook_get((FootballPlayId)i);
@@ -73,5 +75,5 @@ int main(void)
         FootballRoutePoint end=football_playbook_route(p,1),bad=football_playbook_route(p,NAN);
         assert(end.x==p->route[p->route_count-1].x && bad.x==0 && bad.y==0);
     }
-    puts("football playcalling: all eight named plays, route samples, touch edges, back and single delivery passed");
+    puts("football playcalling: all twenty named plays, route samples, touch edges, back and single delivery passed");
 }
