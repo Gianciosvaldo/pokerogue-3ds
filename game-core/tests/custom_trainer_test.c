@@ -37,6 +37,9 @@ static uint64_t rng_hash(const gc_run *r) { H = 1469598103934665603ull; mix_rng(
 static void new_run_in(gc_run *r, gc_system *s, const char *seed, const gc_custom_hooks *hooks)
 {
     memset(r, 0, sizeof *r);
+    /* the session-wide state of the move objects (AI attribute state, healed statuses, called moves) outlives a run, as upstream's move objects do: a fresh process starts
+     * clean, so two plays of one seed in this process must too (the enemies of the evil teams now use those moves) */
+    pr_status_healed_clear(); pr_called_selected_reset(); pr_ai_session_reset();
     gc_system_init_defaults(s);
     gc_run_new(r, GAME_MODES_CLASSIC, seed, 7);
     if (hooks) gc_run_set_custom(r, hooks);

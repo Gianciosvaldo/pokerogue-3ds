@@ -7,10 +7,8 @@
  * category its species must not use, weather or terrain setters when its ability or passive sets one and status moves under
  * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
- * abilities. Ordinary Classic trainers also use their ordered TM pool and caps, trainer
- * blocklists, weight adjustments and remaining-slot type diversity. The four plain Gym
- * profiles below also use the source egg pool. Instant Tera, postProcess regeneration
- * and trainer-specific rival signatures remain guarded. Power-table queries
+ * abilities. Classic trainers also use their ordered TM pool and caps, egg moves where the trainer's config allows them (bosses), trainer
+ * blocklists, weight adjustments and remaining-slot type diversity. Instant Tera (the config's own slots) is handled; trainer-specific rival signatures remain guarded. Power-table queries
  * include the resolved move type so an active type-changing
  * ability can affect a type-conditional passive. Explicit passive overrides on fusions remain outside this owner.
  *
@@ -67,8 +65,10 @@ typedef struct {
     bool boss, single, trainer, allow_egg; /* isBoss(), singles, hasTrainer() */
     uint16_t moves[4];          /* the moveset so far */
     int n_moves;
-    int tm_count, egg_count; /* includes selected moves later removed as useless */
-    unsigned char source_of[PR_MOVE_COUNT];
+    int tm_count, egg_count; /* include selected moves later removed as useless */
+    bool eggs_allowed;       /* currentBattle.trainer.config.allowEggMoves (setBoss or setEggMovesAllowed) */
+    bool will_tera;          /* hasTrainer() && willTerastallize(): the party slot is in the config's instantTeras */
+    unsigned char source_of[PR_MOVE_COUNT];   /* 1 = the TM pool, 2 = the egg pool */
 } mg_ctx;
 
 static const gc_mg_move *mgm(int move) { return &gc_mg_moves[move]; }
@@ -179,6 +179,12 @@ static int movegen_type(mg_ctx *c, int move)
     const pr_move *mv = &pr_moves[move];
     if (mv->category == MOVE_CATEGORY_STATUS) return mv->type;
     int type = mv->type;
+    /* TeraBlastTypeAttr / TeraStarstormTypeAttr / MatchUserTypeAttr with willTera */
+    if (c->will_tera) {
+        if (move == MOVE_ID_TERA_BLAST) return c->p.tera_type;
+        if (move == MOVE_ID_TERA_STARSTORM && c->p.species == SPECIES_ID_TERAPAGOS) return POKEMON_TYPE_STELLAR;
+        if (mgm(move)->vt_kind == GC_MGV_MATCH_USER_TYPE && c->p.tera_type != POKEMON_TYPE_STELLAR) return c->p.tera_type;
+    }
     switch (mgm(move)->vt_kind) {
     case GC_MGV_FORM_CHANGE_ITEM: case GC_MGV_TECHNO_BLAST: case GC_MGV_RAGING_BULL: case GC_MGV_IVY_CUDGEL:
     case GC_MGV_HIDDEN_POWER:
@@ -205,7 +211,7 @@ static int movegen_type(mg_ctx *c, int move)
         if (pr_get_types(&c->p, t, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD) > 0) type = t[0];
         break;
     }
-    default:   /* Aura Wheel, Tera Blast and Starstorm (willTera is false), Terrain Pulse, the Pledges: the move's own type */
+    default:   /* Aura Wheel, Tera Blast and Starstorm (without willTera), Terrain Pulse, the Pledges: the move's own type */
         break;
     }
     return type;
@@ -274,7 +280,8 @@ static void force_stab(mg_ctx *c, pr_rng *rng, mg_pool *base)
     for (int i = 0; i < base->n; i++) {
         const int move = base->e[i].move;
         if (pr_moves[move].category == MOVE_CATEGORY_STATUS) continue;
-        if (!mg_has_type(c, movegen_type(c, move)) || stab_blacklisted(move)) continue;
+        if (!(mg_has_type(c, movegen_type(c, move)) || (c->will_tera && move == MOVE_ID_TERA_BLAST && c->p.tera_type != POKEMON_TYPE_STELLAR))
+            || stab_blacklisted(move)) continue;
         chosen[n++] = base->e[i];
         total += base->e[i].w;
     }
@@ -292,13 +299,16 @@ static bool matches_offensive_category(int move, int category)
 }
 
 /* getExistingDamageMoveTypes(pokemon, false), as a bit per PokemonType */
-static uint32_t existing_damage_types(mg_ctx *c)
+static uint32_t existing_damage_types(mg_ctx *c, bool tera)
 {
+    const bool saved = c->will_tera;
+    c->will_tera = tera && saved;
     uint32_t set = 0;
     for (int i = 0; i < c->n_moves; i++) {
         const int move = c->moves[i];
         if (pr_moves[move].category != MOVE_CATEGORY_STATUS && !mg_flag(move, GC_MGF_FIXED_DAMAGE)) set |= 1u << movegen_type(c, move);
     }
+    c->will_tera = saved;
     return set;
 }
 
@@ -310,7 +320,7 @@ static bool any_instant_charge(const mg_ctx *c, int weather)
 
 static bool should_remove_rain_dance(mg_ctx *c)
 {
-    if (existing_damage_types(c) & (1u << POKEMON_TYPE_WATER)) return false;
+    if (existing_damage_types(c, false) & (1u << POKEMON_TYPE_WATER)) return false;
     static const int abilities[] = {ABILITY_ID_RAIN_DISH, ABILITY_ID_FORECAST, ABILITY_ID_SWIFT_SWIM, ABILITY_ID_DRY_SKIN};
     for (int i = 0; i < 4; i++) if (mg_ability_is(c, abilities[i])) return false;
     return !any_instant_charge(c, WEATHER_TYPE_RAIN);
@@ -318,7 +328,7 @@ static bool should_remove_rain_dance(mg_ctx *c)
 
 static bool should_remove_sunny_day(mg_ctx *c)
 {
-    if (existing_damage_types(c) & (1u << POKEMON_TYPE_FIRE)) return false;
+    if (existing_damage_types(c, false) & (1u << POKEMON_TYPE_FIRE)) return false;
     static const int abilities[] = {ABILITY_ID_CHLOROPHYLL, ABILITY_ID_FLOWER_GIFT, ABILITY_ID_PROTOSYNTHESIS, ABILITY_ID_HARVEST, ABILITY_ID_FORECAST};
     for (int i = 0; i < 5; i++) if (mg_ability_is(c, abilities[i])) return false;
     const bool solar_power = mg_ability_is(c, ABILITY_ID_SOLAR_POWER);
@@ -336,7 +346,8 @@ static bool should_remove_snowscape_hail(mg_ctx *c)
 {
     int8_t t[PR_MAX_TYPES];
     const int n = pr_get_types(&c->p, t, PR_TYPES_NO_TERA);
-    for (int i = 0; i < n; i++) if (t[i] == POKEMON_TYPE_ICE) return false;
+    for (int i = 0; i < n; i++)
+        if (t[i] == POKEMON_TYPE_ICE && (!c->will_tera || c->p.tera_type == POKEMON_TYPE_STELLAR || c->p.tera_type == POKEMON_TYPE_ICE)) return false;
     static const int abilities[] = {ABILITY_ID_SLUSH_RUSH, ABILITY_ID_FORECAST, ABILITY_ID_ICE_FACE, ABILITY_ID_SNOW_CLOAK, ABILITY_ID_ICE_BODY};
     for (int i = 0; i < 5; i++) if (mg_ability_is(c, abilities[i])) return false;
     for (int i = 0; i < c->n_moves; i++)
@@ -348,9 +359,10 @@ static bool should_remove_sandstorm(mg_ctx *c)
 {
     int8_t t[PR_MAX_TYPES];
     const int n = pr_get_types(&c->p, t, PR_TYPES_NO_TERA);
-    for (int i = 0; i < n; i++) if (t[i] == POKEMON_TYPE_ROCK) return false;
+    for (int i = 0; i < n; i++)
+        if (t[i] == POKEMON_TYPE_ROCK && (!c->will_tera || c->p.tera_type == POKEMON_TYPE_STELLAR || c->p.tera_type == POKEMON_TYPE_ROCK)) return false;
     const uint32_t ground_steel_rock = (1u << POKEMON_TYPE_GROUND) | (1u << POKEMON_TYPE_STEEL) | (1u << POKEMON_TYPE_ROCK);
-    if (mg_ability_is(c, ABILITY_ID_SAND_FORCE) && (existing_damage_types(c) & ground_steel_rock)) return false;
+    if (mg_ability_is(c, ABILITY_ID_SAND_FORCE) && (existing_damage_types(c, false) & ground_steel_rock)) return false;
     static const int abilities[] = {ABILITY_ID_SAND_RUSH, ABILITY_ID_SAND_VEIL, ABILITY_ID_FORECAST};
     for (int i = 0; i < 3; i++) if (mg_ability_is(c, abilities[i])) return false;
     return !any_instant_charge(c, WEATHER_TYPE_SANDSTORM);
@@ -451,8 +463,7 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             const int nonlevel = c->tm_count + c->egg_count;
             const int tm_cap = nonlevel_cap(c->p.level, gc_mg_trainer_const.tm_cap_level);
             const int egg_cap = nonlevel_cap(c->p.level, gc_mg_trainer_const.egg_cap_level);
-            if (taken || (nonlevel >= tm_cap && c->source_of[move] == 1)
-                || (nonlevel >= egg_cap && c->source_of[move] == 2)) continue;
+            if (taken || (nonlevel >= tm_cap && c->source_of[move] == 1) || (nonlevel >= egg_cap && c->source_of[move] == 2)) continue;
             remaining[n++] = base->e[i];
             total += base->e[i].w;
         }
@@ -461,7 +472,7 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             int damaging = 0;
             for (int k = 0; k < c->n_moves; k++) damaging += pr_moves[c->moves[k]].power > 1;
             const double denominator = fmax(js_pow(4, damaging) / 8, .5);
-            const uint32_t existing = existing_damage_types(c);
+            const uint32_t existing = existing_damage_types(c, true);
             total = 0;
             for (int k = 0; k < n; k++) {
                 const int move = remaining[k].move;
@@ -471,7 +482,7 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
                     if (type >= 0 && (existing & (1u << type))) weight = sqrt(weight);
                     else {
                         weight /= denominator;
-                        if (mg_has_type(c, type) && !stab_blacklisted(move)) weight *= 20;
+                        if ((mg_has_type(c, type) || (c->will_tera && type == c->p.tera_type)) && !stab_blacklisted(move)) weight *= 20;
                     }
                     remaining[k].w = ceil(weight);
                 }
@@ -528,32 +539,43 @@ static int nonlevel_cap(int level, const int thresholds[4])
     return cap;
 }
 
-/* Ordered native pools: TMs, eggs, level moves. Both fill caps read the shared
- * tmCount + eggCount. Forced signature/STAB picks bypass the fill caps. */
+/* getAndWeightEggMoves: a trainer whose config allows egg moves, from level 80, gets the egg moves of its root species that are not already
+ * in the level pool, weighted by 85% of the level pool's best weight (60 at most; the rare fourth at 5/6 of that, from level 170 and never
+ * for a boss). Math.round is floor(x + .5). */
+static bool egg_pool(const mg_ctx *c, const mg_pool *level, mg_pool *egg)
+{
+    egg->n = 0;
+    if (!c->eggs_allowed || c->p.level < gc_mg_trainer_const.egg_level) return true;
+    const bool exclude_rare = c->boss || c->p.level < gc_mg_trainer_const.rare_egg_level;
+    double best = -INFINITY;   /* Math.max(...levelPool.values()) */
+    for (int i = 0; i < level->n; i++) best = fmax(best, level->e[i].w);
+    const double normal = fmin(floor(best * gc_mg_trainer_const.egg_to_level_weight + .5), gc_mg_trainer_const.egg_weight_max);
+    const double rare = normal * (5.0 / 6);
+    const int root = gc_root_species(c->p.species);
+    for (int i = 0; i < gc_starter_egg_moves_count; i++) {
+        const gc_starter_egg_moves *e = &gc_starter_egg_moves_data[i];
+        if (e->species != root) continue;
+        for (int k = 0; k < 4; k++) {
+            const int move = e->egg_moves[k];
+            if (!move || pool_find(level, move) >= 0 || (k == 3 && exclude_rare)) continue;
+            const double w = k == 3 ? rare : normal;
+            const int at = pool_find(egg, move);
+            if (at >= 0) { if (w > egg->e[at].w) egg->e[at].w = w; continue; }
+            if (egg->n >= MG_POOL_MAX) return false;
+            egg->e[egg->n++] = (mg_ent){(uint16_t)move, w};
+        }
+        break;
+    }
+    return true;
+}
+
+/* Ordered native pools: TMs, then egg moves, then level moves. Ordinary configs disable eggs (an egg-enabled config is a boss or has
+ * setEggMovesAllowed). Forced signature/STAB picks bypass the fill cap as upstream does. */
 static bool trainer_pools(mg_ctx *c, mg_pool *level)
 {
-    static mg_pool egg, tm, combined;
-    egg.n = tm.n = combined.n = 0;
-    if (c->allow_egg && c->p.level >= gc_mg_trainer_const.egg_level) {
-        double max = -INFINITY;
-        for (int k = 0; k < level->n; k++) max = fmax(max, level->e[k].w);
-        const double weight = fmin(floor(max * gc_mg_trainer_const.egg_to_level + .5),
-                                   gc_mg_trainer_const.egg_weight_max);
-        const int root = gc_root_species(c->p.species);
-        for (int k = 0; k < gc_starter_egg_moves_count; k++) {
-            if (gc_starter_egg_moves_data[k].species != root) continue;
-            for (int j = 0; j < 4; j++) {
-                const int move = gc_starter_egg_moves_data[k].egg_moves[j];
-                if (!move || pool_find(level, move) >= 0
-                    || (j == 3 && (c->boss || c->p.level < gc_mg_trainer_const.rare_egg_level))) continue;
-                const int i = pool_find(&egg, move);
-                const double w = j == 3 ? weight * (5.0 / 6.0) : weight;
-                if (i < 0) egg.e[egg.n++] = (mg_ent){move, w};
-                else egg.e[i].w = fmax(egg.e[i].w, w);
-            }
-            break;
-        }
-    }
+    static mg_pool tm, egg, combined;
+    tm.n = combined.n = 0;
+    if (!egg_pool(c, level, &egg)) return false;
     if (c->p.level >= gc_mg_trainer_const.tm_level[0]) {
         const pr_reward_species *species = NULL;
         int lo = 0, hi = pr_reward_species_count - 1;
@@ -632,7 +654,7 @@ static void filter_move_pool(const mg_ctx *c, mg_pool *p, bool ignore_soft)
 /* ---- generateMoveset ---- */
 
 /* the constructor's view of the Pokemon: before enemy items and summon effects, on a battle that has only the arena's weather */
-static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
+static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m, const gc_mon *stats_of)
 {
     memset(c, 0, sizeof *c);
     c->bt.game_mode = run->run.mode;
@@ -642,6 +664,14 @@ static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
     c->p = m->b;
     pr_update_passive(&c->bt, &c->p);
     pr_calculate_stats(&c->bt, &c->p);
+    if (stats_of) {
+        /* a postProcess regenerates the moveset after changing the form, ability or boss status by assignment: the stats are still the
+         * constructor's (Pokemon.stats is only recalculated by calculateStats), the types, abilities and boss status are current */
+        static pr_pokemon old;   /* 3.5 KB: off the 3DS stack */
+        old = stats_of->b;
+        pr_calculate_stats(&c->bt, &old);
+        memcpy(c->p.stats, old.stats, sizeof c->p.stats);
+    }
     c->ability = c->p.ability;
     c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;
     c->boss = m->b.is_boss;
@@ -656,36 +686,38 @@ static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
 bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves, int n, double *out)
 {
     static mg_ctx c;
-    if (!ctx_init(&c, run, m)) return false;
+    if (!ctx_init(&c, run, m, NULL)) return false;
     for (int i = 0; i < n; i++) out[i] = effective_power(&c, moves[i]);
     return true;
 }
 
-/* These pinned plain Gym profiles have no postProcess regeneration or instant
- * Tera policy. Special callbacks, forms/shields and trainer Tera have other owners. */
+/* The pinned plain Gym profiles whose configs are single battles but for Tate and Liza (a double there is not a state upstream produces). */
 static bool plain_egg_gym(int type)
 {
     return type == TRAINER_TYPE_BROCK || type == TRAINER_TYPE_ROXANNE
         || type == TRAINER_TYPE_TATE || type == TRAINER_TYPE_LIZA;
 }
 
-bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
+/* the constructor's moveset; gc_int(run)->ctor_will_tera is set by the caller that knows the member's party slot (willTerastallize) */
+bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m) { return gc_generate_moveset_stale(run, rng, m, NULL, gc_int(run)->ctor_will_tera); }
+
+bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera)
 {
     if (run->run.has_challenges) return false;
     const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
-    const bool egg_gym = plain_egg_gym(run->trainer_type);
-    /* Ordinary Classic trainer pools. Instant Tera, rivals, Gym/E4,
-     * challenges, fusions and post-moveset form callbacks need separate owners. */
+    /* Classic trainer pools: ordinary trainers, and the egg-enabled ones (gym leaders, Elite Four, champions, evil team admins and bosses:
+     * setBoss / setEggMovesAllowed). A trainer's Pokemon is not a boss in its constructor; only a postProcess regenerating the moveset (stats_of)
+     * after setBoss(true, n) makes one. Instant Tera (the caller checks the
+     * party slot), rivals (their own signature moves), challenges, fusions and post-moveset form callbacks need separate owners. */
     if (trainer && (!m->b.has_trainer || !m->trainer_slot
         || m->trainer_slot != m->b.trainer_slot || m->trainer_slot > TRAINER_SLOT_TRAINER_PARTNER
         || m->b.level < 1 || m->b.n_moves || run->battle_type != BATTLE_TYPE_TRAINER
-        || (egg_gym && run->double_battle && run->trainer_type != TRAINER_TYPE_TATE
+        || (plain_egg_gym(run->trainer_type) && run->double_battle && run->trainer_type != TRAINER_TYPE_TATE
             && run->trainer_type != TRAINER_TYPE_LIZA)
-        || m->b.fusion_species || m->b.is_boss || m->b.passive_flag || m->b.terastallized
+        || m->b.fusion_species || (m->b.is_boss && !stats_of) || m->b.passive_flag || m->b.terastallized
         || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
-        || run->trainer_type <= 0 || (!egg_gym && run->trainer_type > TRAINER_TYPE_YOUNGSTER)
-        || run->trainer_type >= gc_mg_trainer_egg_count
-        || (!egg_gym && gc_mg_trainer_egg[run->trainer_type]))) return false;
+        || run->trainer_type <= 0 || run->trainer_type >= gc_mg_trainer_egg_count
+        || (run->trainer_type >= TRAINER_TYPE_RIVAL && run->trainer_type <= TRAINER_TYPE_RIVAL_6))) return false;
     const pr_species *sp = gc_species(m->b.species);
     if (!sp || (trainer && (sp->form_change_triggers
         & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))) return false;
@@ -694,7 +726,9 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
         return false;
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
-    if (!ctx_init(&c, run, m)) return false;
+    if (!ctx_init(&c, run, m, stats_of)) return false;
+    c.eggs_allowed = trainer && gc_mg_trainer_egg[run->trainer_type];
+    c.will_tera = trainer && will_tera;
     if (m->b.fusion_species && (m->b.passive_flag || (!c.boss && c.passive)
         || c.boss != (m->b.boss_segments > 0))) return false;
     const pr_rng before = *rng;
@@ -775,7 +809,8 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             if (mg_flag(move, GC_MGF_DEF_ATK)) {
                 const double def_ratio = c.p.stats[STAT_DEF] / higher;
                 w *= fmin(js_pow(def_ratio, 3) * 1.3, 1.1);
-            } else if (pr_moves[move].category == worse_category && !mg_flag(move, GC_MGF_PHOTON) && !mg_flag(move, GC_MGF_SHELL_SIDE)) {
+            } else if (pr_moves[move].category == worse_category && !mg_flag(move, GC_MGF_PHOTON) && !mg_flag(move, GC_MGF_SHELL_SIDE)
+                       && !(c.will_tera && (move == MOVE_ID_TERA_BLAST || move == MOVE_ID_TERA_STARSTORM))) {
                 w *= adjustment_ratio;
             }
             pool.e[i].w = w;
