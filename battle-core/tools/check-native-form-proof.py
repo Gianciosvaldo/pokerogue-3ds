@@ -8,9 +8,9 @@ if not env.get('TURNTEST_LOCALES'):raise SystemExit('TURNTEST_LOCALES required')
 faults={
  'missing-native-routing':('phases.c','native_ability_form_target(mon,&target_form)','false',args.api,False),
  'missing-schooling':('phases.c','case SPECIES_ID_WISHIWASHI: case SPECIES_ID_MORPEKO:','case SPECIES_ID_MORPEKO:',args.api,False),
- 'wrong-minior-offset':('phases.c','p->form<7?p->form+7:p->form-7','p->form<7?p->form+6:p->form-6',args.phase,True),
+ 'wrong-minior-offset':('phases.c','pr_half_form(p)<7?pr_half_form(p)+7:pr_half_form(p)-7','pr_half_form(p)<7?pr_half_form(p)+6:pr_half_form(p)-6',args.phase,True),
  'zygarde-keeps-pc-form':('phases.c','to=keys[i^1];','to=keys[i];',args.phase,True),
- 'missing-power-construct-condition':('closures_abilities.c','return a->form==4 || a->form==5;','return false;',args.phase,True),
+ 'missing-power-construct-condition':('closures_abilities.c','return AF(ABILITY_ID_POWER_CONSTRUCT)==4 || AF(ABILITY_ID_POWER_CONSTRUCT)==5;','return false;',args.phase,True),
  'power-construct-too-late':('closures_abilities.c','pr_get_hp_ratio(a,false)<=.5','pr_get_hp_ratio(a,false)<.4',args.natural,True),
  'schooling-ignores-level':('closures_abilities.c','a->level < 20 || pr_get_hp_ratio(a, false) <= .25','pr_get_hp_ratio(a, false) <= .25',args.natural,True),
  'missing-ice-face-weather':('closures_abilities.c','{"ability:248", "ea591d93bc79", weather_in}','{"ability:248", "ea591d93bc79", form_zero}',args.api,False),

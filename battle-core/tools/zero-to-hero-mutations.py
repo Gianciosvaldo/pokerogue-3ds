@@ -6,17 +6,17 @@ import shutil, subprocess, sys, tempfile
 root = Path(__file__).resolve().parent.parent
 api, turns = (Path(a).resolve() for a in sys.argv[1:3])
 mutants = {
-    'faint-ignored': ('src/closures_abilities.c', 'return a->hp <= 0 ? a->form : 1;', 'return 1;'),
-    'switch-out-gate-dropped': ('src/ab_attrs.c', 'GATE(pr_closure_call(bt, P(PreSwitchOutFormChangeAbAttr, a)->formFunc, a->cls, p->form, p, NULL, -1) != p->form);', 'GATE(1);'),
-    'simulated-form-change': ('src/ab_attrs.c', 'NULL, -1) != p->form);\n        if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);\n        return 1;\n    case PR_AC_IncreasePpUsedAbAttr:',
-                              'NULL, -1) != p->form);\n        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);\n        return 1;\n    case PR_AC_IncreasePpUsedAbAttr:'),
-    'palafin-route-removed': ('src/phases.c', '} else if (mon->species == SPECIES_ID_PALAFIN &&', '} else if (false && mon->species == SPECIES_ID_PALAFIN &&'),
+    'faint-ignored': ('src/closures_abilities.c', 'return a->hp <= 0 ? AF(ABILITY_ID_ZERO_TO_HERO) : 1;', 'return 1;'),
+    'switch-out-gate-dropped': ('src/ab_attrs.c', 'GATE(ability_form_differs(bt, p, c->ability, P(PreSwitchOutFormChangeAbAttr, a)->formFunc, a->cls));', 'GATE(1);'),
+    'simulated-form-change': ('src/ab_attrs.c', 'a->cls));\n        if (!pp->simulated) ability_form_change(bt, p, c->ability);\n        return 1;\n    case PR_AC_IncreasePpUsedAbAttr:',
+                              'a->cls));\n        ability_form_change(bt, p, c->ability);\n        return 1;\n    case PR_AC_IncreasePpUsedAbAttr:'),
+    'palafin-route-removed': ('src/phases.c', '} else if (pr_half_species(mon) == SPECIES_ID_PALAFIN &&', '} else if (false && pr_half_species(mon) == SPECIES_ID_PALAFIN &&'),
     'post-battle-init-hero': ('src/closures_abilities.c', '{"ability:278", "5e264af5663d", form_zero},', '{"ability:278", "5e264af5663d", hero_on_switch_out},'),
     'mark-not-set': ('src/ab_attrs.c', '((pr_pokemon *)p)->zero_to_hero_shown = true;', '(void)p;'),
     'mark-not-cleared': ('src/modifiers.c', 'p->zero_to_hero_shown = false;', ''),
     'message-ignores-mark': ('src/closures_abilities.c', '!a->switch_out_status && !a->zero_to_hero_shown;', '!a->switch_out_status;'),
-    'message-ignores-field': ('src/closures_abilities.c', 'return a->form != 0 && a->on_field && !a->switch_out_status', 'return a->form != 0'),
-    'message-in-zero-form': ('src/closures_abilities.c', 'return a->form != 0 && a->on_field', 'return a->on_field'),
+    'message-ignores-field': ('src/closures_abilities.c', 'return AF(ABILITY_ID_ZERO_TO_HERO) != 0 && a->on_field && !a->switch_out_status', 'return AF(ABILITY_ID_ZERO_TO_HERO) != 0'),
+    'message-in-zero-form': ('src/closures_abilities.c', 'return AF(ABILITY_ID_ZERO_TO_HERO) != 0 && a->on_field', 'return a->on_field'),
 }
 
 def turn_summary(text):

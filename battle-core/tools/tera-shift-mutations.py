@@ -8,7 +8,7 @@ traces = [Path(a).resolve() for a in sys.argv[1:]]
 mutants = {
     'closure-missing': ('src/closures_abilities.c', '    {"ability:307", "55c07decbbff", hunger_toggle},                 /* Tera Shift: the same formFunc */\n', ''),
     'formfunc-inverted': ('src/closures_abilities.c', '{"ability:307", "55c07decbbff", hunger_toggle},', '{"ability:307", "55c07decbbff", hunger_stay},'),
-    'route-removed': ('src/phases.c', '} else if (mon->species == SPECIES_ID_TERAPAGOS && (', '} else if (false && mon->species == SPECIES_ID_TERAPAGOS && ('),
+    'route-removed': ('src/phases.c', '} else if (pr_half_species(mon) == SPECIES_ID_TERAPAGOS && (', '} else if (false && pr_half_species(mon) == SPECIES_ID_TERAPAGOS && ('),
     'lapse-dropped': ('src/phases.c', "? !key[0] : !strcmp(key, \"stellar\");", "? !key[0] : false;"),
     'ability-trigger-any-form': ('src/phases.c', "? !key[0] : !strcmp(key, \"stellar\");", "? true : !strcmp(key, \"stellar\");"),
     'lapse-from-any-form': ('src/phases.c', "? !key[0] : !strcmp(key, \"stellar\");", "? !key[0] : true;"),

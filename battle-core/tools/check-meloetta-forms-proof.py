@@ -6,7 +6,7 @@ r=Path(__file__).resolve().parents[2];trace=Path(sys.argv[1]).resolve();turns=Pa
 with turns.open() as f:
  assert sum(line.startswith('TRACE list=') and 'QuietFormChangePhase' in line for line in f)>=100, 'native owning form execution floor'
 runner=r/'battle-core/build/meloetta-forms-test';subprocess.run([runner,trace],check=True,env=env);subprocess.run([r/'battle-core/build/wide-combat-test',turns],check=True,env=env)
-s=(r/'battle-core/src/phases.c').read_text();a=s.index('static void form_change_with_delay(');b=s.index('\nstatic void form_change(',a);leaf=s[a:b];faults=[]
+s=(r/'battle-core/src/phases.c').read_text();a=s.index('static void form_change_body(');b=s.index('\nstatic void form_change_half(',a);leaf=s[a:b];faults=[]
 def fault(name,old,new):
  assert leaf.count(old)==1,(name,leaf.count(old));faults.append((name,s[:a]+leaf.replace(old,new,1)+s[b:],False))
 fault('missing-history-predicate','last->move != MOVE_ID_RELIC_SONG','false')
@@ -20,7 +20,7 @@ fault('inactive-sheer-force','pr_has_ability_active(bt, p, ABILITY_ID_SHEER_FORC
 fault('extra-faint-gate','if (!last || last->move != MOVE_ID_RELIC_SONG','if (p->hp<=0 || !last || last->move != MOVE_ID_RELIC_SONG')
 fault('wrong-aria-target','!strcmp(from->form_key,"aria") ? "pirouette"','!strcmp(from->form_key,"aria") ? "aria"')
 fault('wrong-pirouette-target','!strcmp(from->form_key,"pirouette") ? "aria"','!strcmp(from->form_key,"pirouette") ? "pirouette"')
-fault('missing-positive-handler','if (mon->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {','if (false) {')
+fault('missing-positive-handler','if (pr_half_species(mon) == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {','if (false) {')
 fault('wrong-delay-order','if (delayed) pr_phase_push(bt, e, ph);','if (!delayed) pr_phase_push(bt, e, ph);')
 fault('eager-form-change','e->pool[ph].pokemon = mon;','mon->form=target_form; e->pool[ph].pokemon = mon;')
 for name,old,new,own in [('missing-owning-caller','form_change(bt, user, PR_FCT_SpeciesFormChangePostMoveTrigger);','/* omit post-move scene trigger */',True),('missing-quiet-execution','case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;','case PH_QUIET_FORM_CHANGE: break;',True)]:
