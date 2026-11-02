@@ -267,24 +267,18 @@ static bool knows(const pr_pokemon *p, int move)
     return false;
 }
 
-/* getLevelMoves({startingLevel, includePrevolutionMoves: true}) filtered to the non-PREVO moves, as
- * LevelUpPhase.end uses them: the species' own level moves with startingLevel <= level <= this.level,
- * sorted by level (stable), first of each move kept. Form learnsets (pokemonFormLevelMoves) aren't in
- * battle-core's tables yet, so a form uses its species' list. */
+/* getLevelMoves({startingLevel, includePrevolutionMoves: true}) filtered to the non-PREVO moves, as LevelUpPhase.end uses
+ * them: the Pokemon's own level moves with startingLevel <= level <= this.level, then, for a fusion, the second species' (its form's
+ * learnset too), sorted by level (stable), first of each move kept. That is gc_level_moves, which reads both halves, their forms and
+ * the filters of upstream's getLevelMoves; the prevolution rows are the PREVO ones this filter drops (their messages aren't
+ * shown: battle:prevoMovePrompt). A list that doesn't fit the buffer is reported as nothing to learn, never cut halfway. */
 int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int max)
 {
-    const pr_species *sp = gc_species(m->b.species);
-    if (!sp) return 0;
-    int n = 0;
-    for (int lv = starting_level; lv <= m->b.level; lv++)
-        for (int i = 0; i < sp->level_moves.n; i++) {
-            const pr_level_move *lm = &sp->level_moves.v[i];
-            if (lm->level != lv || lm->level <= 0) continue;
-            bool dup = false;
-            for (int k = 0; k < n; k++) dup |= out[k] == lm->move;
-            if (!dup && n < max) out[n++] = lm->move;
-        }
-    return n;
+    gc_learn_row rows[128];
+    const int n = gc_level_moves(m, starting_level, false, false, false, rows, 128);
+    int w = 0;
+    for (int i = 0; i < n && w < max; i++) out[w++] = rows[i].move;
+    return w;
 }
 
 /* addExp(exp): levels up to getMaxExpLevel(), and the exp is cut back to the cap's level */

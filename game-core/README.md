@@ -200,8 +200,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
-battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers (the player's own is in), form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
-lists read them since Task 59), and the prevolution-move messages.
+battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers (the player's own is in), and the prevolution-move messages.
 
 ## Data
 
@@ -414,7 +413,8 @@ Not done or not checked (reported, not widened into this PR):
   Lure and Silver Poké Ball battle counts aren't tracked either (the differential leaves lures out).
   `metSpecies` is derived from the current species' root. Challenges aren't modelled: no level-up moveset hook,
   `EGG_MOVE_RELEARN_AVAILABILITY` and `isAllowedInChallenge` keep their defaults.
-- `gc_level_up_moves` (level-up learning) still ignores form learnsets, though the dump now has them.
+- `gc_level_up_moves` (level-up learning) reads `gc_level_moves`: form learnsets and, for a fusion, the second species' list too
+  (tests/fusion_after_host_test.c). The prevolution rows it drops would only show a message (`battle:prevoMovePrompt`), which isn't shown.
 - The app (`game/`): the Lock Capsule toggle isn't wired into the UI and how it draws the new item keys is
   unchecked. The shop, fixed-battle and mystery encounter custom reward settings, and fleeing (a non-victory
   is always the restricted screen) are untouched.
