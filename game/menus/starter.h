@@ -9,7 +9,8 @@
  *   - there: the grid with its scrolling and cost labels, the team column with the cost budget, Randomize and Start, the info
  *     panel (sprite, dex number, name, types, growth rate, ability, passive, nature), the options menu with Add to Party and
  *     Remove from Party, Customize, and the Begin / Exit questions. The host provides unlocked move/nature/shiny/ability selections and candy purchases. The top screen shows the species' sprite, moves and team luck.
- *   - the filter and sort are a menu the caller shows (SELECT, or the Filter button), not upstream's bar. Not there: the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
+ *   - the filter and sort are a menu the caller shows (SELECT, or the Filter button), not upstream's bar. The form and gender cycle buttons (L, ZL)
+ *     are there; shiny, ability, nature and tera are chosen in Customize. Not there: IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
  *     what works. See starter_model.h for how the cursor moves without the filter bar.
  */
 #ifndef GAME_MENUS_STARTER_H
@@ -51,6 +52,10 @@ typedef struct {
   void (*filter)(void* ctx);
   /* The label on the Filter button ("Filter", "Filter (3)"), NULL for the plain one. */
   const char* (*filter_label)(void* ctx);
+  /* L (b = MB_CYCLE_FORM) or ZL (MB_CYCLE_GENDER) with the cursor on a species in the grid, as in upstream's processCycleButtonsInput: the caller
+   * cycles that starter's form or gender and answers true when it did (it may be NULL: the buttons do nothing). The screen then plays the
+   * select sound and asks `describe` again. */
+  bool (*cycle)(void* ctx, uint16_t species, mui_button b);
 } starter_events;
 
 typedef struct {

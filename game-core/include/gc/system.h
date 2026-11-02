@@ -36,8 +36,10 @@ typedef struct {
     uint8_t egg_moves;
     uint16_t moveset[4];   /* 0 if default / empty */
     uint16_t classic_win_count;
-    uint8_t preference_flags; /* 1 nature, 2 appearance, 4 ability; absent in older saves */
+    uint8_t preference_flags; /* 1 nature, 2 appearance, 4 ability, 8 form, 16 gender; absent in older saves */
     uint8_t nature_preference, appearance_preference, ability_preference;
+    uint8_t form_preference;   /* StarterPreferences.formIndex, valid with flag 8 */
+    uint8_t gender_preference; /* StarterPreferences.female (0 male, 1 female), valid with flag 16 */
 } gc_starter_entry;
 
 /* Upstream Unlocks */
@@ -119,6 +121,8 @@ void gc_system_init_defaults(gc_system *sys);
 uint64_t gc_mon_dex_attr(const gc_mon *m);
 /* the dex attributes a species can ever unlock (the mask setPokemonSpeciesCaught ANDs a catch with) */
 uint64_t gc_species_full_unlocks_data(uint16_t species_id);
+/* PokemonForm.isStarterSelectable by form index (bit f = form f): the forms the starter select offers. Bit 0 only for a species with one form. */
+uint64_t gc_species_starter_forms(uint16_t species_id);
 int16_t gc_species_prevolution(uint16_t species_id);
 uint16_t gc_species_root_id(uint16_t species_id);
 /* PokemonSpecies.getRootSpeciesId(true): stops at the first starter on the way down */

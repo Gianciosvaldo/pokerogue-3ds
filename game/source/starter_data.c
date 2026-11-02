@@ -15,10 +15,15 @@ const pr_species* menu_species(uint16_t id);
 /* DexAttr (src/enums/dex-attr.ts) as game-core keeps it (gc_mon_dex_attr) */
 #define DEX_NON_SHINY 1ull
 #define DEX_SHINY 2ull
+#define DEX_MALE 4ull
+#define DEX_FEMALE 8ull
 #define DEX_VARIANT_1 16ull
 #define DEX_VARIANT_2 32ull
 #define DEX_VARIANT_3 64ull
 #define DEX_FORM_0 128ull /* DEFAULT_FORM: form f is bit 7 + f */
+/* gc_starter_entry.preference_flags bits for the form and gender (the others are the nature, appearance and ability) */
+#define PREF_FORM 8u
+#define PREF_GENDER 16u
 /* AbilityAttr and PassiveAttr */
 #define ABILITY_1 1u
 #define ABILITY_2 2u
@@ -57,15 +62,25 @@ static bool defaults(const gc_system* sys, uint16_t species, props* p) {
   if (!sys || species > GC_MAX_SPECIES_ID) return true;
 
   const uint64_t attr = sys->dex[species].caught_attr;
+  const gc_starter_entry* pref = &sys->starters[species];
   p->female = p->sp->male_permille == 0; /* female only for a species that is always female */
+  /* a stored gender is kept only while its bit is caught (initStarterPrefs :680-686) */
+  if ((pref->preference_flags & PREF_GENDER) && (attr & (pref->gender_preference ? DEX_FEMALE : DEX_MALE))) p->female = pref->gender_preference != 0;
   p->shiny = (attr & DEX_SHINY) != 0;
   if (attr & DEX_VARIANT_3)
     p->variant = 2;
   else if (attr & DEX_VARIANT_2)
     p->variant = 1;
+  /* a stored form is kept only while it is one the starter select offers and its bit is caught (initStarterPrefs :707-715) */
+  const bool form_pref = (pref->preference_flags & PREF_FORM) && pref->form_preference < p->sp->nforms && pref->form_preference < 57 &&
+                         ((gc_species_starter_forms(species) >> pref->form_preference) & 1) && (attr & (DEX_FORM_0 << pref->form_preference));
+  if (form_pref) {
+    p->form_index = pref->form_preference;
+    p->form = &pr_forms[p->sp->form0 + p->form_index];
+  }
   /* upstream picks form 0. A species whose form 0 was never caught (only a later form was) would be refused by
    * gc_starter_is_available, so it takes the first form that was caught. */
-  if (!(attr & DEX_FORM_0)) {
+  else if (!(attr & DEX_FORM_0)) {
     for (int f = 1; f < p->sp->nforms && f < 57; f++) {
       if (attr & (DEX_FORM_0 << f)) {
         p->form_index = (uint8_t)f;
@@ -92,7 +107,6 @@ static bool defaults(const gc_system* sys, uint16_t species, props* p) {
   }
   /* PassiveAttr.UNLOCKED | ENABLED */
   p->passive = sys->starters[species].passive_attr == (PASSIVE_UNLOCKED | PASSIVE_ENABLED);
-  const gc_starter_entry* pref=&sys->starters[species];
   if ((pref->preference_flags&1) && pref->nature_preference<25 &&
       (natures&(1u<<(pref->nature_preference+1)))) p->nature=pref->nature_preference;
   if ((pref->preference_flags&2) && pref->appearance_preference<=3) {
@@ -110,6 +124,146 @@ static bool defaults(const gc_system* sys, uint16_t species, props* p) {
       p->ability_index=(uint8_t)a;
   }
   return true;
+}
+
+/* ---------------------------------------------------------------- cycling the form and the gender
+ * The cycle buttons of starter-select-ui-handler.ts (updateCanCycle :2846, processCycleButtonsInput :1151, setNewFormIndex :1313,
+ * setNewGender :1330) over the preferences game-core stores for a starter (preference_flags 8 and 16). */
+
+/* the preferences as upstream holds them: each one is set or undefined */
+typedef struct {
+  bool form_set, female_set;
+  uint8_t form;
+  bool female;
+} prefs;
+
+static void prefs_load(const gc_starter_entry* e, prefs* p) {
+  p->form_set = (e->preference_flags & PREF_FORM) != 0;
+  p->form = e->form_preference;
+  p->female_set = (e->preference_flags & PREF_GENDER) != 0;
+  p->female = e->gender_preference != 0;
+}
+
+static void prefs_store(gc_starter_entry* e, const prefs* p) {
+  e->preference_flags = (uint8_t)((e->preference_flags & ~(PREF_FORM | PREF_GENDER)) | (p->form_set ? PREF_FORM : 0) | (p->female_set ? PREF_GENDER : 0));
+  e->form_preference = p->form_set ? p->form : 0;
+  e->gender_preference = p->female_set && p->female ? 1 : 0;
+}
+
+/* species.forms.find(f => f.formKey === "female"): Meowstic, Indeedee, Basculegion and Oinkologne have their sexes as forms */
+static bool has_female_form(const pr_species* sp) {
+  for (int f = 0; f < sp->nforms; f++)
+    if (!strcmp(pr_forms[sp->form0 + f].form_key, "female")) return true;
+  return false;
+}
+
+static void set_gender(prefs* p, const pr_species* sp, bool female);
+static void set_form(prefs* p, const pr_species* sp, int form) {
+  p->form_set = true;
+  p->form = (uint8_t)form;
+  /* (upstream also sets the tera type to the form's first type: a starter keeps tera_type -1, which game-core resolves to the form's first type) */
+  if (has_female_form(sp)) {
+    const bool female = form == 1;
+    if (!p->female_set || p->female != female) set_gender(p, sp, female);
+  }
+}
+static void set_gender(prefs* p, const pr_species* sp, bool female) {
+  p->female_set = true;
+  p->female = female;
+  if (has_female_form(sp)) {
+    const int form = female ? 1 : 0;
+    if (!p->form_set || p->form != form) set_form(p, sp, form);
+  }
+}
+
+static bool form_selectable(uint16_t species, int f) { return f >= 0 && f < 57 && ((gc_species_starter_forms(species) >> f) & 1); }
+
+/* getPokemonSpecies(id).forms.filter(isStarterSelectable || no form change leads anywhere) */
+static bool has_form_change_key(uint16_t species) {
+  for (int i = 0; i < gc_form_change_targets_count; i++)
+    if (gc_form_change_targets_data[i].species == species && gc_form_change_targets_data[i].form_key[0]) return true;
+  return false;
+}
+
+bool ss_can_cycle_gender(const gc_system* sys, uint16_t species) {
+  if (!sys || species == 0 || species > GC_MAX_SPECIES_ID || gc_starter_cost(species) < 0) return false;
+  const uint64_t a = sys->dex[species].caught_attr;
+  return (a & DEX_MALE) && (a & DEX_FEMALE);
+}
+
+bool ss_can_cycle_form(const gc_system* sys, uint16_t species) {
+  const pr_species* sp = menu_species(species);
+  if (!sys || !sp || species > GC_MAX_SPECIES_ID || gc_starter_cost(species) < 0) return false;
+  const uint64_t attr = sys->dex[species].caught_attr;
+  /* upstream numbers the forms that pass the filter again from 0 before it asks which are caught (updateCanCycle :2882-2885): the
+   * same here, so the button is offered exactly when upstream offers it */
+  const bool keyed = has_form_change_key(species);
+  int caught_count = 0, j = 0;
+  for (int f = 0; f < sp->nforms; f++) {
+    if (!form_selectable(species, f) && keyed) continue;
+    if (j < 57 && (attr & (DEX_FORM_0 << j))) caught_count++;
+    j++;
+  }
+  return caught_count > 1;
+}
+
+bool ss_form_offered(const gc_system* sys, uint16_t species, int form) {
+  const pr_species* sp = menu_species(species);
+  if (!sys || !sp || species > GC_MAX_SPECIES_ID || form < 0 || form >= sp->nforms || form >= 57) return false;
+  return form_selectable(species, form) && (sys->dex[species].caught_attr & (DEX_FORM_0 << form));
+}
+
+/* store the new preferences when the starter they make is one game-core accepts; else leave the entry as it was */
+static bool store_prefs(gc_system* sys, uint16_t species, const prefs* p) {
+  gc_starter_entry* e = &sys->starters[species];
+  const gc_starter_entry before = *e;
+  prefs_store(e, p);
+  gc_starter s;
+  if (ss_starter(sys, species, &s) && gc_starter_is_available(sys, &s, NULL, NULL)) return true;
+  *e = before;
+  return false;
+}
+
+bool ss_set_form(gc_system* sys, uint16_t species, int form) {
+  const pr_species* sp = menu_species(species);
+  if (!sys || !sp || species > GC_MAX_SPECIES_ID || gc_starter_cost(species) < 0 || !ss_form_offered(sys, species, form)) return false;
+  prefs p;
+  prefs_load(&sys->starters[species], &p);
+  set_form(&p, sp, form);
+  return store_prefs(sys, species, &p);
+}
+
+bool ss_set_gender(gc_system* sys, uint16_t species, bool female) {
+  const pr_species* sp = menu_species(species);
+  if (!sys || !sp || species > GC_MAX_SPECIES_ID || gc_starter_cost(species) < 0 || !ss_can_cycle_gender(sys, species)) return false;
+  prefs p;
+  prefs_load(&sys->starters[species], &p);
+  set_gender(&p, sp, female);
+  return store_prefs(sys, species, &p);
+}
+
+bool ss_cycle_form(gc_system* sys, uint16_t species) {
+  props now;
+  if (!ss_can_cycle_form(sys, species) || !defaults(sys, species, &now)) return false;
+  const int n = now.sp->nforms;
+  int next = now.form_index;
+  do {
+    next = (next + 1) % n;
+    if (ss_form_offered(sys, species, next)) break;
+  } while (next != now.form_index);
+  prefs p;
+  prefs_load(&sys->starters[species], &p);
+  set_form(&p, now.sp, next);
+  return store_prefs(sys, species, &p);
+}
+
+bool ss_cycle_gender(gc_system* sys, uint16_t species) {
+  props now;
+  if (!ss_can_cycle_gender(sys, species) || !defaults(sys, species, &now)) return false;
+  prefs p;
+  prefs_load(&sys->starters[species], &p);
+  set_gender(&p, now.sp, !(p.female_set && p.female)); /* setNewGender(species, !starterPreferences.female) */
+  return store_prefs(sys, species, &p);
 }
 
 int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused) {
