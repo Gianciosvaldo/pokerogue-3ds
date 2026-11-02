@@ -24,6 +24,97 @@ const pr_form *pr_pokemon_base_form(const pr_pokemon *p)
     return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
 }
 
+/* PR_DEV_FUSION_ABILITIES: a fused Pokemon's form logic (the abilities NoFusionAbilityAbAttr switches off on a fusion in the pin) reads one
+ * half at a time: form_half 0 is the Pokemon's own species and form, 1 the fusion's. The default is the pin's reading. */
+uint16_t pr_half_species(const pr_pokemon *p) { return p->form_half ? p->fusion_species : p->species; }
+uint8_t pr_half_form(const pr_pokemon *p) { return p->form_half ? p->fusion_form : p->form; }
+
+const pr_species *pr_half_species_data(const pr_pokemon *p)
+{
+    return p->form_half ? pr_pokemon_fusion_species(p) : pr_pokemon_species(p);
+}
+
+const pr_form *pr_half_base_form(const pr_pokemon *p)
+{
+    return p->form_half ? pr_pokemon_fusion_form(p) : pr_pokemon_base_form(p);
+}
+
+/* The abilities NoFusionAbilityAbAttr switches off on a fusion in the pin, the species whose form each one changes (the second is Galar
+ * Darmanitan), and whether PR_DEV_FUSION_ABILITIES turns it on. They are turned on a family at a time, as the form logic of each is made to read the
+ * right one of a fusion's two species (pr_half_species, pr_half_form): an ability on with a form logic that reads only the first species half-works. */
+static const struct fusion_ability {
+    uint16_t ability, species[2];
+    bool enabled;
+} fusion_abilities[] = {
+    {ABILITY_ID_FORECAST, {SPECIES_ID_CASTFORM}, true},
+    {ABILITY_ID_FLOWER_GIFT, {SPECIES_ID_CHERRIM}, true},
+    {ABILITY_ID_ZEN_MODE, {SPECIES_ID_DARMANITAN, SPECIES_ID_GALAR_DARMANITAN}, true},
+    {ABILITY_ID_STANCE_CHANGE, {SPECIES_ID_AEGISLASH}, true},
+    {ABILITY_ID_SHIELDS_DOWN, {SPECIES_ID_MINIOR}, true},
+    {ABILITY_ID_SCHOOLING, {SPECIES_ID_WISHIWASHI}, true},
+    {ABILITY_ID_DISGUISE, {SPECIES_ID_MIMIKYU}, true},
+    {ABILITY_ID_POWER_CONSTRUCT, {SPECIES_ID_ZYGARDE}, true},
+    {ABILITY_ID_GULP_MISSILE, {SPECIES_ID_CRAMORANT}, true},
+    {ABILITY_ID_ICE_FACE, {SPECIES_ID_EISCUE}, true},
+    {ABILITY_ID_HUNGER_SWITCH, {SPECIES_ID_MORPEKO}, true},
+    {ABILITY_ID_ZERO_TO_HERO, {SPECIES_ID_PALAFIN}, true},
+    {ABILITY_ID_TERA_SHIFT, {SPECIES_ID_TERAPAGOS}, false},
+    {ABILITY_ID_BATTLE_BOND, {SPECIES_ID_BATTLE_BOND_GRENINJA}, true},
+    {ABILITY_ID_MULTITYPE, {SPECIES_ID_ARCEUS}, false},
+    {ABILITY_ID_RKS_SYSTEM, {SPECIES_ID_SILVALLY}, false},
+};
+
+bool pr_fusion_ability_enabled(const pr_battle *bt, uint16_t ability)
+{
+    if (!(bt->deviations & PR_DEV_FUSION_ABILITIES)) return false;
+    for (size_t i = 0; i < sizeof fusion_abilities / sizeof *fusion_abilities; i++)
+        if (fusion_abilities[i].ability == ability) return fusion_abilities[i].enabled;
+    return false;
+}
+
+bool pr_fusion_species_enabled(const pr_battle *bt, uint16_t species)
+{
+    if (!(bt->deviations & PR_DEV_FUSION_ABILITIES) || !species) return false;
+    for (size_t i = 0; i < sizeof fusion_abilities / sizeof *fusion_abilities; i++)
+        if (fusion_abilities[i].enabled && (fusion_abilities[i].species[0] == species || fusion_abilities[i].species[1] == species))
+            return true;
+    return false;
+}
+
+int pr_ability_form_half(const pr_battle *bt, const pr_pokemon *p, uint16_t ability)
+{
+    if (!p->fusion_species || !pr_fusion_ability_enabled(bt, ability)) return 0;
+    for (size_t i = 0; i < sizeof fusion_abilities / sizeof *fusion_abilities; i++)
+        if (fusion_abilities[i].ability == ability)
+            return p->fusion_species == fusion_abilities[i].species[0]
+                   || (fusion_abilities[i].species[1] && p->fusion_species == fusion_abilities[i].species[1]);
+    return 0;
+}
+
+uint8_t pr_ability_form(const pr_battle *bt, const pr_pokemon *p, uint16_t ability)
+{
+    return pr_ability_form_half(bt, p, ability) ? p->fusion_form : p->form;
+}
+
+void pr_change_half_form_state(pr_battle *bt, pr_pokemon *p, int half, int form)
+{
+    if (!half || !p->fusion_species) { pr_change_form_state(bt, p, form); return; }
+    const pr_species *species = pr_pokemon_fusion_species(p);
+    if (!species || form < 0 || form >= species->nforms) {
+        pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+        return;
+    }
+    p->fusion_form = (uint8_t)form;
+    if (p->ability_lookup_known) {
+        /* as changeForm does for the first species: the ability index stays inside the new form's count */
+        int count = pr_pokemon_fusion_form(p)->ability_hidden ? 3 : 2;
+        if (p->fusion_ability_index >= count) p->fusion_ability_index = (int8_t)(count - 1);
+        pr_refresh_ability(p);
+    }
+    pr_update_passive(bt, p);
+    pr_recalculate_stats(bt, p);
+}
+
 const pr_form *pr_pokemon_form(const pr_pokemon *p)
 {
     if (!p->transformed) return pr_pokemon_base_form(p);

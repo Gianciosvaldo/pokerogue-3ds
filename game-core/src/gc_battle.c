@@ -233,7 +233,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 
     memset(bt, 0, sizeof *bt);
     bt->event_sink = battle_event_chunk; bt->event_sink_ctx = run;
-    bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION;   /* lorenzo's departures from the pin */
+    bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION | PR_DEV_FUSION_ABILITIES;   /* lorenzo's departures from the pin */
     bt->player_teras_used_known = true;
     bt->player_teras_used = player_teras_used;
     bt->illusion_species = wild_illusion_species; bt->illusion_species_ctx = run;

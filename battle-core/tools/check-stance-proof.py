@@ -6,9 +6,9 @@ p=argparse.ArgumentParser();p.add_argument('api',type=Path);p.add_argument('turn
 if not os.environ.get('TURNTEST_LOCALES'):raise SystemExit('TURNTEST_LOCALES required')
 faults={
  'premoves-use-current-phase':('int move = bt->commands[b].move;','int move = bt->engine->pool[bt->engine->current].move.id;','stance-change-test',a.api),
- 'leave-requires-ability':('mon->form == 1 && !is_active_on_field(mon)','mon->form == 1 && !is_active_on_field(mon) && pr_has_ability_active(bt,mon,ABILITY_ID_STANCE_CHANGE)','stance-change-test',a.api),
- 'leave-ignores-field':('mon->form == 1 && !is_active_on_field(mon)','mon->form == 1 && !is_active(mon)','stance-change-test',a.api),
- 'no-stance-change-queue':('if (target_form >= 0 && target_form != mon->form) {','if (!stance && target_form >= 0 && target_form != mon->form) {','stance-change-test',a.api),
+ 'leave-requires-ability':('pr_half_form(mon) == 1 && !is_active_on_field(mon)','pr_half_form(mon) == 1 && !is_active_on_field(mon) && pr_has_ability_active(bt,mon,ABILITY_ID_STANCE_CHANGE)','stance-change-test',a.api),
+ 'leave-ignores-field':('pr_half_form(mon) == 1 && !is_active_on_field(mon)','pr_half_form(mon) == 1 && !is_active(mon)','stance-change-test',a.api),
+ 'no-stance-change-queue':('if (target_form >= 0 && target_form != pr_half_form(mon)) {','if (!stance && target_form >= 0 && target_form != pr_half_form(mon)) {','stance-change-test',a.api),
  'missing-delay-selection':('if (delayed || (!stance && trigger_class','if (false || (!stance && trigger_class','stance-change-test',a.api),
  'missing-kings-shield':('move == MOVE_ID_KINGS_SHIELD) target_form = 0;','move == MOVE_ID_SPLASH) target_form = 0;','stance-change-test',a.api),
  'faint-revert-is-immediate':('pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));\n    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);','pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));\n    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, false);','stance-turn-test',a.turn),

@@ -61,21 +61,21 @@ static pr_target_list *tlist(pr_engine *e, int list) { return list >= 0 ? &e->ta
  * whether to call the scene trigger; the scene then matches the raw form key. */
 static bool native_ability_form_target(const pr_pokemon *p, int *target)
 {
-    switch(p->species) {
+    switch(pr_half_species(p)) {
     case SPECIES_ID_DARMANITAN: case SPECIES_ID_GALAR_DARMANITAN:
     case SPECIES_ID_WISHIWASHI: case SPECIES_ID_MORPEKO:
     case SPECIES_ID_EISCUE: case SPECIES_ID_MIMIKYU:
-        if(p->form<2)*target=1-p->form;
+        if(pr_half_form(p)<2)*target=1-pr_half_form(p);
         return true;
     case SPECIES_ID_MINIOR:
-        if(p->form<14)*target=p->form<7?p->form+7:p->form-7;
+        if(pr_half_form(p)<14)*target=pr_half_form(p)<7?pr_half_form(p)+7:pr_half_form(p)-7;
         return true;
     case SPECIES_ID_ZYGARDE: {
-        const pr_form *from=pr_pokemon_base_form(p);
+        const pr_form *from=pr_half_base_form(p);
         const char *keys[]={"50-pc","complete","10-pc","10-complete"};
         const char *to=NULL;
         for(int i=0;i<4;i++)if(from->form_key&&!strcmp(from->form_key,keys[i]))to=keys[i^1];
-        const pr_species *sp=pr_pokemon_species(p);
+        const pr_species *sp=pr_half_species_data(p);
         for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))*target=i;
         return true;
     }
@@ -106,19 +106,14 @@ bool pr_learned_form_target(pr_battle *bt, const pr_pokemon *p, uint16_t *target
 }
 
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
-static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
+static void form_change_body(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed, int half)
 {
-    if (!p) return;
-    if (trigger_class == PR_FCT_SpeciesFormChangeItemTrigger) {
-        pr_trigger_item_form_change(bt, (pr_pokemon *)p, delayed, NULL);
-        return;
-    }
-    const pr_species *sp = pr_pokemon_species(p);
+    const pr_species *sp = pr_half_species_data(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 
     /* The specialized Meloetta trigger inherits the newest-move predicate,
      * and excludes Single Type challenges and active primary/passive Sheer Force. */
-    if (p->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+    if (pr_half_species(p) == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
         const pr_turn_move *last = pr_last_move(bt, p, 0);
         if (!last || last->move != MOVE_ID_RELIC_SONG
             || (bt->challenge_flags & (1u << CHALLENGES_SINGLE_TYPE))
@@ -128,30 +123,30 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 
-    bool stance = mon->species == SPECIES_ID_AEGISLASH;
-    if (mon->species == SPECIES_ID_KELDEO && trigger_class == PR_FCT_SpeciesFormChangeMoveLearnedTrigger) {
+    bool stance = pr_half_species(mon) == SPECIES_ID_AEGISLASH;
+    if (pr_half_species(mon) == SPECIES_ID_KELDEO && trigger_class == PR_FCT_SpeciesFormChangeMoveLearnedTrigger) {
         uint16_t target;
         if (!pr_learned_form_target(bt, mon, &target)) return;
         target_form = target;
-    } else if (mon->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
-        const pr_form *from = pr_pokemon_base_form(mon);
+    } else if (pr_half_species(mon) == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+        const pr_form *from = pr_half_base_form(mon);
         const char *to = !strcmp(from->form_key,"aria") ? "pirouette"
             : !strcmp(from->form_key,"pirouette") ? "aria" : NULL;
         for (int i=0;to&&i<sp->nforms;i++)
             if (!strcmp(pr_forms[sp->form0+i].form_key,to)) target_form=i;
-    } else if (mon->species == SPECIES_ID_CRAMORANT) {
-        const pr_form *from=pr_pokemon_base_form(mon);const char *to=NULL;
+    } else if (pr_half_species(mon) == SPECIES_ID_CRAMORANT) {
+        const pr_form *from=pr_half_base_form(mon);const char *to=NULL;
         if(trigger_class==PR_FCT_SpeciesFormChangeAbilityTrigger){
             if(!strcmp(from->form_key,""))to=pr_get_hp_ratio(mon,false)>=0.5?"gulping":"gorging";
             else if(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging"))to="";
         }else if(trigger_class==PR_FCT_SpeciesFormChangeActiveTrigger&&!is_active_on_field(mon)
             &&(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging")))to="";
         for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))target_form=i;
-    } else if (mon->species == SPECIES_ID_XERNEAS) {
+    } else if (pr_half_species(mon) == SPECIES_ID_XERNEAS) {
         /* Source registers quiet neutral<->active transitions, independent of
          * abilities. Match raw form keys before considering field activity. */
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
-            const pr_form *from = pr_pokemon_base_form(mon);
+            const pr_form *from = pr_half_base_form(mon);
             const char *key = is_active_on_field(mon) ? "active" : "neutral";
             if (from->form_key && strcmp(from->form_key,key)) {
                 const char *previous = is_active_on_field(mon) ? "neutral" : "active";
@@ -162,59 +157,59 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         }
     } else if (stance) {
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
-            if (mon->form == 1 && !is_active_on_field(mon)) target_form = 0;
+            if (pr_half_form(mon) == 1 && !is_active_on_field(mon)) target_form = 0;
         } else if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger
                    && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
             /* The registered trigger reads turnCommands, including for called moves. */
             int b = pr_battler_index(bt, mon);
             if (b >= 0 && b < 4 && bt->commands[b].command >= 0 && !bt->commands[b].no_move) {
                 int move = bt->commands[b].move;
-                if (mon->form == 1 && move == MOVE_ID_KINGS_SHIELD) target_form = 0;
-                else if (mon->form == 0 && move > 0 && move < PR_MOVE_COUNT
+                if (pr_half_form(mon) == 1 && move == MOVE_ID_KINGS_SHIELD) target_form = 0;
+                else if (pr_half_form(mon) == 0 && move > 0 && move < PR_MOVE_COUNT
                          && pr_moves[move].category != MOVE_CATEGORY_STATUS) target_form = 1;
             }
         }
     /* Weather form triggers are quiet phases upstream, queued before mutation. */
     } else if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger && native_ability_form_target(mon,&target_form)) {
         /* Match source registrations; queue the mutation below. */
-    } else if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
-        int ability = mon->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
+    } else if (pr_half_species(mon) == SPECIES_ID_CASTFORM || pr_half_species(mon) == SPECIES_ID_CHERRIM) {
+        int ability = pr_half_species(mon) == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
         bool raw = mon->base_ability == ability || mon->passive == ability;
         bool suppressed = pr_weather_effect_suppressed(bt);
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) target_form = 0;
         else if (trigger_class == PR_FCT_SpeciesFormChangeWeatherTrigger
             && !mon->ability_suppressed && !suppressed && pr_has_ability_active(bt, mon, ability)) {
             if (bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN) target_form = 1;
-            else if (mon->species == SPECIES_ID_CASTFORM) {
+            else if (pr_half_species(mon) == SPECIES_ID_CASTFORM) {
                 if (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) target_form = 2;
                 if (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) target_form = 3;
             }
         } else if (trigger_class == PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger && raw) {
-            bool weather_reverts = mon->species == SPECIES_ID_CHERRIM
+            bool weather_reverts = pr_half_species(mon) == SPECIES_ID_CHERRIM
                 ? bt->weather != WEATHER_TYPE_SUNNY && bt->weather != WEATHER_TYPE_HARSH_SUN
                 : bt->weather == WEATHER_TYPE_NONE || bt->weather == WEATHER_TYPE_SANDSTORM
                   || bt->weather == WEATHER_TYPE_STRONG_WINDS || bt->weather == WEATHER_TYPE_FOG;
             if (weather_reverts || suppressed || mon->ability_suppressed
                 || (mon->ability_override != 0 && mon->ability_override != ability)) target_form = 0;
         }
-    } else if (mon->species == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-        target_form = mon->form == 0 ? 1 : 0;
-    } else if (mon->species == SPECIES_ID_BATTLE_BOND_GRENINJA && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+    } else if (pr_half_species(mon) == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        target_form = pr_half_form(mon) == 0 ? 1 : 0;
+    } else if (pr_half_species(mon) == SPECIES_ID_BATTLE_BOND_GRENINJA && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         /* The attribute's formFunc decides whether this trigger is called.
          * Both registered form changes have no additional conditions. */
-        target_form = mon->form == 0 ? 1 : 0;
-    } else if (mon->species == SPECIES_ID_OGERPON && (trigger_class == PR_FCT_SpeciesFormChangeTeraTrigger
+        target_form = pr_half_form(mon) == 0 ? 1 : 0;
+    } else if (pr_half_species(mon) == SPECIES_ID_OGERPON && (trigger_class == PR_FCT_SpeciesFormChangeTeraTrigger
                                                    || trigger_class == PR_FCT_SpeciesFormChangeLapseTeraTrigger)) {
         const char *keys[]={"teal-mask","wellspring-mask","hearthflame-mask","cornerstone-mask",
                             "teal-mask-tera","wellspring-mask-tera","hearthflame-mask-tera","cornerstone-mask-tera"};
-        const char *key=pr_pokemon_base_form(mon)->form_key,*to=NULL;
+        const char *key=pr_half_base_form(mon)->form_key,*to=NULL;
         bool tera=trigger_class==PR_FCT_SpeciesFormChangeTeraTrigger;
         for(int j=0;j<4;j++)if(!strcmp(key,keys[j+(tera?0:4)]))to=keys[j+(tera?4:0)];
         for(int j=0;to&&j<sp->nforms;j++)if(!strcmp(pr_forms[sp->form0+j].form_key,to))target_form=j;
-    } else if (mon->species == SPECIES_ID_TERAPAGOS && (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger
+    } else if (pr_half_species(mon) == SPECIES_ID_TERAPAGOS && (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger
                                                         || trigger_class == PR_FCT_SpeciesFormChangeTeraTrigger
                                                         || trigger_class == PR_FCT_SpeciesFormChangeLapseTeraTrigger)) {
-        const pr_form *from = pr_pokemon_base_form(mon);
+        const pr_form *from = pr_half_base_form(mon);
         const char *key = from && from->form_key ? from->form_key : "",*to=NULL;
         if(trigger_class==PR_FCT_SpeciesFormChangeAbilityTrigger&&!key[0])to="terastal";
         else if(trigger_class==PR_FCT_SpeciesFormChangeTeraTrigger&&!strcmp(key,"terastal"))to="stellar";
@@ -225,22 +220,23 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         if (target_form >= 0 && !mon->ability_lookup_known && mon->ability_override < 0 && from
             && (mon->ability == from->ability1 || mon->ability == from->ability2 || mon->ability == from->ability_hidden))
             pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
-    } else if (mon->species == SPECIES_ID_PALAFIN && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+    } else if (pr_half_species(mon) == SPECIES_ID_PALAFIN && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         /* zero <-> hero, both quiet with no conditions; Zero to Hero's formFuncs decide the call */
-        target_form = mon->form == 0 ? 1 : 0;
-    } else if (mon->species == SPECIES_ID_ETERNATUS && mon->form == 0
+        target_form = pr_half_form(mon) == 0 ? 1 : 0;
+    } else if (pr_half_species(mon) == SPECIES_ID_ETERNATUS && pr_half_form(mon) == 0
         && trigger_class == PR_FCT_SpeciesFormChangeManualTrigger) {
         target_form = 1;
     } else goto other_forms;
-    if (target_form >= 0 && target_form != mon->form) {
+    if (target_form >= 0 && target_form != pr_half_form(mon)) {
         pr_engine *e = bt->engine;
         if (!e) { pr_note_unported(bt, PR_FEAT_FORM_CHANGE); return; }
-        bool nonquiet = mon->species == SPECIES_ID_KELDEO && mon->is_player;
+        bool nonquiet = pr_half_species(mon) == SPECIES_ID_KELDEO && mon->is_player;
         int ph = pr_phase_new(e, nonquiet ? PH_FORM_CHANGE : PH_QUIET_FORM_CHANGE,
                               (int8_t)pr_battler_index(bt, mon));
         if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         e->pool[ph].pokemon = mon;
         e->pool[ph].move_id = (uint16_t)target_form;
+        e->pool[ph].form_half = (uint8_t)half;
         if (delayed) pr_phase_push(bt, e, ph);
         else pr_phase_unshift(bt, e, ph);
     }
@@ -251,6 +247,33 @@ other_forms:
     if (target_form < 0 && (sp->form_change_triggers & (1u << trigger_class))) {
         pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     }
+}
+
+/* PR_DEV_FUSION_ABILITIES: the form logic above reads one species of the Pokemon at a time (pr_half_species, pr_half_form), so it can
+ * run for each of a fusion's two: the form change lands on whichever one the registration belongs to */
+static void form_change_half(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed, int half)
+{
+    pr_pokemon *mon = (pr_pokemon *)p;
+    mon->form_half = (uint8_t)half;
+    form_change_body(bt, p, trigger_class, delayed, half);
+    mon->form_half = 0;
+}
+
+static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
+{
+    if (!p) return;
+    if (trigger_class == PR_FCT_SpeciesFormChangeItemTrigger) {
+        pr_trigger_item_form_change(bt, (pr_pokemon *)p, delayed, NULL);
+        return;
+    }
+    /* The ability trigger belongs to one ability, hence to one of the two species: the caller says which (form_half, set around the call). */
+    if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        form_change_half(bt, p, trigger_class, delayed, p->form_half && p->fusion_species ? 1 : 0);
+        return;
+    }
+    if (pr_fusion_species_enabled(bt, p->fusion_species))
+        form_change_half(bt, p, trigger_class, delayed, 1);
+    form_change_half(bt, p, trigger_class, delayed, 0);
 }
 
 static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
@@ -2566,6 +2589,8 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
                 if (!pr_attr_is(c, PR_AC_ChangeMultiHitTypeAttr)) continue;
                 if (c != PR_AC_WaterShurikenMultiHitTypeAttr) pr_note_unported(bt, c);
                 else if (user->species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->form == 1) hit_type = MULTI_HIT_TYPE_THREE;
+                else if (user->fusion_species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->fusion_form == 1
+                         && pr_fusion_ability_enabled(bt, ABILITY_ID_BATTLE_BOND)) hit_type = MULTI_HIT_TYPE_THREE;   /* PR_DEV_FUSION_ABILITIES */
             }
             switch (hit_type) {
             case MULTI_HIT_TYPE_TWO_TO_FIVE: {
@@ -2831,13 +2856,20 @@ void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *sourc
     pr_pokemon *p;
     while ((p = pr_speed_iter_next(bt, &it))) {
         if (!revert && p == source) continue;
-        int ability = p->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
-                    : p->species == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
-        if (ability < 0) continue;
-        bool has = revert ? p->base_ability == ability || p->passive == ability
-                          : pr_has_ability_active(bt, p, ability);
-        if (has) form_change(bt, p, revert ? PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger
+        /* PR_DEV_FUSION_ABILITIES: either species of a fusion (the fusion's is read first; form_change runs for both) */
+        for (int h = pr_fusion_species_enabled(bt, p->fusion_species) ? 1 : 0; h >= 0; h--) {
+            const uint16_t sp = h ? p->fusion_species : p->species;
+            int ability = sp == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
+                        : sp == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
+            if (ability < 0) continue;
+            bool has = revert ? p->base_ability == ability || p->passive == ability
+                              : pr_has_ability_active(bt, p, ability);
+            if (has) {
+                form_change(bt, p, revert ? PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger
                                           : PR_FCT_SpeciesFormChangeWeatherTrigger);
+                break;
+            }
+        }
     }
 }
 
@@ -2848,7 +2880,7 @@ static void form_change_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *p = PH(ph)->pokemon;
     if (!p) { pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_FORM_CHANGE); return; }
     pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
-    pr_change_form_state(bt, p, PH(ph)->move_id);
+    pr_change_half_form_state(bt, p, PH(ph)->form_half, PH(ph)->move_id);
     if (!PH(ph)->sw_modal)
         pr_phase_unshift(bt, e, pr_phase_new(e, PH_END_EVOLUTION, -1));
     if (PH(ph)->move_id == 0)
@@ -2859,17 +2891,17 @@ static void form_change_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_AUTOTOMIZED);
 }
 
-static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
+static void quiet_form_change_body(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = PH(ph)->pokemon;
     int target = PH(ph)->move_id;
     /* the pin ends early for an off-field enemy without changing its form (source TODO) */
-    bool enemy_hero = (bt->deviations & PR_DEV_ENEMY_ZERO_TO_HERO) && p && p->species == SPECIES_ID_PALAFIN;
-    if (!p || p->form == target || (!p->is_player && !is_active_on_field(p) && !enemy_hero)) return;
+    bool enemy_hero = (bt->deviations & PR_DEV_ENEMY_ZERO_TO_HERO) && p && pr_half_species(p) == SPECIES_ID_PALAFIN;
+    if (!p || pr_half_form(p) == target || (!p->is_player && !is_active_on_field(p) && !enemy_hero)) return;
     pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
     pr_ab_params pp = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
-    pr_change_form_state(bt, p, target);
+    pr_change_half_form_state(bt, p, p->form_half, target);
     if (is_active_on_field(p)) {
         uint16_t passive_ability = pr_get_passive_ability(p);
         bool active_seen = false, passive_seen = false;
@@ -2892,7 +2924,7 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
             }
         }
     }
-    const char *key = pr_pokemon_base_form(p)->form_key;
+    const char *key = pr_half_base_form(p)->form_key;
     if (key && strstr(key, "mega"))
         pr_show_text(bt, e, pr_msg2("battlePokemonForm:megaChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
     else if (key && strstr(key, "gigantamax"))
@@ -2905,6 +2937,16 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_show_text(bt, e, pr_msg0("battlePokemonForm:disguiseChange"));
     else pr_show_text(bt, e, pr_msg1("battlePokemonForm:formChange", pre));
     pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_AUTOTOMIZED);
+}
+
+/* QuietFormChangePhase for one of a fusion's two species (PR_DEV_FUSION_ABILITIES: the phase says which, form_half): the form logic it runs
+ * (the abilities leaving the field and arriving, the form's text) reads that species and form */
+static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_pokemon *p = PH(ph)->pokemon;
+    if (p) p->form_half = PH(ph)->form_half;
+    quiet_form_change_body(bt, e, ph);
+    if (p) p->form_half = 0;
 }
 
 static int32_t party_hp(pr_battle *bt, int side, int k)
