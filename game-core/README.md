@@ -188,7 +188,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters become wild battles of the wave's level when run-core can't make them; the six classic rivals (`enable_fixed_rivals`), the gym leaders of the boss trainer waves, the Elite Four and the Champion (`enable_gym_e4`), the Town Youngster, the evil team grunts (`enable_evil_grunts`), admins and bosses (`enable_evil_bosses`) are real fights | run-core, later the encounters |
 | The held items of the Champions Red, Steven, Wallace and Kieran (and rivals 5 and 6): their configs have a `genModifiersFunc`, which run-core's item generation reports as `PR_RUN_UNPORTED_TRAINER`, so they hold nothing (counted as `enemy run-core can't generate`) | run-core |
-| Terastallization of the gym leaders, the Elite Four and the Champion (`config.trainerAI.teraMode` and the random Tera modifiers are not in the trainer data): the AI's tera mode stays NO_TERA | trainer data dump |
+| A trainer's genAI pick is kept with the battle's party, not pushed into a shared config: upstream's `trainerAI.teraLogic` keeps every pick of every battle of that trainer for the rest of the session (a gym leader met twice Terastallizes two members the second time); a new battle here starts clean. A trainer's slot also stays as picked after a save and a load, where upstream rolls it again | deliberate, `tests/trainer_tera_test.c` |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | The biome's weather and terrain are set on the arena without the engine's phases: no start animation, and no PostWeatherChange abilities for a Daily Run's per-wave roll with a Pokémon already out; the weather text comes out as game-core's own messages before "A wild ... appeared"; timed-event pools are left out | `gc_arena_new_battle` |
@@ -200,7 +200,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
-battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers (the player's own is in), form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
+battle-core's `pr_move_usable` lands), form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
 lists read them since Task 59), and the prevolution-move messages.
 
 ## Data
@@ -1159,8 +1159,24 @@ planned for slot 0, random species, forms, fusion halves, Ultra Necrozma on eith
 `tests/tera_command_diff_test.c` replays it through game-core. `tools/teracmdplant.sh` plants 14 bugs. `tests/tera_command_test.c` plays it through a
 run: the text and the Terastallized state after the turn, the counter at the next wave and in a save, the doubles flow with the cancel, and the refusals.
 
-Not covered by this: the app's button (a separate change in `game/`), Terastallization by trainers (below, the gym leaders', Elite Four's and Champion's AI
-tera mode is still NO_TERA), the Tera sprite effect, and the SelectTargetPhase conditions of the fight command (the same code as a plain FIGHT).
+Not covered by this: the app's button (a separate change in `game/`), the Tera sprite effect, and the SelectTargetPhase conditions of the fight command (the same code as a plain FIGHT).
+
+### Trainers' Terastallization (gym leaders, Elite Four, Champion)
+
+`gen/dump-trainers.test.ts` now also dumps, per trainer config, the slots `setInstantTera` listed when the config was made (`tera_static`, the Champions' and a few
+named trainers') and what `setRandomTeraModifiers`' genAI function does (`tera_random`): read by running the real function on fake parties, it starts at wave
+`tera_min_wave` (1 for the Elite Four and the Paldean gyms, 100 for the other gym leaders: `GYM_LEADER_TERA_WAVE`), takes the fixed slot `tera_slot[party size]`
+(`teraSlot` wrapped) or a random one, and gives it the specialty type (`tera_type`). `gc_trainer_gen_ai` (run from `finish_party` for a trainer battle, after the
+enemy's items, as EncounterPhase runs `Trainer.genAI` after `generateEnemyModifiers`) does that with the run's RNG: a Shedinja is not eligible unless the specialty
+type is Bug or there is none, `randSeedItem` rolls only with two or more eligible members, and a party of nothing but Shedinja leaves nobody (upstream throws there, the
+battle goes on with the config's own slots). The pick is `gc_mon.tera_instant`, saved with the member. `gc_trainer_instant_teras` (the config's slots, then the pick)
+is what the AI is told (`ai_trainer_on`: tera mode INSTANT_TERA when it is not empty), so ai-core's `should_tera` makes that member Terastallize at its first move.
+
+`tools/trainerteradiff.sh <upstream 8555c08> [N=600] [seed]` runs the real `Trainer.genAI`, `config.trainerAI.instantTeras` and `Trainer.shouldTera` on random trainer
+configs, waves 1 to 250 (and 99, 100, 101), party sizes 1 to 6 and parties with Shedinja (`tests/trainer-tera.producer.test.ts`) and
+`tests/trainer_tera_diff_test.c` compares the slots, every member's Tera type and the RNG state after. `tools/trainerteraplant.sh` plants 11 bugs.
+`tests/trainer_tera_test.c` plays the gym leaders, Elite Four and Champions of 8 seeds: what the AI is told, a listed member that gets a command in the field
+Terastallizes once (text and all), a gym leader before wave 100 has nobody, a save and a load keep the pick.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 
