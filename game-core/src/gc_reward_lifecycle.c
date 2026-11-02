@@ -89,8 +89,7 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         const int rule = pr_item_form_rule_index(&run->bt, &m->b);
         /* A failed activation still retains the new held item and finishes a
          * free reward selection. Conditions are not reward selection gates. */
-        if (rule >= 0)
-            gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, pr_item_form_rules[rule].to, pr_item_form_rule_half(&run->bt, &m->b, rule)));
+        if (rule >= 0) gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, pr_item_form_rules[rule].to, pr_item_form_rule_half(&run->bt, &m->b, rule)));
     }
     return GC_APPLY_DONE;
 }
