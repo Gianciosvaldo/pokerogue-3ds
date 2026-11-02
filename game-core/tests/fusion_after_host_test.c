@@ -150,10 +150,80 @@ static void evolution_and_level_up(void)
     CHECK(found);
 }
 
+/* the candy bar of a starter after a gain, from the table of caps (upstream getStarterValueFriendshipCap): the bar, and how many
+ * candies the bar has paid out */
+static int bar_cap(int species)
+{
+    const int cost = gc_starter_cost(gc_species_root_id((uint16_t)species));
+    return getStarterValueFriendshipCap(cost < 1 ? 1 : cost);
+}
+
+/* Pokemon.addFriendship: a Pokemon made of two species feeds the candy bar of each root species, and the rate of each is halved
+ * (floor(gain * 3 / 2) in Classic, floor(gain / 2) elsewhere); a Pokemon that is not fused feeds its own root alone, at the full
+ * rate. The gains and the bars are worked out by hand from the rule, not by calling the function being tested twice. */
+static void candy(void)
+{
+    const int pikachu_root = gc_species_root_id(SPECIES_ID_PIKACHU), dura_root = gc_species_root_id(SPECIES_ID_DURALUDON);
+    CHECK(pikachu_root != dura_root);
+    const int cap_p = bar_cap(SPECIES_ID_PIKACHU), cap_d = bar_cap(SPECIES_ID_DURALUDON);
+    CHECK(cap_p > 12 && cap_d > 12);
+
+    /* before the splice: Classic, 4 friendship is 12 points on the bar of the Pokemon's own root, none on the other */
+    setup(SPECIES_ID_PIKACHU, SPECIES_ID_DURALUDON);
+    gc_system_add_friendship(&sys, &r, &r.party[0], 4, false);
+    CHECK(sys.starters[pikachu_root].friendship == 12 && sys.starters[dura_root].friendship == 0);
+    CHECK(r.party[0].b.friendship >= 4);
+
+    /* after it: both bars gain half of that rate, 4 * 3 / 2 = 6 each; the Pokemon's own friendship still gains the 4 */
+    splice();
+    const int before_friendship = r.party[0].b.friendship;
+    gc_system_add_friendship(&sys, &r, &r.party[0], 4, false);
+    CHECK(sys.starters[pikachu_root].friendship == 12 + 6 && sys.starters[dura_root].friendship == 6);
+    CHECK(r.party[0].b.friendship == before_friendship + 4);
+    CHECK(sys.starters[pikachu_root].candy_count == 0 && sys.starters[dura_root].candy_count == 0);
+
+    /* an odd product is floored: 5 * 3 / 2 = 7 */
+    gc_system_add_friendship(&sys, &r, &r.party[0], 5, false);
+    CHECK(sys.starters[pikachu_root].friendship == 12 + 6 + 7 && sys.starters[dura_root].friendship == 6 + 7);
+
+    /* a bar that crosses its cap pays out a candy on that species alone and keeps the rest: the second species' bar is 3 short of
+     * its cap, the first has room */
+    sys.starters[pikachu_root].friendship = 0;
+    sys.starters[dura_root].friendship = (uint16_t)(cap_d - 3);
+    gc_system_add_friendship(&sys, &r, &r.party[0], 4, false);
+    CHECK(sys.starters[dura_root].candy_count == 1 && sys.starters[dura_root].friendship == 3);
+    CHECK(sys.starters[pikachu_root].candy_count == 0 && sys.starters[pikachu_root].friendship == 6);
+
+    /* outside Classic the rate is 1, halved: 7 / 2 = 3 each; a loss of friendship touches no bar */
+    r.run.mode = GAME_MODES_ENDLESS;
+    sys.starters[pikachu_root].friendship = 0;
+    sys.starters[dura_root].friendship = 0;
+    gc_system_add_friendship(&sys, &r, &r.party[0], 7, false);
+    CHECK(sys.starters[pikachu_root].friendship == 3 && sys.starters[dura_root].friendship == 3);
+    gc_system_add_friendship(&sys, &r, &r.party[0], -5, false);
+    CHECK(sys.starters[pikachu_root].friendship == 3 && sys.starters[dura_root].friendship == 3);
+
+    /* a Pokemon that is not fused, same mode: its root at the full rate, 7 points */
+    gc_mon alone = r.party[0];
+    alone.b.fusion_species = 0;
+    sys.starters[pikachu_root].friendship = 0;
+    sys.starters[dura_root].friendship = 0;
+    gc_system_add_friendship(&sys, &r, &alone, 7, false);
+    CHECK(sys.starters[pikachu_root].friendship == 7 && sys.starters[dura_root].friendship == 0);
+
+    /* two members of one line fused: that one bar is fed twice, upstream's forEach adds to the same entry once for each */
+    setup(SPECIES_ID_PICHU, SPECIES_ID_PIKACHU);
+    splice();
+    sys.starters[pikachu_root].friendship = 0;
+    gc_system_add_friendship(&sys, &r, &r.party[0], 4, false);
+    CHECK(sys.starters[pikachu_root].friendship == 12);
+}
+
 int main(void)
 {
     tms_and_level_moves();
     evolution_and_level_up();
+    candy();
     printf("fusion after the splice: %u checks\n", checks);
     return 0;
 }
