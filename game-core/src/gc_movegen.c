@@ -1,5 +1,5 @@
 /* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for wild Pokemon and the
- * guarded ordinary-trainer constructor domain below:
+ * guarded fresh-trainer constructor domain below:
  * bosses, including fusions with their natural passive, are supported. This is what
  * every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's, the Dark Deal boss) is made with. A boss adds
  * to the steps below: its pool drops a move that a better move of the pool makes redundant (SUPERCEDED_MOVES), then Pain Split,
@@ -8,8 +8,9 @@
  * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
  * abilities. Ordinary Classic trainers also use their ordered TM pool and caps, trainer
- * blocklists, weight adjustments and remaining-slot type diversity. Egg-enabled trainers,
- * instant Tera and trainer-specific rival signatures remain guarded. Power-table queries
+ * blocklists, weight adjustments and remaining-slot type diversity. The four plain Gym
+ * profiles below also use the source egg pool. Instant Tera, postProcess regeneration
+ * and trainer-specific rival signatures remain guarded. Power-table queries
  * include the resolved move type so an active type-changing
  * ability can affect a type-conditional passive. Explicit passive overrides on fusions remain outside this owner.
  *
@@ -63,10 +64,10 @@ typedef struct {
     int n_types;
     uint16_t ability;           /* getAbility() */
     uint16_t passive;           /* getPassiveAbility() when hasPassive() (a boss), else 0 */
-    bool boss, single, trainer; /* isBoss(), singles, hasTrainer() */
+    bool boss, single, trainer, allow_egg; /* isBoss(), singles, hasTrainer() */
     uint16_t moves[4];          /* the moveset so far */
     int n_moves;
-    int tm_count; /* includes selected moves later removed as useless */
+    int tm_count, egg_count; /* includes selected moves later removed as useless */
     unsigned char source_of[PR_MOVE_COUNT];
 } mg_ctx;
 
@@ -231,6 +232,7 @@ static void add_to_moveset(mg_ctx *c, mg_pool *base, int move)
 {
     pool_delete(base, move);
     if (c->source_of[move] == 1) c->tm_count++;
+    else if (c->source_of[move] == 2) c->egg_count++;
     c->source_of[move] = 0;
     c->moves[c->n_moves++] = (uint16_t)move;
 }
@@ -446,9 +448,11 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             bool taken = false;
             for (int k = 0; k < c->n_moves; k++)
                 if (c->moves[k] == move || (mg_flag(move, GC_MGF_SACRIFICIAL) && mg_flag(c->moves[k], GC_MGF_SACRIFICIAL))) taken = true;
-            const int nonlevel = c->tm_count;
+            const int nonlevel = c->tm_count + c->egg_count;
             const int tm_cap = nonlevel_cap(c->p.level, gc_mg_trainer_const.tm_cap_level);
-            if (taken || (nonlevel >= tm_cap && c->source_of[move] == 1)) continue;
+            const int egg_cap = nonlevel_cap(c->p.level, gc_mg_trainer_const.egg_cap_level);
+            if (taken || (nonlevel >= tm_cap && c->source_of[move] == 1)
+                || (nonlevel >= egg_cap && c->source_of[move] == 2)) continue;
             remaining[n++] = base->e[i];
             total += base->e[i].w;
         }
@@ -493,7 +497,7 @@ static bool sorted_has(const uint16_t *list, int n, int move)
 }
 
 /* filterSupercededMoves(pool): a move goes when any move that supercedes it is in the pool as it stood before the filter */
-static void filter_superceded_extra(mg_pool *p, const mg_pool *a)
+static void filter_superceded_extra(mg_pool *p, const mg_pool *a, const mg_pool *b)
 {
     bool del[MG_POOL_MAX] = {false};
     for (int i = 0; i < p->n; i++) {
@@ -507,14 +511,15 @@ static void filter_superceded_extra(mg_pool *p, const mg_pool *a)
         if (!row) continue;
         for (int k = 0; k < row->n; k++)
             if (pool_find(p, gc_mg_superceded_moves[row->first + k]) >= 0
-                || (a && pool_find(a, gc_mg_superceded_moves[row->first + k]) >= 0)) { del[i] = true; break; }
+                || (a && pool_find(a, gc_mg_superceded_moves[row->first + k]) >= 0)
+                || (b && pool_find(b, gc_mg_superceded_moves[row->first + k]) >= 0)) { del[i] = true; break; }
     }
     int out = 0;
     for (int i = 0; i < p->n; i++) if (!del[i]) p->e[out++] = p->e[i];
     p->n = out;
 }
 
-static void filter_superceded(mg_pool *p) { filter_superceded_extra(p, NULL); }
+static void filter_superceded(mg_pool *p) { filter_superceded_extra(p, NULL, NULL); }
 
 static int nonlevel_cap(int level, const int thresholds[4])
 {
@@ -523,13 +528,32 @@ static int nonlevel_cap(int level, const int thresholds[4])
     return cap;
 }
 
-/* Ordered native pools: TMs, then level moves. Ordinary configs disable eggs
- * (checked at admission), so the source tmCount + eggCount is just tmCount.
- * Forced signature/STAB picks bypass the fill cap as upstream does. */
+/* Ordered native pools: TMs, eggs, level moves. Both fill caps read the shared
+ * tmCount + eggCount. Forced signature/STAB picks bypass the fill caps. */
 static bool trainer_pools(mg_ctx *c, mg_pool *level)
 {
-    static mg_pool tm, combined;
-    tm.n = combined.n = 0;
+    static mg_pool egg, tm, combined;
+    egg.n = tm.n = combined.n = 0;
+    if (c->allow_egg && c->p.level >= gc_mg_trainer_const.egg_level) {
+        double max = -INFINITY;
+        for (int k = 0; k < level->n; k++) max = fmax(max, level->e[k].w);
+        const double weight = fmin(floor(max * gc_mg_trainer_const.egg_to_level + .5),
+                                   gc_mg_trainer_const.egg_weight_max);
+        const int root = gc_root_species(c->p.species);
+        for (int k = 0; k < gc_starter_egg_moves_count; k++) {
+            if (gc_starter_egg_moves_data[k].species != root) continue;
+            for (int j = 0; j < 4; j++) {
+                const int move = gc_starter_egg_moves_data[k].egg_moves[j];
+                if (!move || pool_find(level, move) >= 0
+                    || (j == 3 && (c->boss || c->p.level < gc_mg_trainer_const.rare_egg_level))) continue;
+                const int i = pool_find(&egg, move);
+                const double w = j == 3 ? weight * (5.0 / 6.0) : weight;
+                if (i < 0) egg.e[egg.n++] = (mg_ent){move, w};
+                else egg.e[i].w = fmax(egg.e[i].w, w);
+            }
+            break;
+        }
+    }
     if (c->p.level >= gc_mg_trainer_const.tm_level[0]) {
         const pr_reward_species *species = NULL;
         int lo = 0, hi = pr_reward_species_count - 1;
@@ -546,7 +570,7 @@ static bool trainer_pools(mg_ctx *c, mg_pool *level)
             const int move = pr_tm_pool[list->start + k];
             if (move >= pr_tm_tier_count || move >= PR_MOVE_COUNT) return false;
             if (sorted_has(gc_mg_tm_forbidden, gc_mg_tm_forbidden_count, move)
-                || pool_find(level, move) >= 0 || pool_find(&tm, move) >= 0) continue;
+                || pool_find(level, move) >= 0 || pool_find(&egg, move) >= 0 || pool_find(&tm, move) >= 0) continue;
             int tier = pr_tm_tier[move];
             if (tier < 0) continue;
             tier &= 7; /* bit 3 is isUnimplemented; filterMovePool owns that exclusion */
@@ -554,12 +578,16 @@ static bool trainer_pools(mg_ctx *c, mg_pool *level)
             if (tm.n >= MG_POOL_MAX) return false;
             tm.e[tm.n++] = (mg_ent){move, gc_mg_trainer_const.tm_weight[tier]};
         }
-        filter_superceded_extra(&tm, level);
+        filter_superceded_extra(&tm, level, &egg);
     }
-    if (tm.n + level->n > MG_POOL_MAX) return false;
+    if (tm.n + egg.n + level->n > MG_POOL_MAX) return false;
     for (int k = 0; k < tm.n; k++) {
         combined.e[combined.n++] = tm.e[k];
         c->source_of[tm.e[k].move] = 1;
+    }
+    for (int k = 0; k < egg.n; k++) {
+        combined.e[combined.n++] = egg.e[k];
+        c->source_of[egg.e[k].move] = 2;
     }
     for (int k = 0; k < level->n; k++) combined.e[combined.n++] = level->e[k];
     *level = combined;
@@ -618,6 +646,8 @@ static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
     c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;
     c->boss = m->b.is_boss;
     c->trainer = m->b.has_trainer;
+    c->allow_egg = c->trainer && run->trainer_type >= 0 && run->trainer_type < gc_mg_trainer_egg_count
+        && gc_mg_trainer_egg[run->trainer_type];
     c->single = !run->double_battle;
     c->n_types = pr_get_types(&c->p, c->types, 0);
     return true;
@@ -631,19 +661,31 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
     return true;
 }
 
+/* These pinned plain Gym profiles have no postProcess regeneration or instant
+ * Tera policy. Special callbacks, forms/shields and trainer Tera have other owners. */
+static bool plain_egg_gym(int type)
+{
+    return type == TRAINER_TYPE_BROCK || type == TRAINER_TYPE_ROXANNE
+        || type == TRAINER_TYPE_TATE || type == TRAINER_TYPE_LIZA;
+}
+
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
     if (run->run.has_challenges) return false;
     const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
+    const bool egg_gym = plain_egg_gym(run->trainer_type);
     /* Ordinary Classic trainer pools. Instant Tera, rivals, Gym/E4,
      * challenges, fusions and post-moveset form callbacks need separate owners. */
     if (trainer && (!m->b.has_trainer || !m->trainer_slot
         || m->trainer_slot != m->b.trainer_slot || m->trainer_slot > TRAINER_SLOT_TRAINER_PARTNER
         || m->b.level < 1 || m->b.n_moves || run->battle_type != BATTLE_TYPE_TRAINER
+        || (egg_gym && run->double_battle && run->trainer_type != TRAINER_TYPE_TATE
+            && run->trainer_type != TRAINER_TYPE_LIZA)
         || m->b.fusion_species || m->b.is_boss || m->b.passive_flag || m->b.terastallized
         || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
-        || run->trainer_type <= 0 || run->trainer_type > TRAINER_TYPE_YOUNGSTER
-        || run->trainer_type >= gc_mg_trainer_egg_count || gc_mg_trainer_egg[run->trainer_type])) return false;
+        || run->trainer_type <= 0 || (!egg_gym && run->trainer_type > TRAINER_TYPE_YOUNGSTER)
+        || run->trainer_type >= gc_mg_trainer_egg_count
+        || (!egg_gym && gc_mg_trainer_egg[run->trainer_type]))) return false;
     const pr_species *sp = gc_species(m->b.species);
     if (!sp || (trainer && (sp->form_change_triggers
         & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))) return false;
