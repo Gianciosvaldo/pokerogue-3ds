@@ -266,6 +266,11 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         pr_trigger_item_form_change(bt, (pr_pokemon *)p, delayed, NULL);
         return;
     }
+    /* The ability trigger belongs to one ability, hence to one of the two species: the caller says which (form_half, set around the call). */
+    if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        form_change_half(bt, p, trigger_class, delayed, p->form_half && p->fusion_species ? 1 : 0);
+        return;
+    }
     if (pr_fusion_species_enabled(bt, p->fusion_species))
         form_change_half(bt, p, trigger_class, delayed, 1);
     form_change_half(bt, p, trigger_class, delayed, 0);
@@ -2584,6 +2589,8 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
                 if (!pr_attr_is(c, PR_AC_ChangeMultiHitTypeAttr)) continue;
                 if (c != PR_AC_WaterShurikenMultiHitTypeAttr) pr_note_unported(bt, c);
                 else if (user->species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->form == 1) hit_type = MULTI_HIT_TYPE_THREE;
+                else if (user->fusion_species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->fusion_form == 1
+                         && pr_fusion_ability_enabled(bt, ABILITY_ID_BATTLE_BOND)) hit_type = MULTI_HIT_TYPE_THREE;   /* PR_DEV_FUSION_ABILITIES */
             }
             switch (hit_type) {
             case MULTI_HIT_TYPE_TWO_TO_FIVE: {

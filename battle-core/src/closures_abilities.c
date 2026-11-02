@@ -337,7 +337,9 @@ static double always(ARGS) { UNUSED; return 1; }
 static double battle_bond_greninja(ARGS)
 {
     UNUSED;
-    return a->species == SPECIES_ID_BATTLE_BOND_GRENINJA && !a->fusion_species;
+    /* PR_DEV_FUSION_ABILITIES: also a fusion whose second species is the Battle Bond Greninja (the pin's !isFusion is lifted for it) */
+    return (a->species == SPECIES_ID_BATTLE_BOND_GRENINJA && !a->fusion_species)
+        || (a->fusion_species == SPECIES_ID_BATTLE_BOND_GRENINJA && pr_fusion_ability_enabled(bt, ABILITY_ID_BATTLE_BOND));
 }
 static double battle_bond_unused(ARGS)
 {
@@ -372,7 +374,7 @@ static double flower_veil_status(ARGS)
 }
 
 /* Shields Down: (p) => p.formIndex < 7 (Meteor Form) */
-static double meteor_form(ARGS) { UNUSED; return a->form < 7; }
+static double meteor_form(ARGS) { UNUSED; return pr_ability_form(bt, a, ABILITY_ID_SHIELDS_DOWN) < 7; }
 
 /* (_user, _target, move) => move.category !== STATUS: PostAttackAbAttr's default attackCondition and
  * several on-hit conditions */
@@ -452,25 +454,33 @@ static double side_has_fainted(ARGS)
 }
 
 /* Form callbacks are evaluated before showing the ability, including for species
- * whose current ability/passive differs from their natural one. */
-static double construct_complete(ARGS) { UNUSED; return a->form==4 || a->form==5; }
-static double construct_base(ARGS) { UNUSED; return a->form-2; }
-static double construct_low_hp(ARGS) { UNUSED; return pr_get_hp_ratio(a,false)<=.5 && (a->form==2 || a->form==3); }
-static double construct_evolved(ARGS) { UNUSED; return a->form+2; }
+ * whose current ability/passive differs from their natural one. Each reads the form of the species its ability belongs to:
+ * the Pokemon's own, or (PR_DEV_FUSION_ABILITIES) the fusion's second species' (pr_ability_form). */
+#define AF(ability) pr_ability_form(bt, a, ability)
+static double construct_complete(ARGS) { UNUSED; return AF(ABILITY_ID_POWER_CONSTRUCT)==4 || AF(ABILITY_ID_POWER_CONSTRUCT)==5; }
+static double construct_base(ARGS) { UNUSED; return AF(ABILITY_ID_POWER_CONSTRUCT)-2; }
+static double construct_low_hp(ARGS) { UNUSED; return pr_get_hp_ratio(a,false)<=.5 && (AF(ABILITY_ID_POWER_CONSTRUCT)==2 || AF(ABILITY_ID_POWER_CONSTRUCT)==3); }
+static double construct_evolved(ARGS) { UNUSED; return AF(ABILITY_ID_POWER_CONSTRUCT)+2; }
 static double form_zero(ARGS) { UNUSED; return 0; }
 static double zen_form(ARGS) { UNUSED; return pr_get_hp_ratio(a, false) <= .5 ? 1 : 0; }
-static double meteor_base(ARGS) { UNUSED; return a->form % 7; }
-static double shields_form(ARGS) { UNUSED; return a->form % 7 + (pr_get_hp_ratio(a, false) <= .5 ? 7 : 0); }
+static double meteor_base(ARGS) { UNUSED; return AF(ABILITY_ID_SHIELDS_DOWN) % 7; }
+static double shields_form(ARGS) { UNUSED; return AF(ABILITY_ID_SHIELDS_DOWN) % 7 + (pr_get_hp_ratio(a, false) <= .5 ? 7 : 0); }
 static double schooling_form(ARGS) { UNUSED; return a->level < 20 || pr_get_hp_ratio(a, false) <= .25 ? 0 : 1; }
-static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
+/* Hunger Switch's and Tera Shift's formFunc is the same: the form of Morpeko or of Terapagos, wherever the Pokemon has it */
+static const pr_form *shift_base_form(const pr_battle *bt, const pr_pokemon *a)
+{
+    return pr_ability_form_half(bt, a, ABILITY_ID_HUNGER_SWITCH) || pr_ability_form_half(bt, a, ABILITY_ID_TERA_SHIFT)
+           ? pr_pokemon_fusion_form(a) : pr_pokemon_base_form(a);
+}
+static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = shift_base_form(bt, a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
 /* Zero to Hero: PreSwitchOutFormChangeAbAttr's formFunc and its summon message's conditionalAttr */
-static double hero_on_switch_out(ARGS) { UNUSED; return a->hp <= 0 ? a->form : 1; }
+static double hero_on_switch_out(ARGS) { UNUSED; return a->hp <= 0 ? AF(ABILITY_ID_ZERO_TO_HERO) : 1; }
 static double hero_message_due(ARGS)
 {
     UNUSED;
-    return a->form != 0 && a->on_field && !a->switch_out_status && !a->zero_to_hero_shown;
+    return AF(ABILITY_ID_ZERO_TO_HERO) != 0 && a->on_field && !a->switch_out_status && !a->zero_to_hero_shown;
 }
-static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
+static double hunger_stay(ARGS) { UNUSED; const pr_form *f = shift_base_form(bt, a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
 
 const pr_closure_reg pr_ability_closures[] = {
     {"ability:211", "f2c36059c835", construct_complete},

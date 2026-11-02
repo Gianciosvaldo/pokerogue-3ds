@@ -914,6 +914,8 @@ bool pr_fusion_species_enabled(const pr_battle *bt, uint16_t species);
 /* the half (0 or 1) whose species the form-changing ability `ability` belongs to: the fusion's, as a fusion's own ability comes from it;
  * 0 when it is not */
 int pr_ability_form_half(const pr_battle *bt, const pr_pokemon *p, uint16_t ability);
+/* the form of the species the ability belongs to: the Pokemon's own, or the fusion's when the ability is the fusion half's */
+uint8_t pr_ability_form(const pr_battle *bt, const pr_pokemon *p, uint16_t ability);
 /* pr_change_form_state for one half: 0 the Pokemon's own form, 1 the fusion's */
 void pr_change_half_form_state(pr_battle *bt, pr_pokemon *p, int half, int form);
 int pr_get_gender(const pr_pokemon *p);

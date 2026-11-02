@@ -165,6 +165,8 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
         }
         case PR_AC_WaterShurikenPowerAttr:
             if (user->species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->form == 1) *power = 20;
+            else if (user->fusion_species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->fusion_form == 1
+                     && pr_fusion_ability_enabled(bt, ABILITY_ID_BATTLE_BOND)) *power = 20;   /* PR_DEV_FUSION_ABILITIES */
             break;
         case PR_AC_DoublePowerChanceAttr: { /* Fickle Beam */
             int roll = pr_wave_seed_roll(bt, 100);
@@ -319,6 +321,8 @@ void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move
             break;
         case PR_AC_AuraWheelTypeAttr:
             if (sp == SPECIES_ID_MORPEKO) *type = form == 1 ? POKEMON_TYPE_DARK : POKEMON_TYPE_ELECTRIC;
+            else if (user->fusion_species == SPECIES_ID_MORPEKO && pr_fusion_ability_enabled(bt, ABILITY_ID_HUNGER_SWITCH))
+                *type = user->fusion_form == 1 ? POKEMON_TYPE_DARK : POKEMON_TYPE_ELECTRIC;   /* PR_DEV_FUSION_ABILITIES: Morpeko as the second species */
             break;
         case PR_AC_RagingBullTypeAttr:
             if (sp == SPECIES_ID_PALDEA_TAUROS)

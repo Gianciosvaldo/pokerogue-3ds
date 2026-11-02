@@ -212,6 +212,22 @@ static int weather_form_half(pr_battle *bt, const pr_pokemon *q)
     return -1;
 }
 
+/* A form-changing ability's formFunc and trigger, for the species of a fusion the ability belongs to (PR_DEV_FUSION_ABILITIES): the form it
+ * reads is that species' (pr_ability_form), and the trigger changes that species' form alone (the half goes with the call). On a Pokemon that
+ * is not fused, or with the ability not enabled, half is 0 and both are the pin's. */
+static bool ability_form_differs(pr_battle *bt, const pr_pokemon *p, uint16_t ability, pr_fn_id fn, int cls)
+{
+    const int current = pr_ability_form(bt, p, ability);
+    return pr_closure_call(bt, fn, (uint16_t)cls, current, p, NULL, -1) != current;
+}
+static void ability_form_change(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
+{
+    pr_pokemon *mon = (pr_pokemon *)p;
+    mon->form_half = (uint8_t)pr_ability_form_half(bt, p, ability);
+    pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+    mon->form_half = 0;
+}
+
 /* Pokemon.canApplyAbility(passive): form restrictions precede ordinary suppression. */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
 {
@@ -1091,8 +1107,8 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
     }
     case PR_AC_PreSwitchOutFormChangeAbAttr:                            /* Zero to Hero */
-        GATE(pr_closure_call(bt, P(PreSwitchOutFormChangeAbAttr, a)->formFunc, a->cls, p->form, p, NULL, -1) != p->form);
-        if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        GATE(ability_form_differs(bt, p, c->ability, P(PreSwitchOutFormChangeAbAttr, a)->formFunc, a->cls));
+        if (!pp->simulated) ability_form_change(bt, p, c->ability);
         return 1;
     case PR_AC_IncreasePpUsedAbAttr:                                    /* Pressure (shows nothing) */
         GATE(p->is_player != o->is_player);                             /* isOpponent */
@@ -1319,9 +1335,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
                     : a->cls == PR_AC_PostFaintFormChangeAbAttr
                         ? P(PostFaintFormChangeAbAttr, a)->formFunc
                         : P(PostBattleInitFormChangeAbAttr, a)->formFunc;
-        GATE(pr_closure_call(bt, fn, a->cls, p->form, p, NULL, -1) != p->form);
+        GATE(ability_form_differs(bt, p, c->ability, fn, a->cls));
         if (a->cls == PR_AC_PostBattleInitFormChangeAbAttr) GATE(!pp->simulated);
-        if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        if (!pp->simulated) ability_form_change(bt, p, c->ability);
         return 1;
     }
     case PR_AC_PostWeatherChangeFormChangeAbAttr: {                     /* Forecast, Flower Gift */
@@ -1338,9 +1354,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
     }
     case PR_AC_IceFaceFormChangeAbAttr:                                 /* Ice Face in Hail or Snow */
-        GATE(p->form == P(IceFaceFormChangeAbAttr, a)->formIndex
+        GATE(pr_ability_form(bt, p, c->ability) == P(IceFaceFormChangeAbAttr, a)->formIndex
              && (pp->field_type == WEATHER_TYPE_HAIL || pp->field_type == WEATHER_TYPE_SNOW));
-        if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        if (!pp->simulated) ability_form_change(bt, p, c->ability);
         return 1;
     case PR_AC_PostWeatherChangeAddBattlerTagAbAttr: {                  /* Protosynthesis */
         const pr_attr_PostWeatherChangeAddBattlerTagAbAttr *x = P(PostWeatherChangeAddBattlerTagAbAttr, a);
@@ -1741,7 +1757,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_FormBlockDamageAbAttr: {
         /* Disguise, Ice Face. apply does nothing when simulated. */
         const pr_attr_FormBlockDamageAbAttr *x = P(FormBlockDamageAbAttr, a);
-        GATE(*pp->value > 0 && p->form == x->formIndex && call_bool(bt, x->condition, a->cls, p, o, move)
+        GATE(*pp->value > 0 && pr_ability_form(bt, p, c->ability) == x->formIndex && call_bool(bt, x->condition, a->cls, p, o, move)
              && !pr_move_hits_substitute(bt, move, o, p));
         if (pp->simulated) return 1;
         *pp->value = 0;
@@ -1756,7 +1772,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (x->recoil > 0)
             pr_damage_and_update_segments(bt, c->e, (pr_pokemon *)p,
                 to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil), HIT_RESULT_INDIRECT, true, true, NULL);
-        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        ability_form_change(bt, p, c->ability);
         return 1;
     }
     case PR_AC_AlliedFieldDamageReductionAbAttr:

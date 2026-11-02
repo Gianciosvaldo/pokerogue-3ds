@@ -48,18 +48,18 @@ static const struct fusion_ability {
 } fusion_abilities[] = {
     {ABILITY_ID_FORECAST, {SPECIES_ID_CASTFORM}, true},
     {ABILITY_ID_FLOWER_GIFT, {SPECIES_ID_CHERRIM}, true},
-    {ABILITY_ID_ZEN_MODE, {SPECIES_ID_DARMANITAN, SPECIES_ID_GALAR_DARMANITAN}, false},
-    {ABILITY_ID_STANCE_CHANGE, {SPECIES_ID_AEGISLASH}, false},
-    {ABILITY_ID_SHIELDS_DOWN, {SPECIES_ID_MINIOR}, false},
-    {ABILITY_ID_SCHOOLING, {SPECIES_ID_WISHIWASHI}, false},
-    {ABILITY_ID_DISGUISE, {SPECIES_ID_MIMIKYU}, false},
-    {ABILITY_ID_POWER_CONSTRUCT, {SPECIES_ID_ZYGARDE}, false},
-    {ABILITY_ID_GULP_MISSILE, {SPECIES_ID_CRAMORANT}, false},
-    {ABILITY_ID_ICE_FACE, {SPECIES_ID_EISCUE}, false},
-    {ABILITY_ID_HUNGER_SWITCH, {SPECIES_ID_MORPEKO}, false},
-    {ABILITY_ID_ZERO_TO_HERO, {SPECIES_ID_PALAFIN}, false},
+    {ABILITY_ID_ZEN_MODE, {SPECIES_ID_DARMANITAN, SPECIES_ID_GALAR_DARMANITAN}, true},
+    {ABILITY_ID_STANCE_CHANGE, {SPECIES_ID_AEGISLASH}, true},
+    {ABILITY_ID_SHIELDS_DOWN, {SPECIES_ID_MINIOR}, true},
+    {ABILITY_ID_SCHOOLING, {SPECIES_ID_WISHIWASHI}, true},
+    {ABILITY_ID_DISGUISE, {SPECIES_ID_MIMIKYU}, true},
+    {ABILITY_ID_POWER_CONSTRUCT, {SPECIES_ID_ZYGARDE}, true},
+    {ABILITY_ID_GULP_MISSILE, {SPECIES_ID_CRAMORANT}, true},
+    {ABILITY_ID_ICE_FACE, {SPECIES_ID_EISCUE}, true},
+    {ABILITY_ID_HUNGER_SWITCH, {SPECIES_ID_MORPEKO}, true},
+    {ABILITY_ID_ZERO_TO_HERO, {SPECIES_ID_PALAFIN}, true},
     {ABILITY_ID_TERA_SHIFT, {SPECIES_ID_TERAPAGOS}, false},
-    {ABILITY_ID_BATTLE_BOND, {SPECIES_ID_BATTLE_BOND_GRENINJA}, false},
+    {ABILITY_ID_BATTLE_BOND, {SPECIES_ID_BATTLE_BOND_GRENINJA}, true},
     {ABILITY_ID_MULTITYPE, {SPECIES_ID_ARCEUS}, false},
     {ABILITY_ID_RKS_SYSTEM, {SPECIES_ID_SILVALLY}, false},
 };
@@ -89,6 +89,11 @@ int pr_ability_form_half(const pr_battle *bt, const pr_pokemon *p, uint16_t abil
             return p->fusion_species == fusion_abilities[i].species[0]
                    || (fusion_abilities[i].species[1] && p->fusion_species == fusion_abilities[i].species[1]);
     return 0;
+}
+
+uint8_t pr_ability_form(const pr_battle *bt, const pr_pokemon *p, uint16_t ability)
+{
+    return pr_ability_form_half(bt, p, ability) ? p->fusion_form : p->form;
 }
 
 void pr_change_half_form_state(pr_battle *bt, pr_pokemon *p, int half, int form)
