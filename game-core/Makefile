@@ -1433,3 +1433,19 @@ trainer-constructor-faults: $(BUILD)/trainer-constructor.native.inc $(BUILD)/lib
 	python3 tools/check_trainer_constructor_faults.py --build $(BUILD)
 test: trainer-constructor-capture trainer-constructor-faults
 .PHONY: trainer-constructor-capture trainer-constructor-faults
+
+$(BUILD)/gym-egg.native.inc: tests/fixtures/gym-egg.native.json.gz tools/build-gym-egg-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-gym-egg-proof.py $< $@
+$(BUILD)/gym_egg_constructor_test: tests/gym_egg_constructor_test.c $(BUILD)/gym-egg.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_run_enemy_pokemon_base,--wrap=gc_generate_moveset,--wrap=pr_run_enemy_pokemon_finish,--wrap=pr_calculate_stats -lm -o $@
+gym-egg-constructor-test: $(BUILD)/gym_egg_constructor_test
+	$(BUILD)/gym_egg_constructor_test
+test: gym-egg-constructor-test
+.PHONY: gym-egg-constructor-test
+gym-egg-capture:
+	python3 tools/check_gym_egg_capture.py
+gym-egg-faults: $(BUILD)/gym-egg.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	python3 tools/check_gym_egg_faults.py --build $(BUILD)
+test: gym-egg-capture gym-egg-faults
+.PHONY: gym-egg-capture gym-egg-faults

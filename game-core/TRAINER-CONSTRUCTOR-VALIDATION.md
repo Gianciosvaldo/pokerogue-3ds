@@ -9,14 +9,14 @@ movesets, with moveset generation and constructor finish inside each member's
 prefix-only API and rival owner, and stages completed members until the entire
 party prefix succeeds. It also ports Young Couple's paired factories.
 
-The follow-up extends that owner through common/great/ultra TM pools and
+PR #513 extends that owner through common/great/ultra TM pools and
 relearner moves. It preserves source pool order, duplicates, forbidden TMs,
 superseded moves across TM/level pools, tier weights and fill caps. Before this
 extension, higher-level members still used the last-four-level-moves stand-in
 and finished on the ambient RNG. Formerly guarded native cases now receive full
 moves/PP/finish/RNG comparisons.
 
-**Egg-enabled trainers remain outside this owner.** All 63 ordinary trainer
+**PR #513 kept egg-enabled trainers outside its owner.** All 63 ordinary trainer
 configurations disable egg moves in the pinned source. A compiled fault check
 caught that distinction during development; exploratory egg code was removed
 before publication. Level-80/170 samples alone do not prove egg generation.
@@ -124,3 +124,8 @@ capacity guards; the sampled constructor matrix is not a whole-catalogue bound.
 Full encounter item rolls/played battles, broader closure classification and the
 integrated wide-level Endless acceptance chain retain separate obligations.
 No Windows builder is produced by this change.
+
+The subsequent [plain Gym egg owner](GYM-EGG-CONSTRUCTOR-VALIDATION.md) covers
+Brock/Roxanne and single/named-double Tate/Liza under explicit fresh-constructor
+bounds. Other special contexts retain the limits above. See the
+[shared constructor contract](TRAINER-CONSTRUCTOR-CONTRACT.md) for integration.

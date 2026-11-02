@@ -1173,8 +1173,15 @@ static void obtain_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         /* falling asleep while semi-invulnerable ends it and drops the queued move */
         static const int invuln[] = {BATTLER_TAG_TYPE_FLYING, BATTLER_TAG_TYPE_UNDERGROUND, BATTLER_TAG_TYPE_UNDERWATER,
                                      BATTLER_TAG_TYPE_HIDDEN};
-        for (unsigned i = 0; i < sizeof invuln / sizeof *invuln; i++)
-            if (pr_get_battler_tag(p, invuln[i])) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+        bool was_invulnerable = false;
+        for (unsigned i = 0; i < sizeof invuln / sizeof *invuln; i++) {
+            if (!pr_get_battler_tag(p, invuln[i])) continue;
+            was_invulnerable = true;
+            pr_remove_tag(bt, e, p, invuln[i]);
+        }
+        /* doSetStatus shifts once when any matching tag existed, even if several
+         * tags were removed. An unrelated queued move is otherwise preserved. */
+        if (was_invulnerable) move_queue_shift(p, NULL);
     }
     p->status = (uint8_t)effect;
     p->status_toxic_turns = 0;

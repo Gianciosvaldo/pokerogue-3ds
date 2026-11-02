@@ -17,6 +17,8 @@ extern const gc_mg_constants gc_mg_const;
 /* Trainer pools and caps, from the same pinned balance module and trainer configs. */
 typedef struct {
     int tm_level[3], tm_weight[3], tm_cap_level[4];
+    int egg_level, rare_egg_level, egg_cap_level[4];
+    double egg_to_level, egg_weight_max;
 } gc_mg_trainer_constants;
 extern const gc_mg_trainer_constants gc_mg_trainer_const;
 extern const int gc_mg_tm_forbidden_count, gc_mg_trainer_egg_count;
