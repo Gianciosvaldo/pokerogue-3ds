@@ -79,3 +79,8 @@ joins actual generated encounters, battle, EXP/reward, save/load and next
 encounter at the 65,535/65,536 player boundary in both modes. Its 16 prepared API
 contexts retain losses and are not native full-run parity or learning/evolution,
 terminal or hardware acceptance. The source ledger remains open.
+
+[The lifecycle extension](../game-core/ENDLESS-LIFECYCLE-VALIDATION.md) now adds
+executed evolution/move learning and played wave-5,849/5,850 clears with save/load.
+This supersedes the earlier absence of those particular joined C contexts;
+it does not close source parity, complete token history or presentation acceptance.

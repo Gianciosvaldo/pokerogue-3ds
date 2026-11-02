@@ -45,3 +45,7 @@ boss shields, admin/team-boss movesets, fusion niches and trainer Tera.
 Run `make -C game-core endless-journey-host-test held-lock-host-test`.
 Normal core/app/custom/save/football and actual 3DS/ARM stack CI remain merge
 gates; only dedicated Task63 is skipped. No builder or full completion claim.
+
+The later [lifecycle integration](ENDLESS-LIFECYCLE-VALIDATION.md) retains all
+16 contexts and adds played learning/evolution and final-wave chains. Its own
+synthetic setup and native/full-history/presentation limits remain explicit.
