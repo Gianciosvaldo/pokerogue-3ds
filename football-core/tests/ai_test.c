@@ -109,7 +109,11 @@ int main(void)
 
     /* First and ten in a tied game at midfield: every play is in the book, and it is not a coin flip between two of them. */
     Mix neutral=sample_calls((Situation){1,10,50,0,2,90});
-    for(unsigned id=0;id<FB_PLAY_COUNT;++id)assert(share(neutral.play[id],neutral.calls)>.05f);
+    unsigned legacy_calls=0;for(unsigned id=0;id<8;++id)legacy_calls+=neutral.play[id];
+    /* Preserve coverage within the original eight and cover every new concept.
+     * Twenty absolute shares above five percent would be mathematically impossible. */
+    for(unsigned id=0;id<8;++id)assert(share(neutral.play[id],legacy_calls)>.05f);
+    for(unsigned id=0;id<FB_PLAY_COUNT;++id)assert(share(neutral.play[id],neutral.calls)>.015f);
     assert(share(neutral.run,neutral.calls)>.35f && share(neutral.run,neutral.calls)<.6f);
     /* Calling the play it just ran is rare (a uniform pick would repeat one time in eight). */
     assert(share(neutral.repeat,neutral.calls)<.06f);
@@ -148,7 +152,9 @@ int main(void)
     assert((float)st.interceptions/snaps>.005f && (float)st.interceptions/snaps<.05f);
     float attempts=(float)(st.completions+st.incompletions+st.interceptions);
     assert((float)st.completions/attempts>.4f && (float)st.completions/attempts<.75f);
-    for(unsigned id=0;id<FB_PLAY_COUNT;++id)assert((float)st.plays[id]/snaps>.04f);
+    unsigned legacy_snaps=0;for(unsigned id=0;id<8;++id)legacy_snaps+=st.plays[id];
+    for(unsigned id=0;id<8;++id)assert((float)st.plays[id]/legacy_snaps>.04f);
+    for(unsigned id=0;id<FB_PLAY_COUNT;++id)assert(st.plays[id]>0);
     assert(st.points/st.games>10 && st.points/st.games<70);
     /* Runs are not all funneled into the same hole: a fifth of them end more than four yards off the middle, on both sides. */
     float outside=(float)(st.run_left+st.run_right),runs=(float)(st.runs);

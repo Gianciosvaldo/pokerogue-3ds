@@ -22,15 +22,23 @@ bool football_pass_resolve(FootballPassReport *out,const FootballPassInput *in,
     case FB_PASS_PLAY_ACTION: depth=12;release=1000;break_bonus=8;break;
     case FB_PASS_VERTICALS: depth=26;release=1300;break_bonus=0;break;
     case FB_PASS_POST: depth=24;release=1500;break_bonus=3;break;
+    case FB_PASS_STICK: depth=6;release=450;break_bonus=5;break;
+    case FB_PASS_MESH: depth=7;release=850;break_bonus=8;break;
+    case FB_PASS_FLOOD: depth=16;release=1100;break_bonus=5;break;
+    case FB_PASS_CURLS: depth=10;release=950;break_bonus=5;break;
+    case FB_PASS_SMASH: depth=6;release=800;break_bonus=4;break;
+    case FB_PASS_HB_SCREEN: depth=2;release=550;break_bonus=8;break;
+    case FB_PASS_BUBBLE: depth=1;release=400;break_bonus=6;break;
+    case FB_PASS_SHALLOW_CROSS: depth=5;release=700;break_bonus=7;break;
     default:return false;
     }
     const FootballAttributes *q=&in->quarterback,*rec=&in->receiver,*cover=&in->coverer,*rush=&in->rusher;
     int separation=50+((int)rec->spd+rec->agi-cover->spd-cover->agi)/4+break_bonus;
-    if(in->defense==FB_DEF_ZONE)separation+=depth>=20 ? -8 : -2;
-    if(in->defense==FB_DEF_BLITZ)separation+=12;
+    if(football_defense_is_zone(in->defense))separation+=depth>=20 ? -8 : -2;
+    if(football_defense_is_blitz(in->defense))separation+=12;
     int pressure=40+((int)rush->str+rush->agi-q->agi-50)/3-in->protection*2+(release-450)/100;
-    if(in->defense==FB_DEF_BLITZ)pressure+=20;
-    if(in->defense==FB_DEF_ZONE)pressure-=8;
+    if(football_defense_is_blitz(in->defense))pressure+=20;
+    if(football_defense_is_zone(in->defense))pressure-=8;
     separation=clamp(separation,0,99);pressure=clamp(pressure,0,99);
     int short_arm=depth-(6+q->thp/2);if(short_arm<0)short_arm=0;
     r.depth_yards=(uint8_t)depth;r.release_ms=(uint16_t)release;

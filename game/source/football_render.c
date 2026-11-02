@@ -172,16 +172,16 @@ void football_render_bottom(FootballRenderer *r, const FootballPlaycall *ui)
     label(r,football_playcall_title(ui),20,16,.6f);
     unsigned count=football_playcall_option_count(ui);
     for (unsigned i=0;i<count;++i) {
-        FootballTouchRect rect=football_playcall_rect(i);
+        FootballTouchRect rect=football_playcall_option_rect(ui,i);
         u32 color=i==ui->highlighted ? C2D_Color32(40,100,170,255) : C2D_Color32(35,48,65,255);
         C2D_DrawRectSolid(rect.x,rect.y,0,rect.w,rect.h,color);
-        label(r,football_playcall_label(ui,i),rect.x+12,rect.y+14,.6f);
+        label(r,football_playcall_label(ui,i),rect.x+6,rect.y+8,ui->state==FB_CALL_PLAY?.43f:.6f);
     }
     if (ui->state==FB_CALL_PLAY) {
         const FootballPlayDefinition *p=football_playbook_option(ui->formation,ui->type,ui->highlighted);
-        if (p) label(r,p->description,20,177,.32f);
+        if (p) label(r,p->description,20,194,.30f);
     }
-    label(r,"Touch or D-pad + A     B: Back",20,208,.45f);
+    label(r,"Touch or D-pad + A     B: Back",20,218,.4f);
 }
 void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMenu *menu)
 {
@@ -190,10 +190,10 @@ void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMen
     for(unsigned i=0;i<FB_DEF_COUNT;++i) {
         FootballTouchRect rect=football_defense_rect(i);
         C2D_DrawRectSolid(rect.x,rect.y,0,rect.w,rect.h,i==menu->selected ? C2D_Color32(40,100,170,255) : C2D_Color32(35,48,65,255));
-        label(r,football_defense_get((FootballDefenseId)i)->name,rect.x+12,rect.y+10,.55f);
+        label(r,football_defense_get((FootballDefenseId)i)->name,rect.x+6,rect.y+8,.43f);
     }
     const FootballDefenseDefinition *d=football_defense_get((FootballDefenseId)menu->selected);
-    if(d)label(r,d->description,20,191,.30f);
+    if(d)label(r,d->description,20,200,.30f);
 
 }
 static const char *species_name(uint16_t id)

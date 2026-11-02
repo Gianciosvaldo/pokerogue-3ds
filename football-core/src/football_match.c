@@ -192,9 +192,7 @@ static PlayInfo opponent_call(FootballMatch *m)
 }
 static FootballDefenseId opponent_defense(FootballMatch *m)
 {
-    unsigned roll=random_next(&m->rng)%100;
-    if(football_rules_distance(&m->rules)>6 && roll<55)return FB_DEF_ZONE;
-    return roll>=75 ? FB_DEF_BLITZ : FB_DEF_MAN;
+    return football_defense_pick(random_next(&m->rng),m->rules.down,football_rules_distance(&m->rules),m->rules.ball);
 }
 bool football_match_defend(FootballMatch *m,FootballDefenseId defense)
 {

@@ -2,9 +2,14 @@
 #include <stddef.h>
 #include <string.h>
 static const FootballDefenseDefinition defenses[FB_DEF_COUNT]={
-    {"Man Coverage","Tight matchups; balanced run support.",0,-4,1,0},
-    {"Zone Coverage","Protect passing lanes; concede run space.",-2,-8,3,2},
-    {"Blitz","Pressure the QB; leave passing gaps.",8,6,-2,-1}
+    {"2-Man","Five man matchups with two deep safeties.",0,-4,1,0},
+    {"Cover 2 Zone","Two deep safeties and five underneath zones.",-2,-8,3,2},
+    {"Man Blitz","Five rushers, man coverage, one deep safety.",8,6,-2,-1},
+    {"Cover 1 Robber","One deep safety; a robber reads the middle.",1,-5,3,0},
+    {"Cover 3","Three deep thirds and four underneath zones.",-1,-9,3,2},
+    {"Cover 4 Quarters","Four deep quarters; protect the big play.",-4,-12,4,4},
+    {"Zone Blitz","Five rushers, three underneath, three deep.",6,1,1,0},
+    {"Cover 0 Blitz","Six rushers; five isolated man assignments.",11,10,-3,-2}
 };
 const FootballDefenseDefinition *football_defense_get(FootballDefenseId id)
 {
@@ -12,7 +17,7 @@ const FootballDefenseDefinition *football_defense_get(FootballDefenseId id)
 }
 FootballTouchRect football_defense_rect(unsigned option)
 {
-    return option<FB_DEF_COUNT ? (FootballTouchRect){20,52+(int)option*48,280,42} : (FootballTouchRect){0,0,0,0};
+    return option<FB_DEF_COUNT ? (FootballTouchRect){16+(int)(option/4)*148,44+(int)(option%4)*38,140,32} : (FootballTouchRect){0,0,0,0};
 }
 void football_defense_update(FootballDefenseMenu *m,FootballCallInput in)
 {

@@ -49,6 +49,12 @@ FootballTouchRect football_playcall_rect(unsigned option)
     if (option>1) return (FootballTouchRect){0,0,0,0};
     return (FootballTouchRect){20,60+(int)option*64,280,52};
 }
+FootballTouchRect football_playcall_option_rect(const FootballPlaycall *ui,unsigned option)
+{
+    if(!ui || option>=football_playcall_option_count(ui))return (FootballTouchRect){0,0,0,0};
+    if(ui->state!=FB_CALL_PLAY)return football_playcall_rect(option);
+    return (FootballTouchRect){16+(int)(option/4)*148,44+(int)(option%4)*38,140,32};
+}
 static bool inside(FootballTouchRect r, unsigned x, unsigned y)
 {
     return (int)x>=r.x && (int)y>=r.y && (int)x<r.x+r.w && (int)y<r.y+r.h;
@@ -73,7 +79,7 @@ void football_playcall_update(FootballPlaycall *ui, FootballCallInput input)
         activate=false;
         if (input.touch_x<320 && input.touch_y<240)
             for (unsigned i=0;i<count;++i)
-                if (inside(football_playcall_rect(i),input.touch_x,input.touch_y)) {
+                if (inside(football_playcall_option_rect(ui,i),input.touch_x,input.touch_y)) {
                     ui->highlighted=i; activate=true; break;
                 }
     }
