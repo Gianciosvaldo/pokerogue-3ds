@@ -104,6 +104,17 @@ plant regen-not-boss        's/    p->is_boss = g->boss_segments > 0;/    p->is_
 plant regen-stale-form      's/    p->form = (uint8_t)g->form;/    p->form = st->m->b.form;/'
 plant regen-stale-ability   's/gc_form(p->species, g->form), g->ability_index);/gc_form(p->species, g->form), st->m->ability_index);/'
 plant tera-slot-ignored     's/const bool will_tera = tc \&\& (tc->tera_static \& (1u << member));.*$/const bool will_tera = false;/'
+# the Elite Four's and Champions' postProcess: the ops added for them, the closure attached to the member gym_e4.c makes, the regeneration's Tera type
+plant jmp-ignored           's/        case PR_EOP_JMP: i += op->a; break;/        case PR_EOP_JMP: break;/' run-core:evil_team.c
+plant tera-op-ignored       's/        case PR_EOP_TERA: out->tera_type = op->a; break;/        case PR_EOP_TERA: break;/' run-core:evil_team.c
+plant tera-species-type1    's/const int t = pr_run_species_type(ctx->species, op->a);/const int t = pr_run_species_type(ctx->species, 1);/' run-core:evil_team.c
+plant species-eq2-first     's/ctx->species == op->gv || ctx->species == (uint16_t)op->b;/ctx->species == op->gv;/' run-core:evil_team.c
+plant species-ne2-either    's/ctx->species != op->gv \&\& ctx->species != (uint16_t)op->b;/ctx->species != op->gv || ctx->species != (uint16_t)op->b;/' run-core:evil_team.c
+plant species-lacks-species 's/        if (ctx->species != op->gv) return false;/        ;/' run-core:evil_team.c
+plant species-lacks-move    's/if (g->moveset\[k\] == op->b) return false;/if (0) return false;/' run-core:evil_team.c
+plant attach-dropped        's/    if (func_key >= 0) pr_run_evil_attach(run, type, func_key, out);/    ;/' run-core:gym_e4.c
+plant species-type2-as-1    's/return f \&\& which <= f->n_types ? f->types\[which - 1\] : -1;/return f \&\& which <= f->n_types ? f->types[0] : -1;/' run-core:pokemongen.c
+plant regen-stale-tera      's/^    p->tera_type = g->tera_type;.*$/    ;/'
 M=gc_movegen.c
 plant egg-pool-dropped      's/if (!c->eggs_allowed || c->p.level < gc_mg_trainer_const.egg_level) return true;/if (1) return true;/' $M
 plant egg-weight-unrounded  's/egg_to_level_weight + .5)/egg_to_level_weight)/' $M
@@ -120,6 +131,7 @@ plant nonlevel-tm-only      's/const int nonlevel = c->tm_count + c->egg_count;/
 plant tera-ignored          's/c.will_tera = trainer \&\& will_tera;/c.will_tera = false;/' $M
 plant tera-blast-untyped    's/if (move == MOVE_ID_TERA_BLAST) return c->p.tera_type;/if (move == MOVE_ID_TERA_BLAST) return type;/' $M
 plant tera-existing-types   's/const uint32_t existing = existing_damage_types(c, true);/const uint32_t existing = existing_damage_types(c, false);/' $M
+plant keldeo-declined        's/if (!sp || (trainer \&\& !(run->trainer_type >= TRAINER_TYPE_LORELEI \&\& run->trainer_type <= TRAINER_TYPE_KIERAN) \&\& (sp->form_change_triggers/if (!sp || (trainer \&\& (sp->form_change_triggers/' $M
 plant regen-boss-declined   's/ || (m->b.is_boss \&\& !stats_of) || m->b.passive_flag/ || m->b.is_boss || m->b.passive_flag/' $M
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"
