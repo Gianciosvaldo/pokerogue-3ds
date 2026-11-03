@@ -60,7 +60,7 @@ static bool banner(const FootballLive *m,char *out,size_t size)
     if((m->phase!=FB_LIVE_DEAD && m->phase!=FB_LIVE_END) || m->event==FB_EVENT_NONE)return false;
     switch(m->event){
     case FB_EVENT_TOUCHDOWN:snprintf(out,size,"TOUCHDOWN!");break;
-    case FB_EVENT_INTERCEPTION:snprintf(out,size,"INTERCEPTION!");break;
+    case FB_EVENT_INTERCEPTION:if(m->return_yards>0)snprintf(out,size,"INTERCEPTION!   RETURN %d",(int)m->return_yards);else snprintf(out,size,"INTERCEPTION!");break;
     case FB_EVENT_SACK:snprintf(out,size,"SACK!");break;
     case FB_EVENT_FUMBLE:snprintf(out,size,"FUMBLE!");break;
     case FB_EVENT_SAFETY:snprintf(out,size,"SAFETY");break;
@@ -120,7 +120,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     const FootballLive *m=&c->live;float dir=m->rules.offense==FB_HOME?1:-1;
     world(cam,m->los,0,.18f,53.333f,.05f,C2D_Color32(74,163,255,255));
     float first=m->rules.offense==FB_HOME?10+m->rules.first_down_at:110-m->rules.first_down_at;
-    if(!m->special)world(cam,first,0,.18f,53.333f,.05f,gold);
+    if(!m->special && !m->turnover)world(cam,first,0,.18f,53.333f,.05f,gold); /* nobody is going for a first down on a run-back */
     route_lines(m,cam);
     unsigned order[22];for(unsigned i=0;i<22;++i){order[i]=i;for(unsigned j=i;j>0 && m->actors[order[j]].y<m->actors[order[j-1]].y;--j){unsigned t=order[j];order[j]=order[j-1];order[j-1]=t;}}
     for(unsigned rank=0;rank<22;++rank){unsigned i=order[rank];const FootballLiveActor *a=&m->actors[i];

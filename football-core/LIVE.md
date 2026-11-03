@@ -151,6 +151,20 @@ and for a kickoff (it follows the dead ball without a playcall). `tests/undo_tes
 two-point play, the kickoff, the CPU's offense, and 12 whole games each played straight and with every human call taken back and made
 again, which end in the same rules, random state, snaps, steps and stats.
 
+## Interceptions stay live
+
+An intercepted pass is not a dead ball. `begin_turnover` (in `football_live.c`) hands the ball to the defender who caught it, the way a kick
+return does: `rules.offense` flips to his team, he is the carrier, the play becomes a run (`FB_RUN_TOSS`, caught and thrown), blocking
+assignments are cleared, and `turnover`, `interceptor` and `catch_x` (not serialized) mark it. The old offense now pursues, the new one blocks
+and the carrier runs on the ordinary run-play systems. The human steers the taker, or chases with the player of his own team nearest the ball.
+`finish` sends the end of the play to `finish_turnover`: a touchdown at the goal line (`football_rules_touchdown`), otherwise
+`football_rules_possession` where he went down, and a fumble on the run-back gives the ball to the team that threw. The interception is
+credited at the dead ball with everything else, so the career's candy and the stats see it once. An interception on a try (two-point play), in the
+interceptor's own end zone or out of bounds is still a dead ball (a touchback or a failed try), because there is nothing to run back.
+`return_yards` holds the run-back and the banner prints it. `tests/turnover_test.c`: 300 whole games (CPU on both sides, and a scripted human
+who throws, runs the ball back and chases), every run-back checked for the swapped sides, the carrier, the spot, the touchdown, the fumble
+and the credit, plus the end-zone case.
+
 ## CPU play
 
 `football_live_ai.c` holds everything the CPU decides; it reads only the live state and the match's own RNG,

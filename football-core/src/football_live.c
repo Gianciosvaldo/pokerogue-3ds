@@ -15,7 +15,7 @@ static void arrange(FootballLive *m)
     static const float oy[11]={26.67f,28,4,49,13,39,21,24,26.67f,29,32};
     static const float dx[11]={2,2,2,2,7,7,7,2,2,15,15};
     static const float dy[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
-    m->credit_count=0;m->credited=FB_NO_ACTOR;
+    m->credit_count=0;m->credited=FB_NO_ACTOR;m->return_yards=0;m->turnover=false;
     m->snap_offense=m->rules.offense;m->event=FB_EVENT_NONE;m->snap_score[0]=m->rules.score[0];m->snap_score[1]=m->rules.score[1];
     float dir=direction(m);m->los=m->rules.offense==FB_HOME?10+m->rules.ball:110-m->rules.ball;
     unsigned off=offense_base(m),def=defense_base(m);
@@ -184,9 +184,36 @@ void football_live_conversion_done(FootballLive *m,unsigned points,FootballLiveE
     ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
     m->after=m->rules.finished?FB_AFTER_NONE:FB_AFTER_KICKOFF;m->after_side=(uint8_t)scorer;
 }
+/* The dead ball after a run-back: the team that took the ball scores, or gets it where its carrier went down; a fumble on the return
+ * goes back to the team that threw. Yards are counted from where the ball was taken. */
+static void finish_turnover(FootballLive *m,FootballResultKind kind,float x)
+{
+    unsigned taker=m->rules.offense,thrower=1-taker;float rd=taker==FB_HOME?1.f:-1.f;
+    unsigned seconds=(unsigned)limit(ceilf(m->elapsed)+4,1,30);
+    bool score=(rd>0 && x>=110) || (rd<0 && x<=10),lost=kind==FB_RESULT_FUMBLE;
+    m->turnover=false;
+    football_live_credit(m,m->interceptor,FB_CREDIT_INTERCEPTION);
+    m->return_yards=(int16_t)limit(roundf((x-m->catch_x)*rd),-100,100);
+    m->result=(FootballResolvedPlay){FB_RESULT_INTERCEPTION,m->return_yards<0?0:m->return_yards,(uint8_t)seconds};
+    bool ok;
+    if(score && !lost){
+        football_live_credit(m,m->carrier,FB_CREDIT_TOUCHDOWN);football_live_fx(m,FB_FX_TOUCHDOWN,m->carrier,22,rd<0?-1:1);
+        ok=football_rules_touchdown(&m->rules,(FootballSide)taker,seconds);m->event=FB_EVENT_TOUCHDOWN;
+    }else{
+        unsigned side=lost?thrower:taker;
+        int spot=(int)roundf(side==FB_HOME?x-10:110-x);
+        ok=football_rules_possession(&m->rules,(FootballSide)side,(unsigned)limit((float)spot,1,99),seconds);
+        m->event=lost?FB_EVENT_FUMBLE:FB_EVENT_INTERCEPTION;
+    }
+    if(!ok){m->rules.finished=true;m->rules.winner=FB_AWAY;}
+    m->flying=false;m->ball_z=0;m->caught=false;
+    ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
+    football_live_after_play(m);
+}
 static void finish(FootballLive *m,FootballResultKind kind,float x)
 {
     if(m->special && m->stage==FB_STAGE_RETURN){football_live_special_finish(m,kind,x);return;}
+    if(m->turnover){finish_turnover(m,kind,x);return;}
     int yards=(int)roundf((x-m->los)*direction(m));
     if(kind==FB_RESULT_INCOMPLETE)yards=0;
     if(kind==FB_RESULT_INTERCEPTION && yards<0)yards=0;
@@ -241,6 +268,25 @@ static void throw_away(FootballLive *m)
     m->from_x=qb->x;m->from_y=qb->y;m->to_x=limit(qb->x+direction(m)*3,0,120);m->to_y=qb->y<26.67f?-6:59.3f;
     m->flight_time=.55f;m->flight=0;m->flying=m->thrown=true;m->target=(uint8_t)off;
 }
+/* The defender who has the ball runs it back, from where he caught it. False where the old dead-ball interception stands: on a try (a
+ * two-point play) and in the defender's own end zone or out of bounds, which is a touchback. */
+static bool begin_turnover(FootballLive *m,unsigned defender)
+{
+    unsigned taker=defender<11?FB_HOME:FB_AWAY,thrower=1-taker;
+    bool deep=taker==FB_HOME?m->ball_x<=10:m->ball_x>=110;
+    if(m->conversion || deep || m->ball_y<=0 || m->ball_y>=53.333f)return false;
+    for(unsigned i=0;i<22;++i){FootballLiveActor *a=&m->actors[i];a->block_peer=255;a->block_time=0;a->block_cooldown=0;}
+    m->turnover=true;m->interceptor=(uint8_t)defender;m->rules.offense=(uint8_t)taker;m->carrier=m->target=(uint8_t)defender;m->catch_x=m->ball_x;
+    m->caught=m->thrown=true;m->flying=false;m->scramble=false;m->ball_z=0;m->play=FB_RUN_TOSS;m->hand_to=FB_NO_ACTOR;m->juke=0;m->cooldown=0;
+    if(!football_live_cpu(m,(FootballSide)taker))m->controlled=(uint8_t)defender;
+    else if(!football_live_cpu(m,(FootballSide)thrower)){
+        /* The human chases with the player of his own team nearest the ball. */
+        unsigned best=thrower==FB_HOME?0:11,start=best;float near=1000;
+        for(unsigned i=start;i<start+11;++i){float g=distance(m->actors[i].x,m->actors[i].y,m->ball_x,m->ball_y);if(g<near){near=g;best=i;}}
+        m->controlled=(uint8_t)best;
+    }else m->controlled=FB_NO_ACTOR;
+    return true;
+}
 static void ball_step(FootballLive *m)
 {
     if(!m->flying){m->ball_x=m->actors[m->carrier].x;m->ball_y=m->actors[m->carrier].y;return;}
@@ -256,7 +302,9 @@ static void ball_step(FootballLive *m)
     if(defender<22){
         /* Alone under it a defender usually takes it; with a receiver there it is a fight. */
         float chance=receiver<22?3+m->actors[defender].attributes.cth/20.0f:58+m->actors[defender].attributes.cth/3.0f;
-        if(random32(m)%100<chance){m->credited=(uint8_t)defender;football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);football_live_fx(m,FB_FX_INTERCEPTION,defender,receiver,(m->ball_x>=m->from_x)?1:-1);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);return;}
+        if(random32(m)%100<chance){m->credited=(uint8_t)defender;football_live_fx(m,FB_FX_INTERCEPTION,defender,receiver,(m->ball_x>=m->from_x)?1:-1);
+            /* The credit is made with the dead ball, as for every play, so a run-back that ends in a fumble is still his interception. */
+            if(!begin_turnover(m,defender)){football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);}return;}
     }
     if(receiver==22 || (defender<22 && random32(m)%100<12u+m->actors[defender].attributes.cth/8u) || random32(m)%100>55u+m->actors[receiver].attributes.cth/3){finish(m,FB_RESULT_INCOMPLETE,m->los);return;}
     m->carrier=(uint8_t)receiver;m->caught=true;football_live_fx(m,FB_FX_CATCH,receiver,22,direction(m)>0?1:-1);

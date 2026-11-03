@@ -59,6 +59,9 @@ int main(void)
     /* The yard numbers sit under the banner and the HUD; a dead ball shows its banner, and no player target number, over the field. */
     m->phase=FB_LIVE_PLAY;m->special=FB_SPECIAL_NONE;m->event=FB_EVENT_NONE;field_numbers=numbers_over_banner=words_under_banner=0;
     camera.x=60;camera.y=14;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(field_numbers>=2 && !numbers_over_banner && !words_under_banner);
+    /* Nobody is going for a first down on an interception's run-back: its line is not drawn. */
+    {unsigned with_line;rects=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);with_line=rects;
+     m->turnover=true;rects=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(rects+1==with_line);m->turnover=false;}
     for(unsigned event=FB_EVENT_TOUCHDOWN;event<=FB_EVENT_KICKOFF;++event){
         m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->return_yards=23;field_numbers=numbers_over_banner=words_under_banner=0;
         drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(field_numbers>=2 && !numbers_over_banner && !words_under_banner);

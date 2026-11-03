@@ -94,10 +94,11 @@ int main(void)
             for(unsigned i=0;i<m.credit_count;++i){
                 const FootballCredit *c=&m.credits[i];FootballFxKind kind=c->kind==FB_CREDIT_TOUCHDOWN?FB_FX_TOUCHDOWN:c->kind==FB_CREDIT_SACK?FB_FX_SACK:FB_FX_INTERCEPTION;
                 const FootballFx *f=newest(kind);
-                assert(f && f->step==m.steps && m.actors[f->actor].roster==c->member && (f->actor<11)==(c->side==FB_HOME));
+                /* An interception is stamped where the ball was caught, which a run-back can leave well before the dead ball. */
+                assert(f && (kind==FB_FX_INTERCEPTION?f->step<=m.steps:f->step==m.steps) && m.actors[f->actor].roster==c->member && (f->actor<11)==(c->side==FB_HOME));
                 td+=kind==FB_FX_TOUCHDOWN;intc+=kind==FB_FX_INTERCEPTION;sack+=kind==FB_FX_SACK;
             }
-            assert(fresh(FB_FX_TOUCHDOWN)==td && fresh(FB_FX_INTERCEPTION)==intc && fresh(FB_FX_SACK)==sack);
+            assert(fresh(FB_FX_TOUCHDOWN)==td && fresh(FB_FX_INTERCEPTION)<=intc && fresh(FB_FX_SACK)==sack);
             assert(m.event!=FB_EVENT_FUMBLE || fresh(FB_FX_FUMBLE)==1);
             assert(fresh(FB_FX_SACK)+fresh(FB_FX_TACKLE)<=1); /* one tackle at most ends a play */
             tackles+=fresh(FB_FX_TACKLE);touchdowns+=td;sacks+=sack;interceptions+=intc;fumbles+=fresh(FB_FX_FUMBLE);
