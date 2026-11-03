@@ -97,6 +97,8 @@ M = [
     (CR, "  if (R.enc_flags & GC_ENF_DOUBLES) n->traits |= CC_TR_DOUBLES;", "", T, "a double roll's finisher is stored"),
     (CR, "  if (R.enc_flags & GC_ENF_FUSED) n->traits |= CC_TR_FUSED;", "", T, "a fusion's finisher is stored"),
     (CR, "  if (R.enc_flags & GC_ENF_TERA) n->traits |= CC_TR_TERA;", "", T, "a terastallized finisher is stored"),
+    (CR, "  if (a->trainer_owned && !(R.enc_flags & GC_ENF_RANDOM_TRAINER)) n->traits |= CC_TR_FIXED_SCRIPTED;", "", T, "a rival or gym trainer's Pokemon is stored"),
+    (CR, "    case GC_ENC_FINAL: return CC_TR_FIXED_SCRIPTED;", "    case GC_ENC_FINAL: return 0;", T, "the final boss is stored"),
     (CR, "  if (a->is_boss) n->traits |= CC_TR_BOSS;", "", T, "a boss finisher is stored"),
     (CR, "  if (a->trainer_owned) n->traits |= CC_TR_TRAINER_OWNED;", "", T, "a trainer's Pokemon is stored"),
     (CR, "  n->traits = trait_of_kind(R.enc_kind);", "  n->traits = 0;", T, "a trainer, mystery, boss or fixed encounter's finisher is stored"),

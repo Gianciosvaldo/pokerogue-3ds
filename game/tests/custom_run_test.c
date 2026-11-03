@@ -1095,9 +1095,10 @@ static void test_gate(void) {
   static const gate_case T[] = {
       /* name                kind flags d  src side rem wv boss fus tera trn chg abil mv wrong second  cand refusal */
       {"ordinary wild",      GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
-      {"trainer battle",     GC_ENC_TRAINER, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
+      {"story trainer (rival, gym...)", GC_ENC_TRAINER, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 62, 2, 0, 0, 1, CC_REFUSE_FIXED_SCRIPTED},
+      {"random trainer",     GC_ENC_TRAINER, GC_ENF_RANDOM_TRAINER, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
       {"boss wave",          GC_ENC_BOSS, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
-      {"final wave",         GC_ENC_FINAL, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
+      {"final wave",         GC_ENC_FINAL, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FIXED_SCRIPTED},
       {"mystery encounter",  GC_ENC_MYSTERY, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_MYSTERY},
       {"fixed or scripted",  GC_ENC_FIXED_OR_SCRIPTED, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FIXED_SCRIPTED},
       {"unsupported kind",   GC_ENC_UNSUPPORTED, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
@@ -1107,7 +1108,7 @@ static void test_gate(void) {
       {"boss actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
       {"fused actor",        GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FUSED},
       {"tera actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_TERA},
-      {"trainer-owned actor",GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
+      {"trainer-owned actor",GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 62, 2, 0, 0, 1, CC_REFUSE_FIXED_SCRIPTED},
       {"not a direct hit",   GC_ENC_ORDINARY_WILD, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
       {"attacker gone",      GC_ENC_ORDINARY_WILD, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
       {"own side's attack",  GC_ENC_ORDINARY_WILD, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
