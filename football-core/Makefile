@@ -242,6 +242,13 @@ undo-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/undo_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/undo_test
 	$(BUILD)/undo_test
 test: undo-test
+
+.PHONY: turnover-test
+turnover-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/turnover_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/turnover_test
+	$(BUILD)/turnover_test
+test: turnover-test
 .PHONY: defense-goal-line-test
 defense-goal-line-test: core-libs
 	mkdir -p $(BUILD)

@@ -81,6 +81,9 @@ typedef struct {
     /* Kicks (not serialized: a checkpoint is always taken at a call). kick_yards is the gross distance of the
      * last punt from the line of scrimmage; the landing spot is to_x/to_y while the ball flies. */
     uint8_t special,stage,kick_side,event;bool fair_catch,kick_good;int16_t kick_yards,return_yards;
+    /* Not serialized. An interception does not end the play: while turnover is set the defender who took it carries the ball for his team
+     * (rules.offense is flipped to it, as on a kick return), interceptor is who took it, catch_x is where, and football_live_turnover_finish ends it. */
+    bool turnover;uint8_t interceptor;
     /* The try after a touchdown: conversion is 1 while the scoring team chooses a kick or a two-point play, and 2 while
      * that play is run. after/after_side say what the next call is (the scorer, or the kicker); next_offense is
      * who gets the ball once the try is over. catch_x/catch_time mark where and when a kick was caught. */
