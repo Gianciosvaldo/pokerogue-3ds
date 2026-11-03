@@ -97,6 +97,16 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
         }
         if(m->flying && (one_high || (rank==9?m->to_y<=29:m->to_y>=24))){tx=m->to_x;ty=m->to_y;}
     }
+    /* Play action: the linebackers (in zone; in man the back's cover already follows him) and, half as far, the safeties step toward the
+     * fake before they drop. */
+    if(!rushing && football_live_fake_active(m)){
+        float bite=rank>=4 && rank<=6?(football_defense_is_zone(m->defense)?1.f:0.f):rank>=9?.5f:0.f;
+        if(bite>0){
+            float fx,fy;football_live_fake_point(m,&fx,&fy);
+            float bx=rank<=6?m->los+dir*1.5f:m->zone_x[rank]-dir*4,by=rank<=6?a->y+(fy-a->y)*.5f:m->zone_y[rank];
+            tx+=(bx-tx)*bite;ty+=(by-ty)*bite;
+        }
+    }
     /* Until the ball is handed off the rush cannot tell a run from a pass: the line reads the QB and the backfield, then commits.
      * Only the draw is built to fool it (it looks like a pass and the rush keeps coming). */
     if(m->hand_to<22 && rushing){

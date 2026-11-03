@@ -114,8 +114,8 @@ int football_live_ai_qb(FootballLive *m)
     if(m->thrown || m->flying || m->scramble || m->carrier!=off)return FB_AI_HOLD;
     /* The window opens when the called routes have had time to break: quick ones early, deep and play-action ones late. */
     const FootballPlayDefinition *play=football_playbook_get(m->play);
-    float opens=.85f+(play?fmaxf(0,play->gain)*.11f+(play->formation==FB_FORM_UNDER_CENTER?.4f:0):0);
-    if(football_playbook_screen(play))opens=.45f;
+    float opens=football_playbook_window(play);
+    if(football_playbook_fake(play))opens+=FB_LIVE_FAKE; /* the QB turns his back on the defense for the fake, then sets and reads: the crossers and the post need that time */
     static const uint8_t slot[5]={2,3,4,5,1};
     float to_go=(float)football_rules_distance(&m->rules),arm=12+qb->attributes.thp*.36f,pressure=100,ahead=100;
     for(unsigned d=def;d<def+11;++d){const FootballLiveActor *b=&m->actors[d];
@@ -187,9 +187,9 @@ void football_live_ai_receiver(FootballLive *m,unsigned i,float *x,float *y)
     float lane=m->snap_y[rank],inside=lane<26.67f?1.f:-1.f;
     float depth=(a->x-m->los)*dir-origin;
     bool settles=football_playbook_settles(p);
-    /* Read a short distance ahead along current momentum for the new concepts:
+    /* Read a short distance ahead along current momentum (every concept now has sharp breaks of its own):
      * the turn instruction must reach a fast receiver before the landmark. */
-    float anticipation=p->id>=FB_PASS_STICK?.15f:0;
+    float anticipation=.15f;
     FootballRoutePoint route=receiver_route(football_playbook_receiver_path(p,rank),settles,depth+a->vx*dir*anticipation,(a->y-lane)*inside+a->vy*inside*anticipation);
     float planned=dir*(settles?route.x-depth:fmaxf(.1f,route.x-depth));
     float tx=planned,ty=clampf(lane+route.y*inside,2,51)-a->y;

@@ -25,7 +25,8 @@ static float distance_to_path(FootballRouteView path,bool settles,float x,float 
 static void routes(void)
 {
     static const FootballAttributes profiles[]={{35,35,60,60,60,60,60,60},{99,25,60,60,60,60,60,60},{99,99,60,60,60,60,60,60}};
-    for(unsigned a=0;a<3;++a)for(unsigned away=0;away<2;++away)for(unsigned p=FB_PASS_STICK;p<FB_PLAY_COUNT;++p)for(unsigned rank=1;rank<=5;++rank){
+    for(unsigned a=0;a<3;++a)for(unsigned away=0;away<2;++away)for(unsigned p=0;p<FB_PLAY_COUNT;++p)for(unsigned rank=1;rank<=5;++rank){
+        if(football_playbook_get((FootballPlayId)p)->type!=FB_PLAY_PASS)continue; /* every pass: the four old concepts have their own RB, TE and slot routes now */
         setup(away,(FootballPlayId)p);unsigned off=away?11:0,i=off+rank,def=11-off;
         FootballLiveActor *actor=&m.actors[i];float sx=actor->x,sy=actor->y,dir=away?-1:1,inside=sy<26.67f?1:-1;
         const FootballPlayDefinition *play=football_playbook_get((FootballPlayId)p);

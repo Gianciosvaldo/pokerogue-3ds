@@ -325,8 +325,10 @@ static void step(FootballLive *m,FootballLiveInput input)
                 }else football_live_ai_carrier(m,i,&tx,&ty);
             }
             else if(football_live_is_blocker(m,i)){
-                unsigned mark=football_live_block_target(m,i);
-                if(mark<22){tx=m->actors[mark].x-a->x;ty=m->actors[mark].y-a->y;
+                float wx,wy;bool wall=football_live_screen_wall(m,rank,&wx,&wy);
+                unsigned mark=wall?255:football_live_block_target(m,i);
+                if(wall){tx=wx-a->x;ty=wy-a->y;} /* the screen's wall leaves its men and sets up ahead of the back */
+                else if(mark<22){tx=m->actors[mark].x-a->x;ty=m->actors[mark].y-a->y;
                     /* Pass protection sets and mirrors; it does not charge into the rushers. */
                     if(p->type==FB_PLAY_PASS && !m->caught){float len=hypotf(tx,ty);if(len>.55f){tx*=.55f/len;ty*=.55f/len;}}}
                 /* A run's eligible blockers release downfield when no defender

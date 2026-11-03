@@ -175,7 +175,7 @@ the same seeds give identical games.
   Spread (the old 2x2), Trips, Tight (tight end on the line with a wing behind him, the back straight behind the QB) and Jet. A run uses
   its usual alignment, or its alternate a third of the time, and the whole picture is mirrored about the middle of the field half the time.
   `snap_x/snap_y` hold where each player stood; routes, man coverage and the route lanes all read them, so nothing may assume that WR1 is on
-  the low side. Passes still start from Spread (their alignments come with their own concepts).
+  the low side. Passes have their own alignments (see Pass game).
 - **Handoff.** A run no longer gives the ball to the runner at the snap. It stays on the QB (`carrier` is the QB, `hand_to` names the runner)
   while the runner goes to the mesh point beside the QB (`football_live_mesh_point`, per play in `football_playbook_handoff`: the side, how far
   across, and a delay). The runner becomes the carrier within 1.2 yd of it or after `FB_LIVE_HANDOFF_MAX` (1.1 s), and a human gets control
@@ -193,6 +193,29 @@ the same seeds give identical games.
 
 `tests/run_game_test.c` covers the alignments (no overlaps, inside the field, both mirrors, strong side), the handoff (ball on the QB, runner not
 a blocker, control passes, input ignored, draw later than dive) and the balance of the eight runs (no run is a free yard or a certain loss).
+
+## Pass game
+
+- **Routes.** Each of the twelve concepts sends the five eligible players on five different routes (`support[]` in `football_playbook.c`: WR2, WR3,
+  TE and RB rows; WR1 runs the play's own `route[]`). The back is the checkdown or flat outlet on every concept but the screens (never past 8 yards),
+  no two receivers share a coordinate, and every route stays inside the field in each alignment its play uses. Routes are relative to the player's own
+  spot and inside-positive, so they hold in every alignment and mirror. Routes that sit in a window instead of running through it (`football_playbook_settles`):
+  Stick, Curls, Smash, PA Cross, Shallow Cross, Bubble. Mesh and Shallow Cross, and HB Screen and WR Bubble, no longer share routes.
+- **Alignments.** A pass uses its usual alignment or an alternate a third of the time (Spread, Trips or Tight, `football_playbook_alignment_for`), mirrored half the
+  time. Smash and Bubble avoid Trips (the slot runs to the sideline) and Flood avoids it too (the TE crosses the field); `tests/pass_game_test.c` checks every route
+  against the field edge and against each other in both alignments of every concept.
+- **Play action** (PA Cross, PA Post). The back's route runs through the mesh point beside the QB. For `FB_LIVE_FAKE` (0.8 s) the zone linebackers step up
+  toward the line and the safeties half as far (`football_live_fake_active`, `bite` in `football_live_defense_intent`); man coverage keeps its men. The CPU
+  QB waits `FB_LIVE_FAKE` longer before he looks for the open man (`football_playbook_window` plus the fake).
+- **HB Screen.** The QB waits 1.45 s (a bubble throws at once). After `FB_LIVE_SCREEN_RELEASE` (0.5 s) the three linemen who lined up nearest the back's
+  landing spot leave their men and set a wall three yards downfield of it (`football_live_screen_wall`); the other two keep the pocket. After the
+  catch every eligible player and lineman blocks as on a run. WR Bubble: WR1 and WR2 stem to the corners and sit there (they block once it is caught), WR3 swings
+  out behind them.
+- Quick-game sacks are rare by design (Stick, Mesh, Curls, screens 0 to 0.4%); the deep and slow concepts carry the sack risk (Flood 12%, PA Post 9%, PA Cross 8%, Four Verticals 6%).
+  `football_playbook_window` replaces the `gain` formula for the CPU QB's wait only for the screens; the other concepts still derive it from `gain`.
+
+`tests/pass_game_test.c` covers all of it (routes spaced and in bounds, distinct per concept, alignments and mirrors, the fake and its bite, the wall, settling routes
+from a goal-line snap).
 
 ## Special teams
 

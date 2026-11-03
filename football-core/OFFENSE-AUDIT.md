@@ -53,14 +53,14 @@ CPU QB, same sample as above, 800 snaps per play: comp% / inc% / int% / sack% = 
 
 | Play | Intended (card text) | What actually happens | Bugs | avg yd | comp% | int% | sack% |
 |---|---|---|---|---|---|---|---|
-| Quick Slants | Quick inside pass; safer, shorter gains | All five receivers run the same slant. **RB and WR1 both end at (22,16)**, i.e. 0.0 yd apart; WR3 and TE end 2 yd apart. "Safer" is a dead field (S3). | S3, S8 | 7.25 | 57.5 | 4.0 | 1.1 |
+| Quick Slants | Quick inside pass; safer, shorter gains | All five receivers run the same slant (the back too: a slant that ends 15 yd past the line, from his spot 7 yd behind it). WR3 and TE end 2.0 yd apart on the field. (The dump below is route-relative; RB and WR1 share the shape and end point, but the back starts 7 yd deeper, so on the field they are 6 yd apart.) "Safer" is a dead field (S3). | S3, S8 | 7.25 | 57.5 | 4.0 | 1.1 |
 | PA Cross | Fake the run, cross the middle | No fake (S7). All five run the same crossing route toward the middle at 8 yd; **WR1 and WR2 end 1.0 yd apart** (inside body width 1.3), the RB runs across the whole field to the sideline. | S7, S8 | 4.08 | 48.6 | 6.0 | **10.0** |
 | Four Verticals | Deep routes; more sacks and picks | Five receivers including the **RB and TE go 50 yd deep**; no checkdown. "More sacks and picks" is a dead field; the sacks come from the QB waiting for 50-yd routes. | S3, S8 | 14.51 | 51.5 | 4.6 | **10.2** |
-| PA Post | Long fake and deep break toward midfield | No fake (S7). All five run the post; **RB and WR1 both end at (40,16)** (0.0 yd). | S7, S8 | 11.54 | 47.6 | 4.1 | **11.6** |
+| PA Post | Long fake and deep break toward midfield | No fake (S7). All five run the post, the back included; WR3 and TE end 2.0 yd apart on the field. | S7, S8 | 11.54 | 47.6 | 4.1 | **11.6** |
 | Stick | Quick stick with flat and seam outlets | WR1 sticks at 7 yd, WR2 and WR3 run seams to 35 yd, TE and RB both go to the right flat. Works as described. Balance: 10.2 yd at 1.0% sacks, among the best. | none beyond S1 | 10.17 | 61.0 | 2.8 | 1.0 |
 | Mesh | Shallow crossers create traffic underneath | WR1 and WR2 cross at 4 to 5 yd, WR3 runs a 42-yd vertical, TE drags at 12 yd, RB runs the right flat. No rub/pick geometry. Safest deep-ish play: 0.2% sacks. | none beyond S1 | 10.24 | 53.9 | 5.4 | 0.2 |
 | Flood | Stretch one sideline at three depths | Concept is built correctly: left sideline gets WR1 deep (27), TE at 18, WR3 and RB in the flat. **Bad payoff:** 7.53 yd with **12% sacks** (under-center plus `gain` 4 makes the QB wait 1.69 s), the highest sack rate of any pass play, with a below-average gain. | none beyond S1; balance | 7.53 | 50.6 | 3.5 | **12.0** |
-| Curls | Settle in front of deep coverage | Works, but **RB ends at (8,34) and TE at (8,35)**, 1.0 yd apart: the two bodies overlap at the end of the route. | collision | 8.87 | 62.5 | 2.5 | 0.4 |
+| Curls | Settle in front of deep coverage | Works. (Route-relative, the back and TE end 1.0 yd apart; on the field the back starts 7 yd deeper and they are 6 yd apart, so this is not a collision. They do run the same curl shape.) | shared shape | 8.87 | 62.5 | 2.5 | 0.4 |
 | Smash | A short hitch under an inside corner route | Hitch by WR1 at 6 yd, corner by WR3, WR2 vertical, TE seam. Works. Balance: 13.66 yd, 36.5% of snaps gain 10+ yd, second best pass. | balance | 13.66 | 58.8 | 2.1 | 7.1 |
 | HB Screen | Invite pressure, then find the back in space | **Not a screen:** the offensive line never releases to form a wall, WR1 and WR2 run 45-yd verticals, and the throw is simply a flat pass to the RB. **WR3 also runs to the flat**, so it is the same play as WR Bubble (below). | S6, duplicate | 2.94 | 61.9 | 1.8 | 0.0 |
 | WR Bubble | Throw quickly to WR3 outside the formation | **Identical routes to HB Screen** for RB, WR2, WR3 and TE (same `support[5]` table). Only WR1's route (1 yd) and the QB's first read (RB vs WR3) differ. No stalk blocking by the outside receivers. | S6, duplicate | 6.20 | 59.9 | 2.4 | 0.0 |
@@ -68,7 +68,7 @@ CPU QB, same sample as above, 800 snaps per play: comp% / inc% / int% / sack% = 
 
 ## Route table dump (field coordinates: depth, lateral y)
 
-Each route is listed from the receiver's snap spot. For the four plays below, all five receivers use one table (mirrored by side).
+Each route is listed from the receiver's own snap spot (route-relative: the back, who stands 7 yd behind the line, only seems to share coordinates with WR1; PR 2 measures absolute field positions instead). For the four plays below, all five receivers use one table (mirrored by side).
 
 ```
 Quick Slants   RB (2,28)(6,25)(14,20)(22,16)   WR1 (2,4)(6,7)(14,12)(22,16)   WR2 (2,49)(6,46)(14,41)(22,37)   WR3 (2,13)(6,16)(14,21)(22,25)   TE (2,39)(6,36)(14,31)(22,27)
@@ -104,4 +104,29 @@ Before and after, same sample (800 snaps per play, mirror teams, CPU runner; "do
 | **Jet Sweep** | **4.21** (0% losses) | **0.51** (36 to 42% losses) | **8.19** (19.6% of runs 10+) | **2.58** (3.8% of runs 10+) |
 
 Known gaps left for later: the CPU's plain handoff costs about 0.3 yd a carry against the instant one; plain Inside/Outside Zone share one blocking rule; Counter has no weak-side counter step (the delay and the wing lead are its only differences); the CPU runs the lateral sweep leg poorly.
-**Still open:** S2 (route lines), S3 (dead balance fields), S7, S8 and the pass-play items (PR 2).
+
+**PR 2 (pass concepts) fixes:** S8 (the four old concepts now send the back, tight end and slot on their own routes; the back is an outlet that never runs past 8 yd; no two receivers on one coordinate on the field), the duplicates (Mesh vs Shallow Cross, HB Screen vs WR Bubble), S7 (play action: the back's route runs through the mesh point, the zone linebackers and safeties step up for 0.8 s, the CPU QB waits 0.8 s longer), the screen (the line releases to a wall, the QB waits for it), part of S1 for passes (Spread, Trips or Tight, mirrored half the time), and S3 for the texts only (seven card descriptions that promised a bonus the engine never applied now say what the play does). The `completion`, `sack`, `interception` and `speed_weight` fields stay dead in live mode.
+
+Corrections to this audit's own findings: the S8 and Curls "same coordinate" claims were route-relative (see the note under the route dump). On the field the real overlaps were PA Cross (WR1 and WR2 ended 1.0 yd apart, 0.0 in a Trips set), Slants and PA Post (WR3 and TE 2.0 yd apart), and the back running a slant to 15 yd past the line, a post to 35 and a vertical to 43.
+
+Same sample as before (100 seeds x 8 defenses, CPU QB, 1st and 10 at the 40; alignments vary as in a game):
+
+| Pass | yd before | yd after | sacks % before | after | 10+ yd % before | after |
+|---|---|---|---|---|---|---|
+| Quick Slants | 6.96 | 9.80 | 0.6 | 3.4 | 22.0 | 38.0 |
+| PA Cross | 4.70 | 11.12 | 8.9 | 7.8 | 11.1 | 42.1 |
+| Four Verticals | 14.81 | 15.81 | 7.9 | 6.0 | 47.9 | 53.4 |
+| PA Post | 12.47 | 10.78 | 12.5 | 8.6 | 43.4 | 43.8 |
+| Stick | 10.19 | 11.78 | 0.8 | 0.4 | 27.8 | 31.6 |
+| Mesh | 9.03 | 10.06 | 0.2 | 0.2 | 22.4 | 24.9 |
+| Flood | 7.10 | 8.46 | 8.9 | 12.2 | 33.0 | 32.2 |
+| Curls | 9.34 | 11.86 | 0.0 | 0.0 | 30.6 | 39.4 |
+| Smash | 13.88 | 12.90 | 5.6 | 6.0 | 38.2 | 41.1 |
+| HB Screen | 2.97 | 7.18 | 0.0 | 0.0 | 9.2 | 20.2 |
+| WR Bubble | 5.64 | 5.92 | 0.0 | 0.0 | 15.6 | 17.1 |
+| Shallow Cross | 9.73 | 11.85 | 3.8 | 4.2 | 24.1 | 37.2 |
+
+The mean over the twelve passes went from 8.9 to 10.5 yd a snap (the runs average about 1.2), so the gap between passing and running, already large, is a little larger. Nothing here tunes it; it is a balance call for later. Flood is unchanged and still carries the highest sack rate (12%).
+
+Known gaps left: the CPU QB's wait for every concept except the screens still comes from the old `gain` field; Bunch and Empty sets do not exist; WR1 and WR2 still run the same route on Slants, Verticals and Post (mirrored, on opposite sides); the screen's wall is three linemen walking to three fixed points, not a blocking scheme.
+**Still open:** S2 (pre-snap route lines, PR 3), S3 (the four balance fields stay dead).
