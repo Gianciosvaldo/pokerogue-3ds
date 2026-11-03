@@ -15,6 +15,8 @@
 
 #include <stdbool.h>
 
+#include "gc/run.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,6 +26,7 @@ enum { RSET_SPEED_SLOW = 2, RSET_SPEED_NORMAL = 3, RSET_SPEED_FAST = 4, RSET_SPE
 typedef struct {
   bool custom;
   int speed; /* RSET_SPEED_* */
+  int mode;  /* GAME_MODES_CLASSIC / ENDLESS / SPLICED_ENDLESS */
 } rset_values;
 
 /* The saved values ("settings" on the SD card), or the defaults (Classic, Normal) when there is none or it can't be read. */
@@ -36,6 +39,8 @@ float rset_time_scale(int speed);
 
 typedef struct {
   rset_values values;  /* what the screen starts with */
+  bool endless_unlocked;
+  bool spliced_endless_unlocked;
   void (*on_start)(const rset_values* v, void* arg);
   void (*on_back)(void* arg);
   void* arg;

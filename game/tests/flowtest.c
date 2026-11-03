@@ -80,12 +80,14 @@ void ui_push_options(const char* const* labels,int n,bool cancel,void (*done)(in
 static rset_args RS;
 static int n_rset;
 static bool rset_pick_custom;
+static int rset_pick_mode=GAME_MODES_CLASSIC;
 static float game_speed;
 void rset_open(const rset_args* a) {
   RS = *a;
   n_rset++;
   rset_values v = a->values;
   v.custom = rset_pick_custom;
+  v.mode = rset_pick_custom ? GAME_MODES_CLASSIC : rset_pick_mode;
   if (a->on_start) a->on_start(&v, a->arg);
 }
 void ui_set_game_speed(float scale) { game_speed = scale; }
@@ -238,10 +240,10 @@ static int n_start, n_resume;
 static bool fail_start, slot_empty_at_start, sys_saved_ok;
 static gc_system snap; /* 724 KB: not on the stack */
 
-static void new_run(gc_run* r, const char* seed) {
-  gc_run_new(r, GAME_MODES_CLASSIC, seed, 99);
+static void new_run_mode(gc_run* r, const char* seed, int mode) {
+  gc_run_new(r, mode, seed, 99);
   gc_starter team[6];
-  int n = 0, budget = gc_starter_budget(GAME_MODES_CLASSIC);
+  int n = 0, budget = gc_starter_budget(mode);
   for (int i = 0; i < PR_SPECIES_COUNT && n < 2; i++) {
     const int cost = gc_starter_cost(pr_species_table[i].id);
     if (cost <= 0 || cost > budget) continue;
@@ -258,6 +260,7 @@ static void new_run(gc_run* r, const char* seed) {
   while (gc_run_next_event(r, &e)) {
   }
 }
+static void new_run(gc_run* r,const char* seed){new_run_mode(r,seed,GAME_MODES_CLASSIC);}
 
 /* What the real driver does around a run, with a tiny battle: it starts observing with the run, sees one turn in which the player's lead
  * faints, and takes the report as the run ends (run_screen.c: drain() and end_run()). */
@@ -306,7 +309,8 @@ bool rs_start(const rs_config* c) {
   if (fail_start) return false;
   if (c->n_team > 0) {
     /* the run takes the team the player confirmed, as the real driver does */
-    gc_run_new(&RUN, GAME_MODES_CLASSIC, c->seed, 99);
+    const int mode=c->custom?GAME_MODES_CLASSIC:c->mode;
+    gc_run_new(&RUN, mode, c->seed, 99);
     RUN.sys = c->sys;
     if (c->custom) {   /* run_screen.c's new_run: the controller starts with the run, before its starters */
       co_begin_run(false);
@@ -321,7 +325,7 @@ bool rs_start(const rs_config* c) {
     while (gc_run_next_event(&RUN, &e)) {
     }
   } else {
-    new_run(&RUN, c->seed);
+    new_run_mode(&RUN,c->seed,c->custom?GAME_MODES_CLASSIC:c->mode);
   }
   CHECK(c->save, "a new run must save");
   observe_start(false);
@@ -1084,6 +1088,27 @@ int main(void) {
     CHECK(!ptx_apply_pending() && ptx_pending() == 0, "app_start finished it");
     CHECK(sysd_get()->n_eggs == res.n && sysd_get()->voucher_counts[GC_VOUCHER_REGULAR] < 10, "the pulled egg is in the profile and the voucher is spent");
     CHECK(ptx_result_of(txn, NULL), "and the result is kept");
+  }
+
+  /* Endless modes appear only after their matching profile unlock and are
+   * carried from New Game through the starter screen into the run. */
+  {
+    sysd_get()->unlocks.endless_mode=true;
+    rset_pick_custom=false;rset_pick_mode=GAME_MODES_ENDLESS;
+    T.on_choose(TITLE_NEW_GAME,T.arg);
+    CHECK(RS.endless_unlocked&&RS.values.mode==GAME_MODES_CLASSIC,"Endless is unlocked while New Game still defaults to Classic");
+    S.on_pick(3,S.arg);
+    CHECK(SH.mode==GAME_MODES_ENDLESS,"starter screen receives the selected Endless mode");
+    sh_confirm(1);
+    CHECK(CFG.mode==GAME_MODES_ENDLESS&&RUN.run.mode==GAME_MODES_ENDLESS,"the selected Endless mode starts in game-core");
+    driver_end(GC_SCREEN_GAME_OVER);R.on_done(R.arg);
+    sysd_get()->unlocks.spliced_endless_mode=true;rset_pick_mode=GAME_MODES_SPLICED_ENDLESS;
+    T.on_choose(TITLE_NEW_GAME,T.arg);
+    CHECK(RS.spliced_endless_unlocked,"Spliced Endless is gated by its own unlock");
+    S.on_pick(4,S.arg);sh_confirm(1);
+    CHECK(CFG.mode==GAME_MODES_SPLICED_ENDLESS&&RUN.run.mode==GAME_MODES_SPLICED_ENDLESS,"the selected Spliced Endless mode starts in game-core");
+    driver_end(GC_SCREEN_GAME_OVER);R.on_done(R.arg);
+    rset_pick_mode=GAME_MODES_CLASSIC;
   }
 
   /* Football has a separate entry: no classic/custom save slot or run is started. */

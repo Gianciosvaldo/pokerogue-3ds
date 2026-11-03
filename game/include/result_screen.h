@@ -44,6 +44,7 @@ typedef struct {
   const char* note;      /* one more line under the result (the report could not be stored...), NULL = none; copied */
   const wg_gains* gains; /* what the win gave (wg_collect), NULL = none; copied */
   bool ending;           /* a Classic win: the rival's ending dialogue comes before the end card */
+  bool endless_ending;   /* an Endless clear: upstream's endingEndless text comes before the end card */
   void (*on_done)(void* arg);
   void* arg;
 } result_args;

@@ -66,6 +66,7 @@ static rs_config run_config(int slot, bool fresh) {
     A.first_used = true;
   }
   c.custom = A.custom;
+  c.mode = A.custom ? GAME_MODES_CLASSIC : A.settings.mode;
   /* each run has its own randomness: the session's base, and when the player got here (frames since boot) */
   c.entropy = A.first.entropy ^ (A.runs_started * 0x9E3779B1u) ^ (ui_frame() * 2654435761u);
   A.runs_started++;
@@ -203,7 +204,8 @@ static void new_run_in(int slot) {
     snprintf(notice, sizeof notice, "%s The file is left as it is, and nothing is saved to it until it is removed.", why);
     text = notice;
   }
-  const sh_events ev = {on_starters_chosen, on_starters_exit, (void*)(long)slot};
+  const sh_events ev = {.on_start=on_starters_chosen,.on_exit=on_starters_exit,.arg=(void*)(long)slot,
+                        .mode=A.custom?GAME_MODES_CLASSIC:A.settings.mode};
   if (!sh_open(sysd_get(), text, &ev)) tell("There is no Pokemon to start with.");
 }
 
@@ -229,6 +231,7 @@ static void on_run_end(int kind, void* arg) {
   A.result.on_done = on_result_done;
   /* the win's unlocks, vouchers and ribbons: game-core has already changed the system data as the run was cleared */
   A.result.ending = A.result.victory && rs_run()->run.mode == GAME_MODES_CLASSIC;
+  A.result.endless_ending = A.result.victory && (rs_run()->run.mode == GAME_MODES_ENDLESS || rs_run()->run.mode == GAME_MODES_SPLICED_ENDLESS);
   static wg_gains gains;
   A.result.gains = A.result.victory && wg_collect(rs_run()->sys, rs_run(), &gains) > 0 ? &gains : NULL;
   /* The custom store takes the report BEFORE the slot is cleared. If the app stops between the two, Continue reloads the save from the
@@ -350,6 +353,11 @@ static void show_slots(slots_mode mode, int cursor) {
 static void on_settings_start(const rset_values* v, void* arg) {
   (void)arg;
   A.settings = *v;
+  if(A.settings.custom)A.settings.mode=GAME_MODES_CLASSIC;
+  const gc_system* sys=sysd_get();
+  if(A.settings.mode==GAME_MODES_ENDLESS&&(!sys||!sys->unlocks.endless_mode))A.settings.mode=GAME_MODES_CLASSIC;
+  if(A.settings.mode==GAME_MODES_SPLICED_ENDLESS&&(!sys||!sys->unlocks.spliced_endless_mode))
+    A.settings.mode=sys&&sys->unlocks.endless_mode?GAME_MODES_ENDLESS:GAME_MODES_CLASSIC;
   A.custom = v->custom;
   show_slots(SLOTS_NEW, 0);
   char why[CR_WHY_LEN];
@@ -380,7 +388,9 @@ static void on_title(title_choice c, void* arg) {
     }
     case TITLE_NEW_GAME: {
       A.settings = rset_load(); /* as the screen last left them (B keeps a changed speed too) */
-      const rset_args a = {A.settings, on_settings_start, NULL, NULL};
+      const gc_system* sys=sysd_get();
+      const rset_args a = {.values=A.settings,.endless_unlocked=sys&&sys->unlocks.endless_mode,
+        .spliced_endless_unlocked=sys&&sys->unlocks.spliced_endless_mode,.on_start=on_settings_start};
       rset_open(&a);
       break;
     }

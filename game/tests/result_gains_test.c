@@ -104,6 +104,10 @@ static bool g_no_ending_text;
 const char* i18n_t(char* out, int n, const char* key, ...) {
   if (!strcmp(key, "miscDialogue:ending") && !g_no_ending_text)
     snprintf(out, (size_t)n, "@c{shock}You're back?$@c{smile}Let's go home.");
+  else if (!strcmp(key, "miscDialogue:endingEndless"))
+    snprintf(out, (size_t)n, "Congratulations on reaching the current end!$More content is prophesized for a future update.");
+  else if (!strcmp(key, "miscDialogue:endingName"))
+    snprintf(out, (size_t)n, "Devs");
   else if (!strcmp(key, "trainerNames:rivalFemale"))
     snprintf(out, (size_t)n, "Ivy");
   else if (!strcmp(key, "miscDialogue:ending"))
@@ -547,6 +551,19 @@ int main(void) {
   {
     n_cs_log = 0;
     n_done = 0;
+    result_args e = args(true,NULL,NULL);
+    e.run.wave=5850;e.endless_ending=true;
+    result_screen_open(&e);
+    CHECK(n_cs_log==1&&!strcmp(g_cs_log[0],"reset"),"Endless ending resets character state without showing a rival");
+    run(500);draw_top();draw_bottom();
+    CHECK(!drew("images/cg/end_m")&&n_cs_draw==0,"Endless ending text precedes the end card without a portrait");
+    CHECK(!strcmp(g_box_text,"Congratulations on reaching the current end!")&&!strcmp(g_name,"Devs"),"upstream Endless ending text and name appear (%s, %s)",g_box_text,g_name);
+    press(BTN_ACTION);draw_bottom();CHECK(!strcmp(g_box_text,"More content is prophesized for a future update."),"the second Endless ending page is shown (%s)",g_box_text);
+    press(BTN_ACTION);run(1520);draw_bottom();
+    CHECK(!strcmp(g_box_text,"You cleared the run at wave 5850!"),"the end card follows the Endless ending (%s)",g_box_text);
+    press(BTN_ACTION);CHECK(n_done==1,"A leaves the Endless clear result");
+
+    n_cs_log=0;n_done=0;
     g_no_ending_text = true;
     result_args a = args(true, NULL, NULL);
     a.ending = true;

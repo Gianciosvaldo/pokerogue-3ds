@@ -421,7 +421,8 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   if (H.n == 0) return false;
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
-  const starter_args args = {H.entries, H.n, gc_starter_budget(GAME_MODES_CLASSIC), H.all, H.n_all};
+  const int mode=ev->mode>=GAME_MODES_CLASSIC&&ev->mode<=GAME_MODES_SPLICED_ENDLESS?ev->mode:GAME_MODES_CLASSIC;
+  const starter_args args = {H.entries, H.n, gc_starter_budget(mode), H.all, H.n_all};
   const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle};
   starter_open(&args, &events);
   ui_set(&g_screen);
