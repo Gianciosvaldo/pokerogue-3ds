@@ -443,7 +443,7 @@ enum {
 extern const char *const gc_stub_name[GC_STUB_COUNT_];
 
 /* ---------------------------------------------------------------- the calls */
-/* A new run in `mode` (GameModes; only CLASSIC is supported for now) from `seed` (upstream's 24-char
+/* A new run in `mode` (GameModes: CLASSIC, ENDLESS, SPLICED_ENDLESS; the others are partly ported) from `seed` (upstream's 24-char
  * run seed; NULL = a new random one from `entropy`). Waits on the STARTERS screen. */
 void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy);
 
@@ -507,7 +507,7 @@ int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by nativ
 /* GC_TARGET_FUSE's party filter (FusePokemonModifierType.selectFilter) for one pick: false for a Pokemon that is already fused, or a
  * fainted one in a Hardcore run. The party screen shows "it won't have any effect" for it */
 bool gc_fusion_pickable(const gc_run *run, int party);
-int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
+int gc_starter_budget(int mode);                       /* the cost limit: 10 in Classic, 15 in Endless */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
 void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */

@@ -326,6 +326,131 @@ void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy)
     run->screen.kind = GC_SCREEN_STARTERS;
 }
 
+/* The constructor's tera type: randSeedItem(getTypes({includeTeraType: false, bypassSummonData: true, ignoreThirdType: true})), one
+ * draw for two types and none for one (initBattle replaces the result with the starter's own tera type) */
+static bool constructor_tera_draw(gc_run *run, const pr_enemy_gen *g, int species)
+{
+    int8_t types[2];
+    const int n = pr_run_enemy_types(g, species, types);
+    if (n < 1) return false;
+    if (n > 1) (void)pr_rng_integer_in_range(&run->run.rng, 0, n - 1);
+    return true;
+}
+
+/* A Spliced Endless starter's fusion. Upstream fuses it twice, and both draw from Phaser.Math.RND:
+ *  1. the Pokemon constructor (isSplicedOnly, level 5 > 1): calculateStats(), generateFusionSpecies() with the ordinary filter
+ *     (species.getCompatibleFusionSpeciesFilter()), then luck = shiny + fusionShiny luck, then the tera type
+ *     randSeedItem(getTypes({includeTeraType: false, bypassSummonData: true, ignoreThirdType: true})) over the fused types
+ *     (one draw for two types, none for one);
+ *  2. SelectStarterPhase.initBattle, after the starter's luck is set from the dex: generateFusionSpecies(true), the starter filter,
+ *     which replaces everything the first one chose (gc_mon_starter_fusion).
+ * The first is run here only for the draws it makes (run-core's constructor fusion, the same rolls); its result is replaced. The
+ * Ability Charm does not reach either: HiddenAbilityRateBoosterModifier is applied only when !this.hasTrainer(), and a player's
+ * Pokemon has a trainer. */
+static bool constructor_fusion_draws(gc_run *run, gc_mon *m)
+{
+    pr_pokemon *p = &m->b;
+    pr_enemy_gen tmp;
+    memset(&tmp, 0, sizeof tmp);
+    tmp.id = p->id;
+    tmp.form = p->form;
+    tmp.nature = p->nature;
+    tmp.fusion_species = -1;
+    pr_enemy_gen_ctx ctx;
+    memset(&ctx, 0, sizeof ctx);
+    ctx.species = p->species;
+    ctx.level = p->level;
+    ctx.wave = run->wave;
+    ctx.biome = run->biome;
+    ctx.wave_cycle_offset = run->wave_cycle_offset;
+    ctx.battle_type = BATTLE_TYPE_WILD;
+    ctx.trainer_type = -1;
+    if (pr_run_generate_fusion(&run->run, &ctx, &tmp) < 0) return false;
+    return constructor_tera_draw(run, &tmp, p->species);
+}
+
+/* Pokemon.generateFusionSpecies(true) (SelectStarterPhase.initBattle, after the starter's luck):
+ *   hasHiddenAbility = !randSeedInt(BASE_HIDDEN_ABILITY_RATE); randAbilityIndex = randSeedInt(2);
+ *   fusionSpecies = randomSpecies(waveIndex || 0, level, false, filter, true): randSeedItem of the catchable species the filter
+ *     keeps, as they are (filterAllEvolutions), in registry order. The starter filter: hasEvolutions && !hasPrevolution && not a
+ *     sub-legendary / legendary / mythical && !isTrainerForbidden() && not this species && not Ditto;
+ *   fusionAbilityIndex = abilityHidden && hasHiddenAbility ? 2 : ability2 === ability1 ? 0 : randAbilityIndex;
+ *   fusionShiny = shiny, fusionVariant = variant; fusionGender = (id % 256) * 0.390625 < malePercent (genderless without one);
+ *   fusionFormIndex = getSpeciesFormIndex(fusionSpecies, fusionGender, getNature(), true); fusionLuck = luck.
+ * The form roll is run-core's egg-phase one (ignoreArena, no trainer). For the species this filter keeps it is the same roll: the
+ * egg phase only changes Gimmighoul in Classic / Challenge, and the nature only Toxtricity (which has a prevolution).
+ * Upstream recalculates the stats at the next updateModifiers, before the first battle; this is that recalculation. */
+#define GC_BASE_HIDDEN_ABILITY_RATE 256   /* src/data/balance/rates.ts */
+bool gc_mon_starter_fusion(gc_run *run, gc_mon *m)
+{
+    pr_rng *rng = &run->run.rng;
+    const bool has_hidden = !pr_rng_seed_int(rng, GC_BASE_HIDDEN_ABILITY_RATE, 0);
+    const int rand_ability = pr_rng_seed_int(rng, 2, 0);
+    static uint16_t list[1400];
+    int n = 0;
+    for (int i = 0; i < pr_species_gen_count && n < (int)(sizeof list / sizeof list[0]); i++) {
+        const pr_species_gen *c = &pr_species_gens[i];
+        if (!c->catchable || !c->has_evolutions || c->has_prevolution || c->sub_legendary || c->legendary || c->mythical
+            || c->trainer_forbidden || c->id == m->b.species || c->id == SPECIES_ID_DITTO)
+            continue;
+        list[n++] = c->id;
+    }
+    if (!n) return false;   /* randSeedItem([]) */
+    const int fusion = list[n == 1 ? 0 : pr_rng_integer_in_range(rng, 0, n - 1)];
+    const pr_species_gen *fs = gc_species_gen(fusion);
+    if (!fs) return false;
+    pr_pokemon *p = &m->b;
+    p->fusion_species = (uint16_t)fusion;
+    p->fusion_ability_index = (int8_t)(fs->has_hidden && has_hidden ? 2 : fs->same_abilities ? 0 : rand_ability);
+    m->fusion_shiny = p->shiny;
+    m->fusion_variant = m->variant;
+    p->fusion_gender = (int8_t)(fs->male_percent < 0 ? GENDER_GENDERLESS
+                                : (p->id % 256) * 0.390625 < fs->male_percent ? GENDER_MALE : GENDER_FEMALE);
+    p->fusion_gender_known = true;
+    pr_enemy_gen_ctx ctx;
+    memset(&ctx, 0, sizeof ctx);
+    ctx.species = fusion;
+    ctx.level = p->level;
+    ctx.wave = run->wave;
+    ctx.biome = run->biome;
+    ctx.wave_cycle_offset = run->wave_cycle_offset;
+    ctx.battle_type = BATTLE_TYPE_WILD;
+    ctx.trainer_type = -1;
+    const unsigned before = run->run.unported;
+    const int form = pr_run_get_egg_form_index(rng, &run->run, &ctx, p->fusion_gender);
+    if (run->run.unported != before) return false;
+    p->fusion_form = (uint8_t)form;
+    m->fusion_luck = m->luck;
+    pr_update_passive(&run->bt, p);
+    pr_calculate_stats(&run->bt, p);
+    return true;
+}
+
+/* SelectStarterPhase.initBattle: the party at the starting level, each built on Phaser.Math.RND, a Spliced Endless starter fused as
+ * it is made (before the next one). Every Pokemon's constructor also draws its tera type (overwritten by initBattle with the
+ * starter's own), which shifts the ids of the members after a two-type one. */
+void gc_starters_build_party(gc_run *run, const gc_starter *starters, int n)
+{
+    const int level = pr_run_get_starting_level(&run->run);
+    /* the constructor's calculateStats reads gameMode.isSplicedOnly (the other modes leave it to the first encounter's setup) */
+    if (run->run.mode == GAME_MODES_SPLICED_ENDLESS) run->bt.game_mode = (int8_t)run->run.mode;
+    for (int i = 0; i < n; i++) {
+        gc_mon_new_player(run, &run->party[i], &starters[i], level);
+        if (run->run.mode == GAME_MODES_SPLICED_ENDLESS) {
+            if (!(constructor_fusion_draws(run, &run->party[i]) && gc_mon_starter_fusion(run, &run->party[i])))
+                gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        } else {
+            pr_enemy_gen plain;
+            memset(&plain, 0, sizeof plain);
+            plain.form = run->party[i].b.form;
+            plain.fusion_species = -1;
+            if (!constructor_tera_draw(run, &plain, run->party[i].b.species)) gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        }
+        run->party_order[i] = (int8_t)i;
+    }
+    run->n_party = n;
+}
+
 bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const char **why)
 {
     const char *dummy;
@@ -341,13 +466,7 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
         cost += c;
     }
     if (cost > (double)gc_starter_budget(run->run.mode) + 1e-9) { *why = "starterSelectUiHandler:cost"; return false; }
-    /* SelectStarterPhase.initBattle: the party at the starting level, each built on Phaser.Math.RND */
-    const int level = pr_run_get_starting_level(&run->run);
-    for (int i = 0; i < n; i++) {
-        gc_mon_new_player(run, &run->party[i], &starters[i], level);
-        run->party_order[i] = (int8_t)i;
-    }
-    run->n_party = n;
+    gc_starters_build_party(run, starters, n);
     memset(&run->screen, 0, sizeof run->screen);
     gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
     gc_run_until_screen(run);

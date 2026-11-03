@@ -745,7 +745,9 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
 }
 
 /* ---- starters ---- */
-int gc_starter_budget(int mode) { (void)mode; return 10; }   /* the classic and endless cost limit */
+/* getRunValueLimit (starter-select-ui-utils.ts): 15 in Endless and Spliced Endless, 10 otherwise (the STARTER_POINTS challenges
+ * aren't ported) */
+int gc_starter_budget(int mode) { return mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS ? 15 : 10; }
 
 /* speciesDataRegistry.getStarterCost (gen/out/gc_starters.c); -1 = not a starter species */
 int gc_starter_cost(int species)
