@@ -28,11 +28,31 @@ static void arrange(FootballLive *m)
         *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*depth,.y=oy[i],.roster=(uint8_t)os,.block_peer=255,.facing=(int8_t)dir,.home=off==0};
         *b=(FootballLiveActor){.attributes=m->units[1-m->rules.offense][ds],.x=m->los+dir*dx[i],.y=dy[i],.roster=(uint8_t)ds,.block_peer=255,.facing=(int8_t)-dir,.home=def==0};
     }
+    m->hand_to=FB_NO_ACTOR;m->align=FB_ALIGN_SPREAD;m->flip=0;
+    int run_side=random32(m)&1?1:-1;
+    if(!m->special && play){
+        /* Where the five eligible players stand depends on the play (its usual alignment, or its alternate a third of the time)
+         * and is mirrored half the time, so the same call does not always start from the same picture. */
+        FootballAlignmentId id=football_playbook_alignment_for(play,random32(m)%100<35?1:0);
+        const FootballAlignment *al=football_playbook_alignment(id);
+        m->align=(uint8_t)id;m->flip=random32(m)&1;
+        FootballLiveActor *rb=&m->actors[off+1];
+        rb->x=m->los+dir*(ox[1]+al->rb_back+(play->formation==FB_FORM_UNDER_CENTER?2:0));rb->y=26.667f+al->rb_dy;
+        for(unsigned k=0;k<4;++k){FootballLiveActor *w=&m->actors[off+2+k];w->x=m->los+dir*al->wr[k].depth;w->y=al->wr[k].y;}
+        if(m->flip)for(unsigned k=1;k<6;++k)m->actors[off+k].y=53.333f-m->actors[off+k].y;
+        /* The runs with a lead blocker go to the strong side, the one the tight end lines up on: run_side is set so that the end of the
+         * called path (route y, inside-positive around the middle of the field) lands there. */
+        if(football_playbook_strong_side(play) && play->route_count){
+            bool high=m->actors[off+5].y>26.667f;int sign=play->route[play->route_count-1].y>0?1:-1;
+            run_side=high?-sign:sign;
+        }
+    }
+    for(unsigned i=0;i<11;++i){m->snap_x[i]=m->actors[off+i].x;m->snap_y[i]=m->actors[off+i].y;}
     football_live_defense_setup(m);
     m->target=(uint8_t)(off+2);
     /* The human always plays HOME: the QB with the ball, or a linebacker without it. */
     m->carrier=(uint8_t)off;m->controlled=!football_live_cpu(m,(FootballSide)m->rules.offense)?0:!football_live_cpu(m,(FootballSide)(1-m->rules.offense))?5:FB_NO_ACTOR;
-    m->run_side=random32(m)&1?1:-1;
+    m->run_side=(int8_t)run_side;
     m->ball_x=m->actors[off].x;m->ball_y=m->actors[off].y;m->ball_z=0;
     m->flying=m->thrown=m->caught=m->loose=m->scramble=false;m->elapsed=m->juke=m->cooldown=0;
     memset(m->fx,0,sizeof m->fx);m->fx_next=0;
@@ -170,6 +190,21 @@ void football_live_move(FootballLiveActor *a,float tx,float ty,bool sprint)
     a->x=limit(a->x+a->vx*FB_LIVE_STEP,0,120);a->y+=a->vy*FB_LIVE_STEP;
     if(a->contact>0)a->contact-=FB_LIVE_STEP;
 }
+/* Where the ball changes hands: beside the QB and a step toward the line, on the side the play calls for (football_playbook_handoff).
+ * Stable during the handoff: it reads the QB and the runner's snap spot, not where he is now. */
+void football_live_mesh_point(const FootballLive *m,float *x,float *y)
+{
+    unsigned off=offense_base(m);float dir=direction(m);
+    const FootballLiveActor *qb=&m->actors[off];
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    FootballHandoff h=football_playbook_handoff(p);
+    bool sweep=p && p->id==FB_RUN_JET_SWEEP,under=p && p->formation==FB_FORM_UNDER_CENTER;
+    /* The strong side is where the called path ends: below or above the middle of the field. */
+    float end=p && p->route_count?26.67f-m->run_side*p->route[p->route_count-1].y:26.67f,strong=end>26.67f?1.f:-1.f;
+    float lined=m->hand_to<22?m->snap_y[m->hand_to-off]-m->snap_y[0]:0;
+    float side=h.side==FB_MESH_STRONG?strong:h.side==FB_MESH_WEAK?-strong:fabsf(lined)>.4f?(lined>0?1.f:-1.f):strong;
+    *x=qb->x+dir*(sweep?1.8f:under?-.3f:.9f);*y=qb->y+side*h.across;
+}
 static void throw_ball(FootballLive *m,unsigned receiver)
 {
     unsigned off=offense_base(m);if((m->actors[off].x-m->los)*direction(m)>0 || receiver>=5 || m->flying || m->thrown || m->carrier!=off)return;
@@ -244,7 +279,7 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(m->phase==FB_LIVE_SET){
         if((!cpu && (input.pressed&FB_LIVE_ACTION)) || (cpu && m->elapsed>=1.2f)){
             m->phase=FB_LIVE_PLAY;m->elapsed=0;
-            if(!m->special && p->type==FB_PLAY_RUN){m->carrier=(uint8_t)(off+football_playbook_runner(p));if(!cpu)m->controlled=m->carrier;}
+            if(!m->special && p->type==FB_PLAY_RUN)m->hand_to=(uint8_t)(off+football_playbook_runner(p)); /* the ball is the QB's until the handoff */
         }
         return;
     }
@@ -253,23 +288,36 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(!cpu && input.receiver>=0)throw_ball(m,(unsigned)input.receiver);
     if(m->cooldown>0)m->cooldown-=FB_LIVE_STEP;
     if(m->juke>0)m->juke-=FB_LIVE_STEP;
-    if(!cpu && (input.pressed&FB_LIVE_JUKE) && m->cooldown<=0){m->juke=.35f;m->cooldown=1.6f;football_live_fx(m,FB_FX_JUKE,m->carrier,22,m->actors[m->carrier].vy<0?-1:1);}
+    if(!cpu && m->hand_to>=22 && (input.pressed&FB_LIVE_JUKE) && m->cooldown<=0){m->juke=.35f;m->cooldown=1.6f;football_live_fx(m,FB_FX_JUKE,m->carrier,22,m->actors[m->carrier].vy<0?-1:1);}
     if(cpu && p->type==FB_PLAY_PASS && !m->thrown && !m->scramble){
         int read=football_live_ai_qb(m);
         if(read>=0 && read<5)throw_ball(m,(unsigned)read);
         else if(read==FB_AI_THROW_AWAY)throw_away(m);
         else if(read==FB_AI_SCRAMBLE)m->scramble=true;
     }
+    float mesh_x=0,mesh_y=0;
+    if(m->hand_to<22){
+        /* The handoff is done when the runner reaches the mesh point beside the QB (or, if bodies in the way keep him from it, a
+         * moment later anyway); the human gets the runner then. */
+        football_live_mesh_point(m,&mesh_x,&mesh_y);
+        const FootballLiveActor *runner=&m->actors[m->hand_to];
+        if(m->elapsed>=football_playbook_handoff(p).delay && (distance(runner->x,runner->y,mesh_x,mesh_y)<=1.2f || m->elapsed>=FB_LIVE_HANDOFF_MAX)){
+            m->carrier=m->hand_to;m->hand_to=FB_NO_ACTOR;if(!cpu)m->controlled=m->carrier;
+        }
+    }
+    bool meshing=m->hand_to<22;
     FootballLiveActor *carrier=&m->actors[m->carrier];
     float intent[22][2];
     for(unsigned i=0;i<22;++i){
         FootballLiveActor *a=&m->actors[i];float tx=0,ty=0;
         bool attack=i>=off && i<off+11;
-        if(i==m->controlled){tx=limit(input.x,-1,1);ty=limit(input.y,-1,1);}
+        if(i==m->controlled && !meshing){tx=limit(input.x,-1,1);ty=limit(input.y,-1,1);}
         else if(attack){
             unsigned rank=i-off;
-            if(i==m->carrier){
-                if(rank==0 && p->type==FB_PLAY_PASS && !m->caught && !m->scramble){
+            if(meshing && i==m->hand_to){if(m->elapsed>=football_playbook_handoff(p).delay){tx=mesh_x-a->x;ty=mesh_y-a->y;}}
+            else if(i==m->carrier){
+                if(meshing){tx=ty=0;} /* the QB turns with the ball and waits for the runner */
+                else if(rank==0 && p->type==FB_PLAY_PASS && !m->caught && !m->scramble){
                     /* Hold the pocket, sliding away from the closest rusher. */
                     tx=0;ty=(26.67f-a->y)*.2f;float near=5;
                     for(unsigned d=def;d<def+11;++d){float g=distance(a->x,a->y,m->actors[d].x,m->actors[d].y);

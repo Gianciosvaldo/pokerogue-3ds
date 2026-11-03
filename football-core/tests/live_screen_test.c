@@ -108,6 +108,8 @@ int main(void)
     for(unsigned i=0;i<30;++i){tick();}
     assert(career()->live.phase==FB_LIVE_SET);
     down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
+    /* A run starts with the ball on the QB: the human gets the runner when the handoff is done. */
+    for(unsigned i=0;i<90 && career()->live.hand_to<22;++i){tick();}
     float y=career()->live.actors[career()->live.controlled].y;circle.dy=156;
     for(unsigned i=0;i<10;++i){tick();}
     assert(career()->live.actors[career()->live.controlled].y<y);circle.dy=0;

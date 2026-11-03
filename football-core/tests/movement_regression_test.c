@@ -150,7 +150,7 @@ int main(void)
     CHECK(backward==0,"unobstructed receivers turned backward on %u frames",backward);
     for(unsigned profile=1;profile<3;++profile)for(unsigned away=0;away<2;++away){
         setup(away,FB_PASS_VERTICALS);unsigned off=away?11:0,def=11-off,i=off+2,d=def+7;float dir=away?-1:1;
-        isolate(i,d);m.defense=FB_DEF_MAN;m.actors[i].y=m.actors[d].y=6;m.actors[i].attributes=profiles[profile];m.elapsed=3;m.actors[i].x=m.los+dir*15;m.actors[d].x=m.actors[i].x+dir*1.55f;
+        isolate(i,d);m.defense=FB_DEF_MAN;m.actors[i].y=m.actors[d].y=6;m.snap_y[2]=6;m.actors[i].attributes=profiles[profile];m.elapsed=3;/* the formation may have been mirrored: the route follows the snap spot, so move that too */m.actors[i].x=m.los+dir*15;m.actors[d].x=m.actors[i].x+dir*1.55f;
         float before=m.actors[i].x;
         for(unsigned f=0;f<240;++f)football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
         float gain=(m.actors[i].x-before)*dir;

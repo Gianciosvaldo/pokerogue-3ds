@@ -7,7 +7,7 @@ static unsigned offense(const FootballLive *m){return m->rules.offense==FB_HOME?
 bool football_live_is_blocker(const FootballLive *m,unsigned actor)
 {
     unsigned off=offense(m);
-    if(actor<off || actor>=off+11 || actor==m->carrier)return false;
+    if(actor<off || actor>=off+11 || actor==m->carrier || actor==m->hand_to)return false;
     if(m->special && m->stage!=FB_STAGE_RETURN){
         /* The kicking line holds the rushers off until the foot meets the ball; the gunners are already gone, and a
          * kickoff has no line to hold. */
@@ -24,6 +24,30 @@ static bool pass_protection(const FootballLive *m)
     return !m->special && p && p->type==FB_PLAY_PASS && !m->caught && m->carrier==off &&
            (m->actors[off].x-m->los)*(off?-1:1)<=.5f;
 }
+bool football_live_run_path(const FootballLive *m,float depth,float lat,float look,float *x,float *y)
+{
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    if(!p || p->type!=FB_PLAY_RUN || !p->route_count)return false;
+    /* The first point of the called path still ahead of the runner: 2.5 yards further downfield than he is, or not far behind him
+     * and still more than 2.5 yards to the side (the sweep's first points run sideways behind the line). Then `look` yards on along
+     * the path. Route y is inside-positive around the middle of the field. */
+    unsigned k=0;
+    while(k+1<p->route_count && !(p->route[k].x>depth+2.5f || (p->route[k].x>depth-1.f && p->route[k].x<=.5f && fabsf(p->route[k].y-lat)>4.f)))++k;
+    float cx=p->route[k].x,cy=p->route[k].y,left=look;
+    for(++k;k<p->route_count && left>0;++k){
+        float dx=p->route[k].x-cx,dy=p->route[k].y-cy,len=hypotf(dx,dy);
+        if(len>left){cx+=dx*left/len;cy+=dy*left/len;left=0;break;}
+        left-=len;cx=p->route[k].x;cy=p->route[k].y;
+    }
+    if(left>0)cx+=left; /* past the last point: straight on */
+    *x=m->los+(m->rules.offense==FB_HOME?1.f:-1.f)*cx;*y=26.67f-m->run_side*cy;return true;
+}
+/* The player who escorts the runner (the sweep's back, the wing on power, counter and toss), or 255 when the play has none. */
+static unsigned lead_actor(const FootballLive *m)
+{
+    unsigned off=offense(m);FootballLead lead=m->special?FB_LEAD_NONE:football_playbook_lead(football_playbook_get(m->play));
+    return lead==FB_LEAD_RB?off+1:lead==FB_LEAD_WING?off+4:255;
+}
 unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
 {
     unsigned off=offense(m),def=11-off;
@@ -31,7 +55,8 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
     const FootballLiveActor *b=&m->actors[blocker];
     if(b->block_peer<22)return b->block_peer;
     unsigned best=255;float score=64;
-    bool running=m->special || m->caught || m->carrier!=off || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
+    const FootballPlayDefinition *play=football_playbook_get(m->play);
+    bool running=m->special || m->caught || m->carrier!=off || (play && play->type==FB_PLAY_RUN) || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
     if(pass_protection(m)){
         unsigned plan[5]={255,255,255,255,255};bool used_blocker[5]={0},used_rusher[11]={0};
         /* Make one shared assignment, rather than five independent nearest-neighbor
@@ -64,6 +89,19 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
             plan[line]=rush;used_blocker[line]=true;used_rusher[rush-def]=true;
         }
         return plan[blocker-off-6];
+    }
+    if(lead_actor(m)==blocker && !m->caught){
+        /* Escort: go for the defender nearest the runner's path a few yards ahead, the one who would otherwise make the tackle. */
+        const FootballLiveActor *runner=&m->actors[m->hand_to<22?m->hand_to:m->carrier];
+        float px,py;
+        if(football_live_run_path(m,(runner->x-m->los)*(off?-1:1),(26.67f-runner->y)*m->run_side,4,&px,&py)){
+            unsigned pick=255;float near=100;
+            for(unsigned d=def;d<def+11;++d){const FootballLiveActor *a=&m->actors[d];
+                float dx=a->x-px,dy=a->y-py,range=dx*dx+dy*dy+(a->block_peer<22?36.f:0);
+                if(range<near){near=range;pick=d;}
+            }
+            if(pick<22)return pick;
+        }
     }
     for(unsigned d=def;d<def+11;++d){const FootballLiveActor *a=&m->actors[d];
         bool user_rush=d==m->controlled && fabsf(a->x-m->actors[off].x)<10;

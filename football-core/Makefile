@@ -217,6 +217,13 @@ ai-test: core-libs
 	$(BUILD)/ai_test
 test: ai-test
 
+.PHONY: run-game-test
+run-game-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/run_game_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/run_game_test
+	$(BUILD)/run_game_test
+test: run-game-test
+
 .PHONY: special-test
 special-test: core-libs
 	mkdir -p $(BUILD)

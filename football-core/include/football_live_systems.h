@@ -9,6 +9,13 @@
 #define FB_AI_THROW_AWAY 5
 #define FB_AI_SCRAMBLE 6
 uint32_t football_live_random(FootballLive *match);
+/* A handoff that has not happened after this long happens anyway. */
+#define FB_LIVE_HANDOFF_MAX 1.1f
+/* Where the QB hands the ball over on this run (football_live.c). */
+void football_live_mesh_point(const FootballLive *match,float *x,float *y);
+/* The point `look` yards further along the called run's path than the runner is now (he is `depth` yards past the line and `lat` yards
+ * to the run_side of the middle of the field), in field coordinates (football_live_ai.c). */
+bool football_live_run_path(const FootballLive *match,float depth,float lat,float look,float *x,float *y);
 /* Shared movement step for a player's intended direction (-1..1 per axis). */
 void football_live_move(FootballLiveActor *actor,float x,float y,bool sprint);
 /* Kick plays (football_live_special.c): formation, one fixed step, and the end of the dead ball. */
