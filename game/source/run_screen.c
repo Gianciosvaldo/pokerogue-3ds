@@ -1797,7 +1797,8 @@ static void screen_step(void) {
 /* a random team within the cost budget, from every species with a starter cost (game-core's own rule). With system data on the
  * run, from the species it lets the player pick, each with the defaults the starter select screen would give it. */
 static int random_team(gc_starter* out) {
-  double budget = gc_starter_budget(GAME_MODES_CLASSIC);
+  const int mode=G.cfg.custom?GAME_MODES_CLASSIC:G.cfg.mode;
+  double budget = gc_starter_budget(mode);
   int n = 0;
   const gc_system* sys = G.run.sys;
   if (sys) {
@@ -1840,7 +1841,8 @@ static bool new_run(bool from_black) {
   G.fade_done = from_black;
   G.rng = 0x9E3779B97F4A7C15ull ^ ((uint64_t)G.cfg.entropy * 0xD1B54A32D192ED03ull) ^ ((uint64_t)G.st.runs * 0x2545F4914F6CDD1Dull);
   rnd(1);
-  gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
+  const int mode=G.cfg.custom?GAME_MODES_CLASSIC:(G.cfg.mode>=GAME_MODES_CLASSIC&&G.cfg.mode<=GAME_MODES_SPLICED_ENDLESS?G.cfg.mode:GAME_MODES_CLASSIC);
+  gc_run_new(&G.run, mode, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   G.run.sys = G.cfg.sys;
   ach_reset();
   G.have_defeat = false;

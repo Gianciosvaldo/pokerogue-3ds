@@ -38,6 +38,7 @@ static struct {
   stage_id stage;
   float stage_ms;
   bool talk;                /* the rival's ending dialogue comes first */
+  bool endless_talk;        /* Endless uses the upstream text without a character portrait */
   bool tall;                /* the box has three lines: there are messages, or a dialogue */
   char talk_text[1024];     /* miscDialogue:ending, with its markers and "$" pages */
   char talk_name[48];
@@ -156,8 +157,13 @@ static void rs_update(ui_screen* s, float dt) {
   switch (R.stage) {
     case ST_FADE_IN:
       if (R.stage_ms >= FADE_MS) {
-        set_stage(ST_SLIDE);
-        chs_show(RIVAL_ATLAS, R.talk_variant); /* showCharacter(...).then(showDialogue) */
+        if(R.endless_talk) {
+          set_stage(ST_TALK);
+          msgbox_show(&R.msg,R.talk_text,-1,true);
+        } else {
+          set_stage(ST_SLIDE);
+          chs_show(RIVAL_ATLAS, R.talk_variant); /* showCharacter(...).then(showDialogue) */
+        }
       }
       break;
     case ST_SLIDE:
@@ -175,12 +181,12 @@ static void rs_update(ui_screen* s, float dt) {
       if (R.stage_ms >= FADE_MS) {
         set_stage(ST_HIDE);
         msgbox_clear(&R.msg);
-        chs_hide(); /* charSprite.hide() under the black */
+        if(!R.endless_talk)chs_hide(); /* charSprite.hide() under the black */
       }
       break;
     case ST_HIDE:
-      if (!chs_busy()) {
-        chs_reset();
+      if (R.endless_talk || !chs_busy()) {
+        if(!R.endless_talk)chs_reset();
         set_stage(ST_CARD_FADE);
       }
       break;
@@ -249,7 +255,7 @@ static void draw_top(void) {
     o.font_px = 128;
     if (R.a.victory && R.stage >= ST_FADE_IN && R.stage <= ST_HIDE) {
       draw_arena();
-      chs_draw();
+      if (!R.endless_talk) chs_draw();
     } else if (R.a.victory) {
       /* addImage(0, 0, "end_m") with origin 0 and scale 0.5; the text at (width / 2, height - 16) */
       if (img_has("images/cg/end_m")) {
@@ -332,10 +338,14 @@ void result_screen_open(const result_args* a) {
   R.page = -1;
   chs_reset();
   /* GameOverPhase: a Classic win shows the rival's ending before the end card (the text may be missing: then it is skipped) */
-  if (a->victory && a->ending) {
-    i18n_t(R.talk_text, sizeof R.talk_text, "miscDialogue:ending", NULL);
-    R.talk = R.talk_text[0] && strcmp(R.talk_text, "miscDialogue:ending") != 0;
-    if (R.talk) {
+  if (a->victory && (a->ending || a->endless_ending)) {
+    const char* ending_key=a->endless_ending?"miscDialogue:endingEndless":"miscDialogue:ending";
+    i18n_t(R.talk_text, sizeof R.talk_text, ending_key, NULL);
+    R.talk = R.talk_text[0] && strcmp(R.talk_text, ending_key) != 0;
+    R.endless_talk=R.talk&&a->endless_ending;
+    if (R.talk && R.endless_talk) {
+      i18n_t(R.talk_name,sizeof R.talk_name,"miscDialogue:endingName",NULL);
+    } else if (R.talk) {
       i18n_t(R.talk_name, sizeof R.talk_name, RIVAL_NAME_KEY, NULL);
       const char* c = strstr(R.talk_text, "@c{");
       const char* end = c ? strchr(c + 3, '}') : NULL;

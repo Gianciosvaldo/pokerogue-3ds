@@ -7,16 +7,17 @@
 
 #define SETTINGS_FILE "settings"
 
-/* ------------------------------------------------------------------ the file: two bytes, the speed and the custom flag */
+/* ------------------------------------------------------------------ the file: speed, custom flag and selected game mode */
 
 rset_values rset_load(void) {
-  rset_values v = {false, RSET_SPEED_NORMAL};
+  rset_values v = {.custom=false,.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_CLASSIC};
   char* buf = NULL;
   size_t len = 0;
   if (save_read(SETTINGS_FILE, &buf, &len, NULL) == SAVE_OK) {
-    if (len == 2 && buf[0] >= RSET_SPEED_SLOW && buf[0] <= RSET_SPEED_TURBO && (buf[1] == 0 || buf[1] == 1)) {
+    if ((len == 2 || len == 3) && buf[0] >= RSET_SPEED_SLOW && buf[0] <= RSET_SPEED_TURBO && (buf[1] == 0 || buf[1] == 1)) {
       v.speed = buf[0];
       v.custom = buf[1] == 1;
+      if (len == 3 && (unsigned char)buf[2] <= GAME_MODES_SPLICED_ENDLESS) v.mode = (unsigned char)buf[2];
     }
     free(buf);
   }
@@ -24,8 +25,9 @@ rset_values rset_load(void) {
 }
 
 bool rset_save(const rset_values* v) {
-  const char b[2] = {(char)v->speed, (char)(v->custom ? 1 : 0)};
-  return save_write(SETTINGS_FILE, b, 2) == SAVE_OK;
+  if (!v || v->mode < GAME_MODES_CLASSIC || v->mode > GAME_MODES_SPLICED_ENDLESS) return false;
+  const char b[3] = {(char)v->speed, (char)(v->custom ? 1 : 0), (char)v->mode};
+  return save_write(SETTINGS_FILE, b, sizeof b) == SAVE_OK;
 }
 
 float rset_time_scale(int speed) {

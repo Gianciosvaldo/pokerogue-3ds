@@ -151,6 +151,13 @@ build/flowtest: $(FLOW_SRCS)
 flowtest: build/flowtest
 .PHONY: flowtest
 
+# selected New Game mode persistence, including compatibility with the previous two-byte settings file
+build/run_settings_test: run_settings_test.c ../source/run_settings.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I$(GC)/include -I$(RC)/include -I$(RC)/gen/out -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $^ -lm -o $@
+run_settings_test: build/run_settings_test
+.PHONY: run_settings_test
+
 # a run save one turn away from game over or from clearing the run, for looking at those screens on a real build (see mkfixture.c);
 # make mkfixture && (cd /some/folder && /path/to/build/mkfixture clear)
 build/mkfixture: mkfixture.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
