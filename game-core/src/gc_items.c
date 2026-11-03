@@ -291,6 +291,21 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         m->cls = PR_MOD_ENEMY_DAMAGE_BOOSTER; m->mult = 1.05; m->unknown_subclass = false; m->is_transferable = false;
     } else if (!strcmp(it->key, "ENEMY_DAMAGE_REDUCTION")) {
         m->cls = PR_MOD_ENEMY_DAMAGE_REDUCER; m->mult = 0.975; m->unknown_subclass = false; m->is_transferable = false;
+    } else if (!strcmp(it->key, "ENEMY_HEAL")) {
+        m->cls = PR_MOD_ENEMY_TURN_HEAL; m->unknown_subclass = false; m->is_transferable = false;
+    } else if (!strcmp(it->key, "ENEMY_ATTACK_POISON_CHANCE")
+        || !strcmp(it->key, "ENEMY_ATTACK_PARALYZE_CHANCE")
+        || !strcmp(it->key, "ENEMY_ATTACK_BURN_CHANCE")) {
+        m->cls = PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE;
+        m->berry_type = !strcmp(it->key, "ENEMY_ATTACK_POISON_CHANCE") ? STATUS_EFFECT_POISON
+            : !strcmp(it->key, "ENEMY_ATTACK_PARALYZE_CHANCE") ? STATUS_EFFECT_PARALYSIS : STATUS_EFFECT_BURN;
+        m->unknown_subclass = false; m->is_transferable = false;
+    } else if (!strcmp(it->key, "ENEMY_STATUS_EFFECT_HEAL_CHANCE")) {
+        m->cls = PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE; m->unknown_subclass = false; m->is_transferable = false;
+    } else if (!strcmp(it->key, "ENEMY_ENDURE_CHANCE")) {
+        m->cls = PR_MOD_ENEMY_ENDURE_CHANCE; m->unknown_subclass = false; m->is_transferable = false;
+    } else if (!strcmp(it->key, "ENEMY_FUSED_CHANCE")) {
+        m->cls = PR_MOD_ENEMY_FUSED_CHANCE; m->unknown_subclass = false; m->is_transferable = false;
     }
 }
 

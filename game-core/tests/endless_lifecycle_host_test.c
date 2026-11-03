@@ -6,6 +6,20 @@ static int learned[2],evolved[2],terminal[2],life_wins[2],life_losses[2];
 typedef struct { int kind,a,b,c,hp;double exp_amount,exp_before; } progress_event;
 typedef struct { int count;progress_event event[16]; } progress_trace;
 static progress_trace observed[2];
+static void enemy_buff_bridge(void){
+ gc_run_new(&run,GAME_MODES_ENDLESS,"enemy-buff-bridge",19);run.wave=50;run.n_enemy_items=0;
+ gc_rphase p=gc_rp(RP_ENEMY_BUFF,0,0,0);CHECK(gc_phase_start(&run,&p));CHECK(run.n_enemy_items==1);
+ CHECK(run.enemy_items[0].pokemon_id==0&&run.enemy_items[0].stack==1);
+ run.n_items=1;run.items[0]=(gc_item){.key="LUCKY_EGG",.stack=1};run.wave=100;CHECK(gc_phase_start(&run,&p));
+ int total=0;for(int i=0;i<run.n_enemy_items;i++)if(!run.enemy_items[i].pokemon_id)total+=run.enemy_items[i].stack;
+ CHECK(total==2&&run.n_items==1&&!strcmp(run.items[0].key,"LUCKY_EGG"));
+ run.n_enemy_items=0;
+ for(int item=14;item<=22;item++)run.enemy_items[run.n_enemy_items++]=(gc_item){.key=pr_item_names[item],.arg=-1,.stack=1,.pokemon_id=0};
+ gc_items_to_battle(&run);CHECK(run.bt.n_mods[1]==9);
+ const int classes[9]={PR_MOD_ENEMY_DAMAGE_BOOSTER,PR_MOD_ENEMY_DAMAGE_REDUCER,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE,PR_MOD_ENEMY_ENDURE_CHANCE,PR_MOD_ENEMY_FUSED_CHANCE,PR_MOD_ENEMY_TURN_HEAL};
+ for(int i=0;i<9;i++)CHECK(run.bt.mods[1][i].cls==classes[i]&&!run.bt.mods[1][i].unknown_subclass);
+ pr_enemy_gen_ctx ec;gc_enemy_ctx(&run,&ec);CHECK(ec.enemy_fusion_stacks==1&&ec.enemy_fusion_chance==0.01);
+}
 static void progression(gc_run *r,int family,bool count,progress_trace *trace){
  memset(trace,0,sizeof *trace);gc_event ev;while(gc_run_next_event(r,&ev)){
   if(ev.kind==GC_EV_EXP||ev.kind==GC_EV_LEVEL_UP||ev.kind==GC_EV_MOVE_LEARNED||ev.kind==GC_EV_EVOLVED){
@@ -55,7 +69,7 @@ static void lifecycle(int family){
  else if(run.wave==26){life_wins[mode]++;CHECK(run.party[0].b.species==SPECIES_ID_KIRLIA&&run.party[0].b.moves[3]==MOVE_ID_PSYBEAM);same_save();}
  else {life_losses[mode]++;CHECK(run.finished&&run.screen.kind==GC_SCREEN_GAME_OVER);}
 }
-int main(void){CHECK(retained_wide_journey_main()==0);
+int main(void){enemy_buff_bridge();CHECK(retained_wide_journey_main()==0);
  for(int family=0;family<2;family++)for(mode=0;mode<2;mode++)for(seed_index=0;seed_index<8;seed_index++)lifecycle(family);
  for(mode=0;mode<2;mode++){CHECK(learned[mode]>0&&evolved[mode]>0&&life_wins[mode]>0&&life_losses[mode]>0);CHECK(terminal[mode]==8);}
  printf("Endless lifecycle: 32 added contexts; learned %d/%d, evolved %d/%d, learning-chain wins %d/%d losses %d/%d, terminal clears %d/%d; %d combined checks passed\n",learned[0],learned[1],evolved[0],evolved[1],life_wins[0],life_wins[1],life_losses[0],life_losses[1],terminal[0],terminal[1],checks);return 0;

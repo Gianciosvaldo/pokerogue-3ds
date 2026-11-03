@@ -31,6 +31,7 @@ enum {
     RP_TRAINER_VICTORY,  /* TrainerVictoryPhase */
     RP_MONEY_REWARD,     /* MoneyRewardPhase: d = money multiplier */
     RP_MODIFIER_REWARD,  /* ModifierRewardPhase: key */
+    RP_ENEMY_BUFF,       /* AddEnemyBuffModifierPhase (Endless): permanent enemy tokens */
     RP_SELECT_MODIFIER,  /* SelectModifierPhase: waits on REWARD */
     RP_SELECT_BIOME,     /* SelectBiomePhase: may wait on BIOME */
     RP_SWITCH_BIOME,     /* SwitchBiomePhase: a = biome */

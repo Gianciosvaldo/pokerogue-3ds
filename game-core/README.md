@@ -731,6 +731,13 @@ voucher, such as the rivals, give nothing of that kind. Without system data (`ru
 NULL) nothing unlocks and nothing is given. Not ported, on purpose: the timed event that
 upgrades the later-win reward (`getUpgradeUnlockedVouchers`).
 
+Endless and Spliced Endless also run upstream's `AddEnemyBuffModifierPhase` after each 50th-wave
+reward. Run-core rolls the tier, weighted token and stack count on the run RNG; game-core keeps those
+tokens in the saved enemy inventory across encounters, maps them to battle-core's damage, healing,
+status, endure and fusion effects, and passes Fusion Chance into wild enemy generation. The retained
+Endless lifecycle test checks the phase bridge and all nine token mappings; run-core's upstream
+differential compares buff stacks and RNG state over 2,252 waves in 100 runs.
+
 A voucher on the reward screen is taken as upstream takes it: `addModifier` runs
 `AddVoucherModifier.apply`, which adds one to the count of its type (`gc_port_apply_reward`,
 `give_voucher` in `gc_stubs.c`), shows no text, adds nothing to the run's items and is no stand-in

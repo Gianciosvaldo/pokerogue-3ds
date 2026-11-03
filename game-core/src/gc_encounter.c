@@ -180,6 +180,12 @@ void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
     ec->trainer_type = run->trainer_type;
     ec->hidden_ability_charm_stacks = gc_item_stack(run, "ABILITY_CHARM");
     ec->shiny_charm_stacks = gc_item_stack(run, "SHINY_CHARM");
+    if (run->battle_type != BATTLE_TYPE_TRAINER) {
+        for (int i = 0; i < run->n_enemy_items; i++)
+            if (!strcmp(run->enemy_items[i].key, "ENEMY_FUSED_CHANCE") && !run->enemy_items[i].pokemon_id)
+                ec->enemy_fusion_stacks += run->enemy_items[i].stack;
+        ec->enemy_fusion_chance = 0.01;
+    }
     ec->trainer_id = (uint16_t)run->trainer_id;
     ec->secret_id = (uint16_t)run->secret_id;
     ec->event_shiny_multiplier = 1;
@@ -268,6 +274,16 @@ static int enemy_item_max_stack(const gc_run *run, const gc_item *it)
 /* The enemy's held items: regenerateModifierPoolThresholds + generateEnemyModifiers */
 static void enemy_items(gc_run *run)
 {
+    gc_item carried_buffs[32];
+    int n_carried_buffs = 0;
+    for (int i = 0; i < run->n_enemy_items; i++) {
+        const gc_item *it = &run->enemy_items[i];
+        for (int item = 14; item <= 22; item++)
+            if (!strcmp(it->key, pr_item_names[item]) && !it->pokemon_id) {
+                if (n_carried_buffs < 32) carried_buffs[n_carried_buffs++] = *it;
+                break;
+            }
+    }
     pr_enemy_items_ctx ic;
     memset(&ic, 0, sizeof ic);
     ic.wave = run->wave;
@@ -310,6 +326,8 @@ static void enemy_items(gc_run *run)
                 }
             }
         }
+    for (int i = 0; i < n_carried_buffs && run->n_enemy_items < GC_MAX_ITEMS; i++)
+        run->enemy_items[run->n_enemy_items++] = carried_buffs[i];
     gc_custom_team_items(run);
     gc_cache_generated_item_tiers(run);
 }
