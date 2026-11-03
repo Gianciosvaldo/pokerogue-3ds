@@ -107,7 +107,16 @@ int main(void)
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */
     for(unsigned i=0;i<30;++i){tick();}
     assert(career()->live.phase==FB_LIVE_SET);
-    down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
+    /* Before the snap the play can be taken back: B (or the left button) returns to the playcall, the screen says so, and the same A does not snap it. */
+    assert(on_bottom("B: Change play") && on_bottom("A: snap the ball") && !on_bottom("B: Juke"));
+    const unsigned snaps_before=career()->live.snaps;const uint32_t rng_before=career()->live.undo_rng;
+    down=KEY_B;tick();assert(career()->live.phase==FB_LIVE_CALL && career()->live.snaps==snaps_before && career()->live.rng==rng_before);
+    down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET);
+    game_screen->touch(game_screen,40,FM_FOOT_Y+10);tick();assert(career()->live.phase==FB_LIVE_CALL); /* the left button does the same */
+    down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET);
+    for(unsigned i=0;i<30;++i){tick();}
+    game_screen->touch(game_screen,260,FM_FOOT_Y+10);tick();assert(career()->live.phase==FB_LIVE_PLAY); /* the right button snaps */
+    assert(on_bottom("B: Juke") && !on_bottom("B: Change play"));
     /* A run starts with the ball on the QB: the human gets the runner when the handoff is done. */
     for(unsigned i=0;i<90 && career()->live.hand_to<22;++i){tick();}
     float y=career()->live.actors[career()->live.controlled].y;circle.dy=156;
