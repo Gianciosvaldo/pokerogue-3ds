@@ -12,7 +12,7 @@ static void prepare(FootballCareer *c,unsigned member)
 bool football_career_new(FootballCareer *c,gc_run *scratch,gc_system *profile,unsigned seed)
 {
     if(!c || !scratch)return false;
-    memset(c,0,sizeof *c);c->scratch=scratch;c->profile=profile;c->seed=seed?seed:1;c->round=1;c->mega=-1;c->stone_target=-1;
+    memset(c,0,sizeof *c);c->scratch=scratch;c->profile=profile;c->seed=seed?seed:1;c->round=1;c->mega=-1;c->stone_target=c->stone2_target=-1;
     gc_football_new(scratch,profile,"football-live",c->seed);
     return football_roster_init(&c->roster);
 }
@@ -97,7 +97,7 @@ static unsigned evo_price(unsigned round,unsigned item){return item>50?800+75*ro
 bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *o)
 {
     if(!c || !o || o->member>=22 || o->member>=c->roster.count || !o->item)return false;
-    if(c->roster.mega_item[o->member] || c->stone_target==(int)o->member)return false; /* evolving would lose the stone */
+    if(c->roster.mega_item[o->member] || c->stone_target==(int)o->member || c->stone2_target==(int)o->member)return false; /* evolving would lose the stone */
     prepare(c,o->member);
     gc_football_item_evolution found[GC_FOOTBALL_MAX_ITEM_EVOLUTIONS];int n=gc_football_item_evolutions(c->scratch,0,found);
     for(int i=0;i<n;++i)if(found[i].item==o->item)return found[i].species==o->species;
@@ -112,7 +112,7 @@ static void roll_evolutions(FootballCareer *c)
     memset(found,0,sizeof found);memset(c->evo,0,sizeof c->evo);c->evo_count=0;
     for(unsigned i=0;i<22;++i){
         n[i]=0;
-        if(c->roster.mega_item[i] || c->stone_target==(int)i)continue;
+        if(c->roster.mega_item[i] || c->stone_target==(int)i || c->stone2_target==(int)i)continue;
         prepare(c,i);n[i]=gc_football_item_evolutions(c->scratch,0,found[i]);
     }
     const unsigned start=(c->seed+c->round*5)%22;
@@ -126,19 +126,25 @@ static void roll_evolutions(FootballCareer *c)
         while(j>0 && (c->evo[j-1].member>o.member || (c->evo[j-1].member==o.member && c->evo[j-1].item>o.item))){c->evo[j]=c->evo[j-1];--j;}
         c->evo[j]=o;}
 }
+int football_career_stone_target(const FootballCareer *c,unsigned offer){return !c||offer<2||offer>=2+FB_SHOP_STONES?-1:offer==2?c->stone_target:c->stone2_target;}
+int football_career_stone_item(const FootballCareer *c,unsigned offer){return !c||offer<2||offer>=2+FB_SHOP_STONES?0:offer==2?c->stone_item:c->stone2_item;}
+/* Two mega stones are on offer each round, for two different members who have none and can use one. When more than two can, the pair moves
+ * on by two every round, so every member comes up in turn. */
 static void shop(FootballCareer *c)
 {
     pay_match(c,true);
-    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;c->message[0]=0;
-    bool owns_mega=false;
-    for(unsigned i=0;i<22;++i)owns_mega|=c->roster.mega_item[i]!=0;
-    /* Keep the first usable stone available until it can be afforded. Otherwise
-     * an unaffordable first offer (500 winnings, 1000 price) can vanish for four rounds. */
-    if(!owns_mega || (c->seed+c->round*7)%4==0)for(unsigned k=0;k<22;++k){
-        unsigned i=(c->seed+c->round*7+k)%22;
+    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[1]=c->prices[0];c->prices[2]=c->prices[3]=1000;
+    c->stone_target=c->stone2_target=-1;c->stone_item=c->stone2_item=0;c->message[0]=0;
+    unsigned able[22],items[22],n=0;
+    for(unsigned i=0;i<22;++i){
         if(c->roster.mega_item[i])continue;
         prepare(c,i);int item=gc_football_mega_item(c->scratch,0);
-        if(item>0){c->stone_target=(int)i;c->stone_item=item;break;}
+        if(item>0){able[n]=i;items[n]=(unsigned)item;++n;}
+    }
+    if(n){
+        const unsigned first=(c->seed%n+(c->round-1)*FB_SHOP_STONES)%n;
+        c->stone_target=(int)able[first];c->stone_item=(int)items[first];
+        if(n>1){const unsigned second=(first+1)%n;c->stone2_target=(int)able[second];c->stone2_item=(int)items[second];}
     }
     roll_evolutions(c);
 }
@@ -265,11 +271,12 @@ bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
     if(!c || c->phase!=FB_CAREER_SHOP)return false;
     if(offer>=FB_SHOP_FIXED)return offer-FB_SHOP_FIXED<c->evo_count && buy_evolution(c,offer-FB_SHOP_FIXED);
     if(member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
-    if(offer==2){
-        if(c->stone_target<0 || c->stone_target>=c->roster.count || c->roster.mega_item[c->stone_target])return false;
-        prepare(c,(unsigned)c->stone_target);
-        if(!gc_football_mega_form(c->scratch,0,c->stone_item))return false;
-        c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;
+    if(offer==2 || offer==3){
+        const int target=football_career_stone_target(c,offer),item=football_career_stone_item(c,offer);
+        if(target<0 || target>=c->roster.count || c->roster.mega_item[target])return false;
+        prepare(c,(unsigned)target);
+        if(!gc_football_mega_form(c->scratch,0,item))return false;
+        c->roster.mega_item[target]=(int16_t)item;
     }
     else {
         uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;

@@ -5,14 +5,15 @@ None and teammates holding an applicable mega stone. A/Continue starts the match
 with that selection. Exactly one slot can be selected. Selection is optional and
 cannot change during a match; it resets to None when the match ends.
 
-In the live 22-player career, each shop offers a usable first stone while no
-teammate owns one. It costs 1000; the first win pays 625, so the offer remains
-available in subsequent shops while the player saves. Once a stone is owned,
-additional offers use the existing one-in-four-round schedule. The recipient
-rotates among compatible teammates; already equipped members are skipped. The
-shop names the stone and its fixed holder, previews that holder, and explains
-that Mega must be selected before the next match. Vitamin target controls do not
-change the stone's holder. The legacy six-player season retains its rare offer.
+In the live 22-player career, every shop offers up to two Mega stones (offers 2
+and 3), each for a different teammate who can use one and does not hold one yet.
+Each costs 1000; the first win pays 625, so an offer can be saved for. The pair
+moves two places along the list of eligible teammates each round, so with more
+than two eligible teammates the offers cycle from round to round and every
+holder comes up; with exactly one eligible teammate there is one offer. The shop
+names each stone by its real name (Rayquazite, Mawilite...) with its fixed holder,
+previews that holder, and explains that Mega must be selected before the next
+match. Vitamin target controls do not change a stone's holder. The legacy six-player season retains its rare offer.
 
 Both modes use the existing form-change catalog and held-item inventory.
 The holder must match the item's species and current pre-form key. The generated

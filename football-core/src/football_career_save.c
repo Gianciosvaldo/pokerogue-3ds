@@ -43,6 +43,11 @@ static void state(Stream *s,FootballCareer *c)
             if(s->read)c->evo[i]=(FootballEvoOffer){.member=(uint8_t)member,.item=(uint8_t)item,.state=(uint8_t)st,.species=(uint16_t)species,.price=(uint16_t)price};
         }
     }
+    if(s->version>=3){
+        /* The second mega stone offer (an older save has one at most). */
+        N(c->prices[3],1000);N(c->sold[3],1);
+        unsigned target2=(unsigned)(c->stone2_target+1);N(target2,22);c->stone2_target=(int)target2-1;N(c->stone2_item,INT16_MAX);
+    }
     if(c->phase==FB_CAREER_MATCH){
         FootballLive *m=&c->live;FootballRules *r=&m->rules;
         N(m->rng,UINT32_MAX);N(m->snaps,4096);
@@ -72,14 +77,14 @@ bool football_career_save_ready(const FootballCareer *c)
 size_t football_career_save(FootballCareer *c,void *buffer,size_t capacity)
 {
     if(!football_career_save_ready(c) || !buffer || capacity<4096 || capacity>FB_CAREER_SAVE_MAX)return 0;
-    Stream s={buffer,20,capacity,false,true,2};state(&s,c);if(!s.ok)return 0;
-    Stream header={buffer,8,20,false,true,2};number(&header,2,2);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
+    Stream s={buffer,20,capacity,false,true,3};state(&s,c);if(!s.ok)return 0;
+    Stream header={buffer,8,20,false,true,3};number(&header,3,3);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
 }
 bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,const void *buffer,size_t length)
 {
     if(!c || !scratch || !profile || !buffer || length<20 || length>FB_CAREER_SAVE_MAX || memcmp(buffer,"PRFBLIVE",8))return false;
-    Stream s={(unsigned char *)buffer,8,length,true,true,0};unsigned version=number(&s,0,2),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
-    if(!s.ok || version<1 || version>2 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
+    Stream s={(unsigned char *)buffer,8,length,true,true,0};unsigned version=number(&s,0,3),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
+    if(!s.ok || version<1 || version>3 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
     FootballCareer *copy=calloc(1,sizeof *copy);if(!copy)return false;
     s.version=version;bool valid=football_career_new(copy,scratch,NULL,1);state(&s,copy);
     valid=valid && s.ok && s.n==length && copy->round>0 && copy->seed && football_career_save_ready(copy) && copy->wins<=copy->round;
@@ -92,10 +97,13 @@ bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,c
         if(copy->roster.mega_item[i]){gc_football_new(scratch,NULL,"check-mega",1);scratch->party[0]=copy->roster.mon[i];scratch->n_party=1;if(!gc_football_mega_form(scratch,0,copy->roster.mega_item[i]))valid=false;}
     }
     if(valid && copy->mega>=0 && !copy->roster.mega_item[copy->mega])valid=false;
-    if(valid && copy->stone_target>=0){
-        gc_football_new(scratch,NULL,"check-offer",1);scratch->party[0]=copy->roster.mon[copy->stone_target];scratch->n_party=1;
-        if(!gc_football_mega_form(scratch,0,copy->stone_item))valid=false;
+    for(unsigned offer=2;valid && offer<2+FB_SHOP_STONES;++offer){
+        const int target=football_career_stone_target(copy,offer);
+        if(target<0)continue;
+        gc_football_new(scratch,NULL,"check-offer",1);scratch->party[0]=copy->roster.mon[target];scratch->n_party=1;
+        if(!gc_football_mega_form(scratch,0,football_career_stone_item(copy,offer)))valid=false;
     }
+    if(valid && copy->stone_target>=0 && copy->stone_target==copy->stone2_target)valid=false; /* two different holders */
     /* An evolution offer exists only in the shop, and holds only while its member can still use the item. */
     if(valid && copy->phase!=FB_CAREER_SHOP && copy->evo_count)valid=false;
     if(valid){
