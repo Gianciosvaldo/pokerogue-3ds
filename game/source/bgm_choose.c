@@ -278,3 +278,21 @@ const char* bgm_trainer_victory(int trainer_type) {
 }
 
 const char* bgm_title_track(int month, int day) { return month == 11 || (month == 0 && day <= 15) ? "winter_title" : "title"; }
+
+/* Football Playoffs: the battle music of the gym leaders, the Elite Four, the Champions and the evil teams (the tracks their trainer
+ * configs name), one per match, a different one each round of a career. 27 tracks and a step of 11 (coprime), so the seven rounds of a
+ * career never repeat a track. */
+static const char *const football_tracks[] = {
+  "battle_kanto_gym", "battle_johto_gym", "battle_hoenn_gym", "battle_sinnoh_gym", "battle_unova_gym", "battle_kalos_gym",
+  "battle_galar_gym", "battle_paldea_gym", "battle_unova_elite", "battle_kalos_elite", "battle_alola_elite", "battle_galar_elite",
+  "battle_paldea_elite", "battle_hoenn_elite", "battle_bb_elite", "battle_champion_alder", "battle_champion_iris",
+  "battle_johto_champion", "battle_sinnoh_champion", "battle_kanto_champion", "battle_kalos_champion", "battle_galar_champion",
+  "battle_alola_champion", "battle_plasma_grunt", "battle_flare_grunt", "battle_aqua_magma_grunt", "battle_galactic_grunt",
+};
+#define FOOTBALL_TRACKS ((unsigned)(sizeof football_tracks / sizeof football_tracks[0]))
+unsigned bgm_football_track_count(void) { return FOOTBALL_TRACKS; }
+const char *bgm_football_track_at(unsigned i) { return i < FOOTBALL_TRACKS ? football_tracks[i] : NULL; }
+const char *bgm_football_track(unsigned seed, unsigned round) {
+  unsigned h = seed * 2654435761u;
+  return football_tracks[((h >> 16) + round * 11u) % FOOTBALL_TRACKS];
+}

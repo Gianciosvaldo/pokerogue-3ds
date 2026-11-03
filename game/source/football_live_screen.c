@@ -1,4 +1,5 @@
 #include "football_screen.h"
+#include "bgm.h"
 #include "football_career.h"
 #include "football_live_art.h"
 #include "football_menu.h"
@@ -326,7 +327,10 @@ static void update(ui_screen *s,float dt)
     float focus_x=0,focus_y=0,focus_vx=0;if(c->phase==FB_CAREER_MATCH)football_live_focus(&c->live,&focus_x,&focus_y,&focus_vx);
     bool framing=c->phase==FB_CAREER_MATCH && c->live.phase==FB_LIVE_SET && L.camera.ready && fabsf(L.camera.x-focus_x)>14;
     football_career_tick(c,framing?0:ms,controls);
-    if(c->phase!=L.old_phase){L.cursor=0;L.editing=false;if(c->phase==FB_CAREER_SHOP)shop_assets();L.old_phase=c->phase;}
+    if(c->phase!=L.old_phase){L.cursor=0;L.editing=false;if(c->phase==FB_CAREER_SHOP)shop_assets();
+        /* A match plays an upbeat battle track (a new one each round); the title music returns once it is over. */
+        if(c->phase==FB_CAREER_MATCH)bgm_on_football_match(c->seed,c->round);else if(L.old_phase==FB_CAREER_MATCH)bgm_on_title();
+        L.old_phase=c->phase;}
     evo_refresh();
     if(c->phase==FB_CAREER_MATCH || c->phase==FB_CAREER_RESULT){
         if(c->live.phase!=FB_LIVE_DEAD && c->live.phase!=FB_LIVE_END)assets();
