@@ -216,6 +216,32 @@ int main(int argc, char** argv) {
   note("winter_title");
   note("menu");
 
+  /* ---- Football Playoffs: every track is one a gym leader, Elite Four member, Champion or evil team trainer fights to (so the pack has it), the
+   * seven rounds of any career play seven different ones, and every track gets played by some career */
+  {
+    const unsigned n = bgm_football_track_count();
+    CHECK(n >= 24 && !bgm_football_track_at(n), "football music has %u tracks", n);
+    for (unsigned i = 0; i < n; i++) {
+      const char* t = bgm_football_track_at(i);
+      bool ours = false;
+      for (int k = 0; k < gm_trainer_bgm_count && !ours; k++)
+        ours = (gm_trainer_bgms[k].battle && !strcmp(gm_trainer_bgms[k].battle, t)) || (gm_trainer_bgms[k].mixed && !strcmp(gm_trainer_bgms[k].mixed, t));
+      CHECK(ours, "football track %s is not a trainer's battle music", t);
+      CHECK(!strncmp(t, "battle_", 7), "football track %s", t);
+      note(t);
+    }
+    bool played[64] = {false};
+    for (unsigned seed = 0; seed < 400; seed++) {
+      const char* seen[7];
+      for (unsigned round = 1; round <= 7; round++) {
+        seen[round - 1] = bgm_football_track(seed * 7717u + 1, round);
+        for (unsigned j = 0; j + 1 < round; j++) CHECK(strcmp(seen[j], seen[round - 1]), "seed %u repeats %s", seed, seen[j]);
+        for (unsigned i = 0; i < n; i++) if (!strcmp(bgm_football_track_at(i), seen[round - 1])) played[i] = true;
+      }
+    }
+    for (unsigned i = 0; i < n; i++) CHECK(played[i], "football track %s is never played", bgm_football_track_at(i));
+  }
+
   /* ---- the unknown trainer and the default victory music */
   CHECK(bgm_trainer_of(99999) == NULL, "a trainer type that is not in the table was found");
   CHECK(!strcmp(bgm_trainer_victory(99999), "bw/victory_trainer"), "default victory music");
@@ -318,6 +344,14 @@ int main(int argc, char** argv) {
           tm.tm_mday);
     bgm_on_starter_select();
     CHECK(!strcmp(bgm_current(), "menu"), "starter select music %s", bgm_current());
+    /* a football match swaps in its battle music, once; the title music comes back after it */
+    bgm_on_football_match(7, 3);
+    CHECK(!strcmp(bgm_current(), bgm_football_track(7, 3)) && !strncmp(bgm_current(), "battle_", 7), "football music %s", bgm_current());
+    bgm_on_football_match(7, 4);
+    CHECK(!strcmp(bgm_current(), bgm_football_track(7, 4)), "next round's football music %s", bgm_current());
+    bgm_on_title();
+    CHECK(!strcmp(bgm_current(), bgm_title_track(tm.tm_mon, tm.tm_mday)), "title music after football %s", bgm_current());
+    bgm_on_starter_select();
 
     /* a wild wave 3 in the plains: the menu music fades with the screen, the wave's music starts at black */
     R.battle_type = BATTLE_TYPE_WILD;

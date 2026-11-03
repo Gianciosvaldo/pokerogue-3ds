@@ -25,6 +25,9 @@ bool ui_busy(void){return false;}bool ui_input_repeating(void){return false;}flo
 ui_screen *ui_top(void){return top;}
 void ui_set(ui_screen *s){ui_screen *old=top;top=s;if(old && old->leave)old->leave(old);if(s->enter)s->enter(s);}
 void ui_push_options(const char *const *o,int count,bool cancel,void(*done)(int,void*),void *arg){assert(o && count>0 && cancel);top=&overlay;answer_fn=done;answer_arg=arg;}
+static unsigned match_music,title_music;static unsigned music_round;
+void bgm_on_football_match(unsigned seed,unsigned round){assert(seed);++match_music;music_round=round;}
+void bgm_on_title(void){++title_music;}
 void C3D_FrameSync(void){}
 bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 c){(void)x;(void)y;(void)z;(void)c;assert(w>0 && h>0);return true;}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
@@ -104,6 +107,7 @@ int main(void)
     press(BTN_CANCEL);assert(career()->phase==FB_CAREER_LINEUP);
     uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);draw_both();press(BTN_RIGHT);draw_both();assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
     assert(career()->phase==FB_CAREER_READY);press(BTN_ACTION);tick();assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL && loads==22);
+    assert(match_music==1 && music_round==1 && !title_music); /* the match's music started with the kickoff screen, once */
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */
     for(unsigned i=0;i<30;++i){tick();}
     assert(career()->live.phase==FB_LIVE_SET);

@@ -75,6 +75,11 @@ const char *bgm_trainer_victory(int trainer_type);
 /* The title screen's music for the date (month 0 = January, day 1-31) */
 const char *bgm_title_track(int month, int day);
 const gm_trainer_bgm *bgm_trainer_of(int trainer_type);
+/* Football Playoffs: the match's music, from the gym leader / Elite Four / Champion / evil team battle tracks; a career's seven rounds
+ * (consecutive `round`s) never play the same track twice. bgm_football_track_at lists the tracks (NULL past the end). */
+const char *bgm_football_track(unsigned seed, unsigned round);
+unsigned bgm_football_track_count(void);
+const char *bgm_football_track_at(unsigned i);
 
 #ifdef __cplusplus
 }

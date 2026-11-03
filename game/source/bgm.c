@@ -53,6 +53,8 @@ void bgm_on_title(void) {
   bgm_play(bgm_title_track(tm.tm_mon, tm.tm_mday));
 }
 
+void bgm_on_football_match(unsigned seed, unsigned round) { bgm_play(bgm_football_track(seed, round)); }
+
 void bgm_on_starter_select(void) { bgm_play("menu"); }
 
 void bgm_on_wave_coming(const gc_run* run, int wave, int biome, int battle_type) {

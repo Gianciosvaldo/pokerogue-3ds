@@ -47,6 +47,9 @@ void bgm_on_foe_sent_out(const gc_run* run);
 /* TrainerVictoryPhase.start: the beaten trainer's victory music (TrainerConfig.victoryBgm). The type comes from the event, not from the
  * run: a win on a wave with no reward screen (a gym leader, the Champion) is played after the next wave has started */
 void bgm_on_trainer_defeated(int trainer_type);
+/* Football Playoffs: a match begins (the kickoff screen comes up) with an upbeat battle track, a different one each round; the title music
+ * returns when the match is over (bgm_on_title). */
+void bgm_on_football_match(unsigned seed, unsigned round);
 /* GameOverPhase.handleGameOver: the music fades out, over 10 s after a win and 5 s after a loss */
 void bgm_on_run_end(bool clear);
 
