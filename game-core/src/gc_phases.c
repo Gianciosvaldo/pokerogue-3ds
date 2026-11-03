@@ -53,6 +53,7 @@ static void queue_battle_end(gc_run *run)
             if (endless && !(wave % 50)) {
                 p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM";
                 gc_rq_push(run, p);
+                gc_rq_push(run, gc_rp(RP_ENEMY_BUFF, 0, 0, 0));
             }
         }
         if (gc_is_new_biome(run, wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
@@ -757,6 +758,47 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_MODIFIER_REWARD:
         gc_reward_gain(run, p->key);
         return true;
+    case RP_ENEMY_BUFF: {
+        pr_enemy_buffs buffs;
+        memset(&buffs, 0, sizeof buffs);
+        /* EnemyPersistentModifiers carry across encounters. Their saved representation is
+         * the run's enemy item list with pokemon_id == 0; the encounter builder preserves
+         * these entries while replacing per-Pokemon held items. */
+        for (int i = 0; i < run->n_enemy_items; i++) {
+            const gc_item *it = &run->enemy_items[i];
+            for (int item = 14; item <= 22; item++) {
+                if (!strcmp(it->key, pr_item_names[item]) && !it->pokemon_id) {
+                    int j = 0;
+                    while (j < buffs.n && buffs.buff[j].item != item) j++;
+                    if (j == buffs.n && buffs.n < 32) buffs.buff[buffs.n++].item = (uint8_t)item;
+                    if (j < buffs.n) buffs.buff[j].stack = it->stack;
+                    break;
+                }
+            }
+        }
+        if (pr_run_add_enemy_buffs(&run->run, run->wave, &buffs) < 0) {
+            gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+            return true;
+        }
+        for (int i = 0; i < run->n_enemy_items; ) {
+            const gc_item *it = &run->enemy_items[i];
+            bool buff = false;
+            for (int item = 14; item <= 22; item++) buff |= !strcmp(it->key, pr_item_names[item]) && !it->pokemon_id;
+            if (!buff) { i++; continue; }
+            for (int j = i; j < run->n_enemy_items - 1; j++) run->enemy_items[j] = run->enemy_items[j + 1];
+            memset(&run->enemy_items[--run->n_enemy_items], 0, sizeof run->enemy_items[0]);
+        }
+        for (int i = 0; i < buffs.n; i++) {
+            const int item = buffs.buff[i].item;
+            if (item >= 14 && item <= 22 && run->n_enemy_items < GC_MAX_ITEMS) {
+                gc_item *it = &run->enemy_items[run->n_enemy_items++];
+                memset(it, 0, sizeof *it);
+                it->key = pr_item_names[item]; it->arg = -1; it->stack = buffs.buff[i].stack;
+                it->non_transferable = true;
+            }
+        }
+        return true;
+    }
     case RP_SELECT_MODIFIER:
         return select_modifier_start(run, p);
     case RP_SELECT_BIOME:
