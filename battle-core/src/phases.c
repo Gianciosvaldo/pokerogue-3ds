@@ -4188,6 +4188,11 @@ void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         const uint16_t moves[] = {MOVE_ID_DYNAMAX_CANNON, MOVE_ID_CROSS_POISON,
             MOVE_ID_FLAMETHROWER, MOVE_ID_RECOVER};
         for (int i=0; i<4; i++) pr_set_original_move(p,i,moves[i]);
+        if (bt->game_mode == GAME_MODES_CHALLENGE) {
+            if (!bt->challenge_flags_known) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+            else if (bt->challenge_flags & (1u << CHALLENGES_INVERSE_BATTLE))
+                pr_set_original_move(p, 2, MOVE_ID_EARTH_POWER);
+        }
         p->pp_up[3] = -4;
     } else pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
     form_change(bt,p,PR_FCT_SpeciesFormChangeManualTrigger);
