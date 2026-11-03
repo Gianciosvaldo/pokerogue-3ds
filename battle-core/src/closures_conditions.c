@@ -82,13 +82,6 @@ static const pr_attr *own_attr(const pr_closure_info *self, int m, bool (*makes)
 }
 #define OWN(makes) const pr_attr *a = own_attr(self, m, makes); if (!a) UNPORTED(PR_FEAT_MOVE_CONDITION)
 
-/* The party slots of one side ([0] player, [1] enemy) */
-static bool in_field_slot(const pr_battle *bt, const pr_pokemon *p)
-{
-    for (int i = 0; i < 4; i++)
-        if (bt->field[i] == p) return true;
-    return false;
-}
 static int32_t party_hp(const pr_battle *bt, int side, int k)
 {
     return bt->party[side][k]->hp;
@@ -764,19 +757,15 @@ static double flower_shield(ARGS)
     return 0;
 }
 
-/* Rototiller: [...getEnemyParty(), ...getPlayerParty()].some(p => p.isOfType(GRASS) && p.isGrounded())
- * (the bench's types aren't modelled: answered only when a Pokemon on the field settles it) */
+/* Rototiller: [...getEnemyParty(), ...getPlayerParty()].some(p => p.isOfType(GRASS) && p.isGrounded()) */
 static double rototiller(ARGS)
 {
     UNUSED;
-    for (int i = 0; i < 4; i++) {
-        const pr_pokemon *p = bt->field[i];
-        if (p && pr_is_of_type(p, POKEMON_TYPE_GRASS) && pr_is_grounded(bt, p, false)) return 1;
-    }
     for (int side = 0; side < 2; side++) {
-        if (!bt->n_party[side]) UNPORTED(PR_FEAT_PARTY);
-        for (int k = 0; k < bt->n_party[side]; k++)
-            if (!in_field_slot(bt, bt->party[side][k])) UNPORTED(PR_FEAT_MOVE_CONDITION);
+        for (int k = 0; k < bt->n_party[side]; k++) {
+            const pr_pokemon *p = bt->party[side][k];
+            if (pr_is_of_type(p, POKEMON_TYPE_GRASS) && pr_is_grounded(bt, p, false)) return 1;
+        }
     }
     return 0;
 }

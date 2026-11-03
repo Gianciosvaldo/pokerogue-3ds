@@ -1,7 +1,7 @@
 # Battle-core completion checklist
 
 Target: enabled battle behavior at upstream
-`8555c08c823b856cbec4eb99ca84ea52a955836d`, with the pinned locales and Node22.
+`8555c08c823b856cbec4eb99ca84ea52a955836d`, with the pinned locales and Node 24.
 This checklist describes the finish line. A checked-in implementation or a high
 passing percentage in a bounded random sample does not close a whole category.
 
@@ -219,3 +219,8 @@ The [dynamic targeting follow-up](VARIABLE-TARGET-VALIDATION.md) adds five
 pinned-source doubles observations for Expanding Force and Tera Starstorm. Its
 ordered target sets and spread flag match; complete move-turn and presentation
 interactions remain open.
+
+The [Rototiller follow-up](ROTOTILLER-VALIDATION.md) now evaluates Grass and
+grounding across both complete parties, including benched and fainted members.
+Six retained source-owned cases cover both party sides and airborne Grass.
+Other move-condition and interaction gaps remain open.

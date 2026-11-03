@@ -1,0 +1,9 @@
+ROTOTILLER 1 7
+CASE no-grass 6 6 19 19 19 19 19 19 19 19 19 19 19 19 1 1 1 1 1 1 1 1 1 1 1 1 0
+CASE field-grass 6 6 1 19 19 19 19 19 19 19 19 19 19 19 1 1 1 1 1 1 1 1 1 1 1 1 1
+CASE player-bench-grass 6 6 19 19 1 19 19 19 19 19 19 19 19 19 1 1 1 1 1 1 1 1 1 1 1 1 1
+CASE fainted-player-bench-grass 6 6 19 19 1 19 19 19 19 19 19 19 19 19 1 1 0 1 1 1 1 1 1 1 1 1 1
+CASE enemy-bench-grass 6 6 19 19 19 19 19 19 19 19 19 19 1 19 1 1 1 1 1 1 1 1 1 1 1 1 1
+CASE airborne-grass-only 6 6 19 19 189 19 19 19 19 19 19 19 189 19 1 1 1 1 1 1 1 1 1 1 1 1 0
+CASE empty-parties 0 0 0
+ROTOTILLER_COMPLETE 7
