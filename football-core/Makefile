@@ -230,6 +230,12 @@ pass-game-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pass_game_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/pass_game_test
 	$(BUILD)/pass_game_test
 test: pass-game-test
+.PHONY: route-line-test
+route-line-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/route_line_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/route_line_test
+	$(BUILD)/route_line_test
+test: route-line-test
 
 .PHONY: special-test
 special-test: core-libs

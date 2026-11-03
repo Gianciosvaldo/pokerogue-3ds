@@ -190,21 +190,6 @@ void football_live_move(FootballLiveActor *a,float tx,float ty,bool sprint)
     a->x=limit(a->x+a->vx*FB_LIVE_STEP,0,120);a->y+=a->vy*FB_LIVE_STEP;
     if(a->contact>0)a->contact-=FB_LIVE_STEP;
 }
-/* Where the ball changes hands: beside the QB and a step toward the line, on the side the play calls for (football_playbook_handoff).
- * Stable during the handoff: it reads the QB and the runner's snap spot, not where he is now. */
-void football_live_mesh_point(const FootballLive *m,float *x,float *y)
-{
-    unsigned off=offense_base(m);float dir=direction(m);
-    const FootballLiveActor *qb=&m->actors[off];
-    const FootballPlayDefinition *p=football_playbook_get(m->play);
-    FootballHandoff h=football_playbook_handoff(p);
-    bool sweep=p && p->id==FB_RUN_JET_SWEEP,under=p && p->formation==FB_FORM_UNDER_CENTER;
-    /* The strong side is where the called path ends: below or above the middle of the field. */
-    float end=p && p->route_count?26.67f-m->run_side*p->route[p->route_count-1].y:26.67f,strong=end>26.67f?1.f:-1.f;
-    float lined=m->hand_to<22?m->snap_y[m->hand_to-off]-m->snap_y[0]:0;
-    float side=h.side==FB_MESH_STRONG?strong:h.side==FB_MESH_WEAK?-strong:fabsf(lined)>.4f?(lined>0?1.f:-1.f):strong;
-    *x=qb->x+dir*(sweep?1.8f:under?-.3f:.9f);*y=qb->y+side*h.across;
-}
 static void throw_ball(FootballLive *m,unsigned receiver)
 {
     unsigned off=offense_base(m);if((m->actors[off].x-m->los)*direction(m)>0 || receiver>=5 || m->flying || m->thrown || m->carrier!=off)return;

@@ -19,11 +19,11 @@ void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
 void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);}
 void C2D_TextOptimize(C2D_Text *t){(void)t;}
 void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color){(void)t;(void)flags;(void)x;(void)y;(void)z;(void)sx;(void)sy;(void)color;}
-static unsigned rects;
+static unsigned rects,line_rects;
 static bool capture;static float cap_x0,cap_y0,cap_x1,cap_y1; /* the extent of the rectangles drawn while a card is being drawn */
 /* The engine records these (football_live_fx); the art only reads them, so the test writes them itself. */
 static void put_fx(FootballLive *m,unsigned kind,unsigned actor,unsigned other,int side){m->fx[m->fx_next]=(FootballFx){(uint8_t)kind,(uint8_t)actor,(uint8_t)other,(int8_t)side,m->steps,m->actors[actor].x,m->actors[actor].y};m->fx_next=(uint8_t)((m->fx_next+1)%FB_FX_COUNT);}
-bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color){(void)z;(void)color;assert(isfinite(w) && w>0 && isfinite(h) && h>0 && isfinite(x) && isfinite(y));++rects;
+bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color){(void)color;line_rects+=z>.0595f && z<.0655f;assert(isfinite(w) && w>0 && isfinite(h) && h>0 && isfinite(x) && isfinite(y));++rects;
     if(capture){cap_x0=fminf(cap_x0,x);cap_y0=fminf(cap_y0,y);cap_x1=fmaxf(cap_x1,x+w);cap_y1=fmaxf(cap_y1,y+h);}return true;}
 const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)ms;assert(slot<22);return &frame;}
 static float last_angle,last_sx=1,last_sy=1,last_x,last_y;
@@ -124,6 +124,37 @@ int main(void)
         }
         assert(cards>40);
         football_live_art_card(NULL,FB_RUN_DRAW,x,y,w,h,false);football_live_art_card(&renderer,FB_PLAY_COUNT,x,y,w,h,false);football_live_art_defense_card(&renderer,FB_DEF_COUNT,x,y,w,h,false);
+    }
+    /* Route lines: the called paths show before the snap for the human's offense and nowhere else, and they leave with the snap. */
+    {
+        m->special=FB_SPECIAL_NONE;m->conversion=0;m->event=FB_EVENT_NONE;m->rules.offense=FB_HOME;m->los=40;m->run_side=1;memset(m->fx,0,sizeof m->fx);
+        static const float lane[6]={26.67f,26.67f,8,15,40,47};
+        for(unsigned r=0;r<6;++r){m->snap_x[r]=r?39:36;m->snap_y[r]=lane[r];m->actors[r].x=m->snap_x[r];m->actors[r].y=m->snap_y[r];}
+        FootballCamera view={.x=42,.y=26.67f,.ready=true};
+        unsigned shown_runs=0,shown_passes=0,most_lines=0;
+        for(unsigned id=0;id<FB_PLAY_COUNT;++id){
+            const FootballPlayDefinition *play=football_playbook_get((FootballPlayId)id);m->play=(FootballPlayId)id;
+            unsigned frames[4]={0,0,0,0};
+            for(unsigned how=0;how<4;++how){
+                m->phase=how==3?FB_LIVE_SET:how==0?FB_LIVE_CALL:how==1?FB_LIVE_PLAY:FB_LIVE_DEAD;
+                m->rules.offense=FB_HOME;
+                drawn=0;line_rects=0;football_live_art_top(&renderer,&career,&view,0);frames[how]=line_rects;
+            }
+            assert(frames[0]==0 && frames[1]==0 && frames[2]==0); /* nothing once the ball is snapped, or before the play is set */
+            assert(frames[3]>=8 && frames[3]<400);                  /* a handful of dots and end squares, a bounded number */
+            if(frames[3]>most_lines)most_lines=frames[3];
+            m->phase=FB_LIVE_SET;
+            m->rules.offense=FB_AWAY;drawn=0;line_rects=0;football_live_art_top(&renderer,&career,&view,0);assert(line_rects==0); /* the CPU's offense keeps its plan */
+            m->rules.offense=FB_HOME;m->special=FB_SPECIAL_PUNT;drawn=0;line_rects=0;football_live_art_top(&renderer,&career,&view,0);assert(line_rects==0);m->special=FB_SPECIAL_NONE;
+            if(play->type==FB_PLAY_RUN)++shown_runs;else ++shown_passes;
+        }
+        assert(shown_runs==8 && shown_passes==FB_PLAY_COUNT-8);
+        /* A run shows only the runner's path: a pass with five routes draws more than a run with one. */
+        m->phase=FB_LIVE_SET;
+        m->play=FB_RUN_INSIDE_ZONE;drawn=0;line_rects=0;football_live_art_top(&renderer,&career,&view,0);unsigned run_lines=line_rects;
+        m->play=FB_PASS_VERTICALS;drawn=0;line_rects=0;football_live_art_top(&renderer,&career,&view,0);assert(line_rects>run_lines);
+        m->phase=FB_LIVE_CALL;
+        printf("route lines: at most %u rectangles in a frame\n",most_lines);
     }
     printf("motion: at most %u extra rectangles in a frame (a plain frame is %u)\n",worst,plain);
     puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");

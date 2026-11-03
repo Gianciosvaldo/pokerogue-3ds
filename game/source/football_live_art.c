@@ -19,6 +19,37 @@ static void world(const FootballCamera *c,float x,float y,float w,float h,float 
 {
     rect(football_camera_x(c,x),football_camera_y(c,y),w*FB_CAMERA_SCALE,h*FB_CAMERA_SCALE*FB_CAMERA_SQUASH,z,color);
 }
+/* Before the snap the human's offense sees where each eligible player is called to go: a dotted line from his spot along his route, a
+ * square where he stops and a few fainter dots when he runs on, the primary read (the one the play card shows) in gold. A run shows the
+ * runner's way to the handoff and on along the called path. They are gone the moment the ball is snapped. Under the players, over the
+ * turf; dots off the screen are skipped so the cost stays a few dozen rectangles. */
+static void route_lines(const FootballLive *m,const FootballCamera *cam)
+{
+    if(m->phase!=FB_LIVE_SET || m->rules.offense!=FB_HOME)return; /* a kick has no line: football_live_route_line answers 0 */
+    const FootballPlayDefinition *p=football_playbook_get(m->play);if(!p)return;
+    unsigned read=football_playbook_primary_receiver(p),primary=p->type==FB_PLAY_PASS?(read==4?1:read+2):football_playbook_runner(p);
+    for(unsigned pass=0;pass<2;++pass)for(unsigned rank=1;rank<=5;++rank){
+        if((rank==primary)!=(pass==1))continue; /* the gold line last, so it stays on top where two cross */
+        float x[8],y[8];bool settles;unsigned n=football_live_route_line(m,rank,x,y,8,&settles);
+        if(n<2)continue;
+        u32 color=rank==primary?C2D_Color32(255,210,63,255):C2D_Color32(238,244,234,230),faint=rank==primary?C2D_Color32(255,210,63,120):C2D_Color32(238,244,234,110);
+        for(unsigned k=1;k<n;++k){
+            float sx=x[k]-x[k-1],sy=y[k]-y[k-1],len=hypotf(sx,sy);if(len<.01f)continue;
+            sx/=len;sy/=len;
+            for(unsigned d=0;d<(unsigned)ceilf(len/1.1f);++d){float t=(float)d*1.1f;
+                float px=football_camera_x(cam,x[k-1]+sx*t),py=football_camera_y(cam,y[k-1]+sy*t);
+                if(px>-4 && px<404 && py>40 && py<244)rect(px-1.5f,py-1.5f,3,3,.06f,color);
+            }
+        }
+        float ex=football_camera_x(cam,x[n-1]),ey=football_camera_y(cam,y[n-1]);
+        /* A player who does not settle runs straight on upfield past his last point (home attacks toward +x). */
+        if(!settles)for(unsigned d=1;d<=3;++d){
+            float px=football_camera_x(cam,x[n-1]+1.1f*d),py=ey;
+            if(px>-4 && px<404 && py>40 && py<244)rect(px-1.5f,py-1.5f,3,3,.06f,faint);
+        }
+        if(ex>-4 && ex<404 && ey>40 && ey<244)rect(ex-3,ey-3,6,6,.065f,color);
+    }
+}
 /* The line shown over the field while the ball is dead. */
 static bool banner(const FootballLive *m,char *out,size_t size)
 {
@@ -86,6 +117,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     world(cam,m->los,0,.18f,53.333f,.05f,C2D_Color32(74,163,255,255));
     float first=m->rules.offense==FB_HOME?10+m->rules.first_down_at:110-m->rules.first_down_at;
     if(!m->special)world(cam,first,0,.18f,53.333f,.05f,gold);
+    route_lines(m,cam);
     unsigned order[22];for(unsigned i=0;i<22;++i){order[i]=i;for(unsigned j=i;j>0 && m->actors[order[j]].y<m->actors[order[j-1]].y;--j){unsigned t=order[j];order[j]=order[j-1];order[j-1]=t;}}
     for(unsigned rank=0;rank<22;++rank){unsigned i=order[rank];const FootballLiveActor *a=&m->actors[i];
         float x=football_camera_x(cam,a->x),y=football_camera_y(cam,a->y);
