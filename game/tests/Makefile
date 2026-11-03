@@ -443,6 +443,12 @@ build/tera_icon_test: tera_icon_test.c ../source/battle_view.c
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
 .PHONY: tera_icon_test
 
+tera_sprite_test: build/tera_sprite_test
+build/tera_sprite_test: tera_sprite_test.c ../source/battle_view.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: tera_sprite_test
+
 build/battle_feedback_test: battle_feedback_test.c ../source/battle_view.c $(BC)/gen/out/pr_data.c
 	@mkdir -p build
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_feedback_test.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@

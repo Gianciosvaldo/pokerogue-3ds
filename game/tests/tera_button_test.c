@@ -21,6 +21,8 @@ const rr_frame* mui_frame(const char* key,const char* frame){
 }
 void img_draw(const char* key,const char* frame,float x,float y,float ox,float oy){}
 void rr_rect(float x,float y,float w,float h,rr_color color){}
+float ui_now(void){return 0;}
+void rr_set_blend(rr_blend b){(void)b;}
 void rr_draw(const rr_frame* frame,float x,float y,const rr_draw_opts* opts){buttons++;}
 text_opts text_defaults(void){return (text_opts){0};}
 rr_color text_color(text_style style,bool shadow){return 0;}

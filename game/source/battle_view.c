@@ -75,6 +75,10 @@ typedef struct {
   bool catch_on;      /* drawn as a silhouette in the ball's colour, fading back to normal as catch_untint goes 0 -> 1 */
   float catch_untint;
   int catch_rgb[3];
+  /* Terastallized (PokemonSpriteTeraSparkleHandler): a sparkle on a random opaque pixel every 400 ms, each playing the 13 frames of tera_sparkle at
+   * 18 fps. x, y are px from the Pokemon's feet; ms since it started */
+  float tera_next_ms;
+  struct { bool on; float x, y, age; } tera_sp[4];
 } side;
 
 typedef enum { M_IDLE, M_EVENTS, M_COMMAND, M_FIGHT } mode;
@@ -428,6 +432,110 @@ static void draw_sparkle(const side* sd,bool player) {
   float x,y;mon_pos(sd,player,&x,&y);rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=.5f;o.origin_y=1;o.scale_x=o.scale_y=sd->scale;rr_draw(f,x,y,&o);
 }
 
+/* getTypeRgb (data/type.ts): the colour of a type's Tera crystal, which also fills the Tera icon beside the name. Stellar is white. */
+static void tera_type_rgb(int type, int rgb[3]) {
+  static const uint8_t RGB[19][3] = {
+      {168, 168, 120}, {192, 48, 40},   {168, 144, 240}, {160, 64, 160},  {224, 192, 104}, {184, 160, 56}, {168, 184, 32},
+      {112, 88, 152},  {184, 184, 208}, {240, 128, 48},  {104, 144, 240}, {120, 200, 80},  {248, 208, 48}, {248, 88, 136},
+      {152, 216, 216}, {112, 56, 248},  {112, 88, 72},   {232, 136, 200}, {255, 255, 255}};
+  const int t = type >= 0 && type < 19 ? type : -1;
+  for (int i = 0; i < 3; i++) rgb[i] = t < 0 ? 0 : RGB[t][i];
+}
+
+/* The Terastallized look. Upstream's sprite shader pulls the sprite's hue 62.5% toward the Tera type's colour (keeping its light and
+ * saturation) and lays an animated crystal pattern over it; the 3DS draws the sprite through a multiply tint that does the first (the type's
+ * colour at full brightness, 70% of the way from white) and a slow additive pulse of the same colour over the sprite's shape for the second.
+ * Stellar (white) has no colour to pull toward: its pulse cycles the hue. */
+#define TERA_PULSE_MS 1400.0f
+static void tera_colour(int type, int rgb[3]) {
+  if (type == POKEMON_TYPE_STELLAR) {
+    /* full-saturation HSV, the hue turning once every 2 s */
+    const float h = fmodf(ui_now() / 2000.0f, 1.0f) * 6, f = h - floorf(h);
+    float c[3];
+    switch ((int)h % 6) {
+      case 0: c[0] = 1, c[1] = f, c[2] = 0; break;
+      case 1: c[0] = 1 - f, c[1] = 1, c[2] = 0; break;
+      case 2: c[0] = 0, c[1] = 1, c[2] = f; break;
+      case 3: c[0] = 0, c[1] = 1 - f, c[2] = 1; break;
+      case 4: c[0] = f, c[1] = 0, c[2] = 1; break;
+      default: c[0] = 1, c[1] = 0, c[2] = 1 - f; break;
+    }
+    for (int i = 0; i < 3; i++) rgb[i] = (int)(c[i] * 255 + 0.5f);
+    return;
+  }
+  tera_type_rgb(type, rgb);
+}
+
+static rr_color tera_tint(int type, int alpha) {
+  int rgb[3];
+  tera_type_rgb(type, rgb);
+  const int top = rgb[0] > rgb[1] ? (rgb[0] > rgb[2] ? rgb[0] : rgb[2]) : (rgb[1] > rgb[2] ? rgb[1] : rgb[2]);
+  if (type == POKEMON_TYPE_STELLAR || top <= 0) return RR_RGBA(255, 255, 255, alpha);
+  int c[3];
+  for (int i = 0; i < 3; i++) c[i] = (int)(255 - 0.7f * (255 - rgb[i] * 255.0f / top) + 0.5f);
+  return RR_RGBA(c[0], c[1], c[2], alpha);
+}
+
+/* the pulse over a Terastallized sprite (or the selected Tera button): the frame again, tinted by the colour and added, 0 to 0.3 alpha */
+static void draw_tera_pulse(const rr_frame* f, float x, float y, const rr_draw_opts* base, int type) {
+  int rgb[3];
+  tera_colour(type, rgb);
+  const float phase = fmodf(ui_now(), TERA_PULSE_MS) / TERA_PULSE_MS;
+  const float k = 0.5f - 0.5f * cosf(phase * 6.2831853f);
+  rr_draw_opts o = *base;
+  o.tint = RR_RGBA(rgb[0], rgb[1], rgb[2], (int)(k * 77 + 0.5f));
+  rr_set_blend(RR_BLEND_ADD);
+  rr_draw(f, x, y, &o);
+  rr_set_blend(RR_BLEND_NORMAL);
+}
+
+static void update_tera(float dt) {
+  for (int k = 0; k < 4; k++) {
+    side* sd = &B.s[k];
+    for (int i = 0; i < 4; i++)
+      if (sd->tera_sp[i].on && (sd->tera_sp[i].age += dt) >= 1000.0f * 13 / 18) sd->tera_sp[i].on = false;
+    if (sd->mon.terastallized && sd->present) sd->tera_next_ms -= dt;
+    else sd->tera_next_ms = 0;
+  }
+}
+
+/* onLapse: a random pixel of the frame; a sparkle only where it is opaque */
+static void tera_spawn(side* sd, const rr_frame* f, float scale) {
+  if (sd->tera_next_ms > 0 || !sd->mon.terastallized) return;
+  sd->tera_next_ms += 400;
+  if (sd->tera_next_ms <= 0) sd->tera_next_ms = 400;
+  static unsigned seed = 0x9e3779b9u;
+  seed = seed * 1664525u + 1013904223u + (unsigned)ui_now();
+  const int px = (int)((seed >> 8) % (unsigned)f->src_w);
+  seed = seed * 1664525u + 1013904223u;
+  const int py = (int)((seed >> 8) % (unsigned)f->src_h);
+  if (!rr_frame_alpha(f, px, py)) return;
+  for (int i = 0; i < 4; i++)
+    if (!sd->tera_sp[i].on) {
+      sd->tera_sp[i].on = true;
+      sd->tera_sp[i].x = (px - f->src_w * 0.5f) * scale;
+      sd->tera_sp[i].y = (py - f->src_h) * scale;
+      sd->tera_sp[i].age = 0;
+      return;
+    }
+}
+
+static void draw_tera_sparkles(const side* sd, bool player) {
+  if (!sd->present || sd->mon.hidden || sd->scale <= 0) return;
+  float x, y;
+  mon_pos(sd, player, &x, &y);
+  for (int i = 0; i < 4; i++) {
+    if (!sd->tera_sp[i].on) continue;
+    char name[8];
+    snprintf(name, sizeof name, "%d", (int)(sd->tera_sp[i].age * 18 / 1000));
+    const rr_frame* f = img_frame("images/effects/tera_sparkle", name);
+    if (!f) continue;
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.origin_x = o.origin_y = 0.5f;
+    rr_draw(f, x + sd->tera_sp[i].x, y + sd->tera_sp[i].y, &o);
+  }
+}
+
 static void draw_sprite(side* sd, bool player) {
   if (!sd->present || !sd->sprite_on || sd->scale <= 0 || sd->mon.hidden || ba_hidden(player ? 0 : 2)) return;
   const rr_frame* f = sprite_frame(sd);
@@ -448,7 +556,8 @@ static void draw_sprite(side* sd, bool player) {
     o.tint = RR_RGBA(v, v, v, 255);
     rr_set_tone((int)(sd->catch_rgb[0] * (1 - sd->catch_untint)), (int)(sd->catch_rgb[1] * (1 - sd->catch_untint)),
                 (int)(sd->catch_rgb[2] * (1 - sd->catch_untint)));
-  } else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
+  } else if (sd->mon.terastallized) o.tint = tera_tint(sd->mon.tera_type, (int)(sd->mon_alpha * 255 + 0.5f));
+  else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
   if (sd->drop > 0) {
     /* fainting: the sprite sinks below its base line */
     int vis = (int)(f->src_h - sd->drop);
@@ -459,6 +568,11 @@ static void draw_sprite(side* sd, bool player) {
   }
   rr_draw(f, x, y, &o);
   if (sd->catch_on) rr_set_tone(0, 0, 0);
+  if (sd->mon.terastallized && !sd->black && !sd->catch_on) {
+    draw_tera_pulse(f, x, y, &o, sd->mon.tera_type);
+    tera_spawn(sd, f, sd->scale);
+    draw_tera_sparkles(sd, player);
+  }
 }
 
 /* The thrown ball (pb atlas: "pb", "pb_opening", "pb_open", and gb/ub/rb/mb), origin (0.5, 0.625) */
@@ -672,16 +786,6 @@ static float name_text(float x, float y, const char* t, rr_color c, rr_color sh)
   o.color = c ? c : text_color(TS_BATTLE_INFO, false);
   o.shadow = sh ? sh : text_color(TS_BATTLE_INFO, true);
   return text_draw(TS_INSTRUCTIONS_TEXT, x, y - 2, t, &o);
-}
-
-/* getTypeRgb (data/type.ts): the colour of a type's Tera crystal, which also fills the Tera icon beside the name. Stellar is white. */
-static void tera_type_rgb(int type, int rgb[3]) {
-  static const uint8_t RGB[19][3] = {
-      {168, 168, 120}, {192, 48, 40},   {168, 144, 240}, {160, 64, 160},  {224, 192, 104}, {184, 160, 56}, {168, 184, 32},
-      {112, 88, 152},  {184, 184, 208}, {240, 128, 48},  {104, 144, 240}, {120, 200, 80},  {248, 208, 48}, {248, 88, 136},
-      {152, 216, 216}, {112, 56, 248},  {112, 88, 72},   {232, 136, 200}, {255, 255, 255}};
-  const int t = type >= 0 && type < 19 ? type : -1;
-  for (int i = 0; i < 3; i++) rgb[i] = t < 0 ? 0 : RGB[t][i];
 }
 
 /* BattleInfo.teraIcon: icon_tera (12 x 15) at half size, filled with the Tera type's colour (setTintFill), 1 px after the name and the gender
@@ -913,7 +1017,9 @@ static void draw_tera_button(void) {
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.origin_x = o.origin_y = 0.5f;
     o.scale_x = o.scale_y = on ? 1.6f : 1.3f;
+    if (on) o.tint = tera_tint(B.opts.tera_type, 255); /* the glow: upstream's toggleTeraButton gives it the Terastallized look */
     rr_draw(f, x, TERA_BTN_Y, &o);
+    if (on) draw_tera_pulse(f, x, TERA_BTN_Y, &o, B.opts.tera_type);
   } else {
     rr_rect(x - 10, TERA_BTN_Y - 9, 20, 18, on ? RR_RGBA(0xf8, 0xf8, 0xf8, 255) : RR_RGBA(0x80, 0x80, 0x98, 255));
   }
@@ -2224,6 +2330,7 @@ static void bv_update(ui_screen* s, float dt) {
     if (B.ball.fade_t >= 500) B.ball.on = false;
   }
   update_sparkles(dt);
+  update_tera(dt);
   for (int k = 0; k < 4; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
