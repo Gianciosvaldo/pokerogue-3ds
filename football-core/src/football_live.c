@@ -158,8 +158,8 @@ void football_live_credit(FootballLive *m,unsigned actor,FootballCreditKind kind
 }
 void football_live_fx(FootballLive *m,FootballFxKind kind,unsigned actor,unsigned other,int side)
 {
-    if(!m || actor>=22 || kind<=FB_FX_NONE || kind>FB_FX_TOUCHDOWN)return;
-    bool at_ball=kind==FB_FX_INTERCEPTION;
+    if(!m || actor>=22 || kind<=FB_FX_NONE || kind>FB_FX_INCOMPLETE)return;
+    bool at_ball=kind==FB_FX_INTERCEPTION || kind==FB_FX_INCOMPLETE;
     m->fx[m->fx_next]=(FootballFx){(uint8_t)kind,(uint8_t)actor,(uint8_t)(other<22?other:22),(int8_t)(side<0?-1:1),m->steps,at_ball?m->ball_x:m->actors[actor].x,at_ball?m->ball_y:m->actors[actor].y};
     m->fx_next=(uint8_t)((m->fx_next+1)%FB_FX_COUNT);
 }
@@ -306,7 +306,10 @@ static void ball_step(FootballLive *m)
             /* The credit is made with the dead ball, as for every play, so a run-back that ends in a fumble is still his interception. */
             if(!begin_turnover(m,defender)){football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);}return;}
     }
-    if(receiver==22 || (defender<22 && random32(m)%100<12u+m->actors[defender].attributes.cth/8u) || random32(m)%100>55u+m->actors[receiver].attributes.cth/3){finish(m,FB_RESULT_INCOMPLETE,m->los);return;}
+    if(receiver==22 || (defender<22 && random32(m)%100<12u+m->actors[defender].attributes.cth/8u) || random32(m)%100>55u+m->actors[receiver].attributes.cth/3){
+        /* The ball drops: the receiver it was for (the closest one, or the target when nobody was near), and the defender who was there. */
+        football_live_fx(m,FB_FX_INCOMPLETE,receiver<22?receiver:m->target,defender,direction(m)>0?1:-1);
+        finish(m,FB_RESULT_INCOMPLETE,m->los);return;}
     m->carrier=(uint8_t)receiver;m->caught=true;football_live_fx(m,FB_FX_CATCH,receiver,22,direction(m)>0?1:-1);
     if(!football_live_cpu(m,(FootballSide)m->rules.offense))m->controlled=m->carrier;
 }

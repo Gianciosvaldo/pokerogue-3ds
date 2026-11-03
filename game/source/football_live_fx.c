@@ -63,6 +63,11 @@ FootballFxPose football_live_fx_pose(const FootballLive *m,unsigned actor)
         case FB_FX_CATCH:
             if(doer && age<.3f)p.dy-=5*arc(age/.3f);
             break;
+        case FB_FX_INCOMPLETE:
+            /* The receiver sags and shakes his head; a defender who was there hops. Small: the play is only over. */
+            if(doer && age<.9f){float k=1-age/.9f;p.angle+=FB_FX_TURN*s*.14f*sinf(age*11)*k;p.dy+=2*ease_out(age/.25f)*k;}
+            if(done_to && age<.35f)p.dy-=3*arc(age/.35f);
+            break;
         case FB_FX_TOUCHDOWN:{
             /* The scorer jumps three times; the teammates around join in a beat apart. */
             if(doer && age<2.1f){float h=fabsf(sinf(age/.7f*PI_F));p.dy-=17*h;p.sy+=.1f*h-.12f*(1-h);p.angle+=.35f*sinf(age*9)*(1-age/2.1f);}
@@ -75,6 +80,16 @@ FootballFxPose football_live_fx_pose(const FootballLive *m,unsigned actor)
         }
     }
     return p;
+}
+float football_live_fx_ball_lift(const FootballLive *m)
+{
+    float lift=0;
+    if(!m)return lift;
+    for(unsigned i=0;i<FB_FX_COUNT;++i){
+        const FootballFx *f=&m->fx[i];float age=age_of(m,f);
+        if(f->kind==FB_FX_INCOMPLETE && age>=0 && age<.5f)lift=fmaxf(lift,7*(1-age/.5f)*fabsf(sinf(age/.25f*PI_F)));
+    }
+    return lift;
 }
 void football_live_fx_shake(const FootballLive *m,float *dx,float *dy)
 {
@@ -197,6 +212,10 @@ void football_live_fx_draw(FootballRenderer *r,const FootballCareer *c,const Foo
             break;
         case FB_FX_CATCH:
             ring(px,py-8,age/.3f,tone(238,244,234,(1-age/.3f)*.6f));
+            break;
+        case FB_FX_INCOMPLETE:
+            puffs(px,py+2,age,.45f,4);
+            popup(r,"INCOMPLETE",px,py-30,age,1.0f);
             break;
         case FB_FX_TOUCHDOWN:
             if(age<.3f)box(0,44,400,196,.74f,tone(255,255,255,(1-age/.3f)*.6f));

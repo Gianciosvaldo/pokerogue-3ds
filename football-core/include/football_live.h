@@ -38,10 +38,11 @@ static inline unsigned football_credit_candy(unsigned kind)
 /* Moments the screen dresses up with motion. Not serialized (a checkpoint is always taken at a call) and cleared when the
  * next play lines up. Each is stamped with `steps`, so an animation follows the match clock and never the frame time. */
 typedef enum {
-    FB_FX_NONE,FB_FX_JUKE,FB_FX_DIVE,FB_FX_TACKLE,FB_FX_SACK,FB_FX_INTERCEPTION,FB_FX_FUMBLE,FB_FX_CATCH,FB_FX_TOUCHDOWN
+    FB_FX_NONE,FB_FX_JUKE,FB_FX_DIVE,FB_FX_TACKLE,FB_FX_SACK,FB_FX_INTERCEPTION,FB_FX_FUMBLE,FB_FX_CATCH,FB_FX_TOUCHDOWN,FB_FX_INCOMPLETE
 } FootballFxKind;
 #define FB_FX_COUNT 8
-/* actor made it happen, other is who it happened to (22 for nobody), side is the direction it points (-1 or +1: the run
+/* actor made it happen (for an incomplete pass the receiver it was meant for), other is who it happened to (22 for nobody; for an incomplete pass
+ * the defender who got a hand on it), x,y of an incomplete pass is where the ball came down, side is the direction it points (-1 or +1: the run
  * of the play along the field for a tackle, a dive or a touchdown; the cut for a juke); x, y are where. */
 typedef struct { uint8_t kind,actor,other;int8_t side;uint32_t step;float x,y; } FootballFx;
 /* The dead ball waits this long before the next playcall: a touchdown is celebrated, a turnover or a sack is let sink in. */

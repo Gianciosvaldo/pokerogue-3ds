@@ -72,7 +72,7 @@ int main(void)
 
     /* Whole games: every score, sack and takeaway has its moment, naming the player the credits name, and the dead ball
      * waits as long as the moment needs. */
-    unsigned long tackles=0,touchdowns=0,sacks=0,interceptions=0,fumbles=0,catches=0,jukes=0;
+    unsigned long tackles=0,touchdowns=0,sacks=0,interceptions=0,fumbles=0,catches=0,jukes=0,drops=0;
     for(uint32_t seed=1;seed<=30;++seed){
         assert(football_live_begin(&m,&roster,seed,1));m.autoplay=1;guard=0;unsigned dead_since=0,dead_event=0;bool was_dead=false;
         while(m.phase!=FB_LIVE_END){
@@ -101,11 +101,15 @@ int main(void)
             assert(fresh(FB_FX_TOUCHDOWN)==td && fresh(FB_FX_INTERCEPTION)<=intc && fresh(FB_FX_SACK)==sack);
             assert(m.event!=FB_EVENT_FUMBLE || fresh(FB_FX_FUMBLE)==1);
             assert(fresh(FB_FX_SACK)+fresh(FB_FX_TACKLE)<=1); /* one tackle at most ends a play */
+            /* Every incomplete pass drops the ball with a moment at the spot it came down, for the receiver it was meant for. */
+            assert(fresh(FB_FX_INCOMPLETE)==(m.result.kind==FB_RESULT_INCOMPLETE && m.event==FB_EVENT_NONE?1u:0u));
+            {const FootballFx *d=newest(FB_FX_INCOMPLETE);
+             if(fresh(FB_FX_INCOMPLETE)){assert(d && d->actor<22 && fabsf(d->x-m.ball_x)<.01f && fabsf(d->y-m.ball_y)<.01f && d->step==m.steps);++drops;}}
             tackles+=fresh(FB_FX_TACKLE);touchdowns+=td;sacks+=sack;interceptions+=intc;fumbles+=fresh(FB_FX_FUMBLE);
         }
     }
-    assert(tackles>100 && touchdowns>20 && sacks>10 && interceptions>5 && catches>100 && jukes>5);
-    printf("fx: 30 games recorded %lu tackles, %lu sacks, %lu interceptions, %lu fumbles, %lu touchdowns, %lu catches, %lu CPU jukes\n",tackles,sacks,interceptions,fumbles,touchdowns,catches,jukes);
+    assert(tackles>100 && touchdowns>20 && sacks>10 && interceptions>5 && catches>100 && jukes>5 && drops>100);
+    printf("fx: 30 games recorded %lu tackles, %lu sacks, %lu interceptions, %lu fumbles, %lu touchdowns, %lu catches, %lu CPU jukes, %lu incomplete passes\n",tackles,sacks,interceptions,fumbles,touchdowns,catches,jukes,drops);
     puts("football motion record tests passed");
     return 0;
 }
