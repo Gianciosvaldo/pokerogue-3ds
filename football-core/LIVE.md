@@ -383,6 +383,12 @@ that is chosen. Nothing in them keeps state; `football_live_screen.c` decides wh
 
 ## Coverage, body contact and facing
 
+**Goal-line squeeze.** The defense's start and drop spots follow the field, not the open-field depths: from `football_live_goal_room` (yards from the line
+of scrimmage to the goal line) no defender is placed deeper than 2.5 yd past the goal line (the deep players) or 1 yd past it (the others), and a deep
+player takes a receiver over once he is `min(8, room + 1)` yd downfield, so the end zone is covered from the 3 as it is from the 40. Nothing changes until
+the ball is about 21 yd from the goal line. `tests/defense_goal_line_test.c` checks every call, play, side and ball position, the unchanged open field and
+the end-zone hand-over. Numbers: `DEFENSE-AUDIT.md`, Status.
+
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners
 match the RB, TE and three receivers, and two safeties protect deep halves. Man
 assignments persist for the entire held pass; there is no three-second collapse.

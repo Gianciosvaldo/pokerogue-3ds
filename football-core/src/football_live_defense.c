@@ -41,7 +41,19 @@ void football_live_defense_setup(FootballLive *m)
             if((m->defense==FB_DEF_ZONE_BLITZ || m->defense==FB_DEF_COVER0) && football_defense_is_rusher(m->defense,rank)){a->x=m->los+dir*3;a->y=rank==4?18:35;}
         }
     }
+    /* The goal line squeezes the defense: nobody starts, or drops, deeper than a couple of yards into the end zone he is defending (the
+     * deep players 2.5 yd past the goal line, the rest 1 yd), instead of at the depths of an open field, which put the safeties at the
+     * back line (and, in the man calls, outside the field) from the 3-yard line. Nothing changes until the line of scrimmage is within
+     * about 21 yd of the goal line. */
+    for(unsigned rank=0;rank<11;++rank){
+        FootballLiveActor *a=&m->actors[def+rank];
+        float cap=football_live_goal_room(m)+((football_defense_deep_mask(m->defense)&(1u<<rank))?FB_LIVE_DEEP_BEHIND:FB_LIVE_SHALLOW_BEHIND);
+        if((a->x-m->los)*dir>cap)a->x=m->los+dir*cap;
+        if((m->zone_x[rank]-m->los)*dir>cap)m->zone_x[rank]=m->los+dir*cap;
+    }
 }
+/* Yards from the line of scrimmage to the goal line the offense attacks. */
+float football_live_goal_room(const FootballLive *m){return m->rules.offense==FB_HOME?110.f-m->los:m->los-10.f;}
 void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float *y)
 {
     unsigned off=m->rules.offense==FB_HOME?0:11,def=11-off,rank=actor-def;
@@ -49,6 +61,9 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
     bool running=!m->flying && (m->caught || (m->carrier!=off && m->elapsed>=.4f) || (m->carrier==off && (carrier->x-m->los)*dir>.5f));
     bool rushing=football_defense_is_rusher(m->defense,rank);
     bool deep=(football_defense_deep_mask(m->defense)&(1u<<rank))!=0;
+    /* How far downfield a receiver is before the deep players take him over from the underneath ones: 8 yd in the open field, less when the
+     * end zone is all the room there is (a receiver 4 yd deep at the 3 is already in the end zone). */
+    float deep_min=fminf(8.f,football_live_goal_room(m)+1.f);
     float tx=a->x,ty=a->y;
     if(running || rushing){
         /* Pursue where the carrier will be, not where he is: lead grows with the distance to close. */
@@ -60,7 +75,7 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
         unsigned threat=255;float best=100000;
         for(unsigned receiver=1;receiver<=5;++receiver){const FootballLiveActor *r=&m->actors[off+receiver];
             float depth=(r->x-m->los)*dir,lateral=fabsf(r->y-m->zone_y[rank]);
-            bool inside=deep ? depth>=8 && lateral<=16 : depth>=-3 && depth<=16 && lateral<=10;
+            bool inside=deep ? depth>=deep_min && lateral<=16 : depth>=-3 && depth<=16 && lateral<=10;
             if(!inside)continue;
             float score=lateral*2+fabsf(r->x-m->zone_x[rank]);
             if(score<best){best=score;threat=off+receiver;}
@@ -91,7 +106,7 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
         for(unsigned receiver=1;receiver<=5;++receiver){const FootballLiveActor *r=&m->actors[off+receiver];
             float depth=(r->x-m->los)*dir;
             bool half=one_high || (rank==9?r->y<=27:r->y>=26);
-            if(!half || depth<(robber?0:8) || (robber&&depth>18))continue;
+            if(!half || depth<(robber?0:deep_min) || (robber&&depth>18))continue;
             float value=depth*.5f-fabsf(r->y-m->zone_y[rank])*.2f;
             if(value>best){best=value;tx=r->x+dir*(robber?FB_BODY_DIAMETER+.4f:3);ty=r->y;}
         }

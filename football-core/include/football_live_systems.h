@@ -13,6 +13,11 @@ uint32_t football_live_random(FootballLive *match);
 #define FB_LIVE_HANDOFF_MAX 1.1f
 /* Where the QB hands the ball over on this run (football_live.c). */
 void football_live_mesh_point(const FootballLive *match,float *x,float *y);
+/* Goal-line squeeze for the defense (football_live_defense.c): how far past the goal line the deep players and the others may stand, and the
+ * distance from the line of scrimmage to the goal line the offense attacks. */
+#define FB_LIVE_DEEP_BEHIND 2.5f
+#define FB_LIVE_SHALLOW_BEHIND 1.f
+float football_live_goal_room(const FootballLive *match);
 /* The same for a named runner: the screen asks before the snap, while hand_to is still empty (football_live_physics.c). */
 void football_live_mesh_point_for(const FootballLive *match,unsigned runner,float *x,float *y);
 /* The route lines drawn before the snap: the called path of the eligible player of this rank (1 RB, 2/3/4 WR1/2/3, 5 TE) as up to `max`

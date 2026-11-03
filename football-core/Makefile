@@ -236,6 +236,12 @@ route-line-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/route_line_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/route_line_test
 	$(BUILD)/route_line_test
 test: route-line-test
+.PHONY: defense-goal-line-test
+defense-goal-line-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_goal_line_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/defense_goal_line_test
+	$(BUILD)/defense_goal_line_test
+test: defense-goal-line-test
 
 .PHONY: special-test
 special-test: core-libs
