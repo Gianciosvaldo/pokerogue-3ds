@@ -68,7 +68,7 @@ int main(void)
     for(unsigned i=0;i<22 && changed;++i){const pr_pokemon *p=&career.roster.mon[i].b;assert(PR_N_MOVES(p)==4);
         for(unsigned k=0;k<4;++k)if(PR_MOVES(p)[k]!=filler[0] && PR_MOVES(p)[k]!=filler[1] && PR_MOVES(p)[k]!=filler[2] && PR_MOVES(p)[k]!=filler[3])changed=0;}
     assert(!changed);
-    assert(career.phase==FB_CAREER_SHOP && guard<10000 && career.wins==1 && career.wallet==500);
+    assert(career.phase==FB_CAREER_SHOP && guard<10000 && career.wins==1 && career.wallet==FB_CAREER_WIN_PAY(1));
     for(unsigned i=0;i<22;++i)assert(career.roster.mon[i].b.level>5);
     assert(football_career_buy(&career,0,21));assert(!football_career_buy(&career,0,21));
     n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));assert(loaded.roster.speed[21]==2 && loaded.sold[0]);

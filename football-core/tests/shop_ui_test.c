@@ -65,6 +65,8 @@ int main(void)
     tap(&menu,20,150);
     assert(menu.last_action==FB_SHOP_BOUGHT && roster.n_items==1 && season.wallet==1000);
     assert(!strcmp(roster.items[0].key,"FORM_CHANGE_ITEM") && roster.items[0].arg==stone);
+    {   /* the shop looks the stone up among the rare form-change items, where Rayquazite and the rest have their names and icons */
+        FootballShopOffer offer={.item=FB_ITEM_MEGA_STONE};assert(!strcmp(football_shop_asset_key(&offer),"RARE_FORM_CHANGE_ITEM")); }
     assert(roster.items[0].pokemon_id==roster.party[0].b.id);
     tap(&menu,20,150);
     assert(menu.last_action==FB_SHOP_REFUSED && roster.n_items==1 && season.wallet==1000);

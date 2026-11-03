@@ -160,7 +160,7 @@ int main(void)
     /* ---- the career's shop ---- */
     unsigned roster[22];unsigned roster_count=species_with_items(0,roster,22);assert(roster_count==22);
     shop_with(&career,7,1,roster,roster_count);
-    assert(career.wallet==500 && career.evo_count>0 && career.evo_count<=FB_SHOP_EVO_MAX);
+    assert(career.wallet==FB_CAREER_WIN_PAY(1) && career.evo_count>0 && career.evo_count<=FB_SHOP_EVO_MAX);
     for(unsigned i=0;i<career.evo_count;++i){
         const FootballEvoOffer *o=&career.evo[i];
         assert(o->state==FB_EVO_OFFER && o->member<22 && o->item && o->species && species_of(o->species));
@@ -203,12 +203,12 @@ int main(void)
         assert(one->evo_count==5);
         for(unsigned i=0;i<one->evo_count;++i)assert(one->evo[i].member==0 && one->evo[i].state==FB_EVO_OFFER);
         FootballEvoOffer bought=one->evo[2];
-        one->roster.mega_item[0]=1;assert(!football_career_buy(one,FB_SHOP_FIXED+2,0) && one->wallet==500 && one->evo[2].state==FB_EVO_OFFER); /* a held stone would be lost */
+        one->roster.mega_item[0]=1;assert(!football_career_buy(one,FB_SHOP_FIXED+2,0) && one->wallet==FB_CAREER_WIN_PAY(1) && one->evo[2].state==FB_EVO_OFFER); /* a held stone would be lost */
         one->roster.mega_item[0]=0;
-        assert(football_career_buy(one,FB_SHOP_FIXED+2,0) && (unsigned)one->roster.mon[0].b.species==bought.species && one->wallet==500u-bought.price);
+        assert(football_career_buy(one,FB_SHOP_FIXED+2,0) && (unsigned)one->roster.mon[0].b.species==bought.species && one->wallet==FB_CAREER_WIN_PAY(1)-bought.price);
         for(unsigned i=0;i<one->evo_count;++i)assert(one->evo[i].state==(i==2?FB_EVO_SOLD:FB_EVO_VOID));
         for(unsigned i=0;i<one->evo_count;++i)assert(!football_career_buy(one,FB_SHOP_FIXED+i,0));
-        assert(one->wallet==500u-bought.price);
+        assert(one->wallet==FB_CAREER_WIN_PAY(1)-bought.price);
         size_t saved=football_career_save(one,bytes,sizeof bytes);assert(saved && football_career_load(&loaded,&other,&profile,bytes,saved)); /* voided offers need not hold, so the checkpoint loads */
         assert(loaded.evo_count==5 && loaded.evo[2].state==FB_EVO_SOLD && loaded.evo[0].state==FB_EVO_VOID);
         free(one);
@@ -247,7 +247,13 @@ int main(void)
 
     /* The fixed offers still work beside them, and a purchase made in the shop is saved. */
     career.wallet+=500;wallet=career.wallet;
+    assert(career.prices[0]==FB_CAREER_VITAMIN_PRICE(career.round) && career.prices[0]<career.evo[0].price); /* a vitamin is cheaper than the cheapest evolution item */
+    unsigned spd_before=career.roster.player[21].attributes.spd;
     assert(football_career_buy(&career,0,21) && !football_career_buy(&career,0,21) && career.roster.speed[21]==2 && career.wallet==wallet-career.prices[0]);
+    {   /* the purchase says what it did: "<name>: Speed <before> to <after> (boost 2/20)" */
+        char want[64];snprintf(want,sizeof want,"Speed %u to %u (boost 2/20)",spd_before,(unsigned)career.roster.player[21].attributes.spd);
+        assert(strstr(career.message,want) && career.roster.player[21].attributes.spd>=spd_before);
+    }
     size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n);
     assert(football_career_load(&loaded,&other,&profile,bytes,n));
     assert(loaded.evo_count==career.evo_count && !memcmp(loaded.evo,career.evo,sizeof career.evo) && loaded.wallet==career.wallet && loaded.roster.mon[member].b.species==first.species);
@@ -308,7 +314,7 @@ int main(void)
     /* A member who cannot evolve with an item is never offered one; a roster of such members has an empty shelf. */
     {
         unsigned plain[1]={4};/* Charmander */
-        shop_with(&career,9,1,plain,1);assert(career.evo_count==0 && career.wallet==500);
+        shop_with(&career,9,1,plain,1);assert(career.evo_count==0 && career.wallet==FB_CAREER_WIN_PAY(1));
         assert(!football_career_buy(&career,FB_SHOP_FIXED,0));
     }
     /* A rare item (Black Augurite, Metal Alloy, a scroll) against Growlithe's Fire Stone is dearer than a common one, and the price climbs with the round. */
@@ -320,7 +326,7 @@ int main(void)
             assert(o->price==(o->item>50?800+75*3:400+50*3));
             if(o->item>50)dear=o->price;else cheap=o->price;}
         assert(cheap && dear>cheap);
-        assert(career.wallet==400+100*3 && (cheap>career.wallet?football_career_buy(&career,FB_SHOP_FIXED,0)==false:true));
+        assert(career.wallet==FB_CAREER_WIN_PAY(3) && (cheap>career.wallet?football_career_buy(&career,FB_SHOP_FIXED,0)==false:true));
     }
     printf("football shop evolution: %u item evolutions (%u rare, %u species with several items), offers, purchase, round rotation, version 1/2 saves and refusals passed\n",evolved,rare,multi);
     return 0;

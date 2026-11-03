@@ -129,7 +129,7 @@ static void roll_evolutions(FootballCareer *c)
 static void shop(FootballCareer *c)
 {
     pay_match(c,true);
-    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;c->message[0]=0;
+    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;c->message[0]=0;
     bool owns_mega=false;
     for(unsigned i=0;i<22;++i)owns_mega|=c->roster.mega_item[i]!=0;
     /* Keep the first usable stone available until it can be afforded. Otherwise
@@ -214,7 +214,7 @@ bool football_career_continue(FootballCareer *c)
     if(!c)return false;
     if(c->phase==FB_CAREER_RESULT){
         if(c->live.rules.winner!=FB_HOME){pay_match(c,false);c->phase=FB_CAREER_END;return true;}
-        ++c->wins;c->wallet+=400+100*c->round;c->exp_member=0;c->phase=FB_CAREER_EXP;
+        ++c->wins;c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }
     if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==7)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
@@ -271,6 +271,14 @@ bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
         if(!gc_football_mega_form(c->scratch,0,c->stone_item))return false;
         c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;
     }
-    else {uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;*boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);}
+    else {
+        uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;
+        const unsigned before=offer==0?c->roster.player[member].attributes.spd:c->roster.player[member].attributes.str;
+        *boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);
+        /* Say what changed: the boost only shows in the member's stats, which the shop does not list. */
+        const unsigned after=offer==0?c->roster.player[member].attributes.spd:c->roster.player[member].attributes.str;
+        const char *who="Pokemon";for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==c->roster.mon[member].b.species){who=pr_species_table[i].name;break;}
+        snprintf(c->message,sizeof c->message,"%s: %s %u to %u (boost %u/20)",who,offer==0?"Speed":"Strength",before,after,(unsigned)*boost);
+    }
     c->wallet-=c->prices[offer];c->sold[offer]=true;return true;
 }
