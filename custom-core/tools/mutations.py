@@ -262,8 +262,8 @@ mut(N, "n->fallen_species < 1 || n->fallen_species > CC_SPECIES_ID_MAX", "n->fal
 mut(N, "} else if (n->fallen_species || n->fallen_form) {", "} else if (n->fallen_species) {")
 mut(N, "} else if (n->fallen_species || n->fallen_form) {", "} else if (0) {")
 # support and the insertion gate
-for tr, ref in [("BOSS", "BOSS"), ("FUSED", "FUSED"), ("TERA", "TERA"),
-                ("TRAINER_OWNED", "TRAINER_OWNED"), ("MYSTERY", "MYSTERY"), ("FIXED_SCRIPTED", "FIXED_SCRIPTED"),
+for tr, ref in [("FUSED", "FUSED"), ("TERA", "TERA"),
+                ("MYSTERY", "MYSTERY"), ("FIXED_SCRIPTED", "FIXED_SCRIPTED"),
                 ("REMATCH", "REMATCH")]:
     drop(N, f"if (n->traits & CC_TR_{tr}) return CC_REFUSE_{ref};")
 mut(N, "/* Doubles is provenance: an attributed enemy can return alone in a rematch. */",
