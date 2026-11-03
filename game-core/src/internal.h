@@ -172,6 +172,9 @@ const pr_species *gc_species(int id);
 const pr_form *gc_form(int species, int form);
 int gc_form_ability(int species, const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
+/* SelectStarterPhase.initBattle's party (src/gc_run.c), and its Spliced Endless fusion (generateFusionSpecies(true)) */
+void gc_starters_build_party(gc_run *run, const gc_starter *starters, int n);
+bool gc_mon_starter_fusion(gc_run *run, gc_mon *m);
 void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int trainer_slot);
 const pr_species_gen *gc_species_gen(int id);                          /* run-core's per-species facts (by SpeciesId), NULL = none */
 /* new PlayerPokemon(species, level, abilityIndex, formIndex, undefined, shiny, undefined) as PokemonData.toPokemon()

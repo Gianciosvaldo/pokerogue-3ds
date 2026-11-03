@@ -108,6 +108,16 @@ $(BUILD)/payday_diff_test: tests/payday_diff_test.c $(BUILD)/libgc.a $(REWARD_LI
 all: $(BUILD)/biome_fields_diff_test
 $(BUILD)/biome_fields_diff_test: tests/biome_fields_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/starters_host_test
+$(BUILD)/starters_host_test: tests/starters_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: starters-host-test
+starters-host-test: $(BUILD)/starters_host_test
+	$(BUILD)/starters_host_test
+.PHONY: starters-host-test
+all: $(BUILD)/starters_diff_test
+$(BUILD)/starters_diff_test: tests/starters_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/flee_diff_test
 $(BUILD)/flee_diff_test: tests/flee_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
