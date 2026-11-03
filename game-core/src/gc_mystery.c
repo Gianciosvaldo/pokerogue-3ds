@@ -1342,13 +1342,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_THE_STRONG_STUFF:
-        if (option == 0) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            if (run->party[target].b.stat_stages[STAT_ATK] < 6) run->party[target].b.stat_stages[STAT_ATK]++;
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_strong_execute(run, option);
         return true;
 
     case GC_ME_THE_POKEMON_SALESMAN:
