@@ -35,10 +35,11 @@ static pr_msg_arg arg(const char *name, uint8_t kind, uint32_t v, const char *s)
     return a;
 }
 
-/* Battle.isClassicFinalBoss: gameMode.isClassic && isWaveFinal(wave) */
+/* Classic and Challenge final-wave encounters use the final-boss name affix. */
 static bool classic_final_boss(const pr_battle *bt)
 {
-    return bt->game_mode == GAME_MODES_CLASSIC && bt->wave_index == 200;
+    return (bt->game_mode == GAME_MODES_CLASSIC || bt->game_mode == GAME_MODES_CHALLENGE)
+        && bt->wave_index == 200;
 }
 
 static uint32_t pokemon_v(const pr_battle *bt, const pr_pokemon *p)
