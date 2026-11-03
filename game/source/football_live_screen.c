@@ -281,6 +281,7 @@ static bool touch(ui_screen *s,float x,float y)
             for(unsigned i=0;i<11;++i){float dx=x-(MAP_X+c->live.actors[i].x*2.5f),dy=y-(MAP_Y+c->live.actors[i].y*2);float d=dx*dx+dy*dy;if(d<best){best=d;nearest=i;}}
             c->live.controlled=(uint8_t)nearest;return true;
         }
+        if(y>=FM_FOOT_Y-4 && x<160 && football_live_can_undo(&c->live)){L.pending|=FB_LIVE_UNDO;return true;} /* the left button: back to the playcall */
         if(c->live.special && c->live.stage!=FB_STAGE_RETURN && c->live.kick_side==FB_HOME){L.pending|=FB_LIVE_ACTION;}
         else if(y>=TARGET_Y && y<TARGET_Y+2*TARGET_PITCH_Y-6 && x>=TARGET_X && x<TARGET_X+3*TARGET_PITCH_X){
             unsigned column=(unsigned)((x-TARGET_X)/TARGET_PITCH_X),row=(unsigned)((y-TARGET_Y)/TARGET_PITCH_Y);unsigned target=row*3+column;
@@ -313,7 +314,7 @@ static void update(ui_screen *s,float dt)
         if(held&KEY_DUP)controls.y=-1;
         if(held&KEY_DDOWN)controls.y=1;
         if(down&KEY_A)controls.pressed|=FB_LIVE_ACTION;
-        if(down&KEY_B)controls.pressed|=FB_LIVE_JUKE|FB_LIVE_SWITCH;
+        if(down&KEY_B)controls.pressed|=c->live.phase==FB_LIVE_SET?FB_LIVE_UNDO:FB_LIVE_JUKE|FB_LIVE_SWITCH; /* before the snap, B takes the called play back */
         if(down&KEY_X)controls.receiver=0;
         if(down&KEY_Y)controls.receiver=1;
         if(down&KEY_L)controls.receiver=2;
@@ -447,6 +448,7 @@ static void match_live(void)
     else if(receiving)help="Circle Pad: rush the kicker     A: dive     B: switch";
     else if(covering || m->special)help="Circle Pad: chase the returner     B: switch     A: dive";
     else help=m->rules.offense==FB_HOME?"Circle Pad: run     B: juke":"Circle Pad: move     B: switch defender";
+    if(football_live_can_undo(m))help="A: snap the ball     B: choose another play";
     football_menu_panel(FM_HEAD_X,32,FM_HEAD_W,30);football_menu_text(TS_WINDOW,FM_PX_SMALL,FM_HEAD_X+12,32+FM_TEXT_PAD+1,FM_HEAD_W-24,help);
     if(kicking){
         football_menu_panel(FM_HEAD_X,68,FM_HEAD_W,100);
@@ -473,7 +475,7 @@ static void match_live(void)
     bool fair=receiving && m->special==FB_SPECIAL_PUNT && m->stage!=FB_STAGE_RETURN;
     const char *kick_label=m->special==FB_SPECIAL_KICKOFF?"A: Kick":"A: Snap";
     const char *action=offense?kick_label:fair?"A: Fair catch":receiving && free_kick && m->stage!=FB_STAGE_RETURN?"":"A: Dive";
-    buttons(offense?"B: Juke":"B: Switch",action,action[0]!=0);
+    buttons(football_live_can_undo(m)?"B: Change play":offense?"B: Juke":"B: Switch",action,action[0]!=0);
 }
 static void bottom_menu(void)
 {

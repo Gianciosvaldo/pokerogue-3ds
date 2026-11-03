@@ -79,9 +79,26 @@ bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,u
     }
     m->pending_receiver=-1;m->phase=FB_LIVE_CALL;m->play=FB_PASS_SLANTS;arrange(m);return true;
 }
+/* The human snaps the ball, so the human may change his mind until he does. */
+static void remember_call(FootballLive *m)
+{
+    m->undo_valid=!football_live_cpu(m,(FootballSide)m->rules.offense);
+    m->undo_rules=m->rules;m->undo_rng=m->rng;m->undo_play=(uint8_t)m->play;m->undo_defense=(uint8_t)m->defense;
+}
+bool football_live_can_undo(const FootballLive *m){return m && m->phase==FB_LIVE_SET && m->undo_valid && !football_live_cpu(m,(FootballSide)m->rules.offense);}
+bool football_live_undo(FootballLive *m)
+{
+    if(!football_live_can_undo(m))return false;
+    m->rules=m->undo_rules;m->play=(FootballPlayId)m->undo_play;m->defense=(FootballDefenseId)m->undo_defense;
+    m->special=FB_SPECIAL_NONE;m->phase=FB_LIVE_CALL;
+    arrange(m); /* the picture the playcall shows, as before the call; its random draws do not count */
+    m->rng=m->undo_rng;m->undo_valid=false;m->pending=0;
+    return true;
+}
 bool football_live_call(FootballLive *m,FootballPlayId play)
 {
     if(!m || m->phase!=FB_LIVE_CALL || m->conversion==1 || !football_playbook_get(play))return false;
+    remember_call(m);
     if(football_live_cpu(m,(FootballSide)(1-m->rules.offense))){
         /* Scheme depends on situation/seed, never the selected offensive play. */
         m->defense=football_live_ai_defense(m);
@@ -91,6 +108,7 @@ bool football_live_call(FootballLive *m,FootballPlayId play)
 bool football_live_special(FootballLive *m,FootballSpecial kind)
 {
     if(!football_live_special_allowed(m,kind))return false;
+    remember_call(m);
     /* The extra point is kicked from the 15, where the formation and the kick distance are those of a field goal. */
     if(kind==FB_SPECIAL_EXTRA_POINT){m->rules.ball=85;m->rules.first_down_at=100;}
     m->special=(uint8_t)kind;m->play=FB_RUN_TOSS;m->phase=FB_LIVE_SET;arrange(m);return true;
@@ -238,7 +256,7 @@ static void ball_step(FootballLive *m)
 static void begin_next(FootballLive *m)
 {
     unsigned after=m->after;FootballRules *r=&m->rules;
-    m->after=FB_AFTER_NONE;m->special=FB_SPECIAL_NONE;m->conversion=0;m->phase=FB_LIVE_CALL;
+    m->after=FB_AFTER_NONE;m->special=FB_SPECIAL_NONE;m->conversion=0;m->phase=FB_LIVE_CALL;m->undo_valid=false;
     if(after==FB_AFTER_CONVERSION){
         /* The scorer lines up on the 4 for the try (a straight run from the 2 scored 93% of the time here, from the 4
          * 62%); the other team's drive waits in next_offense. */
@@ -262,8 +280,9 @@ static void step(FootballLive *m,FootballLiveInput input)
     const FootballPlayDefinition *p=football_playbook_get(m->play);
     bool cpu=football_live_cpu(m,(FootballSide)m->rules.offense);
     if(m->phase==FB_LIVE_SET){
+        if((input.pressed&FB_LIVE_UNDO) && football_live_undo(m))return;
         if((!cpu && (input.pressed&FB_LIVE_ACTION)) || (cpu && m->elapsed>=1.2f)){
-            m->phase=FB_LIVE_PLAY;m->elapsed=0;
+            m->phase=FB_LIVE_PLAY;m->elapsed=0;m->undo_valid=false;
             if(!m->special && p->type==FB_PLAY_RUN)m->hand_to=(uint8_t)(off+football_playbook_runner(p)); /* the ball is the QB's until the handoff */
         }
         return;

@@ -47,7 +47,8 @@ typedef struct { uint8_t kind,actor,other;int8_t side;uint32_t step;float x,y; }
 /* The dead ball waits this long before the next playcall: a touchdown is celebrated, a turnover or a sack is let sink in. */
 #define FB_LIVE_HOLD_TOUCHDOWN 2.4f
 #define FB_LIVE_HOLD_TURNOVER 1.4f
-enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
+/* FB_LIVE_UNDO: before the snap, take the called play back to the playcall (football_live_undo). */
+enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4,FB_LIVE_UNDO=8 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
 /* route_* is snap-local release state: route_peer is defender + 1, or 0.
  * Formation setup clears it; checkpoints rebuild actors rather than storing it. */
@@ -88,11 +89,19 @@ typedef struct {
      * the match; `credited` names the defender who recovered a loose ball or intercepted, for a touchdown that follows. */
     FootballCredit credits[4];uint8_t credit_count,credited;uint8_t stats[2][22][3];
     FootballFx fx[FB_FX_COUNT];uint8_t fx_next;
+    /* Not serialized. What the human's playcall changed, kept until the snap so football_live_undo can put it back: the rules (a kick from the
+     * try moves the ball), the call's random state (so the same call, or any other, meets the same defense), the last play and defense. */
+    FootballRules undo_rules;uint32_t undo_rng;uint8_t undo_play,undo_defense;bool undo_valid;
     FootballResolvedPlay result;
     unsigned snaps;
 } FootballLive;
 bool football_live_begin(FootballLive *m,const FootballRoster *roster,uint32_t seed,unsigned round);
 bool football_live_call(FootballLive *m,FootballPlayId play);
+/* Takes the human's play (or kick) back before the snap: the line-up stays set until A, and this returns to the playcall as it was, the rules
+ * and the random state too, so the CPU's defense is the one it had already chosen, and the same call lines up the same way. False once the ball
+ * is snapped, for the CPU's plays, and for a kickoff (there is no playcall before it). */
+bool football_live_undo(FootballLive *m);
+bool football_live_can_undo(const FootballLive *m);
 /* Input axes are screen/world axes, normalized; receiver -1 or 0..4.
  * Edges consumed once even when a frame advances several fixed steps. */
 void football_live_tick(FootballLive *m,unsigned milliseconds,FootballLiveInput input);

@@ -118,6 +118,7 @@ a simulation step consumes them, then used once. Menus and overlays pause play.
 | --- | --- |
 | Move controlled actor | Circle Pad or held D-pad |
 | Human offense before snap | A or touch SNAP; no automatic human snap |
+| Change your mind before the snap | B or the left button (Change play) returns to the playcall, see "Taking a play back" |
 | Pass targets | X, Y, L, R, SELECT for receivers 1–5, or numbered touch buttons |
 | After completion / run handoff | Control transfers to the receiver / RB |
 | Carrier evasion | B or touch Juke, with a 1.6-second cooldown |
@@ -136,6 +137,19 @@ time and runoff once at the dead ball. The seven-round playoff, shop and EXP loo
 remains. This is arcade football: punts, field goals, kickoffs, the try after a touchdown and both kinds of return exist (see "Special teams" and "Touchdowns, tries and kickoffs"), but no opening kickoff, onside kicks, penalties
 or interception return phase are added here. A fumble uses a nearest-actor recovery
 contest at its contact spot, without a bouncing-ball phase.
+
+## Taking a play back
+
+The line-up after a human call waits for A, and until then B (or a tap on the left button, which reads "B: Change play") returns
+to the playcall: `football_live_undo`. `football_live_call` and `football_live_special` keep what the call changes in
+`undo_rules`, `undo_rng`, `undo_play` and `undo_defense` (not serialized, like the rest of the snap-local state); the undo puts the
+rules (the try's kick moves the ball to the 15, taking it back leaves the 4), the previous play and defense back, sets up the picture the
+playcall shows again, and then restores the random state. So the CPU's defense is the one it had already chosen (it never reads the call:
+`football_live_ai_defense` takes the down, distance and field position), the same call lines up the same way, and nothing can be re-rolled
+by changing one's mind. Refused after the snap, for the CPU's plays (the human on defense has no snap to wait for), with both sides CPU,
+and for a kickoff (it follows the dead ball without a playcall). `tests/undo_test.c`: every play, both kicks, the try kick and the
+two-point play, the kickoff, the CPU's offense, and 12 whole games each played straight and with every human call taken back and made
+again, which end in the same rules, random state, snaps, steps and stats.
 
 ## CPU play
 
