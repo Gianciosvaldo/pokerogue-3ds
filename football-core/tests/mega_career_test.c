@@ -38,16 +38,20 @@ int main(void)
     CHECK(c.stone_target==0 && c.stone_item==FORM_CHANGE_ITEM_MAWILITE,"first eligible stone offered (target%d item%d)",c.stone_target,c.stone_item);
     CHECK(!football_career_buy(&c,2,0) && !c.roster.mega_item[0],"cannot spend the first win's insufficient cash");
     /* Keep real generated shops: do not fabricate an offer to make the activation test pass. */
-    while((c.stone_target<0 || c.wallet<c.prices[2]) && c.round<6){
+    /* With two stone offers per round the Mawile one may sit in either slot: find it. */
+#define MAWILE_OFFER (c.stone_target==0?2u:3u)
+    while(!((c.stone_target==0 && c.wallet>=c.prices[2]) || (c.stone2_target==0 && c.wallet>=c.prices[3])) && c.round<6){
         CHECK(football_career_continue(&c),"leave shop");CHECK(football_career_start(&c),"next match");win();
     }
-    CHECK(c.stone_target==0 && c.stone_item==FORM_CHANGE_ITEM_MAWILITE,"actual applicable stone in shop");
+    const unsigned offer=MAWILE_OFFER;
+    CHECK(football_career_stone_target(&c,offer)==0 && football_career_stone_item(&c,offer)==FORM_CHANGE_ITEM_MAWILITE,"actual applicable stone in shop");
     unsigned wallet=c.wallet;
-    int item=c.stone_item;c.stone_item=FORM_CHANGE_ITEM_VENUSAURITE;
-    CHECK(!football_career_buy(&c,2,0) && c.wallet==wallet && !c.roster.mega_item[0],"wrong-species stone cannot charge or equip");c.stone_item=item;
-    CHECK(football_career_buy(&c,2,0),"buy actual generated stone");
-    CHECK(c.wallet+1000==wallet && c.roster.mega_item[0]==FORM_CHANGE_ITEM_MAWILITE,"pay once and retain ownership");
-    CHECK(!football_career_buy(&c,2,0),"no duplicate purchase");
+    int *item_slot=offer==2?&c.stone_item:&c.stone2_item;
+    int item=*item_slot;*item_slot=FORM_CHANGE_ITEM_VENUSAURITE;
+    CHECK(!football_career_buy(&c,offer,0) && c.wallet==wallet && !c.roster.mega_item[0],"wrong-species stone cannot charge or equip");*item_slot=item;
+    CHECK(football_career_buy(&c,offer,0),"buy actual generated stone");
+    CHECK(c.wallet+c.prices[offer]==wallet && c.roster.mega_item[0]==FORM_CHANGE_ITEM_MAWILITE,"pay once and retain ownership");
+    CHECK(!football_career_buy(&c,offer,0),"no duplicate purchase");
     CHECK(football_career_continue(&c),"next ready screen");c.mega=1;
     CHECK(!football_career_start(&c) && c.phase==FB_CAREER_READY,"unowned Mega selection cannot start a regular-form match silently");c.mega=0;
     gc_football_new(&other,NULL,"mega-expected",1);other.party[0]=c.roster.mon[0];other.n_party=1;
@@ -69,5 +73,48 @@ int main(void)
     CHECK(n && football_career_load(&loaded,&other,&profile,bytes,n),"owned stone and match selection resume");
     CHECK(loaded.mega==0 && loaded.roster.mega_item[0]==FORM_CHANGE_ITEM_MAWILITE &&
         !memcmp(&loaded.live.units[0][0],&expected.attributes,sizeof expected.attributes),"resumed Mega attributes and ownership");
+    /* Two stone offers a round, each for a different holder; with more holders than offers the stones cycle from round to round. */
+    {
+        CHECK(football_career_new(&c,&scratch,&profile,11),"second career");
+        gc_starter st={.species=SPECIES_ID_MAWILE,.tera_type=-1};
+        CHECK(football_roster_add(&c.roster,&scratch,&st,&profile,NULL),"Mawile again");
+        for(int i=0;i<gc_starter_cost_count && c.roster.count<22;++i){
+            if(gc_starter_costs[i].cost>1)continue;
+            st.species=gc_starter_costs[i].id;football_roster_add(&c.roster,&scratch,&st,&profile,NULL);
+        }
+        static const int holders[3]={3,9,65}; /* Venusaur, Blastoise, Alakazam stand in for members 1-3 */
+        for(unsigned i=0;i<3;++i){c.roster.mon[1+i].b.species=holders[i];c.roster.mon[1+i].b.form=0;CHECK(football_roster_refresh(&c.roster,1+i),"holder %u",i);}
+        c.phase=FB_CAREER_READY;
+        unsigned able=0;
+        for(unsigned i=0;i<c.roster.count;++i){gc_football_new(&other,NULL,"count-able",1);other.party[0]=c.roster.mon[i];other.n_party=1;if(gc_football_mega_item(&other,0)>0)++able;}
+        CHECK(able>=3,"enough holders to cycle (%u)",able);
+        unsigned seen[22]={0},two=0;int last_a=-1;
+        for(unsigned round=1;round<=5;++round){
+            CHECK(football_career_start(&c),"match %u",round);win();
+            const int a=football_career_stone_target(&c,2),b=football_career_stone_target(&c,3);
+            CHECK(a>=0 && b>=0 && a!=b,"two different holders in round %u (%d %d)",round,a,b);
+            if(a>=0 && b>=0){++seen[a];++seen[b];++two;
+                CHECK(football_career_stone_item(&c,2)>0 && football_career_stone_item(&c,3)>0,"both stones are real");
+                /* a saved checkpoint keeps both offers */
+                size_t k=football_career_save(&c,bytes,sizeof bytes);
+                CHECK(k && football_career_load(&loaded,&other,&profile,bytes,k) && football_career_stone_target(&loaded,2)==a && football_career_stone_target(&loaded,3)==b &&
+                    football_career_stone_item(&loaded,3)==football_career_stone_item(&c,3),"both offers survive a save (round %u, saved %zu, load %d)",round,k,(int)(k&&football_career_load(&loaded,&other,&profile,bytes,k)));
+                /* buying the second leaves the first on the shelf, and the holder owns it */
+                if(round==5){
+                    if(c.wallet<c.prices[3])c.wallet=c.prices[3]; /* stay within what a career can earn */
+                    const unsigned before=c.wallet;
+                    CHECK(football_career_buy(&c,3,0) && c.wallet+1000==before && c.sold[3] && !c.sold[2] && c.roster.mega_item[b],"buy the second stone");
+                    CHECK(!football_career_buy(&c,3,0),"no second purchase");
+                }
+            }
+            if(round>1)CHECK(a!=last_a || able<=2,"the pair moves on from round to round (round %u)",round);
+            last_a=a;
+            CHECK(football_career_continue(&c),"leave shop");
+            /* a member who already holds a stone is not offered another */
+            for(unsigned i=0;i<c.roster.count;++i)if(c.roster.mega_item[i]){CHECK(football_career_stone_target(&c,2)!=(int)i,"owner not offered again");}
+        }
+        unsigned covered=0;for(unsigned i=0;i<22;++i)if(seen[i])++covered;
+        CHECK(two==5 && covered>=3,"the stones reach several holders over the rounds (%u holders)",covered);
+    }
     printf("football live Mega: %u checks, %u failures\n",checks,failed);return failed?1:0;
 }

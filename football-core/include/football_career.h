@@ -2,10 +2,11 @@
 #define FOOTBALL_CAREER_H
 #include "football_live.h"
 typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN /* unused: level-up moves are learned without a prompt; kept so saved phase numbers stay valid */,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
-/* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0..2 are Carbos, Protein
- * and the mega stone, 3 + n is evo[n]. */
+/* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0..3 are Carbos, Protein
+ * and the two mega stones (2 and 3), 4 + n is evo[n]. */
 #define FB_SHOP_EVO_MAX 8
-#define FB_SHOP_FIXED 3
+#define FB_SHOP_FIXED 4
+#define FB_SHOP_STONES 2 /* mega stones on offer each round: offers 2 and 3 */
 /* Cash for a won round, and the price of a Carbos or Protein in the shop after it. */
 #define FB_CAREER_WIN_PAY(round) (500u+125u*(round))
 #define FB_CAREER_VITAMIN_PRICE(round) (80u+15u*(round))
@@ -26,10 +27,13 @@ typedef struct {
      * looked at for credits. */
     unsigned candy_plays,candy_team,seen_snaps,candy_pending[22],candy_plays_milli,candy_team_milli;
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
-    unsigned prices[3];bool sold[3];int stone_target,stone_item,mega;
+    unsigned prices[FB_SHOP_FIXED];bool sold[FB_SHOP_FIXED];int stone_target,stone_item,stone2_target,stone2_item,mega; /* stone*: the first mega stone offer (offer 2), stone2*: the second (offer 3) */
     unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
     char message[160];
 } FootballCareer;
+/* The holder and stone of mega stone offer 2 or 3 (-1 when there is none). */
+int football_career_stone_target(const FootballCareer *c,unsigned offer);
+int football_career_stone_item(const FootballCareer *c,unsigned offer);
 bool football_career_new(FootballCareer *c,gc_run *scratch,gc_system *profile,unsigned seed);
 bool football_career_start(FootballCareer *c);
 void football_career_tick(FootballCareer *c,unsigned ms,FootballLiveInput input);

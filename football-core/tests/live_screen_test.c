@@ -198,7 +198,7 @@ int main(void)
         FootballCareer *w=(FootballCareer *)career();
         static const struct { unsigned member,species; } made[3]={{0,58},{1,133},{2,123}};
         for(unsigned i=0;i<3;++i){w->roster.mon[made[i].member].b.species=(int)made[i].species;w->roster.mon[made[i].member].b.form=0;assert(football_roster_refresh(&w->roster,made[i].member));w->roster.mega_item[made[i].member]=0;}
-        w->stone_target=-1;w->mega=-1;memset(w->sold,0,sizeof w->sold);w->wallet=2000;w->round=3;w->wins=3;w->message[0]=0;
+        w->stone_target=-1;w->stone2_target=-1;w->stone2_item=0;w->mega=-1;memset(w->sold,0,sizeof w->sold);w->wallet=2000;w->round=3;w->wins=3;w->message[0]=0;
         w->phase=FB_CAREER_READY;tick();
         w->evo_count=4;
         w->evo[0]=(FootballEvoOffer){.member=0,.item=5,.state=FB_EVO_OFFER,.species=59,.price=450};
@@ -207,10 +207,10 @@ int main(void)
         w->evo[3]=(FootballEvoOffer){.member=2,.item=51,.state=FB_EVO_OFFER,.species=900,.price=1025};
         for(unsigned i=0;i<4;++i)assert(football_career_evo_valid(w,&w->evo[i]));
         unsigned icons=icon_loads;w->phase=FB_CAREER_SHOP;tick();assert(icon_loads==icons+4); /* one icon for each evolution item */
-        for(unsigned i=0;i<8;++i){assert(w->evo_count==4);tick();press(BTN_DOWN);} /* every row (three fixed, four evolutions, Continue), and round to the first again */
+        for(unsigned i=0;i<9;++i){assert(w->evo_count==4);tick();press(BTN_DOWN);} /* every row (four fixed, four evolutions, Continue), and round to the first again */
         tick();assert(on_bottom("Carbos") && on_bottom("Growlithe: Fire Stone") && on_bottom("Eevee: Water Stone") && on_bottom("Eevee: Thunder Stone") && on_bottom("Scyther: Black Augurite") && on_bottom("Continue to next round"));
         assert(on_bottom("450") && on_bottom("1025") && !on_top("Growlithe >")); /* on Carbos: no evolution preview */
-        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick(); /* on the first evolution offer */
+        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick(); /* on the first evolution offer */
         assert(on_top("Growlithe > Arcanine") && on_top_change() && on_top("Growlithe evolves into Arcanine.") && on_bottom("A: buy for 450    Up/Down: choose") && !on_bottom("A: buy for 450    Up/Down: choose    Not"));
         press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick();assert(on_top("Scyther > Kleavor") && on_top("Scyther evolves into Kleavor. A rare item.") && on_bottom("A: buy for 1025"));
         w->wallet=1000;tick();assert(on_bottom("A: buy for 1025    Up/Down: choose    Not enough cash"));w->wallet=2000;
@@ -222,8 +222,8 @@ int main(void)
         press(BTN_DOWN);tick();assert(on_bottom("Vaporeon: Thunder Stone") && on_bottom("Evolved") && on_bottom("This Pokemon evolved another way.") && !on_top("Vaporeon >"));
         press(BTN_ACTION);tick();assert(w->wallet==2000-450-450); /* nothing bought */
         press(BTN_UP);press(BTN_UP);tick();assert(on_bottom("Sold") && on_bottom("Bought: this Pokemon has evolved.")); /* back on the Growlithe row */
-        /* A tap on a row is the cursor and A: the Scyther row is the seventh, and the rare stone is bought. */
-        w->wallet=1100;game_screen->touch(game_screen,100,FM_LIST_Y+FM_LIST_PAD+6*FM_ROW_PITCH+8);tick();
+        /* A tap on a row is the cursor and A: the Scyther row is the eighth, and the rare stone is bought. */
+        w->wallet=1100;game_screen->touch(game_screen,100,FM_LIST_Y+FM_LIST_PAD+7*FM_ROW_PITCH+8);tick();
         assert(w->roster.mon[2].b.species==900 && w->wallet==75 && w->evo[3].state==FB_EVO_SOLD && on_bottom("Scyther evolved into Kleavor!"));
         /* The continue row leaves the shop and clears the shelf. */
         press(BTN_DOWN);tick();assert(!w->message[0] && on_bottom("Target ")); /* the cursor moved on from the Scyther row to Continue */
@@ -241,6 +241,16 @@ int main(void)
         assert(on_bottom("Mawile: Mawilite") && on_bottom("Holder: Mawile") && on_top("Mawile") && on_top("For Mawile. Select Mega"));
         press(BTN_RIGHT);tick();assert(on_bottom("Holder: Mawile") && on_top("Mawile"));
         press(BTN_ACTION);tick();assert(w->wallet==500 && w->roster.mega_item[1]==FORM_CHANGE_ITEM_MAWILITE && on_bottom("Sold"));
+        /* The second stone offer (row four) has its own holder, name, price and Sold mark. */
+        w->roster.mon[3].b.species=3;w->roster.mon[3].b.form=0; /* Venusaur */
+        assert(football_roster_refresh(&w->roster,3));w->roster.mega_item[3]=0;
+        w->stone2_target=3;w->stone2_item=FORM_CHANGE_ITEM_VENUSAURITE;w->prices[3]=1000;w->sold[3]=false;w->wallet=1500;w->message[0]=0;
+        w->phase=FB_CAREER_READY;tick();w->phase=FB_CAREER_SHOP;tick(); /* the shop's names and icons are prepared on entering */
+        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick();
+        assert(on_bottom("Venusaur: Venusaurite") && on_bottom("Holder: Venusaur") && on_top("For Venusaur. Select Mega"));
+        press(BTN_ACTION);tick();assert(w->wallet==500 && w->roster.mega_item[3]==FORM_CHANGE_ITEM_VENUSAURITE && w->sold[3] && w->sold[2]);
+        w->stone2_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
+        press(BTN_UP);tick();
         w->stone_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
     }
     {
