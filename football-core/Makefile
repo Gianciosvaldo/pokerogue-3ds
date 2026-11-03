@@ -248,6 +248,12 @@ defense-squat-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_squat_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/defense_squat_test
 	$(BUILD)/defense_squat_test
 test: defense-squat-test
+.PHONY: defense-overload-test
+defense-overload-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_overload_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/defense_overload_test
+	$(BUILD)/defense_overload_test
+test: defense-overload-test
 
 .PHONY: special-test
 special-test: core-libs

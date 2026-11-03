@@ -27,6 +27,10 @@ static inline uint16_t football_defense_deep_mask(FootballDefenseId id)
  * Zone Blitz: they used to start 16-18 yd deep and let the sideline routes go free). */
 static inline uint16_t football_defense_squat_mask(FootballDefenseId id)
 { return id==FB_DEF_COVER4||id==FB_DEF_ZONE_BLITZ?(uint16_t)((1u<<7)|(1u<<8)):0; }
+/* The zone calls whose fixed underneath lanes leave a receiver alone when three of the four (WR1, WR2, WR3, TE) stand on one side: Cover 2
+ * and Cover 3 line their flats and hooks up on those receivers' spots. (Cover 4 and Zone Blitz already cover the slot.) */
+static inline bool football_defense_matches_overload(FootballDefenseId id)
+{ return id==FB_DEF_ZONE||id==FB_DEF_COVER3; }
 static inline FootballDefenseId football_defense_pick(unsigned roll,unsigned down,unsigned to_go,unsigned ball)
 {
     unsigned weight[FB_DEF_COUNT]={14,14,10,12,14,14,12,10},total=0;
