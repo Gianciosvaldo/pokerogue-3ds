@@ -37,7 +37,16 @@ static void touchdown(uint32_t seed,FootballSide side)
     assert(football_live_call(&m,FB_RUN_DIVE));
     unsigned guard=0;
     while(m.phase!=FB_LIVE_PLAY){assert(++guard<400);football_live_tick(&m,16,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});}
-    m.actors[m.carrier].x=side==FB_HOME?110.5f:9.5f;
+    /* Over the line, in the gap furthest from every defender: since the goal-line squeeze the defense stands at the goal line, and a carrier put
+     * down on top of a defender is pushed back out by the body solver (26 of 200 seeds). Only the spot changes; the play is the same. */
+    float goal_x=side==FB_HOME?110.5f:9.5f,best_y=m.actors[m.carrier].y,best=-1;
+    unsigned def=side==FB_HOME?11:0;
+    for(float y=3;y<=50.5f;y+=1){
+        float near=99;
+        for(unsigned q=def;q<def+11;++q){float d=hypotf(goal_x-m.actors[q].x,y-m.actors[q].y);if(d<near)near=d;}
+        if(near>best){best=near;best_y=y;}
+    }
+    m.actors[m.carrier].x=goal_x;m.actors[m.carrier].y=best_y;
     tick(2,idle());
 }
 /* The dead ball waits out its celebration (up to FB_LIVE_HOLD_TOUCHDOWN) before the next call. */
