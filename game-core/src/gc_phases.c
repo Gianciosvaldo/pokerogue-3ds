@@ -430,6 +430,7 @@ static void battle_end(gc_run *run, gc_rphase *p)
     /* Endless graceful end runs before callbacks and cancels queued rewards/new battle. */
     if ((run->run.mode == GAME_MODES_ENDLESS || run->run.mode == GAME_MODES_SPLICED_ENDLESS)
         && run->wave >= 5850) {
+        if (victory) gc_reward_gain(run, "VOUCHER_PREMIUM");
         gc_rq_clear(run);
         gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
     }

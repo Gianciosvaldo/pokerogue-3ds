@@ -1,4 +1,4 @@
-/* What a Classic win gave the player (see win_gains.h). */
+/* The gain messages shown after Classic and Endless clears (see win_gains.h). */
 #include "win_gains.h"
 
 #include <stdio.h>
@@ -39,7 +39,15 @@ static void add(wg_gains* g, wg_kind k, int id) {
 
 int wg_collect(const gc_system* a, const struct gc_run* run, wg_gains* out) {
   out->n = 0;
-  if (!B.valid || !a || !run || run->run.mode != GAME_MODES_CLASSIC) return 0;
+  if (!B.valid || !a || !run) return 0;
+  /* GameOverPhase awards a Premium Voucher when a non-daily Endless run is
+   * cleared. Detect the terminal clear itself: voucher counts also include
+   * the many Premium Vouchers earned at Endless wave rewards during the run. */
+  if (run->run.mode == GAME_MODES_ENDLESS || run->run.mode == GAME_MODES_SPLICED_ENDLESS) {
+    if (run->finished && run->screen.kind == GC_SCREEN_CLEAR) add(out, WG_PREMIUM, 0);
+    return out->n;
+  }
+  if (run->run.mode != GAME_MODES_CLASSIC) return 0;
   /* validateAchv(CLASSIC_VICTORY): the bar, then the voucher that achievement unlocks */
   if (new_achv(a, GC_ACHV_CLASSIC_VICTORY)) {
     add(out, WG_ACHV, GC_ACHV_CLASSIC_VICTORY);

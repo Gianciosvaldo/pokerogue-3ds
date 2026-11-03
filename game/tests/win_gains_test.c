@@ -268,13 +268,24 @@ static void test_nothing_to_tell(void) {
   wg_snapshot(NULL);
   CHECK(gc_classic_finish(&R, true, NULL), "the win");
   CHECK(wg_collect(&SYS, &R, &G) == 0 && G.n == 0, "no snapshot, no gains");
-  /* not a Classic run */
-  gc_system_init_defaults(&SYS);
-  begin(party, 1);
-  wg_snapshot(&SYS);
-  R.run.mode = GAME_MODES_ENDLESS;
-  SYS.unlocks.endless_mode = true; /* even if the data differs */
-  CHECK(wg_collect(&SYS, &R, &G) == 0, "an Endless run tells nothing");
+  /* Endless clears only announce their Premium Voucher; they do not replay
+   * Classic unlock or ribbon gains. */
+  const int endless_modes[] = {GAME_MODES_ENDLESS, GAME_MODES_SPLICED_ENDLESS};
+  for (int i = 0; i < 2; i++) {
+    gc_system_init_defaults(&SYS);
+    begin(party, 1);
+    wg_snapshot(&SYS);
+    R.run.mode = endless_modes[i];
+    R.finished = true;
+    R.screen.kind = GC_SCREEN_CLEAR;
+    SYS.voucher_counts[GC_VOUCHER_PREMIUM] = 12; /* earned across the wave rewards before the terminal clear */
+    CHECK(wg_collect(&SYS, &R, &G) == 1, "an Endless clear reports its Premium Voucher");
+    const wg_item premium[] = {ITEM(WG_PREMIUM, 0)};
+    expect("Endless clear Premium Voucher", premium, 1);
+    R.finished = false;
+    R.screen.kind = GC_SCREEN_GAME_OVER;
+    CHECK(wg_collect(&SYS, &R, &G) == 0, "Endless defeat or no new voucher tells nothing");
+  }
   /* a run that was not won: the data is as it was */
   gc_system_init_defaults(&SYS);
   begin(party, 1);
