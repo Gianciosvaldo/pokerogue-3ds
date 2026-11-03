@@ -84,5 +84,5 @@ void gc_trash_execute(gc_run *run,int option)
     gc_enemy_finish_party_items(run,items,n);
     in->me_reward.active=true;in->me_reward.has_item=false;in->me_reward.func=PR_ITEM_LEFTOVERS;in->me_reward.fill=true;in->me_reward.before=false;in->me_reward.n_more=0;
     in->me_reward.n_tiers=3;in->me_reward.tiers[0]=MODIFIER_TIER_ROGUE;in->me_reward.tiers[1]=MODIFIER_TIER_ULTRA;in->me_reward.tiers[2]=MODIFIER_TIER_GREAT;
-    in->me_no_flee=true;gc_me_add_start_effect(run,2,0,MOVE_ID_TOXIC);gc_me_add_start_effect(run,2,2,MOVE_ID_STOCKPILE);gc_me_begin_battle(run,GC_ME_TRASH_TO_TREASURE);
+    in->me_no_flee=true;in->me_no_switch=true;gc_me_add_start_effect(run,2,0,MOVE_ID_TOXIC);gc_me_add_start_effect(run,2,2,MOVE_ID_STOCKPILE);gc_me_begin_battle(run,GC_ME_TRASH_TO_TREASURE);
 }

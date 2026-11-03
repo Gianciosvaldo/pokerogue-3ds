@@ -346,6 +346,14 @@ static void setup_texts(gc_run *run)
     case GC_ME_TRASH_TO_TREASURE:
         screen_arg(s, (pr_msg_arg){"costMultiplier",PR_ARG_STR,0,"2.5"});
         break;
+    case GC_ME_MYSTERIOUS_CHEST:
+        screen_arg(s, pr_arg_key("gimmighoulName", "pokemon:gimmighoul"));
+        screen_arg(s, pr_arg_int("trapPercent", 30));
+        screen_arg(s, pr_arg_int("commonPercent", 25));
+        screen_arg(s, pr_arg_int("ultraPercent", 30));
+        screen_arg(s, pr_arg_int("roguePercent", 10));
+        screen_arg(s, pr_arg_int("masterPercent", 5));
+        break;
     case GC_ME_SHADY_VITAMIN_DEALER:
         s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -677,7 +685,14 @@ void gc_me_begin_battle(gc_run *run, int type)
     run->mystery_type = run->mystery_tier = -1;
     run->in_battle = true;
     run->battle_type = BATTLE_TYPE_WILD;
+    /* disableSwitch: no CheckSwitchPhase */
+    const bool ask_switch = run->ask_switch;
+    if (gc_int(run)->me_no_switch) run->ask_switch = false;
+    gc_int(run)->me_no_switch = false;
     gc_battle_setup_field(run, true);
+    run->ask_switch = ask_switch;
+    /* CheckSwitchPhase, in the SWITCH style, unless the encounter disabled switching */
+    if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
 
@@ -1256,36 +1271,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_MYSTERIOUS_CHEST:
-        if (option == 0) {
-            int roll = pr_rng_seed_int(&run->run.rng, 100, 0);
-            if (roll < 30) {
-                /* Trap! Highest level unfainted mon gets KOed */
-                int max_idx = -1, max_lvl = -1;
-                for (int i = 0; i < run->n_party; i++) {
-                    if (run->party[i].b.hp > 0 && run->party[i].b.level > max_lvl) {
-                        max_lvl = run->party[i].b.level;
-                        max_idx = i;
-                    }
-                }
-                if (max_idx >= 0) run->party[max_idx].b.hp = 0;
-                if (legal_party(run) == 0) {
-                    gc_rq_clear(run);
-                    gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0));
-                    return true;
-                }
-                /* Fight Gimmighoul boss */
-                start_mystery_wild_battle(run, SPECIES_ID_GIMMIGHOUL, wave_level, true, 3, 1);
-                return true;
-            }
-            /* Rewards depending on roll */
-            if (roll >= 75) gc_port_give_reward(run, "POTION");
-            else if (roll >= 45) gc_port_give_reward(run, "SUPER_POTION");
-            else if (roll >= 35) gc_port_give_reward(run, "HYPER_POTION");
-            else gc_port_give_reward(run, "MAX_POTION");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_chest_execute(run, option);
         return true;
 
     case GC_ME_DARK_DEAL:

@@ -127,6 +127,8 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
+    /* the encounter's EnemyPartyConfig.disableSwitch: no "Will you switch?" at the fight's start. Read and cleared by gc_me_begin_battle */
+    bool me_no_switch;
     struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; uint8_t n_more, n_tiers; int8_t tiers[3]; pr_reward_option more[5]; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
     /* the encounter's startOfBattleEffects (source battler, its target, the move): copied into the battle at its setup, played once by the
      * first TurnInitPhase */
@@ -445,6 +447,9 @@ bool gc_delibirdy_spawnable(const gc_run *run);                  /* the encounte
 bool gc_delibirdy_option_ok(const gc_run *run, int option);
 double gc_delibirdy_price(const gc_run *run);                    /* getWaveMoneyAmount(2) */
 bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **why);   /* b = the Pokemon (storage index), c = which of gc_delibirdy_held_items */
+/* The Mysterious Chest (src/gc_chest.c) */
+int gc_chest_roll(const gc_run *run);                       /* onPreOptionPhase's randSeedInt(100): below 30 is the trap */
+void gc_chest_execute(gc_run *run, int option);
 /* the Pillar Men (src/gc_pillar.c, custom runs) */
 bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
 void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */
