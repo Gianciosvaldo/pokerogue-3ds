@@ -12,7 +12,7 @@ static uint32_t number(Stream *s,uint32_t v,uint32_t max)
 #define N(x,max) do{(x)=number(s,(uint32_t)(x),max);}while(0)
 static void state(Stream *s,FootballCareer *c)
 {
-    N(c->phase,FB_CAREER_END);N(c->round,7);N(c->wins,7);N(c->wallet,5600);N(c->seed,UINT32_MAX);
+    N(c->phase,FB_CAREER_END);N(c->round,7);N(c->wins,7);N(c->wallet,7000 /* seven wins of FB_CAREER_WIN_PAY */);N(c->seed,UINT32_MAX);
     unsigned mega=(unsigned)(c->mega+1);N(mega,22);c->mega=(int)mega-1;
     N(c->roster.count,22);unsigned cost=(unsigned)(c->roster.cost*1000+.5);N(cost,FB_ROSTER_BUDGET*1000);c->roster.cost=cost/1000.0;
     unsigned seen=0;

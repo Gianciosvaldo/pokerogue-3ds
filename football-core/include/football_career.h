@@ -6,6 +6,9 @@ typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,
  * and the mega stone, 3 + n is evo[n]. */
 #define FB_SHOP_EVO_MAX 8
 #define FB_SHOP_FIXED 3
+/* Cash for a won round, and the price of a Carbos or Protein in the shop after it. */
+#define FB_CAREER_WIN_PAY(round) (500u+125u*(round))
+#define FB_CAREER_VITAMIN_PRICE(round) (80u+15u*(round))
 typedef enum { FB_EVO_OFFER,FB_EVO_SOLD,FB_EVO_VOID /* the member has evolved with another item */ } FootballEvoState;
 typedef struct { uint8_t member,item,state;uint16_t species,price; } FootballEvoOffer; /* item: the classic EvolutionItem id, above 50 rare; species: what it brings */
 typedef struct {

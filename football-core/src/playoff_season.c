@@ -155,7 +155,7 @@ const char *football_shop_asset_key(const FootballShopOffer *o)
     switch (o->item) {
     case FB_ITEM_CARBOS: return "BASE_STAT_BOOSTER";
     case FB_ITEM_PROTEIN: return "BASE_STAT_BOOSTER";
-    case FB_ITEM_MEGA_STONE: return "FORM_CHANGE_ITEM";
+    case FB_ITEM_MEGA_STONE: return "RARE_FORM_CHANGE_ITEM"; /* the stones (Rayquazite, Charizardite X...) are listed under the rare form-change items */
     }
     return NULL;
 }

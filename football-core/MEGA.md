@@ -6,7 +6,7 @@ with that selection. Exactly one slot can be selected. Selection is optional and
 cannot change during a match; it resets to None when the match ends.
 
 In the live 22-player career, each shop offers a usable first stone while no
-teammate owns one. It costs 1000; the first win pays 500, so the offer remains
+teammate owns one. It costs 1000; the first win pays 625, so the offer remains
 available in subsequent shops while the player saves. Once a stone is owned,
 additional offers use the existing one-in-four-round schedule. The recipient
 rotates among compatible teammates; already equipped members are skipped. The
