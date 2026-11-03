@@ -54,9 +54,10 @@ static void open_field(void)
         }
         for(unsigned r=0;r<11;++r)CHECK(fabsf(depth[0][r]-depth[1][r])<.001f && fabsf(y[0][r]-y[1][r])<.001f && fabsf(zone[0][r]-zone[1][r])<.001f);
     }
-    /* and the open-field depths themselves are the old ones: Cover 3 has its deep players at 18, 18 and 24 yd, Cover 4 at 16, 16, 22, 22. */
+    /* and the open-field depths themselves are the old ones: Cover 3 has its deep players at 18, 18 and 24 yd, Cover 4 its safeties at 22, 22 (its
+ * corners start at 12 now and drop to 16, see defense_squat_test). */
     setup(5,0,40,FB_PASS_SLANTS,FB_DEF_COVER3);CHECK(fabsf(depth_of(18)-18)<.001f && fabsf(depth_of(19)-18)<.001f && fabsf(depth_of(20)-24)<.001f);
-    setup(5,0,40,FB_PASS_SLANTS,FB_DEF_COVER4);CHECK(fabsf(depth_of(18)-16)<.001f && fabsf(depth_of(19)-16)<.001f && fabsf(depth_of(20)-22)<.001f && fabsf(depth_of(21)-22)<.001f);
+    setup(5,0,40,FB_PASS_SLANTS,FB_DEF_COVER4);CHECK(fabsf(depth_of(18)-12)<.001f && fabsf(depth_of(19)-12)<.001f && fabsf(depth_of(20)-22)<.001f && fabsf(depth_of(21)-22)<.001f);
 }
 /* From the 3 the deep middle safety of Cover 3 has the receiver standing 5 yd deep (2 yd into the end zone); from the 40 he does not. */
 static void deep_handoff(void)
