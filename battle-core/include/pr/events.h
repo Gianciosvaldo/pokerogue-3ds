@@ -90,6 +90,9 @@ typedef struct {
                                 * starts there) and hidden in the events after it. */
     int8_t gender, types[3];
     uint8_t variant, n_types;
+    bool terastallized;        /* Pokemon.isTerastallized once the event has happened (TeraPhase.end comes after its CommonAnimPhase, so the
+                                * TERASTALLIZE animation's own snapshot still shows false) */
+    int8_t tera_type;          /* getTeraType(): the PokemonType its Tera icon and crystal show; read only with terastallized */
     float sprite_scale;
     uint8_t boss_segments;     /* EnemyPokemon.bossSegments, 0 = not a boss */
     uint8_t boss_segment_index;/* bossSegmentIndex: the shields still up. A hit that breaks one changes it before the

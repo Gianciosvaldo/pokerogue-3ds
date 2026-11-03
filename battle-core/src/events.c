@@ -147,6 +147,8 @@ pr_event *pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int t
         f->visible = p->on_field && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE);
         f->gender = (int8_t)(look ? pr_apparent_gender(p, true) : pr_get_gender(p));
         f->variant = p->variant;
+        f->terastallized = p->terastallized;
+        f->tera_type = (int8_t)pr_get_tera_type(p);
         f->sprite_scale = (float)pr_get_sprite_scale(p);
         f->boss_segments = p->boss_segments;
         f->boss_segment_index = p->boss_segment_index;

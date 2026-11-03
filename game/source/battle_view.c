@@ -674,6 +674,34 @@ static float name_text(float x, float y, const char* t, rr_color c, rr_color sh)
   return text_draw(TS_INSTRUCTIONS_TEXT, x, y - 2, t, &o);
 }
 
+/* getTypeRgb (data/type.ts): the colour of a type's Tera crystal, which also fills the Tera icon beside the name. Stellar is white. */
+static void tera_type_rgb(int type, int rgb[3]) {
+  static const uint8_t RGB[19][3] = {
+      {168, 168, 120}, {192, 48, 40},   {168, 144, 240}, {160, 64, 160},  {224, 192, 104}, {184, 160, 56}, {168, 184, 32},
+      {112, 88, 152},  {184, 184, 208}, {240, 128, 48},  {104, 144, 240}, {120, 200, 80},  {248, 208, 48}, {248, 88, 136},
+      {152, 216, 216}, {112, 56, 248},  {112, 88, 72},   {232, 136, 200}, {255, 255, 255}};
+  const int t = type >= 0 && type < 19 ? type : -1;
+  for (int i = 0; i < 3; i++) rgb[i] = t < 0 ? 0 : RGB[t][i];
+}
+
+/* BattleInfo.teraIcon: icon_tera (12 x 15) at half size, filled with the Tera type's colour (setTintFill), 1 px after the name and the gender
+ * sign (BattleInfo.updateIconDisplay: nameText.displayWidth + genderText.displayWidth + 1). Returns the width it takes there, 0 if absent. */
+#define TERA_ICON_W 6.0f
+static float draw_tera_icon(const bv_mon* m, float x, float y) {
+  if (!m->terastallized) return 0;
+  const rr_frame* f = img_frame("images/ui/icon_tera", NULL);
+  if (!f) return 0;
+  int rgb[3];
+  tera_type_rgb(m->tera_type, rgb);
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.scale_x = o.scale_y = 0.5f;
+  o.tint = RR_RGBA(0, 0, 0, 255); /* a flat fill: black through the multiply, then the colour added back as the tone */
+  rr_set_tone(rgb[0], rgb[1], rgb[2]);
+  rr_draw(f, x + 1, y - 0.5f, &o);
+  rr_set_tone(0, 0, 0);
+  return TERA_ICON_W + 1;
+}
+
 static void draw_name(const bv_mon* m, bool player, float x, float y) {
   /* updateNameText: shortened with "." until it fits */
   char name[48];
@@ -691,9 +719,10 @@ static void draw_name(const bv_mon* m, bool player, float x, float y) {
   float w = name_text(x, y, name, 0, 0);
   if (m->gender >= 0) {
     /* getGenderSymbol / getGenderColor */
-    name_text(x + w, y, m->gender == 0 ? "♂" : "♀", m->gender == 0 ? RR_RGBA(0x40, 0xc8, 0xf8, 255) : RR_RGBA(0xf8, 0x90, 0x90, 255),
-              m->gender == 0 ? RR_RGBA(0x00, 0x60, 0x90, 255) : RR_RGBA(0x98, 0x40, 0x38, 255));
+    w += name_text(x + w, y, m->gender == 0 ? "♂" : "♀", m->gender == 0 ? RR_RGBA(0x40, 0xc8, 0xf8, 255) : RR_RGBA(0xf8, 0x90, 0x90, 255),
+                   m->gender == 0 ? RR_RGBA(0x00, 0x60, 0x90, 255) : RR_RGBA(0x98, 0x40, 0x38, 255));
   }
+  draw_tera_icon(m, x + w, y);
   if (m->status) {
     char fr[24];
     gm_enum_lower(GM_E_STATUS_EFFECT, m->status, fr, sizeof fr);
@@ -1940,6 +1969,12 @@ static void run_event(float dt) {
 
     case BEV_BOSS_SHIELD:
       sd->mon.boss_segment_index = e->a;
+      finish_event();
+      break;
+
+    case BEV_TERA:
+      sd->mon.terastallized = e->a >= 0;
+      if (e->a >= 0) sd->mon.tera_type = e->a;
       finish_event();
       break;
 

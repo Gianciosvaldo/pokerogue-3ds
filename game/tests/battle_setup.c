@@ -97,6 +97,20 @@ void bs_turn_fight(bs_battle* b, int slot) {
   pr_run_turn(bt, &b->eng);
 }
 
+void bs_turn_tera(bs_battle* b, int slot) {
+  pr_battle* bt = &b->bt;
+  for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;
+  pr_pokemon* me = bt->field[0];
+  fight(&bt->commands[0], slot, me->moves[slot], 2);
+  /* CommandPhase.handleCommand(Command.TERA): the pre-turn command, then the FIGHT that follows it */
+  memset(&bt->pre_commands[0], 0, sizeof bt->pre_commands[0]);
+  bt->pre_commands[0].command = COMMAND_TERA;
+  bt->player_teras_used_known = true;
+  pr_ai_enemy_command(bt, &b->ai, 0);
+  bt->n_unported = bt->n_deferred = 0;
+  pr_run_turn(bt, &b->eng);
+}
+
 void bs_turn_switch(bs_battle* b, int slot) {
   pr_battle* bt = &b->bt;
   for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;

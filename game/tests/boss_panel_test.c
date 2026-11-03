@@ -39,6 +39,7 @@ typedef struct{const rr_frame *f;float x,y;int w,h;}crop_call;
 static crop_call crops[8];static int nc;
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)o;assert(nc<8);crops[nc++]=(crop_call){f,x,y,w,h};}
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)o;}
+void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
 static float name_x=-1e9f;
 float text_draw(text_style st,float x,float y,const char *s,const text_opts *o){(void)st;(void)y;(void)o;if(name_x<-1e8f)name_x=x;return (float)strlen(s)*4;}
 float text_width(text_style st,const char *s,const text_opts *o){(void)st;(void)o;return (float)strlen(s)*4;}
