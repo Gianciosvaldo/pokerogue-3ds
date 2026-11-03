@@ -16,9 +16,18 @@ const char *football_live_art_species(unsigned species){named++;return species?"
 static unsigned priced;
 unsigned football_live_art_candy_milli(const FootballCareer *c,unsigned member,unsigned points){(void)c;++priced;return member<22?points*100u:0u;}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
-void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);}
+/* The yard numbers are painted on the turf: every all-digit text is drawn behind the banner's window (z .85), and nothing but them is. */
+static char parsed[64];static unsigned field_numbers,numbers_over_banner,words_under_banner;
+void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);snprintf(parsed,sizeof parsed,"%s",s);}
 void C2D_TextOptimize(C2D_Text *t){(void)t;}
-void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color){(void)t;(void)flags;(void)x;(void)y;(void)z;(void)sx;(void)sy;(void)color;}
+void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color)
+{
+    (void)t;(void)flags;(void)x;(void)y;(void)sx;(void)sy;(void)color;
+    bool digits=strlen(parsed)>=2;for(const char *p=parsed;*p;++p)if(*p<'0' || *p>'9')digits=false; /* two digits: a yard number, not a target's 1-5 */
+    if(digits && z<.85f)++field_numbers;
+    if(digits && z>=.85f)++numbers_over_banner;
+    if(!digits && z<.85f)++words_under_banner;
+}
 static unsigned rects,line_rects;
 static bool capture;static float cap_x0,cap_y0,cap_x1,cap_y1; /* the extent of the rectangles drawn while a card is being drawn */
 /* The engine records these (football_live_fx); the art only reads them, so the test writes them itself. */
@@ -47,6 +56,14 @@ int main(void)
     for(unsigned event=FB_EVENT_NONE;event<=FB_EVENT_KICKOFF;++event){
         for(unsigned returned=0;returned<2;++returned){drawn=0;m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->kick_yards=47;m->return_yards=(int16_t)(returned?23:0);football_live_art_top(&renderer,&career,&camera,0);}
     }
+    /* The yard numbers sit under the banner and the HUD; a dead ball shows its banner, and no player target number, over the field. */
+    m->phase=FB_LIVE_PLAY;m->special=FB_SPECIAL_NONE;m->event=FB_EVENT_NONE;field_numbers=numbers_over_banner=words_under_banner=0;
+    camera.x=60;camera.y=14;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(field_numbers>=2 && !numbers_over_banner && !words_under_banner);
+    for(unsigned event=FB_EVENT_TOUCHDOWN;event<=FB_EVENT_KICKOFF;++event){
+        m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->return_yards=23;field_numbers=numbers_over_banner=words_under_banner=0;
+        drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(field_numbers>=2 && !numbers_over_banner && !words_under_banner);
+    }
+    m->phase=FB_LIVE_PLAY;m->event=FB_EVENT_NONE;m->special=FB_SPECIAL_FIELD_GOAL;
     /* The headline names every kick, and the try is labelled before and during its play. */
     assert(!strcmp(football_live_art_special_name(FB_SPECIAL_KICKOFF),"KICKOFF") && !strcmp(football_live_art_special_name(FB_SPECIAL_EXTRA_POINT),"EXTRA POINT") && !strcmp(football_live_art_special_name(FB_SPECIAL_NONE),"GO FOR TWO"));
     m->special=FB_SPECIAL_NONE;m->phase=FB_LIVE_CALL;m->event=FB_EVENT_NONE;

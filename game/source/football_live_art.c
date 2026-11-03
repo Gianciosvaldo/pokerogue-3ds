@@ -5,10 +5,14 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-static void label(FootballRenderer *r,const char *s,float x,float y,float scale,u32 color)
+/* Text at a depth: the HUD and the banners sit in front of everything (.9), the yard numbers are painted on the turf, under the players and
+ * under any banner or window drawn over the field. */
+static void label_at(FootballRenderer *r,const char *s,float x,float y,float z,float scale,u32 color)
 {
-    C2D_Text t;C2D_TextParse(&t,r->text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,.9f,scale,scale,color);
+    C2D_Text t;C2D_TextParse(&t,r->text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,z,scale,scale,color);
 }
+static void label(FootballRenderer *r,const char *s,float x,float y,float scale,u32 color){label_at(r,s,x,y,.9f,scale,color);}
+#define FIELD_NUMBER_Z .045f
 static float bound(float x,float a,float b){return x<a?a:x>b?b:x;}
 static void rect(float x,float y,float w,float h,float z,u32 color)
 {
@@ -107,8 +111,8 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         if(yard%10==0 && yard>10 && yard<110){
             char n[8];unsigned display=yard<=60?yard-10:110-yard;snprintf(n,sizeof n,"%u",display);
             float px=football_camera_x(cam,(float)yard)-8;
-            float py=football_camera_y(cam,8);if(px>=0 && px<380 && py>50 && py<220)label(r,n,px,py,.48f,white);
-            py=football_camera_y(cam,44);if(px>=0 && px<380 && py>50 && py<220)label(r,n,px,py,.48f,white);
+            float py=football_camera_y(cam,8);if(px>=0 && px<380 && py>50 && py<220)label_at(r,n,px,py,FIELD_NUMBER_Z,.48f,white);
+            py=football_camera_y(cam,44);if(px>=0 && px<380 && py>50 && py<220)label_at(r,n,px,py,FIELD_NUMBER_Z,.48f,white);
         }
     }
     for(unsigned yard=11;yard<110;++yard)for(unsigned hash=0;hash<2;++hash)world(cam,(float)yard,hash?29.75f:23.58f,.12f,.5f,.04f,white);
@@ -136,7 +140,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     }
     football_live_fx_draw(r,c,cam);
     /* Receivers keep their numbered targets even when outside the closer view. */
-    if(m->rules.offense==FB_HOME && !m->caught && !m->special){static const unsigned targets[5]={2,3,4,5,1};
+    if(m->rules.offense==FB_HOME && !m->caught && !m->special && m->phase!=FB_LIVE_DEAD && m->phase!=FB_LIVE_END){static const unsigned targets[5]={2,3,4,5,1};
         for(unsigned i=0;i<5;++i){const FootballLiveActor *a=&m->actors[targets[i]];float x=bound(football_camera_x(cam,a->x),12,382),y=bound(football_camera_y(cam,a->y)-34,50,217);char n[3];snprintf(n,sizeof n,"%u",i+1);rect(x-7,y,18,19,.7f,navy);label(r,n,x-3,y,.5f,gold);}
     }
     float bx=football_camera_x(cam,m->ball_x),by=football_camera_y(cam,m->ball_y)-m->ball_z*5;
