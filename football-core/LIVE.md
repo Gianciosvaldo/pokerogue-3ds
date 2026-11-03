@@ -389,6 +389,11 @@ player takes a receiver over once he is `min(8, room + 1)` yd downfield, so the 
 the ball is about 21 yd from the goal line. `tests/defense_goal_line_test.c` checks every call, play, side and ball position, the unchanged open field and
 the end-zone hand-over. Numbers: `DEFENSE-AUDIT.md`, Status.
 
+**Cover 4 and Zone Blitz corners.** The two corners of these calls (ranks 7 and 8, `football_defense_squat_mask`) start `FB_LIVE_SQUAT_START` (12) yd off the
+ball and drop to their third or quarter (16 and 18 yd) as before; while no receiver is deep in a corner's strip he keeps one who is still short (3 yd behind the
+line to the deep mark, within 10 yd of his lane) like an underneath defender, and the deep rule takes the same receiver once he passes the mark, a deeper receiver
+first. Before this the corners stood 16-18 yd deep and the sideline routes were nobody's. `tests/defense_squat_test.c`; numbers in `DEFENSE-AUDIT.md`, Status.
+
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners
 match the RB, TE and three receivers, and two safeties protect deep halves. Man
 assignments persist for the entire held pass; there is no three-second collapse.

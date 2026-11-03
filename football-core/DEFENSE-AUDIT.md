@@ -77,6 +77,20 @@ Severity: **High** = visibly wrong in play or contradicts the call's own card; *
 
 The zone calls now defend the end zone, and the call matters near the goal (from the 5, Cover 4 allows a score-distance pass 35.8% of the time, Cover 1 49.8%; it used to be 45-51% for all). The side effect is a harder red zone for the offense, mostly against zone shells, which were already low for runs; I did not retune it. The man calls barely move (their men were already at the line). One existing test, `kickoff_test`, put its ball carrier down on top of a defender at the goal line (26 of 200 seeds were pushed back out); its touchdown helper now drops him in the emptiest gap over the line, with every assertion unchanged.
 
+**D2 (sideline strips in Cover 4 and Zone Blitz) fixed.** The fix is in the corners, not the linebackers: a corner of these two calls now starts 12 yd off the ball (`FB_LIVE_SQUAT_START`, it was 16 and 18) and drops to his third or quarter as before; while nobody is deep in his strip he keeps a receiver who is still short (from 3 yd behind the line to the 8 yd mark, within 10 yd of his lane) like an underneath defender does, and the ordinary deep rule takes the same receiver once he passes the mark, a deeper receiver in the strip always first. `football_defense_squat_mask` (ranks 7 and 8 of those two calls) says who does it; the other six calls are bit-for-bit what they were (every number below for them is identical). Measured with the QB never throwing (60 seeds x 12 concepts) and with the CPU on both sides (100 seeds x 12 concepts, 1,200 snaps per call), before to after:
+
+| | Cover 4 | Zone Blitz |
+|---|---|---|
+| WR1 / WR2 more than 4 yd from every defender at 1.2 s (QB holding) | 75 / 80% to 13 / 5% | 66 / 76% to 12 / 6% |
+| same at 2.0 s | 59 / 61% to 1 / 0% | 53 / 51% to 1 / 0% |
+| Mean separation of WR1 / WR2 at 2.0 s, CPU passes | 3.8 / 5.5 to 1.6 / 1.3 yd | 4.3 / 6.9 to 1.6 / 1.3 yd |
+| Pass yards per snap | 7.68 to 6.29 | 9.02 to 8.03 |
+| Completion / interception / sack | 56.0 / 3.7 / 1.2% to 54.8 / 3.2 / 4.3% | 57.2 / 3.8 / 1.2% to 54.3 / 3.6 / 5.5% |
+| Gain 10+ / gain 20+ | 36.0 / 5.2% to 22.2 / 4.6% | 42.2 / 7.5% to 23.6 / 9.1% |
+| Run yards per snap | 1.80 to 1.74 | 1.54 to 1.45 |
+
+Things to know before trusting it. The two calls are now sharper than the audit asked for: Cover 4 gives up the fewest pass yards of the eight calls (6.29, Cover 2 is 7.34) and the lowest 20+ share, and the rate at which the QB is sacked went from 1.2% to 4.3% / 5.5% (the Zone Blitz card says +6 sacks), because the QB's outside reads are now covered and he holds the ball. Zone Blitz gives up more deep balls than before (7.5% to 9.1%, about two standard errors at 1,200 snaps): a corner at 12 yd with one safety deep can be beaten vertically, which the old 18 yd cushion made impossible. The start depth is not the knob for the yards: the rule alone (corners left at 16-18) already gives 6.34 yd in Cover 4, and starting at 16 leaves WR1 / WR2 open 72 / 74% at 1.2 s; 12 is the deepest start that brings both under 20%. The slot (WR3, 0% in these two calls) and the tight end (16-19%) are unchanged; the back is D4.
+
 ## Verified as correct
 
 - Rusher, man, zone and deep counts match the card text for all eight calls (set-phase counts; mask functions in `football_defense.h`).
@@ -87,7 +101,7 @@ The zone calls now defend the end zone, and the call matters near the goal (from
 ## Proposed fixes (one PR each, none started)
 
 1. **D1 goal-line compression** (done, see Status): cap each defender's depth at the distance to the goal line plus a few yards, in `football_live_defense_setup`; test positions from the 1, 3, 5 and 10 yard lines for every call.
-2. **D2 flats and pattern matching** (medium): a deep corner with no deep threat picks up a shallow outside receiver in his third or quarter; Cover 4's underneath linebackers move out, and Zone Blitz gets its second flat defender back. Target: WR1 / WR2 open under 20% at 1.2 s in both, deep share kept.
+2. **D2 flats and pattern matching** (done, see Status; the corners were changed, the linebackers were not): a deep corner with no deep threat picks up a shallow outside receiver in his third or quarter; Cover 4's underneath linebackers move out, and Zone Blitz gets its second flat defender back. Target: WR1 / WR2 open under 20% at 1.2 s in both, deep share kept.
 3. **D3 seams** (medium): shift the underneath zones toward the offense's strong side and the slot (Trips, Tight), mirrored with the alignment.
 4. **D4 the back** (medium): let a man defender trail a receiver behind the line from the side, and give the flats a zone owner; check the pass yards do not collapse.
 5. **D7 run fits** (larger, balance-sensitive): contain and gap responsibilities so the safeties wait for the run to declare; will move every run number, so it needs lorenzo's call on the target yards.

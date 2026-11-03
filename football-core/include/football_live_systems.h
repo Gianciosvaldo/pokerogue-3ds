@@ -17,6 +17,8 @@ void football_live_mesh_point(const FootballLive *match,float *x,float *y);
  * distance from the line of scrimmage to the goal line the offense attacks. */
 #define FB_LIVE_DEEP_BEHIND 2.5f
 #define FB_LIVE_SHALLOW_BEHIND 1.f
+/* Where the corners of Cover 4 and Zone Blitz start, yards off the ball (they drop to the deep third or quarter unless a receiver stays short). */
+#define FB_LIVE_SQUAT_START 12.f
 float football_live_goal_room(const FootballLive *match);
 /* The same for a named runner: the screen asks before the snap, while hand_to is still empty (football_live_physics.c). */
 void football_live_mesh_point_for(const FootballLive *match,unsigned runner,float *x,float *y);

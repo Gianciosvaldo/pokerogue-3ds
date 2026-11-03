@@ -40,6 +40,7 @@ void football_live_defense_setup(FootballLive *m)
             }else if(zone || m->defense==FB_DEF_COVER1_ROBBER){a->x=m->zone_x[rank];a->y=m->zone_y[rank];}
             if((m->defense==FB_DEF_ZONE_BLITZ || m->defense==FB_DEF_COVER0) && football_defense_is_rusher(m->defense,rank)){a->x=m->los+dir*3;a->y=rank==4?18:35;}
         }
+        if(football_defense_squat_mask(m->defense)&(1u<<rank))m->actors[def+rank].x=m->los+dir*FB_LIVE_SQUAT_START;
     }
     /* The goal line squeezes the defense: nobody starts, or drops, deeper than a couple of yards into the end zone he is defending (the
      * deep players 2.5 yd past the goal line, the rest 1 yd), instead of at the depths of an open field, which put the safeties at the
@@ -72,7 +73,7 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
     }
     else if(football_defense_is_zone(m->defense)){
         tx=m->zone_x[rank];ty=m->zone_y[rank];
-        unsigned threat=255;float best=100000;
+        unsigned threat=255;float best=100000;bool squat=false;
         for(unsigned receiver=1;receiver<=5;++receiver){const FootballLiveActor *r=&m->actors[off+receiver];
             float depth=(r->x-m->los)*dir,lateral=fabsf(r->y-m->zone_y[rank]);
             bool inside=deep ? depth>=deep_min && lateral<=16 : depth>=-3 && depth<=16 && lateral<=10;
@@ -80,11 +81,21 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
             float score=lateral*2+fabsf(r->x-m->zone_x[rank]);
             if(score<best){best=score;threat=off+receiver;}
         }
+        /* A corner who starts close to the line and has nobody deep in his strip keeps the shorter receiver there, like an underneath
+         * defender, until that receiver goes deep (and then the deep rule above takes him). */
+        if(threat==255 && (football_defense_squat_mask(m->defense)&(1u<<rank))){
+            for(unsigned receiver=1;receiver<=5;++receiver){const FootballLiveActor *r=&m->actors[off+receiver];
+                float depth=(r->x-m->los)*dir,lateral=fabsf(r->y-m->zone_y[rank]);
+                if(depth<-3 || depth>=deep_min || lateral>10)continue;
+                float score=lateral*2+fabsf(r->x-m->zone_x[rank]);
+                if(score<best){best=score;threat=off+receiver;squat=true;}
+            }
+        }
         m->coverage[rank]=(uint8_t)threat;
-        if(threat!=255){const FootballLiveActor *r=&m->actors[threat];
+        if(threat!=255){const FootballLiveActor *r=&m->actors[threat];bool far=deep && !squat;
             /* Coverage can close a window without targeting the receiver's solid body. */
-            tx=r->x+dir*(deep?2:FB_BODY_DIAMETER+.4f);ty=clamp(r->y+r->vy*.15f,m->zone_y[rank]-(deep?15:9),m->zone_y[rank]+(deep?15:9));
-            if(!deep)tx=m->los+dir*clamp((tx-m->los)*dir,0,18);
+            tx=r->x+dir*(far?2:FB_BODY_DIAMETER+.4f);ty=clamp(r->y+r->vy*.15f,m->zone_y[rank]-(far?15:9),m->zone_y[rank]+(far?15:9));
+            if(!far)tx=m->los+dir*clamp((tx-m->los)*dir,0,18);
         }
         /* Break on a thrown pass only in this defender's responsibility. */
         if(m->flying && fabsf(m->to_y-m->zone_y[rank])<=(deep?17:11) && ((m->to_x-m->los)*dir<=18 || deep)) {tx=m->to_x;ty=m->to_y;}
