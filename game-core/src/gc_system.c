@@ -458,3 +458,14 @@ void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]){
         if(!used)out[n++]=id;
     }
 }
+
+/* GameOverPhase unlocks Endless and the Mini Black Hole at the first Classic victory (gc_classic_finish does it). A profile whose win was
+ * recorded by an older build (before the unlocks were set there) has the win and not the unlocks: derive them from the win, as a
+ * correct run would have left them. Spliced Endless and the Eviolite depend on the winning party and cannot be derived. */
+bool gc_system_repair_unlocks(gc_system *sys) {
+    if (!sys) return false;
+    if (!sys->stats.classic_wins && !sys->achievement_flags[GC_ACHV_CLASSIC_VICTORY]) return false;
+    if (sys->unlocks.endless_mode && sys->unlocks.mini_black_hole) return false;
+    sys->unlocks.endless_mode = sys->unlocks.mini_black_hole = true;
+    return true;
+}
