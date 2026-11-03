@@ -57,6 +57,14 @@ build/form_anim_test: $(FORM_ANIM_SRCS)
 form_anim_test: build/form_anim_test
 .PHONY: form_anim_test
 
+# unit test for the Terastallize icon events (a real Tera turn run through battle-core and converted)
+TERA_VISUAL_SRCS := tera_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/tera_visual_test: $(TERA_VISUAL_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(TERA_VISUAL_SRCS) -lm -o $@
+tera_visual_test: build/tera_visual_test
+.PHONY: tera_visual_test
+
 # unit test for map selection UI driven by game-core
 GC := ../../game-core
 RC := ../../run-core
@@ -428,6 +436,12 @@ build/tera_button_test: tera_button_test.c ../source/battle_view.c
 	@mkdir -p build
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
 .PHONY: tera_button_test
+
+tera_icon_test: build/tera_icon_test
+build/tera_icon_test: tera_icon_test.c ../source/battle_view.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: tera_icon_test
 
 build/battle_feedback_test: battle_feedback_test.c ../source/battle_view.c $(BC)/gen/out/pr_data.c
 	@mkdir -p build

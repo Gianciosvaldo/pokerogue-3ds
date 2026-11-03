@@ -32,6 +32,8 @@ pr_pokemon* bs_add(bs_battle* b, int side, int species, int level, const int* mo
 /* Runs one turn: the player uses move slot `slot`, the enemy what ai-core picks. The events are in
  * b->eng.events. */
 void bs_turn_fight(bs_battle* b, int slot);
+/* Runs one turn where the player Terastallizes (the Tera button, then move slot `slot`). */
+void bs_turn_tera(bs_battle* b, int slot);
 /* Runs one turn where the player switches to party slot `slot` (Command.POKEMON). */
 void bs_turn_switch(bs_battle* b, int slot);
 /* The turn stopped at a SwitchPhase for the player (a faint): the party screen picks, then

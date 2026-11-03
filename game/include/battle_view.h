@@ -42,6 +42,8 @@ typedef struct {
   float exp_ratio;           /* 0..1 of the level's EXP bar */
   int moves[4], pp_left[4], pp_max[4], move_power[4], n_moves;
   bool boss;
+  bool terastallized;        /* Pokemon.isTerastallized: the Tera icon sits beside the name (BattleInfo.updateTeraType) */
+  int tera_type;             /* getTeraType(), a PokemonType; read only with terastallized */
   int boss_segments;         /* EnemyPokemon.bossSegments: the HP bar's dividers are one fewer */
   int boss_segment_index;    /* bossSegmentIndex: shields still up; the divider s is white while this is >= s */
   int8_t stat_stages[7];     /* ATK DEF SPATK SPDEF SPD ACC EVA */
@@ -109,6 +111,8 @@ typedef enum {
                     * to the left over 500 ms (setFieldPosition(LEFT, 500)) and both player info boxes take their doubles places;
                     * the ally the next BEV_SUMMON sends out stands to its right. The foe is not moved: the one boss stays where
                     * it was, in the single layout. Nothing happens on a screen that already shows two player columns */
+  BEV_TERA,        /* TeraPhase.end: battler, a = the PokemonType it is now Terastallized as, or -1 when it is not any more. The Tera icon
+                    * appears beside the name (BattleInfo.updateTeraType) */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 

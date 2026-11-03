@@ -117,6 +117,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   }
   m->n_moves = PR_N_MOVES(p);
   m->boss = p->is_boss;
+  m->terastallized = p->terastallized;
+  m->tera_type = pr_get_tera_type(p);
   m->boss_segments = p->boss_segments;
   m->boss_segment_index = p->boss_segment_index;
   for (int i = 0; i < 7; i++) m->stat_stages[i] = p->stat_stages[i];
@@ -136,6 +138,7 @@ typedef struct {
   bool fainted, present, visible, substitute;
   int max_hp;
   int shield;                /* bossSegmentIndex the screen shows */
+  bool tera;                 /* the Tera icon the screen shows */
 } seen_t;
 
 /* Switch snapshots identify the actual Pokemon, even if its form and party
@@ -193,7 +196,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
   for(int k=0;k<4;k++){
     int i=view_slot(k);view->sent[i]=NULL;current[i]=view->mon[i];
     const bv_mon *m=&view->mon[i];
-    seen[k]=(seen_t){m->species,m->form,m->hp,m->status,!view->present[i],view->present[i],!m->hidden,m->substitute,m->max_hp,m->boss_segment_index};
+    seen[k]=(seen_t){m->species,m->form,m->hp,m->status,!view->present[i],view->present[i],!m->hidden,m->substitute,m->max_hp,m->boss_segment_index,m->terastallized};
   }
   enum { SENT_MAX = 16 };
   static bv_mon sent[SENT_MAX];
@@ -237,6 +240,14 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             seen[k].shield = ev->field[k].boss_segment_index;
             /* Transform and Illusion redraws copy this actor later in the batch. */
             current[view_slot(k)].boss_segment_index = (uint8_t)seen[k].shield;
+          }
+          /* TeraPhase.end (isTerastallized, then updateInfo) happens after its animation, so the snapshots from the next event on
+           * carry it; the battle's end clears it again */
+          if (ev->field[k].terastallized != seen[k].tera) {
+            PUT(.type = BEV_TERA, .battler = k, .a = ev->field[k].terastallized ? ev->field[k].tera_type : -1);
+            seen[k].tera = ev->field[k].terastallized;
+            current[view_slot(k)].terastallized = seen[k].tera;
+            current[view_slot(k)].tera_type = ev->field[k].tera_type;
           }
           /* the maximum changed (a form with other base stats: Zygarde, Morpeko): the bar's numbers follow */
           if (ev->field[k].max_hp > 0 && ev->field[k].max_hp != seen[k].max_hp) {
@@ -347,6 +358,14 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         if (single && seen[b].present)
           PUT(.type = BEV_MOVE_ANIM, .battler = b, .target = ev->target, .a = ev->id,
               .b = ev->type == PR_EV_MOVE_ANIM ? BA_MOVE : ev->type == PR_EV_CHARGE_ANIM ? BA_CHARGE : BA_COMMON);
+        /* TeraPhase plays the TERASTALLIZE animation and only then sets isTerastallized, so this event's own snapshot still shows
+         * false: the icon comes with the end of the animation */
+        if (single && seen[b].present && ev->type == PR_EV_COMMON_ANIM && ev->id == COMMON_ANIM_TERASTALLIZE && !seen[b].tera) {
+          PUT(.type = BEV_TERA, .battler = b, .a = ev->field[b].tera_type);
+          seen[b].tera = true;
+          current[view_slot(b)].terastallized = true;
+          current[view_slot(b)].tera_type = ev->field[b].tera_type;
+        }
         break;
       case PR_EV_DAMAGE:
         if (!single || !seen[b].present) break;
@@ -440,6 +459,8 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         (*sm).female = (*sm).gender == 1;
         (*sm).variant = ev->field[b].variant;
         (*sm).sprite_scale = ev->field[b].sprite_scale;
+        (*sm).terastallized = ev->field[b].terastallized;   /* sent out already Terastallized (it stays so until the battle ends) */
+        (*sm).tera_type = ev->field[b].tera_type;
         (*sm).n_types = ev->field[b].n_types;
         for (int k = 0; k < 3; k++) (*sm).types[k] = ev->field[b].types[k];
         current[view_slot(b)] = *sm;
@@ -447,7 +468,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         if (seen[b].present) PUT(.type = BEV_WITHDRAW, .battler = b);
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &(*sm), .text = go_text);
         go_text = NULL;
-        seen[b] = (seen_t){ev->field[b].species, ev->field[b].form, ev->field[b].hp, ev->field[b].status, false, true, true, ev->field[b].substitute, sm->max_hp, sm->boss_segment_index};
+        seen[b] = (seen_t){ev->field[b].species, ev->field[b].form, ev->field[b].hp, ev->field[b].status, false, true, true, ev->field[b].substitute, sm->max_hp, sm->boss_segment_index, ev->field[b].terastallized};
         break;
       }
       case PR_EV_POKEMON_ANIM:

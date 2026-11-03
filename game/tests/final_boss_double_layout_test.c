@@ -37,6 +37,7 @@ void img_draw_opts(const char *key,const char *frame,float x,float y,const rr_dr
 void rr_rect(float x,float y,float w,float h,rr_color c){(void)x;(void)y;(void)w;(void)h;(void)c;}
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)w;(void)h;(void)o;}
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)o;}
+void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
 float text_draw(text_style st,float x,float y,const char *s,const text_opts *o){(void)st;(void)x;(void)y;(void)o;return (float)strlen(s)*4;}
 float text_width(text_style st,const char *s,const text_opts *o){(void)st;(void)o;return (float)strlen(s)*4;}
 text_opts text_defaults(void){text_opts o;memset(&o,0,sizeof o);return o;}

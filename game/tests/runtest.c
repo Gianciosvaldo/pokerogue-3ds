@@ -166,6 +166,7 @@ static struct {
 static int n_resumes;
 
 static int check_form_events;
+static int n_teras_shown, n_teras_cleared;   /* Tera icons the screen was told to show, and to take away */
 static int n_boss_foes, n_boss_shields;   /* boss enemies the screen was shown (a wave's own, or a trainer's sent out) and the shield breaks it was told */
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
@@ -674,6 +675,18 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           else if (e->a < 0 || e->a >= W.mon[s].boss_segment_index) BAD("shield index %d after %d of %d segments", e->a, W.mon[s].boss_segment_index, W.mon[s].boss_segments);
           W.mon[s].boss_segment_index = e->a;
           n_boss_shields++;
+        }
+        break;
+      case BEV_TERA:
+        /* TeraPhase.end: the Tera icon appears (a = the type) or goes (-1). The converter sends it only when the screen's copy differs. */
+        if (side_ok(e->battler, "Terastallization")) {
+          if (e->a < -1 || e->a > POKEMON_TYPE_STELLAR) BAD("Terastallization to type %d", e->a);
+          else if ((e->a >= 0) == W.mon[s].terastallized) BAD("a Terastallization event that changes nothing (icon %d, type %d)", W.mon[s].terastallized, e->a);
+          else {
+            W.mon[s].terastallized = e->a >= 0;
+            if (e->a >= 0) W.mon[s].tera_type = e->a;
+            if (e->a >= 0) n_teras_shown++; else n_teras_cleared++;
+          }
         }
         break;
       case BEV_MAX_HP:
@@ -2101,6 +2114,7 @@ int main(int argc, char** argv) {
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("boss foes shown: %d, shield breaks shown: %d\n", n_boss_foes, n_boss_shields);
+  printf("Tera icons shown: %d, taken away: %d\n", n_teras_shown, n_teras_cleared);
   if (!n_boss_foes && n_scenes > 50) BAD("no boss was shown");
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls, %d in a party order that differs from storage)\n", n_key_bars,
