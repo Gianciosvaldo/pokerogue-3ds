@@ -11,6 +11,10 @@ all: $(BUILD)/transform-test
 $(BUILD)/transform-test: tests/transform-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+all: $(BUILD)/rototiller-test
+$(BUILD)/rototiller-test: tests/rototiller-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 all: $(BUILD)/transform-turn-test
 $(BUILD)/transform-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py
 	@mkdir -p $(BUILD)
