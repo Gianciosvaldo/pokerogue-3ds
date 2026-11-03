@@ -1,6 +1,7 @@
 #include "football_live_systems.h"
 #include <math.h>
 static float clamp(float v,float a,float b){return v<a?a:v>b?b:v;}
+static void overload_lanes(FootballLive *m,unsigned def,unsigned off);
 void football_live_defense_setup(FootballLive *m)
 {
     if(!m)return;
@@ -42,6 +43,7 @@ void football_live_defense_setup(FootballLive *m)
         }
         if(football_defense_squat_mask(m->defense)&(1u<<rank))m->actors[def+rank].x=m->los+dir*FB_LIVE_SQUAT_START;
     }
+    if(football_defense_matches_overload(m->defense))overload_lanes(m,def,off);
     /* The goal line squeezes the defense: nobody starts, or drops, deeper than a couple of yards into the end zone he is defending (the
      * deep players 2.5 yd past the goal line, the rest 1 yd), instead of at the depths of an open field, which put the safeties at the
      * back line (and, in the man calls, outside the field) from the 3-yard line. Nothing changes until the line of scrimmage is within
@@ -51,6 +53,28 @@ void football_live_defense_setup(FootballLive *m)
         float cap=football_live_goal_room(m)+((football_defense_deep_mask(m->defense)&(1u<<rank))?FB_LIVE_DEEP_BEHIND:FB_LIVE_SHALLOW_BEHIND);
         if((a->x-m->los)*dir>cap)a->x=m->los+dir*cap;
         if((m->zone_x[rank]-m->los)*dir>cap)m->zone_x[rank]=m->los+dir*cap;
+    }
+}
+/* Overload: in Cover 2 and Cover 3 three receivers on one side (Trips, Tight) met two underneath defenders and the third was alone (the slot
+ * was open in 86% and 84% of the Trips snaps). The underneath defenders (the flats and hooks, not the deep players, who drop 16 yd or more) closest to that
+ * sideline now line up on the receivers' spots, one each, nearest the sideline first. Two and two (Spread, Jet): the fixed lanes. */
+static void overload_lanes(FootballLive *m,unsigned def,unsigned off)
+{
+    unsigned low=0,high=0;
+    for(unsigned rank=2;rank<=5;++rank){if(m->snap_y[rank]<26.667f)++low;else ++high;}
+    if(low<3 && high<3)return;
+    bool at_low=low>=3;
+    float spot[4];unsigned n=0;
+    for(unsigned rank=2;rank<=5;++rank)if((m->snap_y[rank]<26.667f)==at_low)spot[n++]=m->snap_y[rank];
+    unsigned under[7],k=0;
+    for(unsigned rank=4;rank<11;++rank)
+        if((m->zone_x[rank]-m->los)*(off?-1.f:1.f)<=8.5f)under[k++]=rank; /* flats and hooks: the deep players drop to 16 yd and more */
+    /* nearest the strong sideline first, receivers likewise */
+    for(unsigned i=1;i<k;++i)for(unsigned j=i;j>0 && (at_low?m->zone_y[under[j]]<m->zone_y[under[j-1]]:m->zone_y[under[j]]>m->zone_y[under[j-1]]);--j){unsigned t=under[j];under[j]=under[j-1];under[j-1]=t;}
+    for(unsigned i=1;i<n;++i)for(unsigned j=i;j>0 && (at_low?spot[j]<spot[j-1]:spot[j]>spot[j-1]);--j){float t=spot[j];spot[j]=spot[j-1];spot[j-1]=t;}
+    for(unsigned i=0;i<n && i<k;++i){
+        float y=clamp(spot[i],4.f,49.333f);
+        m->zone_y[under[i]]=y;m->actors[def+under[i]].y=y;
     }
 }
 /* Yards from the line of scrimmage to the goal line the offense attacks. */

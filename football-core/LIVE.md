@@ -394,6 +394,11 @@ ball and drop to their third or quarter (16 and 18 yd) as before; while no recei
 line to the deep mark, within 10 yd of his lane) like an underneath defender, and the deep rule takes the same receiver once he passes the mark, a deeper receiver
 first. Before this the corners stood 16-18 yd deep and the sideline routes were nobody's. `tests/defense_squat_test.c`; numbers in `DEFENSE-AUDIT.md`, Status.
 
+**Overloaded side (Cover 2, Cover 3).** When three of WR1, WR2, WR3 and the TE stand on one side of the middle (Trips, Tight; `football_defense_matches_overload`),
+`overload_lanes` puts the underneath defenders nearest that sideline (the flats and hooks) on the three receivers' spots, one each, sideline first, instead of the
+fixed lanes that gave two defenders to three receivers; Spread and Jet (two and two) and the other calls keep the fixed lanes. `tests/defense_overload_test.c`;
+numbers in `DEFENSE-AUDIT.md`, Status.
+
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners
 match the RB, TE and three receivers, and two safeties protect deep halves. Man
 assignments persist for the entire held pass; there is no three-second collapse.
