@@ -214,3 +214,8 @@ inheritance with native source observations. Nine family switches cover all
 registered enabled subclasses admitted by their filters. This closes that
 registration/exhaustiveness question, not semantic behavior, caller interactions
 or the remaining unsupported-path review.
+
+The [dynamic targeting follow-up](VARIABLE-TARGET-VALIDATION.md) adds five
+pinned-source doubles observations for Expanding Force and Tera Starstorm. Its
+ordered target sets and spread flag match; complete move-turn and presentation
+interactions remain open.
