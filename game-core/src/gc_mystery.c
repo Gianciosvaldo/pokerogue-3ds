@@ -381,6 +381,14 @@ static void setup_texts(gc_run *run)
     case GC_ME_FIELD_TRIP:
         s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER_MOVE;
         break;
+    case GC_ME_TELEPORTING_HIJINKS: {
+        double price;
+        int p;
+        gc_teleport_tokens(run, &price, &p);
+        screen_arg(s, pr_arg_money_en_us("price", price));
+        if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &run->party[p].b));
+        break;
+    }
     case GC_ME_BERRIES_ABOUND: {
         pr_msg_arg enemy, fastest;
         int grab = 0;
@@ -564,6 +572,13 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_DELIBIRDY) {
         /* MoneyRequirement(0, 2) on the first option; a Pokemon holding a Berry or Reviver Seed / any other transferable item for the others */
         for (int o = 0; o < 3; o++) s->option_ok[o] = gc_delibirdy_option_ok(run, o);
+    } else if (type == GC_ME_TELEPORTING_HIJINKS) {
+        /* MoneyRequirement(0, 1.75) on the first option; a Steel or Electric Pokemon that is not fainted for the second */
+        double price;
+        int p;
+        gc_teleport_tokens(run, &price, &p);
+        s->option_ok[0] = run->money >= price;
+        s->option_ok[1] = gc_teleport_helper_ok(run);
     } else if (type == GC_ME_ABSOLUTE_AVARICE) {
         s->option_ok[1] = berry_stacks(run) >= 6;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
@@ -1441,15 +1456,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_TELEPORTING_HIJINKS:
-        if (option == 0) {
-            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 2.0));
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_ALAKAZAM, wave_level, true, 3, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_teleport_execute(run, option);
         return true;
 
     case GC_ME_BUG_TYPE_SUPERFAN:
@@ -1548,13 +1555,19 @@ void gc_me_win_rewards(gc_run *run)
     end_mystery_encounter_shop(run);
 }
 
-/* setEncounterExp(primary.id, species.baseExp) (useWaveIndexMultiplier), the experience the Pokemon alone gets in the rewards phase */
-void gc_me_steal_exp(gc_run *run, int primary, int species)
+/* setEncounterExp(primary.id, baseExp, useWaveIndexMultiplier), the experience the Pokemon alone gets in the rewards phase */
+void gc_me_exp_value(gc_run *run, int primary, double base_exp, bool use_wave_multiplier)
 {
     pr_exp_party pp;
     const uint32_t id = run->party[primary].b.id;
     gc_exp_party_build(run, &pp, &id, 1);
     pp.trainer_battle = false;
     pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
-    gc_exp_party_queue(run, &pp, gc_form(species, 0)->base_exp, true);
+    gc_exp_party_queue(run, &pp, base_exp, use_wave_multiplier);
+}
+
+/* setEncounterExp(primary.id, species.baseExp) (useWaveIndexMultiplier) */
+void gc_me_steal_exp(gc_run *run, int primary, int species)
+{
+    gc_me_exp_value(run, primary, gc_form(species, 0)->base_exp, true);
 }
