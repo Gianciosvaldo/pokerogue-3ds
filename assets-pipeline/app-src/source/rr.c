@@ -160,6 +160,18 @@ rr_tex* rr_tex_thumbnail(const rr_frame* f, unsigned edge) {
   return dst;
 }
 
+int rr_frame_alpha(const rr_frame* f, int x, int y) {
+  if (!f || !f->tex) return 0;
+  const int sx = x - f->off_x, sy = y - f->off_y;
+  if (sx < 0 || sy < 0 || sx >= f->w || sy >= f->h) return 0;
+  rr_tex* t = f->tex;
+  if (f->x + sx >= t->w || f->y + sy >= t->h) return 0;
+  u32 i = texel_index(f->x + sx, f->y + sy, t->tex.width, t->tex.height);
+  if (t->format == GPU_RGBA8) return (int)(((u32*)t->tex.data)[i] & 0xFF);
+  if (t->format == GPU_RGBA5551) return (((u16*)t->tex.data)[i] & 1) ? 255 : 0;
+  return 255;
+}
+
 void rr_tex_free(rr_tex* t) {
   if (!t) return;
   for (rr_tex** pp = &g_live; *pp; pp = &(*pp)->next) {

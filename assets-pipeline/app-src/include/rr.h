@@ -114,6 +114,10 @@ int rr_atlas_palette(const rr_atlas* a, const uint32_t** pal);
 /* Draws every frame at the same position: reassembles a split image. */
 void rr_draw_all(const rr_atlas* a, float x, float y, const rr_draw_opts* o);
 
+/* The alpha (0..255) of the texel at (x, y) of a frame's untrimmed area, 0 outside its drawn part. Reads the texture the GPU draws from, so a
+ * 5551 texture gives 0 or 255. For effects that need a point on the visible Pokemon (upstream's Tera sparkles pick a random opaque pixel). */
+int rr_frame_alpha(const rr_frame* f, int x, int y);
+
 /* ---- drawing (current target) ---- */
 void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o);
 /* Draws only the part of the frame inside [0,w)x[0,h) of the untrimmed frame
