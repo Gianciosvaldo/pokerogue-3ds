@@ -401,11 +401,11 @@ int main(int argc, char **argv)
                 fields_checked++;
             }
             /* setEncounterExp(primary.id, 100) */
-            EQ("experience set", in->tele_exp.pending, n_exp);
+            EQ("experience set", in->me_exp.pending, n_exp);
             if (n_exp > 0) {
-                EQ("experience Pokemon", (int)(run.party[in->tele_exp.primary].b.id - 0x4000), exp_idx[0]);
-                EQ("experience base", (int)gc_int(&run)->tele_exp.base, exp_base[0]);
-                EQ("experience wave multiplier", gc_int(&run)->tele_exp.wave, exp_wave[0]);
+                EQ("experience Pokemon", (int)(run.party[in->me_exp.primary].b.id - 0x4000), exp_idx[0]);
+                EQ("experience base", (int)gc_int(&run)->me_exp.base, exp_base[0]);
+                EQ("experience wave multiplier", gc_int(&run)->me_exp.wave, exp_wave[0]);
                 fainted_primary += setup[exp_idx[0]].hp <= 0;
             }
         }
