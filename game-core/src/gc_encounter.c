@@ -753,7 +753,8 @@ void gc_new_battle(gc_run *run)
     in->me_no_flee = in->me_reward.active = in->me_reward.before = in->me_no_stats = false;
     in->me_reward.n_more = in->me_reward.n_tiers = 0;
     in->berries.pending = false;
-    in->tele_exp.pending = false;
+    in->me_exp.pending = false;
+    in->fiery_item = false;
     in->n_me_start = 0;
 
     pr_new_battle_ctx ctx;

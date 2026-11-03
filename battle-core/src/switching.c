@@ -680,6 +680,11 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         p->me_post_summon = PR_ME_POST_NONE;
         pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/theStrongStuff:option.2.statBoost", pr_arg_key("shuckleName", "pokemon:shuckle")));
         pr_unshift_stat_stage_change(bt, e, q->battler, stats, 2, 1, p);
+    } else if (p->me_post_summon == PR_ME_POST_SPDEF_SPD) {
+        /* Fiery Fallout's Volcarona: groupStatChange([SPDEF, SPD], 1), no message */
+        static const int32_t stats[2] = {STAT_SPDEF, STAT_SPD};
+        p->me_post_summon = PR_ME_POST_NONE;
+        pr_unshift_stat_stage_change(bt, e, q->battler, stats, 2, 1, p);
     } else if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
         pr_note_unported(bt, PR_FEAT_TRAINER);
     }

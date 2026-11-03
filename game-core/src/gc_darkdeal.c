@@ -101,21 +101,21 @@ static bool is_form_change_item(const gc_item *it)
     return !strcmp(it->key, "FORM_CHANGE_ITEM") || !strcmp(it->key, "RARE_FORM_CHANGE_ITEM");
 }
 
-/* new EnemyPokemon(species, level, NONE, boss = true) on `r` (a seed-offset stream), and with `second_iv` addEnemyPokemon's second IV
+/* new EnemyPokemon(species, level, NONE, boss) on `r` (a seed-offset stream), and with `second_iv` addEnemyPokemon's second IV
  * roll (a boss made without a data source); the config's form index 0 is applied by the caller */
-bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out)
+bool gc_me_new_enemy(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, gc_mon *out)
 {
     pr_enemy_gen_ctx ec;
     gc_enemy_ctx(run, &ec);
     ec.species = species;
     ec.level = level;
-    ec.boss = true;
+    ec.boss = boss;
     pr_enemy_gen g;
     memset(&g, 0, sizeof g);
     g.fusion_species = -1;
     g.friendship = -1;
     if (pr_run_enemy_pokemon_base_rng(r, &run->run, &ec, &g) < 0) return false;
-    g.boss_segments = pr_run_get_encounter_boss_segments(&run->run, run->wave, level, species, true);
+    g.boss_segments = boss ? pr_run_get_encounter_boss_segments(&run->run, run->wave, level, species, true) : 0;
     gc_mon_new_enemy(run, out, species, level, &g, 0);
     if (!gc_generate_moveset(run, r, out)) gc_port_enemy_moveset(run, out);
     const pr_rng saved = run->run.rng;
@@ -127,6 +127,11 @@ bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_
     if (rc < 0) return false;
     gc_refresh_enemy(run, out, species, level, &g, 0);
     return true;
+}
+
+bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out)
+{
+    return gc_me_new_enemy(run, r, species, level, true, second_iv, out);
 }
 
 void gc_dark_deal_execute(gc_run *run, int option)

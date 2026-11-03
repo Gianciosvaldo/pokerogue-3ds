@@ -389,6 +389,12 @@ static void setup_texts(gc_run *run)
         if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &run->party[p].b));
         break;
     }
+    case GC_ME_FIERY_FALLOUT: {
+        screen_arg(s, pr_arg_key("volcaronaName", "pokemon:volcarona"));
+        const int p = gc_fiery_primary(run);
+        if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, "option3PrimaryName", &run->party[p].b));
+        break;
+    }
     case GC_ME_BERRIES_ABOUND: {
         pr_msg_arg enemy, fastest;
         int grab = 0;
@@ -579,6 +585,10 @@ void gc_mystery_setup_screen(gc_run *run)
         gc_teleport_tokens(run, &price, &p);
         s->option_ok[0] = run->money >= price;
         s->option_ok[1] = gc_teleport_helper_ok(run);
+    } else if (type == GC_ME_FIERY_FALLOUT) {
+        /* the battle and the hunkering need nothing; calming them needs a Fire Pokemon that is not fainted or a fire resistant ability */
+        gc_fiery_init(run);
+        s->option_ok[2] = gc_fiery_option_ok(run);
     } else if (type == GC_ME_ABSOLUTE_AVARICE) {
         s->option_ok[1] = berry_stacks(run) >= 6;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
@@ -1342,18 +1352,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_FIERY_FALLOUT:
-        if (option == 0) {
-            for (int i = 0; i < run->n_party; i++) {
-                run->party[i].b.hp = run->party[i].b.stats[0];
-                run->party[i].b.status = STATUS_EFFECT_NONE;
-            }
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_VOLCARONA, wave_level, true, 3, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_fiery_execute(run, option);
         return true;
 
     case GC_ME_THE_STRONG_STUFF:
@@ -1521,6 +1520,7 @@ pr_rng gc_me_option_rng(const gc_run *run) { return me_option_rng(run); }
 void gc_me_prune_items(gc_run *run) { me_prune_items(run); }
 void gc_me_update_modifiers(gc_run *run) { me_update_modifiers(run); }
 void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }
+void gc_me_apply_damage(gc_mon *m, int damage) { me_apply_damage(m, damage); }
 
 void gc_me_leave(gc_run *run) { end_mystery_encounter_leave(run); }
 

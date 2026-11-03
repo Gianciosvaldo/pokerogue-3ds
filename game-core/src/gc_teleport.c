@@ -89,10 +89,10 @@ static void fight(gc_run *run, const gc_mon *boss, int level, int post_summon, c
     in->me_reward.before = primary >= 0;
     in->me_reward.n_more = (uint8_t)n_more;
     for (int i = 0; i < n_more; i++) in->me_reward.more[i] = more[i];
-    in->tele_exp.pending = primary >= 0;
-    in->tele_exp.primary = (int8_t)primary;
-    in->tele_exp.base = 100;      /* setEncounterExp(primary.id, 100): useWaveIndex defaults to true */
-    in->tele_exp.wave = true;
+    in->me_exp.pending = primary >= 0;
+    in->me_exp.primary = (int8_t)primary;
+    in->me_exp.base = 100;      /* setEncounterExp(primary.id, 100): useWaveIndex defaults to true */
+    in->me_exp.wave = true;
     gc_me_start_boss_battle(run, boss, level, post_summon, &run->run.rng, GC_ME_TELEPORTING_HIJINKS);
 }
 
@@ -100,9 +100,9 @@ static void fight(gc_run *run, const gc_mon *boss, int level, int post_summon, c
 void gc_teleport_reward(gc_run *run)
 {
     gc_internal *in = gc_int(run);
-    if (!in->tele_exp.pending) return;
-    in->tele_exp.pending = false;
-    if (in->tele_exp.primary >= 0 && in->tele_exp.primary < run->n_party) gc_me_exp_value(run, in->tele_exp.primary, in->tele_exp.base, in->tele_exp.wave);
+    if (!in->me_exp.pending) return;
+    in->me_exp.pending = false;
+    if (in->me_exp.primary >= 0 && in->me_exp.primary < run->n_party) gc_me_exp_value(run, in->me_exp.primary, in->me_exp.base, in->me_exp.wave);
 }
 
 /* doBiomeTransitionDialogueAndBattleInit, then the rewards and the experience */

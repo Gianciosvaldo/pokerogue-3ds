@@ -139,7 +139,8 @@ typedef struct {
     /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
-    struct { bool pending; int8_t primary; double base; bool wave; } tele_exp;   /* Teleporting Hijinks: setEncounterExp(primary.id, 100), run by the rewards phase of the won fight */
+    struct { bool pending; int8_t primary; double base; bool wave; } me_exp;   /* setEncounterExp(primary.id, base, wave) of a fight (Teleporting Hijinks), run by the rewards phase of the won fight */
+    bool fiery_item;   /* Fiery Fallout: the won fight's rewards phase gives the lead an attack type booster (setEncounterRewards' callback) */
     struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
     /* A football run (gc_football_new): its members evolve by the football rules (gc_mon_football_evolutions). Never set on a classic or
      * custom run, and not saved */
@@ -404,6 +405,7 @@ void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n);   /*
 void gc_me_begin_battle(gc_run *run, int type);                /* the encounter's battle starts: the field, the first turn (an EnemyPartyConfig's enemy party is in place) */
 void gc_dark_deal_execute(gc_run *run, int option);
 bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out);   /* new EnemyPokemon(.., boss) on a seed-offset stream */
+bool gc_me_new_enemy(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, gc_mon *out);   /* the same for a Pokemon that is no boss (Fiery Fallout) */
 void gc_fof_execute(gc_run *run, int option);                    /* Fight or Flight (src/gc_fof.c) */
 bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item);   /* onInit, worked out from the run (the oracle's test reads it) */
 bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name);   /* the tokens onInit sets: enemyPokemon, itemName */
@@ -455,6 +457,12 @@ void gc_teleport_execute(gc_run *run, int option);                 /* Teleportin
 void gc_teleport_reward(gc_run *run);
 bool gc_teleport_tokens(gc_run *run, double *price, int *primary);
 bool gc_teleport_helper_ok(const gc_run *run);
+void gc_fiery_execute(gc_run *run, int option);                    /* Fiery Fallout (src/gc_fiery.c) */
+void gc_fiery_init(gc_run *run);                                   /* onInit: the weather turns Sunny */
+void gc_fiery_reward(gc_run *run);
+int gc_fiery_primary(const gc_run *run);                           /* the third option's primary Pokemon (a storage index), -1 without */
+bool gc_fiery_option_ok(const gc_run *run);
+void gc_me_apply_damage(gc_mon *m, int damage);                    /* applyDamageToPokemon */
 void gc_me_exp_value(gc_run *run, int primary, double base_exp, bool use_wave_multiplier);   /* setEncounterExp(primary.id, base, wave multiplier) */
 /* The Mysterious Chest (src/gc_chest.c) */
 int gc_chest_roll(const gc_run *run);                       /* onPreOptionPhase's randSeedInt(100): below 30 is the trap */
