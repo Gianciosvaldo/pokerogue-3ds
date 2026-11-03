@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_chest.c src/gc_strong.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_chest.c src/gc_strong.c src/gc_teleport.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -271,6 +271,135 @@ test: strong-host-test
 strong-host-test: $(BUILD)/mystery_strong_test
 	$(BUILD)/mystery_strong_test
 .PHONY: strong-host-test
+all: $(BUILD)/mystery_teleport_diff_test
+$(BUILD)/mystery_teleport_diff_test: tests/mystery_teleport_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_chest_diff_test
+$(BUILD)/mystery_chest_diff_test: tests/mystery_chest_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_snorlax_diff_test
+$(BUILD)/mystery_snorlax_diff_test: tests/mystery_snorlax_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_training_diff_test
+$(BUILD)/mystery_training_diff_test: tests/mystery_training_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_delibirdy_test
+$(BUILD)/mystery_delibirdy_test: tests/mystery_delibirdy_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: delibirdy-host-test
+delibirdy-host-test: $(BUILD)/mystery_delibirdy_test
+	$(BUILD)/mystery_delibirdy_test
+.PHONY: delibirdy-host-test
+all: $(BUILD)/gym_e4_diff_test $(BUILD)/gym_e4_test
+$(BUILD)/gym_e4_diff_test: tests/gym_e4_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/gym_e4_test: tests/gym_e4_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: gym-e4-host-test
+gym-e4-host-test: $(BUILD)/gym_e4_test
+	$(BUILD)/gym_e4_test
+.PHONY: gym-e4-host-test
+all: $(BUILD)/tera_command_test $(BUILD)/tera_command_diff_test
+$(BUILD)/tera_command_test: tests/tera_command_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/tera_command_diff_test: tests/tera_command_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/trainer_tera_test
+$(BUILD)/trainer_tera_test: tests/trainer_tera_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: trainer-tera-host-test
+trainer-tera-host-test: $(BUILD)/trainer_tera_test
+	$(BUILD)/trainer_tera_test
+.PHONY: trainer-tera-host-test
+all: $(BUILD)/trainer_tera_diff_test
+$(BUILD)/trainer_tera_diff_test: tests/trainer_tera_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: tera-command-host-test
+tera-command-host-test: $(BUILD)/tera_command_test
+	$(BUILD)/tera_command_test
+.PHONY: tera-command-host-test
+all: $(BUILD)/mystery_delibirdy_diff_test
+$(BUILD)/mystery_delibirdy_diff_test: tests/mystery_delibirdy_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_berries_diff_test
+$(BUILD)/mystery_berries_diff_test: tests/mystery_berries_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/achv_test
+$(BUILD)/achv_test: tests/achv_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: achv-host-test
+achv-host-test: $(BUILD)/achv_test
+	$(BUILD)/achv_test
+.PHONY: achv-host-test
+all: $(BUILD)/mystery_gts_test
+$(BUILD)/mystery_gts_test: tests/mystery_gts_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: gts-host-test
+gts-host-test: $(BUILD)/mystery_gts_test
+	$(BUILD)/mystery_gts_test
+.PHONY: gts-host-test
+all: $(BUILD)/mystery_reach_test
+$(BUILD)/mystery_reach_test: tests/mystery_reach_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: reach-host-test
+reach-host-test: $(BUILD)/mystery_reach_test
+	$(BUILD)/mystery_reach_test
+.PHONY: reach-host-test
+all: $(BUILD)/mystery_pillar_test
+$(BUILD)/mystery_pillar_test: tests/mystery_pillar_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: pillar-host-test
+pillar-host-test: $(BUILD)/mystery_pillar_test
+	$(BUILD)/mystery_pillar_test
+.PHONY: pillar-host-test
+all: $(BUILD)/mystery_challengers_test
+$(BUILD)/mystery_challengers_test: tests/mystery_challengers_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: challengers-host-test
+challengers-host-test: $(BUILD)/mystery_challengers_test
+	$(BUILD)/mystery_challengers_test
+.PHONY: challengers-host-test
+all: $(BUILD)/fusion_diff_test $(BUILD)/fusion_host_test
+$(BUILD)/fusion_diff_test: tests/fusion_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/fusion_host_test: tests/fusion_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: fusion-host-test
+fusion-host-test: $(BUILD)/fusion_host_test
+	$(BUILD)/fusion_host_test
+.PHONY: fusion-host-test
+all: $(BUILD)/fusion_after_host_test
+$(BUILD)/fusion_after_host_test: tests/fusion_after_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: fusion-after-host-test
+fusion-after-host-test: $(BUILD)/fusion_after_host_test
+	$(BUILD)/fusion_after_host_test
+.PHONY: fusion-after-host-test
+# the 600 cases upstream's PlayerPokemon.fuse() produced (tests/fusion.producer.test.ts at 8555c08, seed 777), replayed without upstream
+test: fusion-replay
+fusion-replay: $(BUILD)/fusion_diff_test tests/fixtures/fusion-splicers.native.txt.gz
+	gzip -dc tests/fixtures/fusion-splicers.native.txt.gz | $(BUILD)/fusion_diff_test /dev/stdin
+.PHONY: fusion-replay
+all: $(BUILD)/mystery_gts_diff_test
+$(BUILD)/mystery_gts_diff_test: tests/mystery_gts_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_salesman_diff_test
+$(BUILD)/mystery_salesman_diff_test: tests/mystery_salesman_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_fungames_test
+$(BUILD)/mystery_fungames_test: tests/mystery_fungames_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: fungames-host-test
+fungames-host-test: $(BUILD)/mystery_fungames_test
+	$(BUILD)/mystery_fungames_test
+.PHONY: fungames-host-test
+all: $(BUILD)/mystery_teleport_test
+$(BUILD)/mystery_teleport_test: tests/mystery_teleport_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: teleport-host-test
+teleport-host-test: $(BUILD)/mystery_teleport_test
+	$(BUILD)/mystery_teleport_test
+.PHONY: teleport-host-test
 all: $(BUILD)/mystery_chest_test
 $(BUILD)/mystery_chest_test: tests/mystery_chest_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

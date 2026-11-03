@@ -41,9 +41,9 @@ static int boosted_level(gc_run *run, pr_rng *r)
 /* getRandomEncounterPokemon with isBoss in onInit, on the stream of the wave seed: the boss's level, the boss itself and its calculated stats; `after` is the
  * stream where onInit's further rolls (Fight or Flight's item) go on. False when run-core has no roll for the biome and wave or the species. The run's RNG and
  * unported flags are left as they were. */
-bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after)
+bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level)
 {
-    pr_rng r = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+    pr_rng r = *stream;
     const pr_rng saved = run->run.rng;
     const unsigned flags = run->run.unported;
     const bool dbl = run->double_battle;
@@ -67,13 +67,21 @@ bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after)
     /* the constructor's calculateStats: the stats (and full HP) of the boss as it stands, before any item */
     pr_update_passive(&run->bt, &boss->b);
     pr_calculate_stats(&run->bt, &boss->b);
-    *after = r;
+    *stream = r;
     ok = true;
 done:
     run->run.rng = saved;
     run->double_battle = dbl;
     run->run.unported = flags;
     return ok;
+}
+
+bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after)
+{
+    pr_rng r = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+    if (!gc_me_roll_boss(run, &r, boss, level)) return false;
+    *after = r;
+    return true;
 }
 
 /* onInit, on the stream of the wave seed (the boss, its level and the item); false when run-core has no roll for the biome and wave or the species */

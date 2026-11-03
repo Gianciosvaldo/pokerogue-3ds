@@ -818,7 +818,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_ME_BEFORE_REWARDS:
         if (gc_int(run)->training.away) gc_training_return(run);
-        else gc_berries_reward(run);
+        else { gc_berries_reward(run); gc_teleport_reward(run); }
         return true;
     case RP_MYSTERY: {
         gc_screen *s = &run->screen;

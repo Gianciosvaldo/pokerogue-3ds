@@ -139,6 +139,7 @@ typedef struct {
     /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
+    struct { bool pending; int8_t primary; double base; bool wave; } tele_exp;   /* Teleporting Hijinks: setEncounterExp(primary.id, 100), run by the rewards phase of the won fight */
     struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
     /* A football run (gc_football_new): its members evolve by the football rules (gc_mon_football_evolutions). Never set on a classic or
      * custom run, and not saved */
@@ -412,6 +413,7 @@ void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
 int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
 void gc_me_leave(gc_run *run);                                   /* leaveEncounterWithoutBattle(): no heal shop */
+bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level);   /* the same boss rolled on a given stream (Teleporting Hijinks), src/gc_fof.c */
 bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after);   /* onInit's boss (Fight or Flight, Berries Abound), src/gc_fof.c */
 void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type);
 void gc_berries_execute(gc_run *run, int option);                  /* Berries Abound (src/gc_berries.c) */
@@ -449,6 +451,11 @@ double gc_delibirdy_price(const gc_run *run);                    /* getWaveMoney
 bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **why);   /* b = the Pokemon (storage index), c = which of gc_delibirdy_held_items */
 /* The Strong Stuff (src/gc_strong.c) */
 void gc_strong_execute(gc_run *run, int option);
+void gc_teleport_execute(gc_run *run, int option);                 /* Teleporting Hijinks (src/gc_teleport.c) */
+void gc_teleport_reward(gc_run *run);
+bool gc_teleport_tokens(gc_run *run, double *price, int *primary);
+bool gc_teleport_helper_ok(const gc_run *run);
+void gc_me_exp_value(gc_run *run, int primary, double base_exp, bool use_wave_multiplier);   /* setEncounterExp(primary.id, base, wave multiplier) */
 /* The Mysterious Chest (src/gc_chest.c) */
 int gc_chest_roll(const gc_run *run);                       /* onPreOptionPhase's randSeedInt(100): below 30 is the trap */
 void gc_chest_execute(gc_run *run, int option);
