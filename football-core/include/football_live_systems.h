@@ -13,6 +13,11 @@ uint32_t football_live_random(FootballLive *match);
 #define FB_LIVE_HANDOFF_MAX 1.1f
 /* Where the QB hands the ball over on this run (football_live.c). */
 void football_live_mesh_point(const FootballLive *match,float *x,float *y);
+/* The same for a named runner: the screen asks before the snap, while hand_to is still empty (football_live_physics.c). */
+void football_live_mesh_point_for(const FootballLive *match,unsigned runner,float *x,float *y);
+/* The route lines drawn before the snap: the called path of the eligible player of this rank (1 RB, 2/3/4 WR1/2/3, 5 TE) as up to `max`
+ * field points, the first being his own spot, and whether he stops at the last (see the definition). 0 when he has none. */
+unsigned football_live_route_line(const FootballLive *match,unsigned rank,float *x,float *y,unsigned max,bool *settles);
 /* The point `look` yards further along the called run's path than the runner is now (he is `depth` yards past the line and `lat` yards
  * to the run_side of the middle of the field), in field coordinates (football_live_ai.c). */
 bool football_live_run_path(const FootballLive *match,float depth,float lat,float look,float *x,float *y);

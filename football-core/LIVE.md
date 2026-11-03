@@ -217,6 +217,17 @@ a blocker, control passes, input ignored, draw later than dive) and the balance 
 `tests/pass_game_test.c` covers all of it (routes spaced and in bounds, distinct per concept, alignments and mirrors, the fake and its bite, the wall, settling routes
 from a goal-line snap).
 
+### Route lines before the snap
+
+While the play is set and you are on offense, the top screen draws where each eligible player is called to go (`route_lines` in `football_live_art.c`, fed
+by `football_live_route_line` in `football_live_physics.c`). A pass shows five dotted lines, one per receiver, from his own spot along his own route (inside
+toward the middle, the same clamp the receiver's steering applies), a square where he stops and three fainter dots when he runs on upfield. A run shows one
+line, the runner's: his way to the mesh point beside the QB and on along the called path (the sweep's runner is WR3, the others' is the back). The primary
+read, the route the play card shows, is gold. The lines are the plan, not a prediction: coverage and blocking bend the real path, and the lead blocker of a
+run (the sweep's back, the wing) has no line. They are gone from the first frame after the snap, and are not drawn for the CPU's offense or for kicks.
+Dots off the screen are skipped; in the test field no play adds more than 131 rectangles to a frame (a plain frame is 163), and only while the play is set. `football_live_mesh_point_for` lets the screen ask for the handoff point
+before the snap, when `hand_to` is still empty. `tests/route_line_test.c` (every play, 40 spread seeds, both sides) and `tests/live_art_test.c` cover them.
+
 ## Special teams
 
 `football_live_special.c` plays punts and field goals. The playcall has a third page, SPECIAL TEAMS (Left/Right

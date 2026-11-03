@@ -85,6 +85,52 @@ bool football_live_screen_wall(const FootballLive *m,unsigned rank,float *x,floa
     *x=m->los+(off?-1.f:1.f)*3.f;*y=clamp(end+((float)slot-1)*2.4f,3,50.3f);
     return true;
 }
+/* Where the ball changes hands: beside the QB and a step toward the line, on the side the play calls for (football_playbook_handoff).
+ * Stable during the handoff: it reads the QB and the runner's snap spot, not where he is now. `runner` is the actor who takes the ball
+ * (hand_to once the ball is snapped; the screen asks before the snap, when hand_to is still empty). */
+void football_live_mesh_point_for(const FootballLive *m,unsigned runner,float *x,float *y)
+{
+    unsigned off=offense(m);float dir=off?-1:1;
+    const FootballLiveActor *qb=&m->actors[off];
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    FootballHandoff h=football_playbook_handoff(p);
+    bool sweep=p && p->id==FB_RUN_JET_SWEEP,under=p && p->formation==FB_FORM_UNDER_CENTER;
+    /* The strong side is where the called path ends: below or above the middle of the field. */
+    float end=p && p->route_count?26.67f-m->run_side*p->route[p->route_count-1].y:26.67f,strong=end>26.67f?1.f:-1.f;
+    float lined=runner>=off && runner<off+11?m->snap_y[runner-off]-m->snap_y[0]:0;
+    float side=h.side==FB_MESH_STRONG?strong:h.side==FB_MESH_WEAK?-strong:fabsf(lined)>.4f?(lined>0?1.f:-1.f):strong;
+    *x=qb->x+dir*(sweep?1.8f:under?-.3f:.9f);*y=qb->y+side*h.across;
+}
+void football_live_mesh_point(const FootballLive *m,float *x,float *y){football_live_mesh_point_for(m,m->hand_to,x,y);}
+/* The called path of the player of this rank, in field coordinates, for the lines shown before the snap. [0] is where he lines up. A pass
+ * route is the called points from his own spot (inside toward the middle of the field, the same clamp the receiver's steering applies); a
+ * run is the runner's way to the mesh point and then the points of the called path he would aim for, picked by football_live_run_path.
+ * It is the plan, not a prediction: coverage and blocking bend the real path. Returns 0 for the QB, the line, kicks and a run's other
+ * players. `settles` is true when the player stops at the last point instead of running on upfield. */
+unsigned football_live_route_line(const FootballLive *m,unsigned rank,float *x,float *y,unsigned max,bool *settles)
+{
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    unsigned off=offense(m),n=0;float dir=off?-1:1;
+    if(settles)*settles=false;
+    if(m->special || !p || rank<1 || rank>5 || max<2)return 0;
+    if(p->type==FB_PLAY_PASS){
+        FootballRouteView path=football_playbook_receiver_path(p,rank);
+        float lane=m->snap_y[rank],inside=lane<26.67f?1.f:-1.f;
+        x[n]=m->snap_x[rank];y[n]=lane;++n;
+        for(unsigned k=0;k<path.count && n<max;++k){x[n]=m->snap_x[rank]+dir*path.point[k].x;y[n]=clamp(lane+path.point[k].y*inside,2,51);++n;}
+        if(settles)*settles=football_playbook_settles(p);
+        return n;
+    }
+    if(rank!=football_playbook_runner(p) || !p->route_count)return 0;
+    float mx,my;football_live_mesh_point_for(m,off+rank,&mx,&my);
+    x[n]=m->snap_x[rank];y[n]=m->snap_y[rank];++n;x[n]=mx;y[n]=my;++n;
+    float depth=(mx-m->los)*dir,lat=(26.67f-my)*m->run_side,last=p->route[p->route_count-1].x;
+    while(n<max && depth<last){
+        float px,py;if(!football_live_run_path(m,depth,lat,0,&px,&py) || (fabsf(px-x[n-1])<.05f && fabsf(py-y[n-1])<.05f))break;
+        x[n]=px;y[n]=py;++n;depth=(px-m->los)*dir;lat=(26.67f-py)*m->run_side;
+    }
+    return n;
+}
 /* The player who escorts the runner (the sweep's back, the wing on power, counter and toss), or 255 when the play has none. */
 static unsigned lead_actor(const FootballLive *m)
 {

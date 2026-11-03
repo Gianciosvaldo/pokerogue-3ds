@@ -129,4 +129,6 @@ Same sample as before (100 seeds x 8 defenses, CPU QB, 1st and 10 at the 40; ali
 The mean over the twelve passes went from 8.9 to 10.5 yd a snap (the runs average about 1.2), so the gap between passing and running, already large, is a little larger. Nothing here tunes it; it is a balance call for later. Flood is unchanged and still carries the highest sack rate (12%).
 
 Known gaps left: the CPU QB's wait for every concept except the screens still comes from the old `gain` field; Bunch and Empty sets do not exist; WR1 and WR2 still run the same route on Slants, Verticals and Post (mirrored, on opposite sides); the screen's wall is three linemen walking to three fixed points, not a blocking scheme.
-**Still open:** S2 (pre-snap route lines, PR 3), S3 (the four balance fields stay dead).
+**PR 3 (pre-snap route lines) fixes:** S2. In the set phase the top screen draws a dotted line for each receiver, tight end and back of the human's pass (gold for the primary read), or the runner's line on a run (his way to the handoff, then the called path); they vanish at the snap and are not drawn for the CPU's offense or for kicks. The engine answers with `football_live_route_line`, so the lines come from the same route tables, alignment spots (`snap_x`/`snap_y`), inside sign and mesh point the players use. Not shown: the lead blocker's path on a run, and the defenders' assignments (offense first; defense is a later audit).
+
+**Still open:** S3 (the four balance fields stay dead).
