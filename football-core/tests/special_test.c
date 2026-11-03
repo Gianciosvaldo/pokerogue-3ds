@@ -79,7 +79,9 @@ int main(void)
         if(m.event==FB_EVENT_TOUCHBACK)assert(m.rules.ball==20 && m.rules.offense==FB_AWAY);
         if(m.event==FB_EVENT_PUNT || m.event==FB_EVENT_FAIR_CATCH){if(m.result.yards<net_min)net_min=m.result.yards;if(m.result.yards>net_max)net_max=m.result.yards;}
         /* The next call arrives with the possession it earned. */
-        tick(70,(FootballLiveInput){.receiver=-1});assert(m.phase==FB_LIVE_CALL && m.special==FB_SPECIAL_NONE);
+        /* A turnover or a score is held a little longer than an ordinary dead ball (football_live.h). */
+        unsigned held=0;while(m.phase==FB_LIVE_DEAD && ++held<200)tick(1,(FootballLiveInput){.receiver=-1});
+        assert(m.phase==FB_LIVE_CALL && m.special==FB_SPECIAL_NONE);
     }
     assert(flights==120 && returns>10);
     assert(events[FB_EVENT_FAIR_CATCH]+events[FB_EVENT_PUNT]>60 && events[FB_EVENT_TOUCHDOWN]<=3);

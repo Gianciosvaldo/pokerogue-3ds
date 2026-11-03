@@ -73,6 +73,10 @@ typedef struct {
     /* Not serialized: the CPU's last three calls (play id + 1), the side a scripted run bends toward
      * (-1/+1), and bit 0 set to let the CPU play the HOME side too (host tests, demos). */
     uint8_t recent[3],autoplay;int8_t run_side;
+    /* Not serialized (the formation is set up again at every call). snap_x/snap_y are where the offense's eleven lined up at the snap,
+     * slot 0 the QB; flip says the alignment was mirrored about the middle of the field. A run starts with the ball on the QB and
+     * hand_to naming the runner (255 once the ball is his): the handoff completes when he reaches the mesh point beside the QB. */
+    float snap_x[11],snap_y[11];uint8_t align,flip,hand_to;
     /* Kicks (not serialized: a checkpoint is always taken at a call). kick_yards is the gross distance of the
      * last punt from the line of scrimmage; the landing spot is to_x/to_y while the ball flies. */
     uint8_t special,stage,kick_side,event;bool fair_catch,kick_good;int16_t kick_yards,return_yards;

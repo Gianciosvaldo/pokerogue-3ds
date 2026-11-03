@@ -88,13 +88,14 @@ static void receiver_reads(void)
 }
 static void outside_zone_responsibilities(void)
 {
-    for(unsigned side=0;side<2;++side)for(unsigned play=0;play<FB_PLAY_COUNT;++play){
+    for(uint32_t seed=1;seed<=8;++seed)for(unsigned side=0;side<2;++side)for(unsigned play=0;play<FB_PLAY_COUNT;++play){
         if(football_playbook_get((FootballPlayId)play)->type!=FB_PLAY_PASS)continue;
-        set_situation((Situation){1,10,50,0,2,90},1);m.rules.offense=(FootballSide)side;m.autoplay=1;
+        set_situation((Situation){1,10,50,0,2,90},seed);m.rules.offense=(FootballSide)side;m.autoplay=1;
         assert(football_live_call(&m,(FootballPlayId)play));m.defense=FB_DEF_ZONE;football_live_defense_setup(&m);
         unsigned off=side?11:0,def=11-off;
         for(unsigned corner=7;corner<=8;++corner){float x,y;football_live_defense_intent(&m,def+corner,&x,&y);
-            unsigned receiver=off+(corner==7?2:3);assert(m.coverage[corner]==receiver);
+            /* The corner on the low sideline takes the outside receiver who lined up there, whichever way the formation was mirrored. */
+            bool low=corner==7;unsigned receiver=off+((m.actors[off+2].y<m.actors[off+3].y)==low?2:3);assert(m.coverage[corner]==receiver);
             float dx=m.actors[def+corner].x+x-m.actors[receiver].x,dy=m.actors[def+corner].y+y-m.actors[receiver].y;
             assert(hypotf(dx,dy)>FB_BODY_DIAMETER+.1f);
         }

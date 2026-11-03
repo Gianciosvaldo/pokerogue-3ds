@@ -29,6 +29,8 @@ static void snap(FootballPlayId play,bool human_ball)
     unsigned guard=0;
     assert(football_live_call(&m,play));
     while(m.phase!=FB_LIVE_PLAY){assert(++guard<400);football_live_tick(&m,16,(FootballLiveInput){.pressed=human_ball?FB_LIVE_ACTION:0u,.receiver=-1});}
+    /* A run starts with the ball on the QB: wait for the handoff, so the runner is the carrier. */
+    while(m.hand_to<22){assert(++guard<400);football_live_tick(&m,16,(FootballLiveInput){.receiver=-1});}
 }
 int main(void)
 {

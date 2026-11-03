@@ -91,10 +91,8 @@ void football_live_ai_carrier(const FootballLive *m,unsigned i,float *x,float *y
     float depth=(a->x-m->los)*dir,tx=dir,ty=0;
     bool lane=p && p->type==FB_PLAY_RUN && p->route_count && i==off+football_playbook_runner(p) && !m->caught && depth<p->route[p->route_count-1].x;
     if(lane){
-        /* The called run's path, a few yards at a time: route y is inside-positive around the middle of the field. */
-        FootballRoutePoint point=p->route[p->route_count-1];
-        for(unsigned k=0;k<p->route_count;++k)if(p->route[k].x>depth+2.5f){point=p->route[k];break;}
-        tx=clampf((m->los+dir*point.x-a->x)*.6f,-1,1);ty=clampf((26.67f-m->run_side*point.y-a->y)*.5f,-1,1);
+        float px,py;football_live_run_path(m,depth,(26.67f-a->y)*m->run_side,0,&px,&py);
+        tx=clampf((px-a->x)*dir*.6f,-1,1)*dir;ty=clampf((py-a->y)*.5f,-1,1);
     }
     /* Read what is in front: lean away from defenders in the lane, ease off when one stands square in it. */
     float push=0,block=0;
@@ -104,6 +102,8 @@ void football_live_ai_carrier(const FootballLive *m,unsigned i,float *x,float *y
         push+=(fabsf(side)<.15f?(float)m->run_side:side>0?-1.f:1.f)*weight;
         if(fabsf(side)<1.6f && ahead<4)block+=weight*.25f;
     }
+    /* Running sideways behind the line (the sweep, the toss), the defenders downfield are not in the way yet: ease off the dodging. */
+    if(lane && fabsf(ty)>2*fabsf(tx)){push*=.2f;block=0;}
     ty=clampf(ty+push,-1,1);tx*=1-clampf(block,0,.55f);
     if(a->y<3.5f)ty+=.5f;else if(a->y>49.8f)ty-=.5f;
     *x=tx;*y=clampf(ty,-1,1);
@@ -183,8 +183,8 @@ void football_live_ai_receiver(FootballLive *m,unsigned i,float *x,float *y)
     const FootballPlayDefinition *p=football_playbook_get(m->play);
     /* Receiver-relative routes start at the snap position. Inside is toward the
      * middle of the field, independent of slot parity and direction of play. */
-    float dir=dir_of(m),origin=rank==1?(p->formation==FB_FORM_UNDER_CENTER?-5.f:-7.f):-1.f;
-    float lane=rank==1?28:rank==2?4:rank==3?49:rank==4?13:39,inside=lane<26.67f?1.f:-1.f;
+    float dir=dir_of(m),origin=(m->snap_x[rank]-m->los)*dir;
+    float lane=m->snap_y[rank],inside=lane<26.67f?1.f:-1.f;
     float depth=(a->x-m->los)*dir-origin;
     bool settles=football_playbook_settles(p);
     /* Read a short distance ahead along current momentum for the new concepts:

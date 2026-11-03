@@ -83,12 +83,16 @@ static void carriers(void)
     for(unsigned away=0;away<2;++away){
         setup(away,FB_RUN_JET_SWEEP);unsigned off=away?11:0,def=11-off;float dir=away?-1:1;
         m.autoplay=away?0:1;m.elapsed=1.3f;football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
-        assert(m.phase==FB_LIVE_PLAY && m.carrier==off+4);
+        /* The QB keeps the ball until the slot receiver has crossed to the mesh point; then the receiver is the carrier. */
+        assert(m.phase==FB_LIVE_PLAY && m.carrier==off && m.hand_to==off+4);
         assert(football_live_is_blocker(&m,off+1) && !football_live_is_blocker(&m,off+4));
+        for(unsigned frame=0;frame<120 && m.hand_to!=FB_NO_ACTOR;++frame)football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
+        assert(m.hand_to==FB_NO_ACTOR && m.carrier==off+4);
         for(unsigned d=def;d<def+11;++d){m.actors[d].x=away?1:119;m.actors[d].y=1;}
         m.actors[off+4].x=m.los-dir;m.actors[off+4].y=26.67f;m.run_side=1;
         float x,y;football_live_ai_carrier(&m,off+4,&x,&y);assert(y<-.5f); /* called jet edge */
         /* The RB is an actual contact blocker, not just an eligible flag. */
+        for(unsigned i=0;i<22;++i){m.actors[i].block_peer=255;m.actors[i].block_cooldown=0;} /* the handoff above already ran the engine */
         m.actors[off+1].x=50;m.actors[off+1].y=25;m.actors[def].x=51.4f;m.actors[def].y=25;
         football_live_physics(&m);assert(m.actors[off+1].block_peer==def);
         setup(away,FB_PASS_HB_SCREEN);m.phase=FB_LIVE_PLAY;m.carrier=off+1;m.caught=true;

@@ -25,9 +25,9 @@ static const FootballPlayDefinition plays[FB_PLAY_COUNT]={
     {FB_RUN_COUNTER,FB_FORM_UNDER_CENTER,FB_PLAY_RUN,"HB Counter","Show one gap, then cut to the opposite edge.",
      1,0,0,0,1,4,{{-4,3},{-2,-2},{4,-6},{18,-6}}},
     {FB_RUN_OUTSIDE_ZONE,FB_FORM_SHOTGUN,FB_PLAY_RUN,"Outside Zone","Stretch the edge before turning upfield.",
-     1,0,0,0,2,4,{{-4,4},{0,11},{7,12},{22,12}}},
+     1,0,0,0,2,4,{{-4,3},{0,8},{7,9},{22,9}}},
     {FB_RUN_JET_SWEEP,FB_FORM_SHOTGUN,FB_PLAY_RUN,"Jet Sweep","Hand off to WR3 and race around the edge.",
-     2,0,0,0,2,4,{{-1,10},{0,17},{6,18},{22,18}}},
+     2,0,0,0,2,4,{{-2.4f,3.5f},{-1,6.5f},{3,8.5f},{22,10}}},
     {FB_PASS_STICK,FB_FORM_SHOTGUN,FB_PLAY_PASS,"Stick","Quick stick route with flat and seam outlets.",
      -1,9,-3,-2,0,4,{{3,0},{6,1},{7,3},{7,3}}},
     {FB_PASS_MESH,FB_FORM_SHOTGUN,FB_PLAY_PASS,"Mesh","Shallow crossers create traffic underneath.",
@@ -113,5 +113,51 @@ unsigned football_playbook_primary_receiver(const FootballPlayDefinition *p)
     return p&&p->id==FB_PASS_HB_SCREEN?4:p&&p->id==FB_PASS_BUBBLE?2:0;
 }
 unsigned football_playbook_runner(const FootballPlayDefinition *p){return p&&p->id==FB_RUN_JET_SWEEP?4:1;}
+/* Alignments (unmirrored, low y is the "left"). SPREAD is the 2x2 every play used to start from. TRIPS puts three receivers on one side
+ * and one on the other. TIGHT keeps the TE on the line with a wing behind him, the back deeper and straight behind the QB. JET lines the
+ * slot receiver up in the backfield beside the QB, the back on the sweep side to lead it, and the TE close enough to seal. */
+static const FootballAlignment alignments[FB_ALIGN_COUNT]={
+    {"Spread",1.33f,0,{{-1,4},{-1,49},{-1,13},{-1,39}}},
+    {"Trips",1.33f,0,{{-1,3.5f},{-1,49.5f},{-1,9.5f},{-1.5f,16}}},
+    {"Tight",0,-.5f,{{-1,6},{-1,47.5f},{-1.5f,38.2f},{0,34.8f}}},
+    {"Jet",6,2.5f,{{-1,6},{-1,48},{-3.5f,24.2f},{-1,36}}}
+};
+const FootballAlignment *football_playbook_alignment(FootballAlignmentId id){return (unsigned)id<FB_ALIGN_COUNT?&alignments[id]:&alignments[FB_ALIGN_SPREAD];}
+FootballAlignmentId football_playbook_alignment_for(const FootballPlayDefinition *p,unsigned option)
+{
+    /* Passes keep the spread until their concepts get alignments of their own. */
+    if(!p || p->type!=FB_PLAY_RUN)return FB_ALIGN_SPREAD;
+    switch(p->id){
+    case FB_RUN_JET_SWEEP:return FB_ALIGN_JET;
+    case FB_RUN_INSIDE_ZONE:return option?FB_ALIGN_TIGHT:FB_ALIGN_SPREAD;
+    case FB_RUN_DRAW:return option?FB_ALIGN_TRIPS:FB_ALIGN_SPREAD;
+    case FB_RUN_OUTSIDE_ZONE:return option?FB_ALIGN_TRIPS:FB_ALIGN_TIGHT; /* the wing is the lead blocker, on the strong side */
+    case FB_RUN_DIVE:return option?FB_ALIGN_SPREAD:FB_ALIGN_TIGHT;
+    case FB_RUN_TOSS:case FB_RUN_POWER:case FB_RUN_COUNTER:return FB_ALIGN_TIGHT; /* the wing is the lead blocker */
+    default:return FB_ALIGN_SPREAD;
+    }
+}
+FootballLead football_playbook_lead(const FootballPlayDefinition *p)
+{
+    if(!p)return FB_LEAD_NONE;
+    switch(p->id){
+    case FB_RUN_JET_SWEEP:return FB_LEAD_RB;
+    case FB_RUN_POWER:case FB_RUN_COUNTER:case FB_RUN_TOSS:case FB_RUN_OUTSIDE_ZONE:return FB_LEAD_WING;
+    default:return FB_LEAD_NONE;
+    }
+}
+FootballHandoff football_playbook_handoff(const FootballPlayDefinition *p)
+{
+    if(!p)return (FootballHandoff){FB_MESH_LINED,1.4f,0};
+    switch(p->id){
+    case FB_RUN_DRAW:return (FootballHandoff){FB_MESH_LINED,1.4f,.25f};
+    case FB_RUN_TOSS:return (FootballHandoff){FB_MESH_STRONG,3.2f,0};
+    case FB_RUN_OUTSIDE_ZONE:return (FootballHandoff){FB_MESH_STRONG,2.2f,0};
+    case FB_RUN_COUNTER:return (FootballHandoff){FB_MESH_LINED,1.4f,.2f};
+    case FB_RUN_JET_SWEEP:return (FootballHandoff){FB_MESH_STRONG,1.0f,0};
+    default:return (FootballHandoff){FB_MESH_LINED,1.4f,0};
+    }
+}
+bool football_playbook_strong_side(const FootballPlayDefinition *p){return football_playbook_lead(p)!=FB_LEAD_NONE;}
 bool football_playbook_screen(const FootballPlayDefinition *p){return p&&(p->id==FB_PASS_HB_SCREEN||p->id==FB_PASS_BUBBLE);}
 bool football_playbook_settles(const FootballPlayDefinition *p){return p&&(p->id==FB_PASS_STICK||p->id==FB_PASS_CURLS||p->id==FB_PASS_SMASH);}

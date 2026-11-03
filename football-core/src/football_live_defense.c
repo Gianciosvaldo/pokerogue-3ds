@@ -35,7 +35,7 @@ void football_live_defense_setup(FootballLive *m)
             FootballLiveActor *a=&m->actors[def+rank];unsigned target=m->coverage[rank];
             if(!zone && target!=255){
                 a->x=m->los+dir*(rank==7 || rank==8?2:5);
-                float leverage=target==off+2 || target==off+4?1.f:-1.f;
+                float leverage=m->snap_y[target-off]<26.67f?1.f:-1.f;
                 a->y=clamp(m->actors[target].y+(passing?leverage*(FB_BODY_DIAMETER+.4f):0),2,51);
             }else if(zone || m->defense==FB_DEF_COVER1_ROBBER){a->x=m->zone_x[rank];a->y=m->zone_y[rank];}
             if((m->defense==FB_DEF_ZONE_BLITZ || m->defense==FB_DEF_COVER0) && football_defense_is_rusher(m->defense,rank)){a->x=m->los+dir*3;a->y=rank==4?18:35;}
@@ -80,7 +80,7 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
          * run back into the receiver instead of carrying the route downfield. */
         const FootballPlayDefinition *play=football_playbook_get(m->play);bool passing=play && play->type==FB_PLAY_PASS;
         tx=r->x+dir*(passing?FB_BODY_DIAMETER+.4f:.8f)+r->vx*.12f;
-        ty=clamp(r->y+(passing?(mark==off+2 || mark==off+4?1.f:-1.f)*(FB_BODY_DIAMETER+.4f):0)+r->vy*.12f,2,51);
+        ty=clamp(r->y+(passing?(m->snap_y[mark-off]<26.67f?1.f:-1.f)*(FB_BODY_DIAMETER+.4f):0)+r->vy*.12f,2,51);
         if(m->flying && m->target==mark){tx=m->to_x;ty=m->to_y;}
     }else {
         /* One-high help can read both sides; the robber stays underneath.
@@ -96,6 +96,12 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
             if(value>best){best=value;tx=r->x+dir*(robber?FB_BODY_DIAMETER+.4f:3);ty=r->y;}
         }
         if(m->flying && (one_high || (rank==9?m->to_y<=29:m->to_y>=24))){tx=m->to_x;ty=m->to_y;}
+    }
+    /* Until the ball is handed off the rush cannot tell a run from a pass: the line reads the QB and the backfield, then commits.
+     * Only the draw is built to fool it (it looks like a pass and the rush keeps coming). */
+    if(m->hand_to<22 && rushing){
+        const FootballPlayDefinition *call=football_playbook_get(m->play);
+        if(call && call->id!=FB_RUN_DRAW){float len=hypotf(tx-a->x,ty-a->y);if(len>0){float k=.4f;*x=(tx-a->x)/len*k;*y=(ty-a->y)/len*k;return;}}
     }
     *x=tx-a->x;*y=ty-a->y;
 }

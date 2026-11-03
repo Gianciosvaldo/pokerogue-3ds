@@ -103,7 +103,7 @@ counts. The CPU selects from the same catalogs by situation.
 
 The new standard concepts include Stick, Mesh, Flood, Curls, Smash, HB Screen,
 WR Bubble and Shallow Cross, plus Power, Counter, Outside Zone and Jet Sweep.
-Receivers follow complementary routes; Jet Sweep uses WR3 as carrier. Existing
+Receivers follow complementary routes; Jet Sweep uses WR3 as carrier (see "Run game"). Existing
 IDs and checkpoint version 2 remain compatible. See the
 [playbook validation and limits](EXPANDED-PLAYBOOK-VALIDATION.md).
 
@@ -166,6 +166,33 @@ so a seed still replays identically.
 games between two CPU sides (`FootballLive.autoplay`, host tests only; the human is always HOME in the app) to hold
 run/pass mix, completion, sack and interception rates, scoring and lateral variety of runs inside bands, and that
 the same seeds give identical games.
+
+## Run game
+
+`OFFENSE-AUDIT.md` lists what each offensive play was meant to do and what it did before this section's changes.
+
+- **Alignment.** `arrange()` in `football_live.c` places the five eligible players from the play's alignment (`football_playbook_alignment_for`):
+  Spread (the old 2x2), Trips, Tight (tight end on the line with a wing behind him, the back straight behind the QB) and Jet. A run uses
+  its usual alignment, or its alternate a third of the time, and the whole picture is mirrored about the middle of the field half the time.
+  `snap_x/snap_y` hold where each player stood; routes, man coverage and the route lanes all read them, so nothing may assume that WR1 is on
+  the low side. Passes still start from Spread (their alignments come with their own concepts).
+- **Handoff.** A run no longer gives the ball to the runner at the snap. It stays on the QB (`carrier` is the QB, `hand_to` names the runner)
+  while the runner goes to the mesh point beside the QB (`football_live_mesh_point`, per play in `football_playbook_handoff`: the side, how far
+  across, and a delay). The runner becomes the carrier within 1.2 yd of it or after `FB_LIVE_HANDOFF_MAX` (1.1 s), and a human gets control
+  then; before it his input is ignored. The runner is not a blocker until then. The line cannot tell run from pass yet and keeps coming at
+  40% speed (the draw is built to fool it: its handoff is delayed 0.25 s and the rush keeps full speed). A QB brought down with the ball is a loss on a run, not a sack.
+- **Lead blockers and strong side.** Toss, Power, Counter and Outside Zone send the wing (WR3, who lines up on the tight end's side) ahead of the
+  runner, and the Jet Sweep sends the RB; the escort goes for the defender nearest the runner's path four yards on
+  (`lead_actor`/`football_live_block_target`). These runs go to the strong side, the side of the tight end: `run_side` is chosen so that the
+  end of the called path lands there. Other runs still bend either way.
+- **The sweep.** The slot receiver lines up behind the line on the weak side of the QB (WR3, 3.5 yd back), takes the ball crossing in front of
+  him, and runs the edge behind the line before turning upfield; the RB lines up on the strong side to lead, the TE and WR2 seal. It is an edge run
+  now, no longer a sure gain: about 0.5 yd a carry for the CPU, 2.6 for a steered runner, with plenty of losses.
+- A lateral leg of a run (the sweep, toss, outside zone) eases off the dodging in `football_live_ai_carrier` while the defenders are still
+  downfield.
+
+`tests/run_game_test.c` covers the alignments (no overlaps, inside the field, both mirrors, strong side), the handoff (ball on the QB, runner not
+a blocker, control passes, input ignored, draw later than dive) and the balance of the eight runs (no run is a free yard or a certain loss).
 
 ## Special teams
 

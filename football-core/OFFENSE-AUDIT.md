@@ -85,3 +85,23 @@ That shared table is problem S8.
 2. **Pass concepts** (S7, S8, duplicates, collisions, rest of S1): separate routes for the RB and TE on the four old concepts (RB checkdown, no 50-yd RB), a play-action fake that makes linebackers step up, different routes for HB Screen and WR Bubble (OL wall for the screen), Mesh and Shallow Cross made distinct, no two receivers on the same coordinate, per-play pass alignments, Flood/Smash tuned.
 3. **Pre-snap route lines** (S2): colored lines for WR1, WR2, WR3, TE and the RB (or the runner on a run) during the set phase, gone at the snap; only drawn when you are on offense.
 4. **Dead balance fields** (S3): not planned as a mechanic. The card texts that promise a bonus ("safer", "more sacks and picks", "agility beats pursuit") will be rewritten to say what the play really does.
+
+## Status
+
+**PR 1 (run game) fixes:** S4 (real handoff, ball stays with the QB until the runner reaches the mesh point), S5 (the plays now differ for a human: strong side, wing/RB lead, toss and outside-zone mesh farther out, draw handoff delayed and the rush keeps coming), S6 for the runs that have a lead blocker (Power, Counter, Toss, Outside Zone, Jet Sweep; plain zone blocking is still the nearest-man rule), S1 for runs (alignments Spread/Trips/Tight/Jet, mirrored half the time), J1 to J5.
+
+Before and after, same sample (800 snaps per play, mirror teams, CPU runner; "dodge" = steered runner):
+
+| Run | CPU yd before | CPU yd after | Steered yd before | Steered yd after |
+|---|---|---|---|---|
+| Inside Zone | 1.41 | 1.15 | 2.85 | 3.32 |
+| HB Dive | 1.18 | 1.65 | 2.63 | 3.17 |
+| HB Draw | 1.15 | 0.53 | 2.85 | 2.30 |
+| HB Toss | 1.59 | 1.15 | 2.63 | 2.59 |
+| HB Power | 1.79 | 1.45 | 2.63 | 3.38 |
+| HB Counter | 1.63 | 1.54 | 2.63 | 3.30 |
+| Outside Zone | 1.07 | 0.53 | 2.85 | 3.02 |
+| **Jet Sweep** | **4.21** (0% losses) | **0.51** (36 to 42% losses) | **8.19** (19.6% of runs 10+) | **2.58** (3.8% of runs 10+) |
+
+Known gaps left for later: the CPU's plain handoff costs about 0.3 yd a carry against the instant one; plain Inside/Outside Zone share one blocking rule; Counter has no weak-side counter step (the delay and the wing lead are its only differences); the CPU runs the lateral sweep leg poorly.
+**Still open:** S2 (route lines), S3 (dead balance fields), S7, S8 and the pass-play items (PR 2).
