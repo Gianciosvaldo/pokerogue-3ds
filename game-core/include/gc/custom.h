@@ -46,6 +46,7 @@ enum {
     GC_ENF_FUSED = 1u << 0,      /* the wild enemy is a fusion */
     GC_ENF_TERA = 1u << 1,       /* it is terastallized */
     GC_ENF_DOUBLES = 1u << 2,    /* the roll was a double battle (game-core plays it as a single battle) */
+    GC_ENF_RANDOM_TRAINER = 1u << 3,   /* a trainer wave: an ordinary random single trainer (the same test as trainer()); not a rival, gym, E4, champion, boss... */
 };
 
 typedef struct {

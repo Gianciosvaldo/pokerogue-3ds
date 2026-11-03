@@ -142,11 +142,11 @@ cc_status cc_nemesis_validate(const cc_nemesis *n)
 int cc_nemesis_support(const cc_nemesis *n)
 {
     if (!n) return CC_REFUSE_NOT_ATTRIBUTED;
-    if (n->traits & CC_TR_BOSS) return CC_REFUSE_BOSS;
+    /* Boss and trainer-owned enemies are remembered: a rematch builds a plain wild enemy from the record, so a boss comes back without
+     * its boss status and a trainer's (or JoJo's) Pokemon comes back alone. */
     if (n->traits & CC_TR_FUSED) return CC_REFUSE_FUSED;
     if (n->traits & CC_TR_TERA) return CC_REFUSE_TERA;
     /* Doubles is provenance: an attributed enemy can return alone in a rematch. */
-    if (n->traits & CC_TR_TRAINER_OWNED) return CC_REFUSE_TRAINER_OWNED;
     if (n->traits & CC_TR_MYSTERY) return CC_REFUSE_MYSTERY;
     if (n->traits & CC_TR_FIXED_SCRIPTED) return CC_REFUSE_FIXED_SCRIPTED;
     if (n->traits & CC_TR_REMATCH) return CC_REFUSE_REMATCH;

@@ -98,8 +98,8 @@ static uint8_t trait_of_kind(uint8_t kind) {
     case GC_ENC_TRAINER: return CC_TR_TRAINER_OWNED;
     case GC_ENC_FIXED_OR_SCRIPTED: return CC_TR_FIXED_SCRIPTED;
     case GC_ENC_MYSTERY: return CC_TR_MYSTERY;
-    case GC_ENC_BOSS:
-    case GC_ENC_FINAL: return CC_TR_BOSS;
+    case GC_ENC_BOSS: return CC_TR_BOSS;
+    case GC_ENC_FINAL: return CC_TR_FIXED_SCRIPTED;   /* the final boss (Eternatus...) is a story fight: never remembered */
     default: return 0;
   }
 }
@@ -501,6 +501,9 @@ static bool build_defeat(const gc_run* run, cs_defeat* out) {
   if (a->fused) n->traits |= CC_TR_FUSED;
   if (a->tera) n->traits |= CC_TR_TERA;
   if (a->trainer_owned) n->traits |= CC_TR_TRAINER_OWNED;
+  /* only an ordinary random trainer's Pokemon (JoJo's included) is remembered: a rival (Ivy...), gym leader, Elite Four, champion or any other
+   * story trainer is a fixed battle */
+  if (a->trainer_owned && !(R.enc_flags & GC_ENF_RANDOM_TRAINER)) n->traits |= CC_TR_FIXED_SCRIPTED;
   if (R.rematch_enemy && a->id == R.rematch_enemy_id) n->traits |= CC_TR_REMATCH;
   n->source_pokemon_id = a->id;
   n->species = a->start_species;
@@ -591,7 +594,7 @@ const char* cr_not_remembered_note(const cs_result* stored, bool named) {
       case CC_REFUSE_TERA: why = "A fused or Terastallized enemy is not remembered."; break;
       case CC_REFUSE_TRAINER_OWNED: why = "A trainer's Pokemon is not remembered."; break;
       case CC_REFUSE_MYSTERY: why = "A mystery encounter's enemy is not remembered."; break;
-      case CC_REFUSE_FIXED_SCRIPTED: why = "This wild fight stands in for a fixed battle, so it is not remembered."; break;
+      case CC_REFUSE_FIXED_SCRIPTED: why = "A rival, gym or other fixed battle is not remembered."; break;
       case CC_REFUSE_REMATCH: why = "A rematch enemy is not remembered again."; break;
       case CC_REFUSE_ABILITY_UNKNOWN:
       case CC_REFUSE_MOVES_UNKNOWN: why = "The enemy's ability or moves were not known."; break;
@@ -877,7 +880,7 @@ static bool overlay_decode(const uint8_t* buf, size_t len, overlay* o, co_carry*
   o->enc_flags = r8(&r);
   o->reward_record = r32(&r);
   o->reward_txn = r32(&r);
-  if (r.bad || (o->flags & ~OF_ALL) || o->run_uid == 0 || o->enc_kind > GC_ENC_UNSUPPORTED || (o->enc_flags & ~7u)) return false;
+  if (r.bad || (o->flags & ~OF_ALL) || o->run_uid == 0 || o->enc_kind > GC_ENC_UNSUPPORTED || (o->enc_flags & ~15u)) return false;
   if (!r_sched(&r, &o->sched) || o->sched.run_uid != o->run_uid) return false;
   if (version >= 2u) {
     o->has_jojo = true;

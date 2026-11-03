@@ -964,6 +964,7 @@ void gc_new_battle(gc_run *run)
         else if (stand_in) enc.kind = GC_ENC_FIXED_OR_SCRIPTED;
         else enc.kind = GC_ENC_ORDINARY_WILD;
         if (nb.double_battle) enc.flags |= GC_ENF_DOUBLES;
+        if (enc.kind == GC_ENC_TRAINER && !stand_in && gc_custom_trainer_wave(run, wave)) enc.flags |= GC_ENF_RANDOM_TRAINER;
         if (run->n_enemy && run->enemy[0].b.fusion_species) enc.flags |= GC_ENF_FUSED;
         if (run->n_enemy && run->enemy[0].b.terastallized) enc.flags |= GC_ENF_TERA;
         if (gc_custom_report(run, &enc)) {

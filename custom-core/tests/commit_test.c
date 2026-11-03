@@ -218,8 +218,7 @@ static void test_report_only(void)
 static void test_refusal_table(void)
 {
     static const struct { uint8_t trait; int refusal; } traits[] = {
-        {CC_TR_BOSS, CC_REFUSE_BOSS}, {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
-        {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
+        {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
         {CC_TR_MYSTERY, CC_REFUSE_MYSTERY}, {CC_TR_FIXED_SCRIPTED, CC_REFUSE_FIXED_SCRIPTED}, {CC_TR_REMATCH, CC_REFUSE_REMATCH},
     };
     for (unsigned i = 0; i < sizeof traits / sizeof traits[0]; i++) {
@@ -234,6 +233,21 @@ static void test_refusal_table(void)
         CHECK_EQ(g_meta.roster.count, 0);
         CHECK_EQ(g_meta.counters.next_record_id, 1);
         check_state("trait");
+    }
+    /* Bosses and trainers' Pokemon are remembered. */
+    {
+        static const uint8_t ok[] = {CC_TR_BOSS, CC_TR_TRAINER_OWNED, CC_TR_BOSS | CC_TR_TRAINER_OWNED};
+        for (unsigned i = 0; i < sizeof ok; i++) {
+            fresh();
+            cc_terminal t = term_for(UID(1), 900);
+            cc_nemesis c = cand_for(UID(1), 900);
+            c.traits = ok[i];
+            cc_commit_result r;
+            CHECK_STATUS(cc_commit_terminal(&g_meta, &t, &g_hist, &c, &r), CC_OK);
+            CHECK_EQ(r.refusal, CC_SUPPORT_OK);
+            CHECK_EQ(g_meta.roster.count, 1);
+            check_state("boss/trainer stored");
+        }
     }
     /* A precise doubles killer inserts and survives the real codec. */
     fresh();
