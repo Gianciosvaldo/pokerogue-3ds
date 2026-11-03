@@ -222,5 +222,9 @@ interactions remain open.
 
 The [Rototiller follow-up](ROTOTILLER-VALIDATION.md) now evaluates Grass and
 grounding across both complete parties, including benched and fainted members.
-Six retained source-owned cases cover both party sides and airborne Grass.
+Seven retained source-owned cases cover both party sides and airborne Grass.
 Other move-condition and interaction gaps remain open.
+
+The [Healing Wish/Lunar Dance condition proof](HEALING-WISH-PARTY-VALIDATION.md)
+compares both intrinsic party-eligibility closures separately, including doubles
+with a fainted field member and enemy-side ownership.
