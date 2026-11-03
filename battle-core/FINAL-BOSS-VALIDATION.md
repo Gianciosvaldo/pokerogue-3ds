@@ -20,6 +20,15 @@ representation. Save validation rejects unsupported negative or excessive PP
 Ups. The game-core constructor/use/save fixture passes 44 checks, including
 malformed PP metadata rejection in Classic and Endless.
 
+Challenge Inverse Battle now also selects Earth Power for Eternatus's third
+phase-two move, matching the `EnemyPokemon.generateAndPopulateMoveset` override
+in pinned upstream `src/field/pokemon.ts`. Known empty challenge flags retain
+Flamethrower; missing Challenge flag context reports `PR_FEAT_FINAL_BOSS`
+instead of claiming an exact moveset. The focused four-case native check covers
+Classic, known normal Challenge, known Inverse Battle, and unknown Challenge
+flags. Other final-boss species and their generic learned movesets remain
+unported and explicitly flagged.
+
 The form-change callback Set tracks getPassiveAbility().id even when hasPassive
 is false. The old code used the enabled passive projection instead; native
 Eternatus exposes the difference (Neutralizing Gas recorded, not activated).
