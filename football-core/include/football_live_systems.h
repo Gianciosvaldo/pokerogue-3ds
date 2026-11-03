@@ -16,6 +16,13 @@ void football_live_mesh_point(const FootballLive *match,float *x,float *y);
 /* The point `look` yards further along the called run's path than the runner is now (he is `depth` yards past the line and `lat` yards
  * to the run_side of the middle of the field), in field coordinates (football_live_ai.c). */
 bool football_live_run_path(const FootballLive *match,float depth,float lat,float look,float *x,float *y);
+/* Play action: for this long after the snap the back meshes with the QB and the second level steps up. HB Screen: the line lets the
+ * rush come, then three linemen release to a wall ahead of the back. */
+#define FB_LIVE_FAKE .8f
+#define FB_LIVE_SCREEN_RELEASE .5f
+bool football_live_fake_active(const FootballLive *match);
+void football_live_fake_point(const FootballLive *match,float *x,float *y);
+bool football_live_screen_wall(const FootballLive *match,unsigned rank,float *x,float *y);
 /* Shared movement step for a player's intended direction (-1..1 per axis). */
 void football_live_move(FootballLiveActor *actor,float x,float y,bool sprint);
 /* Kick plays (football_live_special.c): formation, one fixed step, and the end of the dead ball. */

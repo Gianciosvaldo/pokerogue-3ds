@@ -29,11 +29,13 @@ static void isolate(unsigned receiver,unsigned defender)
 }
 /* Distance to the called path, measured from the actual snap position. This
  * checks the trajectory, not just whether x happened to increase. */
-static float route_distance(const FootballPlayDefinition *p,float x,float y)
+static float route_distance(const FootballPlayDefinition *p,unsigned rank,float x,float y)
 {
+    /* Each receiver has his own called path (the back, TE and slot no longer share the WR1 route). */
+    FootballRouteView path=football_playbook_receiver_path(p,rank);
     float nearest=1e6f;FootballRoutePoint start={0,0};
-    for(unsigned k=0;k<=p->route_count;++k){
-        FootballRoutePoint end=k<p->route_count?p->route[k]:(FootballRoutePoint){start.x+100,start.y};
+    for(unsigned k=0;k<=path.count;++k){
+        FootballRoutePoint end=k<path.count?path.point[k]:(FootballRoutePoint){start.x+100,start.y};
         float dx=end.x-start.x,dy=end.y-start.y,len2=dx*dx+dy*dy;
         float t=len2?((x-start.x)*dx+(y-start.y)*dy)/len2:0;t=fmaxf(0,fminf(1,t));
         nearest=fminf(nearest,hypotf(x-start.x-t*dx,y-start.y-t*dy));start=end;
@@ -50,10 +52,13 @@ static void called_routes(const FootballPlayId *passes,const FootballAttributes 
         float worst=0;
         for(unsigned frame=0;frame<480;++frame){
             football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
-            worst=fmaxf(worst,route_distance(football_playbook_get(passes[p]),(m.actors[i].x-sx)*dir,(m.actors[i].y-sy)*inside));
+            worst=fmaxf(worst,route_distance(football_playbook_get(passes[p]),rank,(m.actors[i].x-sx)*dir,(m.actors[i].y-sy)*inside));
         }
         CHECK(worst<1,"receiver left called path: profile%u side%u play%u rank%u error%.2f",profile,away,p,rank,worst);
-        if(p==1)CHECK((m.actors[i].y-sy)*inside>15,"cross never crossed inside: side%u rank%u",away,rank);
+        if(p==1){ /* a receiver whose called route crosses far inside must actually get there */
+            FootballRouteView path=football_playbook_receiver_path(football_playbook_get(passes[p]),rank);float want=path.point[path.count-1].y;
+            if(want>15)CHECK((m.actors[i].y-sy)*inside>want*.6f,"cross never crossed inside: side%u rank%u",away,rank);
+        }
     }
 }
 static void full_releases(const FootballPlayId *passes)
@@ -65,7 +70,7 @@ static void full_releases(const FootballPlayId *passes)
         float start[4],lane[4],worst[4]={0};for(unsigned rank=2;rank<=5;++rank){start[rank-2]=m.actors[off+rank].x;lane[rank-2]=m.actors[off+rank].y;}
         for(unsigned frame=0;frame<90 && m.phase==FB_LIVE_PLAY;++frame){
             football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
-            for(unsigned rank=2;rank<=5;++rank)worst[rank-2]=fmaxf(worst[rank-2],route_distance(football_playbook_get(passes[p]),(m.actors[off+rank].x-start[rank-2])*dir,(m.actors[off+rank].y-lane[rank-2])*(lane[rank-2]<26.67f?1:-1)));
+            for(unsigned rank=2;rank<=5;++rank)worst[rank-2]=fmaxf(worst[rank-2],route_distance(football_playbook_get(passes[p]),rank,(m.actors[off+rank].x-start[rank-2])*dir,(m.actors[off+rank].y-lane[rank-2])*(lane[rank-2]<26.67f?1:-1)));
         }
         for(unsigned rank=2;rank<=5;++rank){
             float gain=(m.actors[off+rank].x-start[rank-2])*dir;
@@ -91,6 +96,9 @@ static void end_zone_routes(const FootballPlayId *passes,const FootballAttribute
 {
     for(unsigned profile=0;profile<4;++profile)for(unsigned away=0;away<2;++away)
     for(unsigned p=0;p<4;++p)for(unsigned obstructed=0;obstructed<2;++obstructed){
+        /* A route that settles (PA Cross) stops at its own last point, not at the back of the end zone: this teleport would only drag it
+         * back to that point. tests/pass_game_test.c runs those from a real goal-line snap instead. */
+        if(football_playbook_settles(football_playbook_get(passes[p])))continue;
         setup(away,passes[p]);unsigned off=away?11:0,i=off+2,d=11-off+7;float dir=away?-1:1;
         isolate(i,22);m.actors[i].x=away?9:111;m.actors[i].y=4;m.actors[i].attributes=profile<3?profiles[profile]:(FootballAttributes){99,1,25,60,60,60,60,60};
         m.actors[i].vx=dir*(4.3f+m.actors[i].attributes.spd*.045f);

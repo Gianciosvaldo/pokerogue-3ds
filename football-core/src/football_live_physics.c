@@ -42,6 +42,49 @@ bool football_live_run_path(const FootballLive *m,float depth,float lat,float lo
     if(left>0)cx+=left; /* past the last point: straight on */
     *x=m->los+(m->rules.offense==FB_HOME?1.f:-1.f)*cx;*y=26.67f-m->run_side*cy;return true;
 }
+/* Play action: the back's fake lasts FB_LIVE_FAKE after the snap, while the QB still holds the ball behind the line. */
+bool football_live_fake_active(const FootballLive *m)
+{
+    unsigned off=offense(m);
+    return !m->special && m->phase==FB_LIVE_PLAY && football_playbook_fake(football_playbook_get(m->play)) && m->elapsed<FB_LIVE_FAKE &&
+           !m->flying && !m->thrown && !m->scramble && m->carrier==off;
+}
+/* Beside the QB on the side the back lined up on, where a handoff would be. */
+void football_live_fake_point(const FootballLive *m,float *x,float *y)
+{
+    unsigned off=offense(m);float dir=off?-1:1;const FootballLiveActor *qb=&m->actors[off];
+    bool under=football_playbook_get(m->play)->formation==FB_FORM_UNDER_CENTER;
+    float side=m->snap_y[1]>=m->snap_y[0]?1.f:-1.f;
+    *x=qb->x+dir*(under?-.3f:.9f);*y=qb->y+side*1.4f;
+}
+/* HB Screen: after the release time the three linemen nearest the side the back slips out to leave their men and set a wall a few yards
+ * downfield of where he catches it. Returns false for every other player and time. */
+bool football_live_screen_wall(const FootballLive *m,unsigned rank,float *x,float *y)
+{
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    unsigned off=offense(m);
+    if(m->special || !p || p->id!=FB_PASS_HB_SCREEN || m->caught || m->carrier!=off || m->elapsed<FB_LIVE_SCREEN_RELEASE || rank<6 || rank>10)return false;
+    FootballRouteView path=football_playbook_receiver_path(p,1);
+    float lane=m->snap_y[1],end=lane+path.point[path.count-1].y*(lane<26.67f?1.f:-1.f);
+    /* Rank the five by how close they lined up to the back's landing spot; the nearest three are the wall. */
+    unsigned place=0;
+    for(unsigned r=6;r<=10;++r){
+        if(r==rank)continue;
+        float a=fabsf(m->snap_y[r]-end),b=fabsf(m->snap_y[rank]-end);
+        if(a<b || (a==b && r<rank))++place;
+    }
+    if(place>=3)return false;
+    /* Slot the three left to right by where they stood. */
+    unsigned slot=0;
+    for(unsigned r=6;r<=10;++r){
+        if(r==rank)continue;
+        unsigned other=0;float b=fabsf(m->snap_y[r]-end);
+        for(unsigned q=6;q<=10;++q){if(q==r)continue;float c=fabsf(m->snap_y[q]-end);if(c<b || (c==b && q<r))++other;}
+        if(other<3 && m->snap_y[r]<m->snap_y[rank])++slot;
+    }
+    *x=m->los+(off?-1.f:1.f)*3.f;*y=clamp(end+((float)slot-1)*2.4f,3,50.3f);
+    return true;
+}
 /* The player who escorts the runner (the sweep's back, the wing on power, counter and toss), or 255 when the play has none. */
 static unsigned lead_actor(const FootballLive *m)
 {
@@ -59,6 +102,7 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
     bool running=m->special || m->caught || m->carrier!=off || (play && play->type==FB_PLAY_RUN) || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
     if(pass_protection(m)){
         unsigned plan[5]={255,255,255,255,255};bool used_blocker[5]={0},used_rusher[11]={0};
+        for(unsigned k=0;k<5;++k){float wx,wy;if(football_live_screen_wall(m,6+k,&wx,&wy))used_blocker[k]=true;} /* the screen's wall has left */
         /* Make one shared assignment, rather than five independent nearest-neighbor
          * decisions. Protect an edge with few reachable blockers before doubling a DT. */
         for(unsigned n=0;n<5;++n){

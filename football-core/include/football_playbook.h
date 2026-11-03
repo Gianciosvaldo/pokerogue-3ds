@@ -23,6 +23,12 @@ unsigned football_playbook_primary_receiver(const FootballPlayDefinition *play);
 unsigned football_playbook_runner(const FootballPlayDefinition *play);
 bool football_playbook_screen(const FootballPlayDefinition *play);
 bool football_playbook_settles(const FootballPlayDefinition *play);
+/* How long the CPU quarterback gives the routes before he looks for the open man, in seconds (the live engine; the older six-player model
+ * does not use it): longer for deep concepts and for under-center sets, from the play's `gain`; a screen waits for the wall, a bubble throws at once. */
+float football_playbook_window(const FootballPlayDefinition *play);
+/* Play action: the back's route runs through the mesh point beside the QB, and for the first FB_LIVE_FAKE seconds the linebackers (zone) and
+ * safeties step up to meet it. */
+bool football_playbook_fake(const FootballPlayDefinition *play);
 /* Where the five eligible players line up. Spots are yards behind the line of scrimmage (depth <= 0) and the lateral y of a 53.3-yard
  * field in the unmirrored version; the live engine mirrors a whole alignment about the middle of the field at random, so nothing may
  * assume a side. The RB stands rb_dy from the QB's line (depth is the base RB depth plus rb_back). wr[] is WR1, WR2, WR3, TE. */

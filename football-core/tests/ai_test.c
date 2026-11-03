@@ -144,9 +144,13 @@ int main(void)
     m.elapsed=3.7f;assert(football_live_ai_qb(&m)!=FB_AI_HOLD);
 
     /* Mirror matches played entirely by the CPU: they finish, and the numbers look like football. */
-    Stats st=play_games(1,40);
+    /* 300 games for the bands. The sack share is about 2.25% of snaps against a 2% floor (600 games on the code before and after the passing
+     * rework: 2.28% and 2.24%), so 40 games (45 sacks, give or take 7) made the floor a coin flip that any change to the passing game re-rolled.
+     * The bounds are the same; the sample is big enough to mean something. */
+    const unsigned games=300;
+    Stats st=play_games(1,games);
     float snaps=(float)st.snaps;
-    assert(st.games==40 && st.snaps>40u*35u);
+    assert(st.games==games && st.snaps>games*35u);
     float dropbacks=(float)(st.completions+st.incompletions+st.interceptions+st.sacks);
     assert(dropbacks/snaps>.4f && dropbacks/snaps<.8f);
     assert((float)st.sacks/snaps>.02f && (float)st.sacks/snaps<.12f);
@@ -164,8 +168,8 @@ int main(void)
         st.games,st.snaps,st.points/st.games,100*runs/snaps,100*outside/runs,100*(float)st.completions/attempts,100*(float)st.sacks/snaps,100*(float)st.interceptions/snaps,st.overtime);
 
     /* Same seeds, same games. */
-    Stats again=play_games(1,40);
-    assert(again.signature==st.signature && again.snaps==st.snaps);
+    Stats first=play_games(1,40),again=play_games(1,40);
+    assert(again.signature==first.signature && again.snaps==first.snaps);
     Stats other=play_games(1001,10);assert(other.signature!=st.signature);
     puts("football ai tests passed");
     return 0;

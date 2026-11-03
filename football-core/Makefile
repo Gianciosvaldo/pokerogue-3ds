@@ -224,6 +224,13 @@ run-game-test: core-libs
 	$(BUILD)/run_game_test
 test: run-game-test
 
+.PHONY: pass-game-test
+pass-game-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pass_game_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/pass_game_test
+	$(BUILD)/pass_game_test
+test: pass-game-test
+
 .PHONY: special-test
 special-test: core-libs
 	mkdir -p $(BUILD)

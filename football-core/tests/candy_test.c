@@ -77,7 +77,7 @@ int main(void)
 
     /* Whole games: every credit is one per scoring play, sack and interception, and the tallies add up to the credits. */
     unsigned long seen[2][3]={{0}};
-    for(uint32_t seed=1;seed<=30;++seed){
+    for(uint32_t seed=1;seed<=60;++seed){ /* 60 games, not 30: cleaner pass routes make the CPU team's interceptions rarer, and the floor below needs a few */
         assert(football_live_begin(&m,&roster,seed,1));m.autoplay=1;guard=0;unsigned long credited[2][3]={{0}};
         while(m.phase!=FB_LIVE_END){
             assert(++guard<300000);
@@ -98,7 +98,7 @@ int main(void)
     }
     /* seen[side][kind-1]; the fixture is lopsided (the human side wins by far), so these are accounting counts, not a balance claim. */
     assert(seen[0][FB_CREDIT_INTERCEPTION-1]>5 && seen[0][FB_CREDIT_SACK-1]>20 && seen[0][FB_CREDIT_TOUCHDOWN-1]>20 && seen[1][FB_CREDIT_INTERCEPTION-1]>5 && seen[1][FB_CREDIT_TOUCHDOWN-1]>0);
-    printf("candy: 30 games, credits (human team / CPU team): %lu/%lu interceptions, %lu/%lu sacks, %lu/%lu touchdowns\n",
+    printf("candy: 60 games, credits (human team / CPU team): %lu/%lu interceptions, %lu/%lu sacks, %lu/%lu touchdowns\n",
         seen[0][FB_CREDIT_INTERCEPTION-1],seen[1][FB_CREDIT_INTERCEPTION-1],seen[0][FB_CREDIT_SACK-1],seen[1][FB_CREDIT_SACK-1],seen[0][FB_CREDIT_TOUCHDOWN-1],seen[1][FB_CREDIT_TOUCHDOWN-1]);
 
     /* The career earns candy as the plays happen and for the whole team at the end, and the profile gets it only with a
