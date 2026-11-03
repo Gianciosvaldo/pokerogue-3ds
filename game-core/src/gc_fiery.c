@@ -26,6 +26,8 @@
 #include <math.h>
 #include <string.h>
 
+extern int pr_reward_generate(pr_reward_ctx *ctx, int item);   /* reward-core/src/reward_internal.h: generateType of a generator item, as in gc_berries.c */
+
 #define DAMAGE_PERCENTAGE 20
 
 static bool is_fire(const gc_mon *m)
