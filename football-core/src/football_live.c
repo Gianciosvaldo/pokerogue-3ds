@@ -131,12 +131,22 @@ bool football_live_defend(FootballLive *m,FootballDefenseId defense)
     if(kick!=FB_SPECIAL_NONE && football_live_special(m,kick))return true;
     return football_live_call(m,football_live_ai_call(m));
 }
-void football_live_switch(FootballLive *m)
+void football_live_cycle_controlled(FootballLive *m,int step)
+{
+    /* The human's eleven are actors 0..10. Nearest the ball first; equal distances keep their order. */
+    unsigned order[11],here=11;float far[11];
+    for(unsigned i=0;i<11;++i){far[i]=distance(m->actors[i].x,m->actors[i].y,m->ball_x,m->ball_y);order[i]=i;}
+    for(unsigned i=1;i<11;++i)for(unsigned j=i;j>0 && far[order[j]]<far[order[j-1]];--j){unsigned t=order[j];order[j]=order[j-1];order[j-1]=t;}
+    for(unsigned i=0;i<11;++i)if(order[i]==m->controlled)here=i;
+    if(here==11){m->controlled=(uint8_t)order[0];return;} /* nobody steered: the one nearest the ball */
+    m->controlled=(uint8_t)order[(here+11u+(unsigned)(step<0?10:1))%11];
+}
+void football_live_switch_step(FootballLive *m,int step)
 {
     if(!m || m->phase!=FB_LIVE_PLAY || !football_live_cpu(m,(FootballSide)m->rules.offense) || football_live_cpu(m,(FootballSide)(1-m->rules.offense)))return;
-    /* Cycle through all eleven defenders, never hand control back to the AI. */
-    m->controlled=(uint8_t)((m->controlled+1)%11);
+    football_live_cycle_controlled(m,step); /* never hand control back to the AI */
 }
+void football_live_switch(FootballLive *m){football_live_switch_step(m,1);}
 void football_live_credit(FootballLive *m,unsigned actor,FootballCreditKind kind)
 {
     if(!m || actor>=22 || kind<FB_CREDIT_INTERCEPTION || kind>FB_CREDIT_TOUCHDOWN)return;
@@ -288,7 +298,8 @@ static void step(FootballLive *m,FootballLiveInput input)
         return;
     }
     if(m->special && m->stage!=FB_STAGE_RETURN){football_live_special_step(m,input);return;}
-    if(input.pressed&FB_LIVE_SWITCH)football_live_switch(m);
+    if(input.pressed&FB_LIVE_SWITCH)football_live_switch_step(m,1);
+    if(input.pressed&FB_LIVE_SWITCH_BACK)football_live_switch_step(m,-1);
     if(!cpu && input.receiver>=0)throw_ball(m,(unsigned)input.receiver);
     if(m->cooldown>0)m->cooldown-=FB_LIVE_STEP;
     if(m->juke>0)m->juke-=FB_LIVE_STEP;

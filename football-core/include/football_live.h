@@ -48,7 +48,7 @@ typedef struct { uint8_t kind,actor,other;int8_t side;uint32_t step;float x,y; }
 #define FB_LIVE_HOLD_TOUCHDOWN 2.4f
 #define FB_LIVE_HOLD_TURNOVER 1.4f
 /* FB_LIVE_UNDO: before the snap, take the called play back to the playcall (football_live_undo). */
-enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4,FB_LIVE_UNDO=8 };
+enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4,FB_LIVE_UNDO=8,FB_LIVE_SWITCH_BACK=16 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
 /* route_* is snap-local release state: route_peer is defender + 1, or 0.
  * Formation setup clears it; checkpoints rebuild actors rather than storing it. */
@@ -112,6 +112,12 @@ FootballPlayId football_live_ai_call(FootballLive *m);
 /* True when the CPU runs that side (always AWAY; HOME too when autoplay is set). */
 bool football_live_cpu(const FootballLive *m,FootballSide side);
 void football_live_switch(FootballLive *m);
+/* The human defender's switch (R: FB_LIVE_SWITCH, L: FB_LIVE_SWITCH_BACK). The eleven are ordered by their distance to the ball, nearest
+ * first, and the switch moves one place along that order from the player now steered (+1 farther from the ball, -1 nearer), wrapping at
+ * the ends, so a press never sends the player across the field when a closer one is next. */
+void football_live_switch_step(FootballLive *m,int step);
+/* The same order for a kick, where the human steers the kicking side's coverage or the return team: any of actors 0..10. */
+void football_live_cycle_controlled(FootballLive *m,int step);
 /* Special teams, CALL phase only. A punt is always allowed; a field goal only within kick range of the goal. The
  * kicker is the QB slot of the offense unit, so its throw power and accuracy set the kick. */
 bool football_live_special(FootballLive *m,FootballSpecial kind);

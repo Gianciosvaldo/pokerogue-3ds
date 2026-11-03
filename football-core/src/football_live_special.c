@@ -263,8 +263,8 @@ void football_live_special_step(FootballLive *m,FootballLiveInput input)
     bool cpu_kick=football_live_cpu(m,(FootballSide)ks),cpu_catch=football_live_cpu(m,(FootballSide)rs);
     const FootballLiveActor *kicker=&m->actors[kb];
     /* The human can cycle the player they steer once there is more than one worth steering. */
-    if((input.pressed&FB_LIVE_SWITCH) && ((!cpu_kick && m->stage!=FB_STAGE_SNAP) || (!cpu_catch && !punt)))
-        m->controlled=(uint8_t)((m->controlled+1)%11);
+    if((input.pressed&(FB_LIVE_SWITCH|FB_LIVE_SWITCH_BACK)) && ((!cpu_kick && m->stage!=FB_STAGE_SNAP) || (!cpu_catch && !punt)))
+        football_live_cycle_controlled(m,(input.pressed&FB_LIVE_SWITCH)?1:-1);
     if(!cpu_catch && punt && m->stage==FB_STAGE_FLIGHT && (input.pressed&FB_LIVE_ACTION))m->fair_catch=true;
     float intent[22][2];bool sprint[22];
     for(unsigned i=0;i<22;++i){intent[i][0]=intent[i][1]=0;sprint[i]=false;}
