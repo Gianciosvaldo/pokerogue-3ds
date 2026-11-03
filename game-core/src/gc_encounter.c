@@ -628,6 +628,28 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
             if (full) run->enemy[i].b.hp = run->enemy[i].b.stats[STAT_HP];
         }
     }
+    /* EncounterPhase.end() makes Eternatus's Mini Black Hole non-transferable at the
+     * Classic final boss and each Endless major boss. This runs after item creation so
+     * generated and explicitly configured stocks share the same rule. */
+    const bool lock_black_hole =
+        (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave))
+        || pr_run_is_endless_major_boss(&run->run, run->wave);
+    if (lock_black_hole) {
+        for (int p = 0; p < run->n_enemy; p++) {
+            if (run->enemy[p].b.species != SPECIES_ID_ETERNATUS) continue;
+            const uint32_t id = run->enemy[p].b.id;
+            for (int i = 0; i < run->n_enemy_items; i++) {
+                gc_item *it = &run->enemy_items[i];
+                if (strcmp(it->key, "MINI_BLACK_HOLE") || it->pokemon_id != id) continue;
+                it->non_transferable = true;
+                for (int j = 0; j < run->bt.n_mods[1]; j++) {
+                    pr_modifier *m = &run->bt.mods[1][j];
+                    if (m->cls == PR_MOD_TURN_HELD_TRANSFER && m->pokemon_id == (int64_t)id)
+                        m->is_transferable = false;
+                }
+            }
+        }
+    }
     if (run->battle_type == BATTLE_TYPE_TRAINER) gc_trainer_gen_ai(run);   /* EncounterPhase: currentBattle.trainer.genAI(enemyParty) */
     gc_ai_enemy_party(run);
     gc_trainer_names(run);

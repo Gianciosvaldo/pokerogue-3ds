@@ -3,6 +3,7 @@
 #include "endless_journey_host_test.c"
 #undef main
 static int learned[2],evolved[2],terminal[2],life_wins[2],life_losses[2];
+static gc_system lifecycle_sys;
 typedef struct { int kind,a,b,c,hp;double exp_amount,exp_before; } progress_event;
 typedef struct { int count;progress_event event[16]; } progress_trace;
 static progress_trace observed[2];
@@ -19,6 +20,29 @@ static void enemy_buff_bridge(void){
  const int classes[9]={PR_MOD_ENEMY_DAMAGE_BOOSTER,PR_MOD_ENEMY_DAMAGE_REDUCER,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE,PR_MOD_ENEMY_ENDURE_CHANCE,PR_MOD_ENEMY_FUSED_CHANCE,PR_MOD_ENEMY_TURN_HEAL};
  for(int i=0;i<9;i++)CHECK(run.bt.mods[1][i].cls==classes[i]&&!run.bt.mods[1][i].unknown_subclass);
  pr_enemy_gen_ctx ec;gc_enemy_ctx(&run,&ec);CHECK(ec.enemy_fusion_stacks==1&&ec.enemy_fusion_chance==0.01);
+}
+static void eternatus_black_hole_lock(int mode,int wave,bool expected){
+ const char *why=NULL;gc_system_init_defaults(&lifecycle_sys);
+ gc_run_new(&run,mode,"endless-eternatus-item-lock",777);
+ gc_starter starter={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};memset(starter.ivs,15,6);
+ CHECK(gc_run_set_starters(&run,&starter,1,&why));
+ run.sys=&lifecycle_sys;
+ run.wave=wave;run.bt.wave_index=wave;run.battle_type=BATTLE_TYPE_WILD;
+ run.n_enemy=0;run.n_enemy_items=0;run.bt.n_mods[1]=0;
+ pr_enemy_gen gen={.id=9001,.form=0,.gender=-1,.nature=-1,.ability_index=0,.fusion_species=-1,.fusion_form=0,.fusion_gender=-1,.fusion_ability_index=-1,.tera_type=-1,.friendship=-1};
+ for(int i=0;i<6;i++)gen.ivs[i]=31;
+ gc_mon_new_enemy(&run,&run.enemy[0],SPECIES_ID_ETERNATUS,1000,&gen,0);run.n_enemy=1;
+ gc_item black_hole={.key="MINI_BLACK_HOLE",.arg=-1,.stack=1};
+ gc_enemy_finish_party_items(&run,&black_hole,1);
+ CHECK(run.n_enemy_items==1&&!strcmp(run.enemy_items[0].key,"MINI_BLACK_HOLE"));
+ CHECK(run.enemy_items[0].non_transferable==expected);
+ CHECK(run.bt.n_mods[1]==1&&run.bt.mods[1][0].is_transferable==!expected);
+}
+static void endless_loss_no_clear_voucher(void){
+ gc_system_init_defaults(&lifecycle_sys);gc_run_new(&run,GAME_MODES_ENDLESS,"endless-loss-no-voucher",777);
+ run.sys=&lifecycle_sys;run.wave=5850;gc_rphase end=gc_rp(RP_BATTLE_END,0,0,0);
+ CHECK(gc_phase_start(&run,&end));CHECK(lifecycle_sys.voucher_counts[GC_VOUCHER_PREMIUM]==0);
+ CHECK(gc_rq_has(&run,RP_GAME_OVER));
 }
 static void progression(gc_run *r,int family,bool count,progress_trace *trace){
  memset(trace,0,sizeof *trace);gc_event ev;while(gc_run_next_event(r,&ev)){
@@ -37,8 +61,9 @@ static void compare_lifecycle(void){compare();CHECK(!run.bt.n_deferred&&!loaded.
 static void lifecycle(int family){
  const char *why=NULL;char seed[48];snprintf(seed,sizeof seed,"endless-integration-%d",seed_index);
  gc_run_new(&run,mode?GAME_MODES_SPLICED_ENDLESS:GAME_MODES_ENDLESS,seed,777);
+ gc_system_init_defaults(&lifecycle_sys);
  gc_starter s={.species=SPECIES_ID_BULBASAUR,.tera_type=-1,.moves={MOVE_ID_SEED_FLARE,MOVE_ID_EARTH_POWER,MOVE_ID_FLAMETHROWER,MOVE_ID_ICE_BEAM}};memset(s.ivs,31,6);
- CHECK(gc_run_set_starters(&run,&s,1,&why));drain(&run,false);
+ CHECK(gc_run_set_starters(&run,&s,1,&why));run.sys=&lifecycle_sys;drain(&run,false);
  const int first_wave=family?5849:25;
  run.wave=first_wave-1;s.species=family?SPECIES_ID_MEWTWO:SPECIES_ID_RALTS;s.moves[0]=MOVE_ID_PSYSTRIKE;s.moves[1]=MOVE_ID_AURA_SPHERE;
  gc_mon_new_player(&run,&run.party[0],&s,family?1000000:19);
@@ -65,11 +90,14 @@ static void lifecycle(int family){
   CHECK(gc_run_choose(&loaded,&c,&why));progression(&loaded,family,false,&observed[1]);CHECK(!memcmp(observed,observed+1,sizeof observed[0]));compare_lifecycle();
  }
  CHECK(steps<300);
- if(family){CHECK(saved_final&&run.finished&&run.screen.kind==GC_SCREEN_CLEAR&&run.wave==5850);CHECK(!gc_run_can_save(&run)&&!gc_run_can_save(&loaded));CHECK(!gc_rq_has(&run,RP_NEW_BATTLE)&&!gc_rq_has(&run,RP_SELECT_MODIFIER));terminal[mode]++;}
+ if(family){CHECK(saved_final&&run.finished&&run.screen.kind==GC_SCREEN_CLEAR&&run.wave==5850);CHECK(!gc_run_can_save(&run)&&!gc_run_can_save(&loaded));CHECK(!gc_rq_has(&run,RP_NEW_BATTLE)&&!gc_rq_has(&run,RP_SELECT_MODIFIER));CHECK(lifecycle_sys.voucher_counts[GC_VOUCHER_PREMIUM]==1);terminal[mode]++;}
  else if(run.wave==26){life_wins[mode]++;CHECK(run.party[0].b.species==SPECIES_ID_KIRLIA&&run.party[0].b.moves[3]==MOVE_ID_PSYBEAM);same_save();}
  else {life_losses[mode]++;CHECK(run.finished&&run.screen.kind==GC_SCREEN_GAME_OVER);}
 }
 int main(void){enemy_buff_bridge();CHECK(retained_wide_journey_main()==0);
+ eternatus_black_hole_lock(GAME_MODES_ENDLESS,1000,true);eternatus_black_hole_lock(GAME_MODES_ENDLESS,999,false);
+ eternatus_black_hole_lock(GAME_MODES_CLASSIC,200,true);eternatus_black_hole_lock(GAME_MODES_CLASSIC,199,false);
+ endless_loss_no_clear_voucher();
  for(int family=0;family<2;family++)for(mode=0;mode<2;mode++)for(seed_index=0;seed_index<8;seed_index++)lifecycle(family);
  for(mode=0;mode<2;mode++){CHECK(learned[mode]>0&&evolved[mode]>0&&life_wins[mode]>0&&life_losses[mode]>0);CHECK(terminal[mode]==8);}
  printf("Endless lifecycle: 32 added contexts; learned %d/%d, evolved %d/%d, learning-chain wins %d/%d losses %d/%d, terminal clears %d/%d; %d combined checks passed\n",learned[0],learned[1],evolved[0],evolved[1],life_wins[0],life_wins[1],life_losses[0],life_losses[1],terminal[0],terminal[1],checks);return 0;
