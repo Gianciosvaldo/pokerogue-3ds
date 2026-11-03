@@ -420,7 +420,7 @@ static void test_field_rules(void)
     CHECK_STATUS(patched(82, 1, 0), CC_E_RANGE);         /* life NONE */
     CHECK_STATUS(patched(82, 1, 6), CC_E_RANGE);
     CHECK_STATUS(patched(82, 1, 2), CC_E_CONSISTENCY);   /* SCHEDULED without its run */
-    CHECK_STATUS(patched(83, 1, 1), CC_E_CONSISTENCY);   /* a stored record with a trait */
+    CHECK_STATUS(patched(83, 1, 2), CC_E_CONSISTENCY);   /* a stored record with a refused trait (fused) */
     CHECK_STATUS(patched(84, 2, 0x0400), CC_E_UNKNOWN_BITS);
     CHECK_STATUS(patched(84, 2, 0x01BF), CC_E_CONSISTENCY);   /* FINISHER_VERIFIED dropped: a stored record has to be supported */
     CHECK_STATUS(patched(84, 2, 0x03FF), CC_E_CONSISTENCY);   /* LOADOUT_TRUNCATED with 1 item */

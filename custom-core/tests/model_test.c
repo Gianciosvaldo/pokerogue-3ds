@@ -667,8 +667,7 @@ static void test_support_and_gate(void)
 
     /* each trait is refused for its own reason */
     const struct { uint8_t bit; int want; } traits[] = {
-        {CC_TR_BOSS, CC_REFUSE_BOSS}, {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
-        {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
+        {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
         {CC_TR_MYSTERY, CC_REFUSE_MYSTERY}, {CC_TR_FIXED_SCRIPTED, CC_REFUSE_FIXED_SCRIPTED},
         {CC_TR_REMATCH, CC_REFUSE_REMATCH},
     };
@@ -685,11 +684,17 @@ static void test_support_and_gate(void)
     CHECK_STATUS(cc_nemesis_validate_stored(&n), CC_OK);
     n.known &= (uint16_t)~CC_NK_FINISHER_VERIFIED;
     CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_NOT_ATTRIBUTED);
+    /* bosses and trainers' Pokemon (JoJo's too) are remembered; a refused trait next to them still refuses */
     n = mk_nem(1, 10, 900); n.traits = CC_TR_DOUBLES | CC_TR_BOSS;
-    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_BOSS);
-    /* several traits: the first listed wins */
+    CHECK_EQ(cc_nemesis_support(&n), CC_SUPPORT_OK);
+    CHECK_STATUS(cc_nemesis_validate_stored(&n), CC_OK);
+    n = mk_nem(1, 10, 900); n.traits = CC_TR_TRAINER_OWNED;
+    CHECK_EQ(cc_nemesis_support(&n), CC_SUPPORT_OK);
+    CHECK_STATUS(cc_nemesis_validate_stored(&n), CC_OK);
     n = mk_nem(1, 10, 900); n.traits = CC_TR_TERA | CC_TR_BOSS;
-    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_BOSS);
+    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_TERA);
+    n = mk_nem(1, 10, 900); n.traits = CC_TR_TRAINER_OWNED | CC_TR_FUSED;
+    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_FUSED);
 
     n = mk_nem(1, 10, 900); n.known &= (uint16_t)~CC_NK_FINISHER_VERIFIED;
     CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_NOT_ATTRIBUTED);
@@ -729,7 +734,10 @@ static void test_support_and_gate(void)
     CHECK_EQ(cc_insertion_check(&t, &n), CC_REFUSE_NOT_ATTRIBUTED);
     /* attribution holds, so the enemy's own limits are what refuse it */
     t = mk_terminal(10, 0); n = mk_nem(1, 10, 900); n.traits = CC_TR_BOSS;
-    CHECK_EQ(cc_insertion_check(&t, &n), CC_REFUSE_BOSS);
+    CHECK_EQ(cc_insertion_check(&t, &n), CC_SUPPORT_OK);
+    n.traits = CC_TR_TERA;
+    CHECK_EQ(cc_insertion_check(&t, &n), CC_REFUSE_TERA);
+    n = mk_nem(1, 10, 900);
     n = mk_nem(1, 10, 900); n.known &= (uint16_t)~CC_NK_MOVES; n.n_moves = 0; memset(n.moves, 0, sizeof n.moves);
     CHECK_EQ(cc_insertion_check(&t, &n), CC_REFUSE_MOVES_UNKNOWN);
 }
