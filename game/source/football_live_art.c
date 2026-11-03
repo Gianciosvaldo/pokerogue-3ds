@@ -178,23 +178,25 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
 }
 /* The cards of the playcall are classic windows with the emerald font: the window is the card, a yellow frame marks the one chosen, and
  * the diagram is drawn over it in plain rectangles. */
+/* The cards below are on the bottom screen, drawn with the classic UI's own rectangles (depth 0, in drawing order), so a window pushed over
+ * them, like the pause menu, covers them: a rectangle drawn with a depth of its own would show through it. */
 void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float y,float w,float h,bool selected)
 {
     const FootballPlayDefinition *p=football_playbook_get(id);if(!p || !r)return;
-    u32 gold=C2D_Color32(255,210,63,255),white=C2D_Color32(246,246,242,255);
+    rr_color gold=RR_RGBA(255,210,63,255),white=RR_RGBA(246,246,242,255);
     football_menu_panel(x,y,w,h);if(selected)football_menu_select(x,y,w,h);
     football_menu_text(selected?TS_SUMMARY_GOLD:TS_WINDOW,FM_PX_BODY,x+10,y+8,w-20,p->name);
-    for(unsigned i=0;i<5;++i)C2D_DrawRectSolid(x+w*.5f-12+i*6,y+36,.03f,4,4,white);
+    for(unsigned i=0;i<5;++i)rr_rect(x+w*.5f-12+i*6,y+36,4,4,white);
     unsigned read=football_playbook_primary_receiver(p),rank=read==4?1:read+2;
     FootballRouteView path=p->type==FB_PLAY_PASS?football_playbook_receiver_path(p,rank):(FootballRouteView){p->route,p->route_count};
     float depth=1,back=0,lateral=1;for(unsigned i=0;i<path.count;++i){depth=fmaxf(depth,path.point[i].x);back=fminf(back,path.point[i].x);lateral=fmaxf(lateral,fabsf(path.point[i].y));}
     float scale_x=(h-46)/(depth-back),scale_y=fminf(2,(w*.4f)/lateral);
     float origin_y=y+h-12+back*scale_x;
     float last_x=x+w*.5f,last_y=origin_y;
-    C2D_DrawRectSolid(last_x-2,last_y-2,.03f,5,5,gold);
+    rr_rect(last_x-2,last_y-2,5,5,gold);
     for(unsigned i=0;i<18;++i){FootballRoutePoint point=football_playbook_sample_path(path,i/17.0f);float px=x+w*.5f+point.y*scale_y,py=origin_y-point.x*scale_x;
-        C2D_DrawRectSolid(px,py,.04f,3,3,gold);last_x=px;last_y=py;}
-    C2D_DrawRectSolid(last_x-2,last_y-3,.04f,7,3,gold);
+        rr_rect(px,py,3,3,gold);last_x=px;last_y=py;}
+    rr_rect(last_x-2,last_y-3,7,3,gold);
 }
 
 const char *football_live_art_special_name(FootballSpecial kind)
@@ -204,31 +206,31 @@ const char *football_live_art_special_name(FootballSpecial kind)
 void football_live_art_special_card(FootballRenderer *r,FootballSpecial kind,const char *detail,float x,float y,float w,float h,bool selected,bool enabled)
 {
     if(!r)return;
-    u32 gold=C2D_Color32(255,210,63,255),white=C2D_Color32(246,246,242,255),dim=C2D_Color32(84,84,96,255);
+    rr_color gold=RR_RGBA(255,210,63,255),white=RR_RGBA(246,246,242,255),dim=RR_RGBA(84,84,96,255);
     football_menu_panel(x,y,w,h);if(selected && enabled)football_menu_select(x,y,w,h);
     football_menu_text(!enabled?TS_SHADOW_TEXT:selected?TS_SUMMARY_GOLD:TS_WINDOW,FM_PX_BODY,x+10,y+8,w-20,football_live_art_special_name(kind));
     if(detail)football_menu_text(enabled?TS_WINDOW:TS_SHADOW_TEXT,FM_PX_TINY,x+10,y+25,w-20,detail);
     if(kind==FB_SPECIAL_PUNT){
         /* A high arc down the field. */
-        for(unsigned i=0;i<20;++i){float t=i/19.0f;C2D_DrawRectSolid(x+14+t*(w-40),y+h-14-4*t*(1-t)*(h-58)*1.6f,.03f,3,3,enabled?gold:dim);}
+        for(unsigned i=0;i<20;++i){float t=i/19.0f;rr_rect(x+14+t*(w-40),y+h-14-4*t*(1-t)*(h-58)*1.6f,3,3,enabled?gold:dim);}
     }else if(kind==FB_SPECIAL_NONE){
         /* The try as a play: the end zone line, the ball carrier and the defenders standing in front of it. */
-        C2D_DrawRectSolid(x+12,y+42,.03f,w-24,2,enabled?gold:dim);
-        for(unsigned i=0;i<4;++i)C2D_DrawRectSolid(x+w*.25f+i*(w*.5f/3)-2,y+h-30,.03f,5,5,enabled?white:dim);
-        C2D_DrawRectSolid(x+w*.5f-3,y+h-20,.04f,7,7,enabled?gold:dim);
-        for(unsigned i=0;i<8;++i)C2D_DrawRectSolid(x+w*.5f,y+h-24-i*(h-70)/8,.04f,2,2,enabled?white:dim);
+        rr_rect(x+12,y+42,w-24,2,enabled?gold:dim);
+        for(unsigned i=0;i<4;++i)rr_rect(x+w*.25f+i*(w*.5f/3)-2,y+h-30,5,5,enabled?white:dim);
+        rr_rect(x+w*.5f-3,y+h-20,7,7,enabled?gold:dim);
+        for(unsigned i=0;i<8;++i)rr_rect(x+w*.5f,y+h-24-i*(h-70)/8,2,2,enabled?white:dim);
     }else{
         /* The uprights, with the kick on its way. */
         float px=x+w-34;
-        C2D_DrawRectSolid(px,y+40,.03f,2,22,enabled?gold:dim);C2D_DrawRectSolid(px+14,y+40,.03f,2,22,enabled?gold:dim);C2D_DrawRectSolid(px,y+62,.03f,16,2,enabled?gold:dim);C2D_DrawRectSolid(px+7,y+62,.03f,2,8,enabled?gold:dim);
-        for(unsigned i=0;i<12;++i){float t=i/11.0f;C2D_DrawRectSolid(x+14+t*(w-58),y+h-14-t*(h-50)-2*t*(1-t)*20,.03f,3,3,enabled?white:dim);}
+        rr_rect(px,y+40,2,22,enabled?gold:dim);rr_rect(px+14,y+40,2,22,enabled?gold:dim);rr_rect(px,y+62,16,2,enabled?gold:dim);rr_rect(px+7,y+62,2,8,enabled?gold:dim);
+        for(unsigned i=0;i<12;++i){float t=i/11.0f;rr_rect(x+14+t*(w-58),y+h-14-t*(h-50)-2*t*(1-t)*20,3,3,enabled?white:dim);}
     }
 }
 
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId id,float x,float y,float w,float h,bool selected)
 {
     const FootballDefenseDefinition *d=football_defense_get(id);if(!d || !r)return;
-    u32 gold=C2D_Color32(255,210,63,255),blue=C2D_Color32(76,201,240,255);
+    rr_color gold=RR_RGBA(255,210,63,255),blue=RR_RGBA(76,201,240,255);
     football_menu_panel(x,y,w,h);if(selected)football_menu_select(x,y,w,h);
     football_menu_text(selected?TS_SUMMARY_GOLD:TS_SUMMARY_BLUE,FM_PX_BODY,x+10,y+8,w-20,d->name);
     unsigned rush=0,deep=0;
@@ -237,10 +239,10 @@ void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId id,flo
      * five dots on every card. Top is deep; the rush arrows point to the QB. */
     for(unsigned row=0;row<3;++row){unsigned count=row==0?deep:row==1?11-rush-deep:rush;
         for(unsigned i=0;i<count;++i){float px=x+12+(i+.5f)*(w-24)/count,py=y+34+row*14;
-            C2D_DrawRectSolid(px-2,py,.03f,5,5,row==2?gold:blue);
-            if(row==2){C2D_DrawRectSolid(px,py+4,.03f,1,7,gold);C2D_DrawRectSolid(px-2,py+8,.03f,5,1,gold);}
-            else if(football_defense_is_zone(id))C2D_DrawRectSolid(px-6,py+5,.03f,13,1,blue);
-            else if(row==1)C2D_DrawRectSolid(px,py+4,.03f,1,6,blue);
+            rr_rect(px-2,py,5,5,row==2?gold:blue);
+            if(row==2){rr_rect(px,py+4,1,7,gold);rr_rect(px-2,py+8,5,1,gold);}
+            else if(football_defense_is_zone(id))rr_rect(px-6,py+5,13,1,blue);
+            else if(row==1)rr_rect(px,py+4,1,6,blue);
         }
     }
 }

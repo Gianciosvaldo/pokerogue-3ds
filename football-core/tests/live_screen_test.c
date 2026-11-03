@@ -41,6 +41,7 @@ bool football_render_load_front(FootballRenderer *r,unsigned slot,const menu_mon
 bool football_render_load_compact(FootballRenderer *r,unsigned slot,const menu_mon *m){assert(r->text && slot<22 && m->species);++loads;return true;}
 const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)slot;(void)ms;return NULL;}
 bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool left){(void)f;(void)x;(void)y;(void)scale;(void)left;return false;}
+static unsigned icons_drawn;void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){assert(f && o && o->scale_x>0 && x>=0 && x<320 && y>=0 && y<240);++icons_drawn;}
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms){(void)r;(void)c;(void)cam;(void)ms;++draws;}
 static uint32_t offense_cards,defense_cards;
 void football_live_art_card(FootballRenderer *r,FootballPlayId p,float x,float y,float w,float h,bool selected){(void)r;assert(p<FB_PLAY_COUNT);offense_cards|=1u<<p;(void)x;(void)y;(void)w;(void)h;(void)selected;}
