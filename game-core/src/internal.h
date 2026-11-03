@@ -447,6 +447,8 @@ bool gc_delibirdy_spawnable(const gc_run *run);                  /* the encounte
 bool gc_delibirdy_option_ok(const gc_run *run, int option);
 double gc_delibirdy_price(const gc_run *run);                    /* getWaveMoneyAmount(2) */
 bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **why);   /* b = the Pokemon (storage index), c = which of gc_delibirdy_held_items */
+/* The Strong Stuff (src/gc_strong.c) */
+void gc_strong_execute(gc_run *run, int option);
 /* The Mysterious Chest (src/gc_chest.c) */
 int gc_chest_roll(const gc_run *run);                       /* onPreOptionPhase's randSeedInt(100): below 30 is the trap */
 void gc_chest_execute(gc_run *run, int option);
