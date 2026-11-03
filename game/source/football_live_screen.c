@@ -389,7 +389,10 @@ static void list_menu(unsigned count)
     football_menu_list(page_rows,n,(int)(L.cursor-first),first,count);
     if(c->phase==FB_CAREER_SHOP)for(unsigned k=0;k<n;++k){
         unsigned i=first+k;const rr_frame *icon=i<3?L.shop.icons[i]:i==3?L.stone2_icon:i<FB_SHOP_FIXED+c->evo_count?L.evo_icons[i-FB_SHOP_FIXED]:NULL;
-        if(icon)football_render_draw_sprite(icon,FM_LIST_X+FM_LABEL_X+12,FM_LIST_Y+FM_LIST_PAD+8+k*FM_ROW_PITCH,.45f,false);
+        if(icon){ /* with the classic UI's own draw (depth 0), so a window pushed over the shop, like the pause menu, covers it */
+            const rr_draw_opts small={.origin_x=.5f,.origin_y=.5f,.scale_x=.45f,.scale_y=.45f,.tint=RR_RGBA(255,255,255,255)};
+            rr_draw(icon,FM_LIST_X+FM_LABEL_X+12,FM_LIST_Y+FM_LIST_PAD+8+k*FM_ROW_PITCH,&small);
+        }
     }
 }
 /* Two buttons along the bottom, the right one the main action. */
@@ -472,7 +475,7 @@ static void match_live(void)
         football_menu_panel(FM_HEAD_X,66,FM_HEAD_W,130);
         rr_rect(MAP_X,MAP_Y,300,108,RR_RGBA(42,128,52,255));
         for(unsigned i=0;i<22;++i){const FootballLiveActor *a=&m->actors[i];float x=MAP_X+a->x*2.5f,y=MAP_Y+a->y*2;
-            C2D_DrawRectSolid(x-2,y-2,.1f,5,5,i==m->controlled?C2D_Color32(255,210,63,255):a->home?C2D_Color32(76,201,240,255):C2D_Color32(232,53,74,255));}
+            rr_rect(x-2,y-2,5,5,i==m->controlled?RR_RGBA(255,210,63,255):a->home?RR_RGBA(76,201,240,255):RR_RGBA(232,53,74,255));}
         football_menu_text(TS_WINDOW,FM_PX_TINY,MAP_X+2,MAP_Y+110,296,"Tap the map to select any player");
     }
     bool offense=kicking || (!m->special && m->rules.offense==FB_HOME);

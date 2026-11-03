@@ -127,15 +127,16 @@ int main(void)
             unsigned count=kind==0?FB_PLAY_COUNT:kind==1?FB_DEF_COUNT:FB_SPECIAL_KICKOFF+1;
             for(unsigned id=0;id<count;++id)for(unsigned pick=0;pick<2;++pick)for(unsigned enabled=0;enabled<2;++enabled){
                 if(kind!=2 && !enabled)continue;
-                fake_begin(RR_BOTTOM);assert(ui_space(UI_PHYS_BOTTOM));capture=true;cap_x0=cap_y0=1e9f;cap_x1=cap_y1=-1e9f;
+                fake_begin(RR_BOTTOM);assert(ui_space(UI_PHYS_BOTTOM));capture=true;cap_x0=cap_y0=1e9f;cap_x1=cap_y1=-1e9f;const unsigned depth_rects=rects;
                 if(kind==0)football_live_art_card(&renderer,(FootballPlayId)id,x,y,w,h,pick);
                 else if(kind==1)football_live_art_defense_card(&renderer,(FootballDefenseId)id,x,y,w,h,pick);
                 else football_live_art_special_card(&renderer,(FootballSpecial)id,id==FB_SPECIAL_FIELD_GOAL?"58 yd: out of range":"45 yd   62% to make it",x,y,w,h,pick,enabled);
                 capture=false;
                 assert(fake.window_count==1 && fake.windows[0].x==x && fake.windows[0].y==y && fake.windows[0].w==w && fake.windows[0].h==h);
-                assert(fake.rect_count==((pick && enabled)?4u:0u) && fake.text_count>=1);
+                const unsigned frame=(pick && enabled)?4u:0u;
+                assert(rects==depth_rects && fake.rect_count>frame && fake.text_count>=1); /* the diagram is classic-UI rectangles (depth 0), so a window over the card covers it */
                 fake_check(); /* the name (and the detail) inside the window, clear of each other */
-                assert(cap_x0>=x && cap_y0>=y && cap_x1<=x+w && cap_y1<=y+h); /* the diagram stays in the card */
+                for(unsigned r=frame;r<fake.rect_count;++r)assert(fake.rects[r].x>=x && fake.rects[r].y>=y && fake.rects[r].x+fake.rects[r].w<=x+w && fake.rects[r].y+fake.rects[r].h<=y+h); /* the diagram stays in the card */
                 ++cards;
             }
         }
