@@ -57,6 +57,7 @@ static void load(void) {
     const char* gc_why = NULL;
     if (gc_system_load(&g_sys, buf, len, &gc_why)) {
       free(buf);
+      gc_system_repair_unlocks(&g_sys); /* a win an older build recorded without its unlocks */
       S.status = SYSD_LOADED;
       /* what the file holds, as the next save would write it: a save is skipped while the data is still this */
       uint8_t* out = malloc(BUF_MAX);

@@ -167,6 +167,7 @@ enum { GC_ACHV_CLASSIC_VICTORY=192, GC_ACHV_UNEVOLVED_CLASSIC,
 bool gc_system_has_achievement(const gc_system *sys, int achievement_id);
 bool gc_system_unlock_achievement(gc_system *sys, int achievement_id);
 void gc_system_add_classic_win(gc_system *sys, uint16_t species_id);
+bool gc_system_repair_unlocks(gc_system *sys);   /* Endless + Mini Black Hole from a recorded Classic win (older-build profiles); true if it changed anything */
 uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id);
 
 /* SD Card System Data Serializer */

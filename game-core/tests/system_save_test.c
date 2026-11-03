@@ -118,6 +118,17 @@ int main(void) {
     bad_buf[0] = 'X'; /* corrupt magic */
     CHECK(!gc_system_load(&sys2, bad_buf, sizeof bad_buf, &why), "invalid magic system save rejected");
 
+    /* a profile with a recorded Classic win and no unlocks (an older build) gets Endless and the Mini Black Hole; nothing else */
+    gc_system_init_defaults(&sys1);
+    CHECK(!gc_system_repair_unlocks(&sys1) && !sys1.unlocks.endless_mode, "no win: no Endless unlock");
+    sys1.stats.classic_wins = 1;
+    CHECK(gc_system_repair_unlocks(&sys1) && sys1.unlocks.endless_mode && sys1.unlocks.mini_black_hole, "recorded win unlocks Endless");
+    CHECK(!sys1.unlocks.spliced_endless_mode && !sys1.unlocks.eviolite, "Spliced Endless and Eviolite are not derived");
+    CHECK(!gc_system_repair_unlocks(&sys1), "repair is idempotent");
+    gc_system_init_defaults(&sys1);
+    sys1.achievement_flags[GC_ACHV_CLASSIC_VICTORY] = 1;
+    CHECK(gc_system_repair_unlocks(&sys1) && sys1.unlocks.endless_mode, "the victory achievement unlocks Endless too");
+
     printf("All system save tests passed successfully!\n");
     return 0;
 }
