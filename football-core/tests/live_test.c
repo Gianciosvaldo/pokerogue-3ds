@@ -71,8 +71,23 @@ int main(void)
     game.phase=FB_LIVE_CALL;game.rules.offense=FB_AWAY;
     assert(football_live_defend(&game,FB_DEF_ZONE));assert(game.controlled<11 && game.actors[game.controlled].home);
     /* Defense cycles all eleven controlled actors. */
-    game.phase=FB_LIVE_PLAY;game.rules.offense=FB_AWAY;game.controlled=0;
-    for(unsigned i=1;i<=11;++i){football_live_switch(&game);assert(game.controlled==i%11);}
+    /* ordered by distance to the ball: R moves one place farther each press (the first press picks the nearest), L one nearer, wrapping. */
+    game.phase=FB_LIVE_PLAY;game.rules.offense=FB_AWAY;game.controlled=255;
+    {
+        unsigned seen=0,first=0,last=0;float far=-1;
+        for(unsigned i=0;i<11;++i){
+            football_live_switch_step(&game,1);unsigned who=game.controlled;assert(who<11 && !(seen&(1u<<who)));seen|=1u<<who;
+            float d=hypotf(game.actors[who].x-game.ball_x,game.actors[who].y-game.ball_y);assert(d>=far);far=d;
+            if(!i){first=who;}
+            last=who;
+        }
+        assert(seen==0x7ffu);
+        football_live_switch_step(&game,1);assert(game.controlled==first); /* wraps to the nearest */
+        football_live_switch_step(&game,-1);assert(game.controlled==last);  /* L from the nearest: the farthest */
+        football_live_switch_step(&game,-1);football_live_switch_step(&game,1);assert(game.controlled==last); /* L then R comes back */
+        game.rules.offense=FB_HOME;football_live_switch_step(&game,1);assert(game.controlled==last); /* the human on offense does not switch */
+        game.rules.offense=FB_AWAY;
+    }
     /* A carrier can retreat farther than the old snap model's 20-yard cap. */
     assert(football_live_begin(&game,&roster,99,1));assert(football_live_call(&game,FB_RUN_DIVE));
     football_live_tick(&game,17,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});
@@ -93,7 +108,13 @@ int main(void)
         assert(game.phase==FB_LIVE_END && game.snaps>0 && steps<30000);
     }
     FootballCamera camera={0};football_camera_follow(&camera,35,26,0,16);float old=camera.x;
-    football_camera_follow(&camera,95,26,0,100);assert(camera.x>old && camera.x-old<=1.801f);
+    football_camera_follow(&camera,45,26,0,100);assert(camera.x>old && camera.x-old<=1.801f); /* a target in view is followed gently */
+    camera=(FootballCamera){0};football_camera_follow(&camera,35,26,0,16);old=camera.x;
+    football_camera_follow(&camera,95,26,0,100);assert(camera.x>old+1.8f && camera.x<=95); /* one off the screen is caught up much faster... */
+    {for(unsigned i=0;i<30;++i)football_camera_follow(&camera,95,26,0,16);{float px=football_camera_x(&camera,95);assert(px>=0 && px<=400);}} /* ...and is on the screen within half a second */
+    camera=(FootballCamera){0};football_camera_follow(&camera,95,26,0,16);
+    for(unsigned i=0;i<150;++i)football_camera_follow(&camera,35,26,0,16);
+    assert(fabsf(camera.x-35)<1); /* either way */
     assert(fabsf(football_camera_x(&camera,camera.x)-200)<.001f);
     puts("football live: 22-member draft, lineup permutation, manual snap, movement, target throw, replay, defender switching, 20 full matches and bounded camera passed");
 }

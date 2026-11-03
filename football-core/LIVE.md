@@ -122,7 +122,7 @@ a simulation step consumes them, then used once. Menus and overlays pause play.
 | Pass targets | X, Y, L, R, SELECT for receivers 1–5, or numbered touch buttons |
 | After completion / run handoff | Control transfers to the receiver / RB |
 | Carrier evasion | B or touch Juke, with a 1.6-second cooldown |
-| Human defense | B switches through all eleven defenders; A attempts a dive tackle |
+| Human defense | R / L switch to the next / previous defender, ordered by distance to the ball (nearest first, wrapping); A attempts a dive tackle |
 | Pause / checkpoint / legacy access | START |
 
 Plays initialize formations and AI routes, rather than precomputing results.
@@ -300,7 +300,7 @@ scripted, and the line starts to run 0.6 s in. Length is `49 + 0.18 thp +/- 7` y
 the Circle Pad (a full push runs to the sideline and can go out of bounds, which gives the receiver the ball at the 40).
 In the end zone it is a touchback to the 25. The deep man nearer the landing spot runs to it while the rest of the
 return team falls back into a wall in front of the catch, and the nearest man within 2.8 yards catches it (there is no
-fair catch on a kickoff; a muff is rarer than on a punt). A human receiver steers any man, and B switches. The return is
+fair catch on a kickoff; a muff is rarer than on a punt). A human receiver steers any man, and L/R switch (same order: by distance to the ball). The return is
 the ordinary run-play code again, so juke, dive, fumbles, a tackle and a return touchdown all work. The clock runs from the
 catch only (touchbacks cost one second).
 

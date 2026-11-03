@@ -314,11 +314,11 @@ static void update(ui_screen *s,float dt)
         if(held&KEY_DUP)controls.y=-1;
         if(held&KEY_DDOWN)controls.y=1;
         if(down&KEY_A)controls.pressed|=FB_LIVE_ACTION;
-        if(down&KEY_B)controls.pressed|=c->live.phase==FB_LIVE_SET?FB_LIVE_UNDO:FB_LIVE_JUKE|FB_LIVE_SWITCH; /* before the snap, B takes the called play back */
+        if(down&KEY_B)controls.pressed|=c->live.phase==FB_LIVE_SET?FB_LIVE_UNDO:FB_LIVE_JUKE; /* before the snap, B takes the called play back */
         if(down&KEY_X)controls.receiver=0;
         if(down&KEY_Y)controls.receiver=1;
-        if(down&KEY_L)controls.receiver=2;
-        if(down&KEY_R)controls.receiver=3;
+        if(down&KEY_L){controls.receiver=2;controls.pressed|=FB_LIVE_SWITCH_BACK;} /* receiver 3 on offense; the nearer defender on defense */
+        if(down&KEY_R){controls.receiver=3;controls.pressed|=FB_LIVE_SWITCH;}      /* receiver 4 on offense; the next defender on defense */
         if(down&KEY_SELECT)controls.receiver=4;
     }
     /* Keep the set formation in view before play can start after a long drive
@@ -445,9 +445,9 @@ static void match_live(void)
     const char *help;
     if(kicking)help=m->special==FB_SPECIAL_PUNT?"Circle Pad up/down aims the punt":m->special==FB_SPECIAL_KICKOFF?"Circle Pad up/down aims the kick":"The kicker takes the snap and kicks";
     else if(receiving && free_kick)help=m->stage==FB_STAGE_RETURN?"Circle Pad: run     B: juke":m->special==FB_SPECIAL_KICKOFF?"Circle Pad: get under it, then run it back":"Circle Pad: get under it     A: fair catch";
-    else if(receiving)help="Circle Pad: rush the kicker     A: dive     B: switch";
-    else if(covering || m->special)help="Circle Pad: chase the returner     B: switch     A: dive";
-    else help=m->rules.offense==FB_HOME?"Circle Pad: run     B: juke":"Circle Pad: move     B: switch defender";
+    else if(receiving)help="Circle Pad: rush the kicker     A: dive     L/R: switch";
+    else if(covering || m->special)help="Circle Pad: chase the returner     L/R: switch     A: dive";
+    else help=m->rules.offense==FB_HOME?"Circle Pad: run     B: juke":"Circle Pad: move     L/R: switch defender";
     if(football_live_can_undo(m))help="A: snap the ball     B: choose another play";
     football_menu_panel(FM_HEAD_X,32,FM_HEAD_W,30);football_menu_text(TS_WINDOW,FM_PX_SMALL,FM_HEAD_X+12,32+FM_TEXT_PAD+1,FM_HEAD_W-24,help);
     if(kicking){
@@ -475,7 +475,7 @@ static void match_live(void)
     bool fair=receiving && m->special==FB_SPECIAL_PUNT && m->stage!=FB_STAGE_RETURN;
     const char *kick_label=m->special==FB_SPECIAL_KICKOFF?"A: Kick":"A: Snap";
     const char *action=offense?kick_label:fair?"A: Fair catch":receiving && free_kick && m->stage!=FB_STAGE_RETURN?"":"A: Dive";
-    buttons(football_live_can_undo(m)?"B: Change play":offense?"B: Juke":"B: Switch",action,action[0]!=0);
+    buttons(football_live_can_undo(m)?"B: Change play":offense?"B: Juke":"L/R: Switch",action,action[0]!=0);
 }
 static void bottom_menu(void)
 {
@@ -495,7 +495,7 @@ static void bottom_menu(void)
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,41,288,"11 offense + 11 defense");
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,63,288,"Circle Pad: move     A: snap / tackle");
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,81,288,"X / Y / L / R / Select: receivers 1-5");
-        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,99,288,"B: juke / switch defender");
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,99,288,"B: juke     L / R: switch defender");
         football_menu_panel(4,128,312,60);
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,137,130,"Mega evolution");
         football_menu_text_right(TS_MONEY,FM_PX_BODY,304,137,160,c->mega<0?"None":name(c->roster.mon[c->mega].b.species));
