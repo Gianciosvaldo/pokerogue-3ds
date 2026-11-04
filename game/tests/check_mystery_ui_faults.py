@@ -40,6 +40,9 @@ FAULTS = [
  ('delibirdy-gts-item-list', UI[0], 'const int n = gc_mystery_held_items(F.run, F.option, F.member, held, GC_MAX_ITEMS);\n  static me_args a;',
      'const int n = gc_gts_held_items(F.run, F.member, held);\n  static me_args a;'),
  ('silent-chosen-item', UI[0], 'extra[n_extra++] = (pr_msg_arg){.name = "chosenItem"', '(void)(pr_msg_arg){.name = "chosenItem"'),
+ ('dance-every-move-selectable', UI[0], 'a.options[a.n].ok = gc_mystery_move_ok(F.run, F.option, F.member, i);', 'a.options[a.n].ok = true;'),
+ ('dance-silent-move-token', UI[0], 'extra[n_extra++] = pr_arg_move("selectedMove", F.run->party[b].b.moves[c]);', '(void)pr_arg_move("selectedMove", F.run->party[b].b.moves[c]);'),
+ ('dance-first-move-token', UI[0], 'pr_arg_move("selectedMove", F.run->party[b].b.moves[c])', 'pr_arg_move("selectedMove", F.run->party[b].b.moves[0])'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

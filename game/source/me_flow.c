@@ -291,6 +291,9 @@ static void finish(int option, int b, int c)
       extra[n_extra++] = (pr_msg_arg){.name = "chosenItem", .kind = PR_ARG_STR, .s = chosen_item};
     }
   }
+  /* Dancing Lessons' third option: "{{selectedPokemon}} shows off {{selectedMove}}" */
+  if (F.type == GC_ME_DANCING_LESSONS && option == 2 && n_extra < 4 && b >= 0 && b < F.run->n_party && c >= 0 && c < F.run->party[b].b.n_moves)
+    extra[n_extra++] = pr_arg_move("selectedMove", F.run->party[b].b.moves[c]);
   bool field_correct = false;
   if (F.type == GC_ME_FIELD_TRIP && b >= 0 && b < F.run->n_party && c >= 0 && c < F.run->party[b].b.n_moves) {
     const int move = F.run->party[b].b.moves[c];
@@ -398,7 +401,7 @@ static void open_moves(void)
   for (int i = 0; i < m->b.n_moves && a.n < 4; i++) {
     if (m->b.moves[i] <= 0) continue;
     snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s", i18n_move_name(m->b.moves[i]));
-    a.options[a.n].ok = true;
+    a.options[a.n].ok = gc_mystery_move_ok(F.run, F.option, F.member, i); /* Dancing Lessons: the dance moves only */
     F.pick_row[a.n] = i;
     a.n++;
   }
