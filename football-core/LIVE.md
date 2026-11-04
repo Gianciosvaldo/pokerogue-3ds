@@ -165,6 +165,19 @@ interceptor's own end zone or out of bounds is still a dead ball (a touchback or
 who throws, runs the ball back and chases), every run-back checked for the swapped sides, the carrier, the spot, the touchdown, the fumble
 and the credit, plus the end-zone case.
 
+## The stadium
+
+`game/source/football_stadium.c` draws everything under the yard lines on the top screen, from rectangles only (no art): mowed turf in a
+checker, the two end zones with stripes and a painted border, goal posts, the midfield ball, a tan apron with each team's bench, ad boards, and
+stands with a crowd behind both sidelines and both end lines (blue fans on the home half, red on the away half, a few neutral ones, aisles
+every 15 seats). Everything is placed in field yards through the camera, culled to the window, and kept under z .04, so it scrolls with the
+play and the lines, players and effects stay on top. The camera only shows the stands when the play is near a sideline (the field is taller
+than the window), so a frame costs about 50 rectangles at midfield and up to about 260 where a whole stand shows. The round sets the time of
+day (rounds 1-2 daylight, 3-5 dusk, 6-7 night: the turf and stands darken), the match clock moves the crowd (a slow wave, and everyone jumps for
+a touchdown or an interception), never the frame time. `tests/stadium_test.c` checks the window, the depth, the cost bounds, determinism, day
+against night and the cheer, and `STADIUM_PPM=<dir> make stadium-test` writes four views as PPM pictures for looking at on the host. The
+reference's sky, light towers and skyline are not drawn: no camera position reaches them.
+
 ## CPU play
 
 `football_live_ai.c` holds everything the CPU decides; it reads only the live state and the match's own RNG,

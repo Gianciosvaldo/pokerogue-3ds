@@ -1,5 +1,6 @@
 #include "football_live_art.h"
 #include "football_live_fx.h"
+#include "football_stadium.h"
 #include "football_menu.h"
 #include "football_live_systems.h"
 #include <math.h>
@@ -97,15 +98,12 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     const FootballCamera *cam=&shaken;
     u32 white=C2D_Color32(238,244,234,255),navy=C2D_Color32(20,26,46,255),gold=C2D_Color32(255,210,63,255);
     rect(0,44,400,196,0,navy);
-    /* Reference palette, oblique turf and repeatable crowd pixels. All bounded
-     * geometry: no giant offscreen canvas, browser textures or frame allocations. */
-    for(unsigned band=0;band<24;++band)world(cam,band*5,0,5,53.333f,.01f,C2D_Color32(band%2?42:47,band%2?128:143,band%2?52:58,255));
-    world(cam,0,0,10,53.333f,.02f,C2D_Color32(30,65,130,255));world(cam,110,0,10,53.333f,.02f,C2D_Color32(143,29,38,255));
-    world(cam,0,-3,120,3,.02f,C2D_Color32(190,183,157,255));world(cam,0,53.333f,120,3,.02f,C2D_Color32(190,183,157,255));
-    for(unsigned row=0;row<4;++row)for(unsigned col=0;col<64;++col){
-        unsigned v=(col*37+row*17)%7;float px=football_camera_x(cam,col*2.0f),py=football_camera_y(cam,-5-row*1.7f);
-        rect(px,py,7,5,.03f,v<3?gold:v<5?white:C2D_Color32(58,134,255,255));
-    }
+    /* The turf, the end zones, the stands and the crowd (football_stadium.c); the crowd is on its feet for a touchdown or a pick. */
+    const FootballLive *m=&c->live;
+    bool cheering=false;
+    for(unsigned i=0;i<FB_FX_COUNT;++i){const FootballFx *f=&m->fx[i];
+        if((f->kind==FB_FX_TOUCHDOWN || f->kind==FB_FX_INTERCEPTION) && m->steps>=f->step && (float)(m->steps-f->step)*FB_LIVE_STEP<(f->kind==FB_FX_TOUCHDOWN?2.4f:1.2f))cheering=true;}
+    football_stadium_draw(cam,c->round,m->steps,cheering);
     for(unsigned yard=10;yard<=110;yard+=5){
         world(cam,(float)yard,0,.12f,53.333f,.04f,white);
         if(yard%10==0 && yard>10 && yard<110){
@@ -117,7 +115,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     }
     for(unsigned yard=11;yard<110;++yard)for(unsigned hash=0;hash<2;++hash)world(cam,(float)yard,hash?29.75f:23.58f,.12f,.5f,.04f,white);
     world(cam,0,0,120,.18f,.05f,white);world(cam,0,53.15f,120,.18f,.05f,white);
-    const FootballLive *m=&c->live;float dir=m->rules.offense==FB_HOME?1:-1;
+    float dir=m->rules.offense==FB_HOME?1:-1;
     world(cam,m->los,0,.18f,53.333f,.05f,C2D_Color32(74,163,255,255));
     float first=m->rules.offense==FB_HOME?10+m->rules.first_down_at:110-m->rules.first_down_at;
     if(!m->special && !m->turnover)world(cam,first,0,.18f,53.333f,.05f,gold); /* nobody is going for a first down on a run-back */
