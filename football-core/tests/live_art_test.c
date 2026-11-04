@@ -84,7 +84,7 @@ int main(void)
     {FootballFxPose p=football_live_fx_pose(m,3);assert(p.dx==0 && p.dy==0 && p.angle==0 && p.sx==1 && p.sy==1);}
     float sx,sy;football_live_fx_shake(m,&sx,&sy);assert(sx==0 && sy==0 && football_live_fx_banner_scale(m)==1);
     drawn=0;rects=0;football_live_art_top(&renderer,&career,&camera,0);unsigned plain=rects;assert(last_angle==0 && last_sx==1 && last_sy==1);
-    for(unsigned kind=FB_FX_JUKE;kind<=FB_FX_TOUCHDOWN;++kind){
+    for(unsigned kind=FB_FX_JUKE;kind<=FB_FX_INCOMPLETE;++kind){
         for(int side=-1;side<=1;side+=2){
             memset(m->fx,0,sizeof m->fx);m->fx_next=0;
             m->steps=2000;put_fx(m,kind,2,16,side); /* actor 2 (home) acts, 16 (away) is on the receiving end */
@@ -115,6 +115,23 @@ int main(void)
             m->steps=2000+400;drawn=0;rects=0;football_live_art_top(&renderer,&career,&camera,0);
             if(kind!=FB_FX_TACKLE && kind!=FB_FX_SACK && kind!=FB_FX_DIVE)assert(football_live_fx_pose(m,2).dy==0);
         }
+    }
+    /* An incomplete pass: the ball hops twice where it came down, smaller each time, and then lies still; nothing else lifts it. */
+    {
+        memset(m->fx,0,sizeof m->fx);m->fx_next=0;assert(football_live_fx_ball_lift(m)==0);
+        m->steps=2000;put_fx(m,FB_FX_INCOMPLETE,2,16,1);
+        float peaks[2]={0,0};unsigned bounces=0;bool was_air=false;
+        for(unsigned step=0;step<=60;++step){
+            m->steps=2000+step;float lift=football_live_fx_ball_lift(m);assert(isfinite(lift) && lift>=0 && lift<=7.01f);
+            if(step>=30)assert(lift<.001f);
+            if(lift>.05f && !was_air){++bounces;}
+            was_air=lift>.05f;
+            if(bounces>=1 && bounces<=2 && lift>peaks[bounces-1])peaks[bounces-1]=lift;
+        }
+        assert(bounces==2 && peaks[0]>peaks[1] && peaks[1]>0);
+        m->steps=1999;assert(football_live_fx_ball_lift(m)==0);m->steps=2005;
+        football_live_fx_ball_lift(NULL);
+        memset(m->fx,0,sizeof m->fx);m->fx_next=0;
     }
     /* Same moment, same picture: nothing depends on frame times. */
     memset(m->fx,0,sizeof m->fx);m->fx_next=0;m->steps=3000;put_fx(m,FB_FX_TOUCHDOWN,2,22,1);m->steps=3020;

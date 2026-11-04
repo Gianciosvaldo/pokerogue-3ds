@@ -12,6 +12,8 @@ typedef struct { float dx,dy,angle,sx,sy; } FootballFxPose;
 #define FB_FX_TURN 1.0f
 /* Where a player is lifted, shifted, turned and stretched from where the engine has them (pixels, radians, factors). */
 FootballFxPose football_live_fx_pose(const FootballLive *match,unsigned actor);
+/* How far the ball is lifted (pixels) while it bounces after an incomplete pass: two small hops that die away. */
+float football_live_fx_ball_lift(const FootballLive *match);
 /* How far the whole field shakes in pixels (a hit, a turnover, a touchdown). */
 void football_live_fx_shake(const FootballLive *match,float *dx,float *dy);
 /* Grows a banner for a moment when a big play lands: 1 when nothing is happening. */
