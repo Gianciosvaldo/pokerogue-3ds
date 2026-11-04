@@ -408,6 +408,8 @@ typedef struct gc_run {
 
 /* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
+/* GC_PICK_MEMBER_MOVE's second list: whether move slot `slot` of party member `member` can be picked for `option` (Dancing Lessons: the dance moves only) */
+bool gc_mystery_move_ok(const gc_run *run, int option, int member, int slot);
 /* Source-seeded trainer previews for the three Mysterious Challengers; RNG-pure. */
 bool gc_mc_trainers(const gc_run *run,int types[3],int variants[3]);
 /* GTS's second pick. Offers use the encounter's seed offset and preserve the run RNG; the returned Pokemon
