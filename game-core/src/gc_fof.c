@@ -32,7 +32,7 @@ typedef struct {
 static void set_item_shop(pr_reward_custom *c, const pr_reward_option *item);
 
 /* getEncounterPokemonLevelForWave(1): the level of the wave plus Math.max(Math.round(wave / 10 * 1), 0) */
-static int boosted_level(gc_run *run, pr_rng *r)
+int gc_me_boosted_level(gc_run *run, pr_rng *r)
 {
     const int base = pr_run_get_level_for_wave(&run->run, r, run->wave);
     return base + (int)floor((double)run->wave / 10 + 0.5);
@@ -49,7 +49,7 @@ static bool roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level, boo
     const bool dbl = run->double_battle;
     bool ok = false;
     run->double_battle = false;
-    if (!fixed_level) *level = boosted_level(run, &r);
+    if (!fixed_level) *level = gc_me_boosted_level(run, &r);
 
     /* arena.randomSpecies(wave, level, 0, luck, true) and getWildSpeciesForLevel, on `r` */
     run->run.rng = r;
@@ -163,19 +163,25 @@ bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name)
 /* initBattleWithEnemyConfig for the boss of onInit's config; the caller has set in->me_reward. post_summon: PR_ME_POST_*, the MYSTERY_ENCOUNTER_POST_SUMMON effects.
  * stream: the option's stream where earlier rolls of the option left it (NULL: from its start), or &run->run.rng when an await ahead of initBattleWithEnemyConfig
  * took it out of the option's seed offset: the level, the new id and the rolls after them are then on the run's own RNG */
-static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, int post_summon, pr_rng *stream, int type);
+static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, bool wave_level, int post_summon, pr_rng *stream, int type);
 void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type)
 {
-    start_data_battle(run, boss, level, true, post_summon, stream, type);
+    start_data_battle(run, boss, level, true, false, post_summon, stream, type);
+}
+
+/* the same for a config without a level (Dancing Lessons): the Pokemon fights at battle.enemyLevels[0], the level of the wave, not at the level of its data */
+void gc_me_start_boss_battle_at_wave_level(gc_run *run, const gc_mon *boss, int post_summon, pr_rng *stream, int type)
+{
+    start_data_battle(run, boss, boss->b.level, true, true, post_summon, stream, type);
 }
 
 /* the same for a config with isBoss false and the Pokemon as its data source (Uncommon Breed): no shield bars, a plain wild enemy */
 void gc_me_start_data_battle(gc_run *run, const gc_mon *mon, int level, int post_summon, pr_rng *stream, int type)
 {
-    start_data_battle(run, mon, level, false, post_summon, stream, type);
+    start_data_battle(run, mon, level, false, false, post_summon, stream, type);
 }
 
-static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, int post_summon, pr_rng *stream, int type)
+static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, bool wave_level, int post_summon, pr_rng *stream, int type)
 {
     gc_internal *in = gc_int(run);
     /* initBattleWithEnemyConfig: a single battle; battle.enemyLevels = [getLevelForWave()] draws on the option's stream, and the
@@ -183,9 +189,16 @@ static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool i
     run->double_battle = false;
     pr_rng fresh = gc_me_option_rng(run);
     pr_rng *rs = stream ? stream : &fresh;
-    (void)pr_run_get_level_for_wave(&run->run, rs, run->wave);
+    const int battle_level = pr_run_get_level_for_wave(&run->run, rs, run->wave);
     gc_mon *e = &run->enemy[0];
     *e = *boss;
+    if (wave_level) {
+        /* addEnemyPokemon(species, battle.enemyLevels[0], .., dataSource): the level is the battle's, the stats are made again and the HP is full */
+        level = battle_level;
+        e->b.level = (uint8_t)level;
+        pr_calculate_stats(&run->bt, &e->b);
+        e->b.hp = e->b.stats[STAT_HP];
+    }
     e->b.id = (uint32_t)floor(pr_rng_real_in_range(rs, 0, 4294967296.0));
     if (is_boss) {
         e->b.boss_segments = (uint8_t)pr_run_get_encounter_boss_segments(&run->run, run->wave, level, e->b.species, true);

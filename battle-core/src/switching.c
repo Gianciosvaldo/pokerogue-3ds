@@ -688,6 +688,12 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         p->me_post_summon = PR_ME_POST_NONE;
         pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/uncommonBreed:option.1.statBoost", pr_arg_pokemon_name(bt, "enemyPokemon", p)));
         pr_unshift_stat_stage_change(bt, e, q->battler, is_low ? low : high, is_low ? 3 : 5, 1, p);
+    } else if (p->me_post_summon == PR_ME_POST_DANCE) {
+        /* Dancing Lessons' Oricorio: its message (the species' name as the dialogue token), then groupStatChange([ATK, DEF, SPATK, SPDEF], 1) */
+        static const int32_t stats[4] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF};
+        p->me_post_summon = PR_ME_POST_NONE;
+        pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/dancingLessons:option.1.bossEnraged", pr_arg_key("oricorioName", "pokemon:oricorio")));
+        pr_unshift_stat_stage_change(bt, e, q->battler, stats, 4, 1, p);
     } else if (p->me_post_summon == PR_ME_POST_SPDEF_SPD) {
         /* Fiery Fallout's Volcarona: groupStatChange([SPDEF, SPD], 1), no message */
         static const int32_t stats[2] = {STAT_SPDEF, STAT_SPD};

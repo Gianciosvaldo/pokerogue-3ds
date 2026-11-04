@@ -150,6 +150,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
     if (type == GC_ME_DELIBIRDY && option >= 1 && option <= 2) return gc_delibirdy_pick_ok(run, option, idx);
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
+    if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);
     return false;
 }
 
@@ -389,6 +390,19 @@ static void setup_texts(gc_run *run)
         if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &run->party[p].b));
         break;
     }
+    case GC_ME_DANCING_LESSONS: {
+        pr_msg_arg name;
+        gc_dance_tokens(run, &name);
+        screen_arg(s, name);
+        s->option_pick[1] = GC_PICK_MEMBER;
+        s->option_pick[2] = GC_PICK_MEMBER_MOVE;
+        const int p = gc_mystery_primary_pokemon(run, type, 2);
+        if (p >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option3PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_move("option3PrimaryMove", gc_dance_first_move(&run->party[p])));
+        }
+        break;
+    }
     case GC_ME_UNCOMMON_BREED: {
         pr_msg_arg enemy;
         if (gc_breed_tokens(run, &enemy)) screen_arg(s, enemy);
@@ -523,6 +537,14 @@ bool gc_mystery_member_ok(const gc_run *run, int option, int idx)
     return gc_mystery_pick_ok(run, type, option, idx);
 }
 
+bool gc_mystery_move_ok(const gc_run *run, int option, int member, int slot)
+{
+    const int type = run->screen.mystery_type;
+    if (member < 0 || member >= run->n_party || slot < 0 || slot >= run->party[member].b.n_moves || run->party[member].b.moves[slot] <= 0) return false;
+    if (type == GC_ME_DANCING_LESSONS) return option == 2 && gc_dance_move_ok(run, member, slot);
+    return true;   /* Field Trip: any move */
+}
+
 void gc_mystery_setup_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -577,6 +599,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_PART_TIMER) {
         s->option_ok[0] = any_pick_ok(run, type, 0);
         s->option_ok[1] = any_pick_ok(run, type, 1);
+        s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
+    } else if (type == GC_ME_DANCING_LESSONS) {
+        /* the battle and learning its dance need nothing; showing a dance needs a Pokemon allowed in battle with a dance move */
         s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
     } else if (type == GC_ME_UNCOMMON_BREED) {
         /* 4 stacks of held berries for the food, a Pokemon allowed in battle with a charming move for the charm */
@@ -872,6 +897,13 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
         if (option != (type == GC_ME_FIGHT_OR_FLIGHT ? 1 : 2)) return -1;
         for (int k = 0; k < run->n_party; k++)
             if (has_stealing_move(&run->party[run->party_order[k]])) return run->party_order[k];
+        return -1;
+    }
+    if (type == GC_ME_DANCING_LESSONS) {
+        /* MoveRequirement(DANCING_MOVES, true): the first Pokemon of the party allowed in battle with a dance move */
+        if (option != 2) return -1;
+        for (int k = 0; k < run->n_party; k++)
+            if (gc_dance_has_move(&run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
     if (type == GC_ME_PART_TIMER || type == GC_ME_UNCOMMON_BREED) {
@@ -1436,16 +1468,11 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_DANCING_LESSONS:
-        if (option == 0) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            if (run->party[target].b.stat_stages[STAT_SPD] < 6) run->party[target].b.stat_stages[STAT_SPD]++;
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_ORICORIO, wave_level, true, 2, 1);
-            return true;
+        if (!gc_dance_execute(run, option, b, c)) {
+            *why = "pick not allowed";
+            *ok = false;
+            return false;
         }
-        end_mystery_encounter_leave(run);
         return true;
 
     case GC_ME_WEIRD_DREAM:

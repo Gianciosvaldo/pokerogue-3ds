@@ -405,7 +405,18 @@ void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n);   /*
 void gc_me_begin_battle(gc_run *run, int type);                /* the encounter's battle starts: the field, the first turn (an EnemyPartyConfig's enemy party is in place) */
 void gc_dark_deal_execute(gc_run *run, int option);
 bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out);   /* new EnemyPokemon(.., boss) on a seed-offset stream */
+int gc_me_boosted_level(gc_run *run, pr_rng *r);               /* getEncounterPokemonLevelForWave(1): the wave's level on `r` plus round(wave / 10) */
 bool gc_me_new_enemy(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, gc_mon *out);   /* the same for a Pokemon that is no boss (Fiery Fallout) */
+/* Dancing Lessons (src/gc_dance.c) */
+bool gc_dance_execute(gc_run *run, int option, int b, int c);   /* false: the pick is not one the screen allows */
+bool gc_dance_roll(gc_run *run, gc_mon *mon);                    /* onInit's Oricorio (the oracle's test reads it) */
+void gc_dance_tokens(gc_run *run, pr_msg_arg *name);             /* the token onInit sets: oricorioName */
+bool gc_is_dance_move(int move);                                 /* DANCING_MOVES */
+bool gc_dance_has_move(const gc_mon *m);                         /* allowed in battle with a dance move */
+int gc_dance_first_move(const gc_mon *m);
+bool gc_dance_pick_ok(const gc_run *run, int option, int idx);   /* the party screen's filter: option 1 = learn its dance, 2 = show it a dance */
+bool gc_dance_move_ok(const gc_run *run, int member, int slot);  /* the second list of the third option */
+void gc_me_start_boss_battle_at_wave_level(gc_run *run, const gc_mon *boss, int post_summon, pr_rng *stream, int type);   /* a config without a level (Dancing Lessons) */
 void gc_fof_execute(gc_run *run, int option);                    /* Fight or Flight (src/gc_fof.c) */
 bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item);   /* onInit, worked out from the run (the oracle's test reads it) */
 bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name);   /* the tokens onInit sets: enemyPokemon, itemName */
