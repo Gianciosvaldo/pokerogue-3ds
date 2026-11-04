@@ -41,7 +41,7 @@ static int boosted_level(gc_run *run, pr_rng *r)
 /* getRandomEncounterPokemon with isBoss in onInit, on the stream of the wave seed: the boss's level, the boss itself and its calculated stats; `after` is the
  * stream where onInit's further rolls (Fight or Flight's item) go on. False when run-core has no roll for the biome and wave or the species. The run's RNG and
  * unported flags are left as they were. */
-bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level)
+static bool roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level, bool fixed_level)
 {
     pr_rng r = *stream;
     const pr_rng saved = run->run.rng;
@@ -49,7 +49,7 @@ bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level)
     const bool dbl = run->double_battle;
     bool ok = false;
     run->double_battle = false;
-    *level = boosted_level(run, &r);
+    if (!fixed_level) *level = boosted_level(run, &r);
 
     /* arena.randomSpecies(wave, level, 0, luck, true) and getWildSpeciesForLevel, on `r` */
     run->run.rng = r;
@@ -74,6 +74,17 @@ done:
     run->double_battle = dbl;
     run->run.unported = flags;
     return ok;
+}
+
+bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level)
+{
+    return roll_boss(run, stream, boss, level, false);
+}
+
+/* the same boss at a level the encounter chose itself (Uncommon Breed: the party's highest level - 2): no level roll */
+bool gc_me_roll_boss_at(gc_run *run, pr_rng *stream, gc_mon *boss, int level)
+{
+    return roll_boss(run, stream, boss, &level, true);
 }
 
 bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after)
@@ -152,7 +163,19 @@ bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name)
 /* initBattleWithEnemyConfig for the boss of onInit's config; the caller has set in->me_reward. post_summon: PR_ME_POST_*, the MYSTERY_ENCOUNTER_POST_SUMMON effects.
  * stream: the option's stream where earlier rolls of the option left it (NULL: from its start), or &run->run.rng when an await ahead of initBattleWithEnemyConfig
  * took it out of the option's seed offset: the level, the new id and the rolls after them are then on the run's own RNG */
+static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, int post_summon, pr_rng *stream, int type);
 void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type)
+{
+    start_data_battle(run, boss, level, true, post_summon, stream, type);
+}
+
+/* the same for a config with isBoss false and the Pokemon as its data source (Uncommon Breed): no shield bars, a plain wild enemy */
+void gc_me_start_data_battle(gc_run *run, const gc_mon *mon, int level, int post_summon, pr_rng *stream, int type)
+{
+    start_data_battle(run, mon, level, false, post_summon, stream, type);
+}
+
+static void start_data_battle(gc_run *run, const gc_mon *boss, int level, bool is_boss, int post_summon, pr_rng *stream, int type)
 {
     gc_internal *in = gc_int(run);
     /* initBattleWithEnemyConfig: a single battle; battle.enemyLevels = [getLevelForWave()] draws on the option's stream, and the
@@ -164,9 +187,13 @@ void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int pos
     gc_mon *e = &run->enemy[0];
     *e = *boss;
     e->b.id = (uint32_t)floor(pr_rng_real_in_range(rs, 0, 4294967296.0));
-    e->b.boss_segments = (uint8_t)pr_run_get_encounter_boss_segments(&run->run, run->wave, level, e->b.species, true);
-    e->b.boss_segment_index = (uint8_t)(e->b.boss_segments - 1);
-    e->b.is_boss = true;
+    if (is_boss) {
+        e->b.boss_segments = (uint8_t)pr_run_get_encounter_boss_segments(&run->run, run->wave, level, e->b.species, true);
+        e->b.boss_segment_index = (uint8_t)(e->b.boss_segments - 1);
+    } else {
+        e->b.boss_segments = e->b.boss_segment_index = 0;
+    }
+    e->b.is_boss = is_boss;
     e->b.passive_flag = false;
     e->b.me_post_summon = (uint8_t)post_summon;
     run->n_enemy = 1;

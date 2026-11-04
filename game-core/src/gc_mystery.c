@@ -389,6 +389,16 @@ static void setup_texts(gc_run *run)
         if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &run->party[p].b));
         break;
     }
+    case GC_ME_UNCOMMON_BREED: {
+        pr_msg_arg enemy;
+        if (gc_breed_tokens(run, &enemy)) screen_arg(s, enemy);
+        const int p = gc_mystery_primary_pokemon(run, type, 2);
+        if (p >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option3PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_move("option3PrimaryMove", charming_move_of(&run->party[p])));
+        }
+        break;
+    }
     case GC_ME_FIERY_FALLOUT: {
         screen_arg(s, pr_arg_key("volcaronaName", "pokemon:volcarona"));
         const int p = gc_fiery_primary(run);
@@ -567,6 +577,10 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_PART_TIMER) {
         s->option_ok[0] = any_pick_ok(run, type, 0);
         s->option_ok[1] = any_pick_ok(run, type, 1);
+        s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
+    } else if (type == GC_ME_UNCOMMON_BREED) {
+        /* 4 stacks of held berries for the food, a Pokemon allowed in battle with a charming move for the charm */
+        s->option_ok[1] = gc_breed_food_ok(run);
         s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
     } else if (type == GC_ME_FUN_AND_GAMES) {
         /* MoneyRequirement(0, 1.5) on the option; leaving needs nothing. The party screen needs a Pokemon the filter passes */
@@ -860,7 +874,7 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
             if (has_stealing_move(&run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
-    if (type == GC_ME_PART_TIMER) {
+    if (type == GC_ME_PART_TIMER || type == GC_ME_UNCOMMON_BREED) {
         if (option != 2) return -1;
         for (int k = 0; k < run->n_party; k++)
             if (has_charming_move(&run->party[run->party_order[k]])) return run->party_order[k];
@@ -1474,19 +1488,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_UNCOMMON_BREED:
-        if (option == 0) {
-            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
-            return true;
-        } else if (option == 1) {
-            if (run->n_party < 6) {
-                init_player_mon(run, &run->party[run->n_party], SPECIES_ID_EEVEE, wave_level);
-                run->party_order[run->n_party] = (int8_t)run->n_party;
-                run->n_party++;
-            }
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_breed_execute(run, option);
         return true;
 
     case GC_ME_GLOBAL_TRADE_SYSTEM:
