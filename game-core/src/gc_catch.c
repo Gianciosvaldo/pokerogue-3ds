@@ -164,7 +164,8 @@ bool gc_catch_start(gc_run *run, gc_rphase *p)
         /* catch(): updateSpeciesDexIvs(species.getRootSpeciesId(true), ivs), then (after the text) setPokemonCaught */
         gc_system_update_species_dex_ivs(run->sys, gc_species_root_for_starter(e->b.species), e->b.ivs);
     }
-    /* encounter-pokemon-utils catchPokemon(.., isObtain) (c = 1: a Mystery Encounter's Pokemon, e.g. the Salesman's) shows
+    /* encounter-pokemon-utils catchPokemon(.., isObtain) (c = 1: a Mystery Encounter's Pokemon, e.g. the Salesman's; c = 2: one caught without the
+     * text, showCatchObtainMessage false, Uncommon Breed's) shows
      * battle:pokemonObtained after the IVs and before the dex */
     if (p->c == 1) gc_ev_msg(run, "battle:pokemonObtained", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
     if (run->sys) {

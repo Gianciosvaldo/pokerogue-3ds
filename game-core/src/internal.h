@@ -415,6 +415,8 @@ void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
 int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
 void gc_me_leave(gc_run *run);                                   /* leaveEncounterWithoutBattle(): no heal shop */
+bool gc_me_roll_boss_at(gc_run *run, pr_rng *stream, gc_mon *boss, int level);   /* the same boss at a level the encounter chose (Uncommon Breed), src/gc_fof.c */
+void gc_me_start_data_battle(gc_run *run, const gc_mon *mon, int level, int post_summon, pr_rng *stream, int type);   /* initBattleWithEnemyConfig with isBoss false and the Pokemon as data source */
 bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level);   /* the same boss rolled on a given stream (Teleporting Hijinks), src/gc_fof.c */
 bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after);   /* onInit's boss (Fight or Flight, Berries Abound), src/gc_fof.c */
 void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type);
@@ -457,6 +459,11 @@ void gc_teleport_execute(gc_run *run, int option);                 /* Teleportin
 void gc_teleport_reward(gc_run *run);
 bool gc_teleport_tokens(gc_run *run, double *price, int *primary);
 bool gc_teleport_helper_ok(const gc_run *run);
+void gc_breed_execute(gc_run *run, int option);                    /* Uncommon Breed (src/gc_breed.c) */
+bool gc_breed_tokens(gc_run *run, pr_msg_arg *enemy_name);
+bool gc_breed_preview(gc_run *run, int *species, int *form, bool *shiny, int *variant);   /* onInit's Pokemon, for the intro sprite */
+bool gc_breed_food_ok(const gc_run *run);
+bool gc_breed_roll(gc_run *run, gc_mon *mon, int *egg_move);   /* onInit's Pokemon and its egg move (0 = none), for the oracle's test */
 void gc_fiery_execute(gc_run *run, int option);                    /* Fiery Fallout (src/gc_fiery.c) */
 void gc_fiery_init(gc_run *run);                                   /* onInit: the weather turns Sunny */
 void gc_fiery_reward(gc_run *run);
