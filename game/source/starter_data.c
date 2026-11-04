@@ -31,9 +31,12 @@ const pr_species* menu_species(uint16_t id);
 #define PASSIVE_UNLOCKED 1u
 #define PASSIVE_ENABLED 2u
 
+uint64_t ss_clock_override_ms=0;
+
 bool ss_has_pokerus(uint16_t species){
   static uint64_t last=UINT64_MAX;static uint16_t ids[3];
-  time_t now=time(NULL);uint64_t ms=now>0?(uint64_t)now*1000:0;
+  uint64_t ms=ss_clock_override_ms;
+  if(!ms){time_t now=time(NULL);ms=now>0?(uint64_t)now*1000:0;}
   if(ms/10800000!=last){last=ms/10800000;gc_pokerus_starters(ms,ids);}
   return species==ids[0]||species==ids[1]||species==ids[2];
 }

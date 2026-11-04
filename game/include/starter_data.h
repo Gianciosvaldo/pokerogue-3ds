@@ -41,6 +41,9 @@ extern "C" {
 int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused);
 
 /* The species has Pokerus now (three are picked every three hours). */
+/* The Pokerus starters rotate every three hours of real time (gc_pokerus_starters). A host test sets this to a fixed time in milliseconds
+ * (0 = the real clock) so that its runs do not depend on the hour it is run in. */
+extern uint64_t ss_clock_override_ms;
 bool ss_has_pokerus(uint16_t species);
 
 /* The panel's data for `species`: how it would be picked. */
