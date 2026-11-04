@@ -135,7 +135,7 @@ void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int 
 const char* i18n_species_name(int id) { return id == 25 ? "Pikachu" : id == 131 ? "Lapras" : "Mon"; }
 const char* i18n_ability_name(int id) { static char b[24]; snprintf(b, sizeof b, "Ability%d", id); return b; }
 const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, (size_t)n, "%s", key); return out; }
-const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : "Move"; }
+const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : id == 14 ? "Swords Dance" : "Move"; }
 
 /* a small locale: the real lines of Shady Vitamin Dealer and Lost at Sea (English), and the names the texts name */
 static const char* const SHADY =
@@ -399,6 +399,32 @@ int main(void) {
   press(BTN_DOWN);
   press(BTN_ACTION);
   CHECK(n_got == 1 && got.option == 0 && got.b == 0 && got.c == 1, "the second move: %d %d %d", got.option, got.b, got.c);
+
+  /* ---- Dancing Lessons: the third option lists the dance moves only, and its text names the move shown */
+  use_source_locales = true;
+  run_at(GC_ME_DANCING_LESSONS, 3);
+  R.party[0].b.n_moves = 2;
+  R.party[0].b.moves[0] = MOVE_ID_TACKLE;
+  R.party[0].b.moves[1] = MOVE_ID_SWORDS_DANCE;
+  R.screen.option_pick[1] = GC_PICK_MEMBER;
+  R.screen.option_pick[2] = GC_PICK_MEMBER_MOVE;
+  R.screen.me_args[0] = pr_arg_key("oricorioName", "pokemon:oricorio");
+  R.screen.n_me_args = 1;
+  CHECK(me_flow_open(&R, chosen, NULL), "dancing lessons opens");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  press(BTN_ACTION); /* Pikachu: the only member with a dance move is listed as pickable */
+  draw(1);
+  CHECK(has_text(1, "Tackle") && has_text(1, "Swords Dance"), "dancing lessons: its moves");
+  press(BTN_UP); /* the cursor starts on the first move that can be taken; Tackle is no dance */
+  press(BTN_ACTION);
+  CHECK(n_got == 0, "a move that is no dance cannot be shown");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && got.b == 0 && got.c == 1, "the dance move: %d %d %d", got.option, got.b, got.c);
+  CHECK(strstr(got.selected, "Pikachu") && strstr(got.selected, "shows off swordsDance"), "the move is named (the fake locale has no move names, so by its key): %s", got.selected);
+  use_source_locales = false;
 
   /* the Pillar Men: their own texts, three plain options, and three black silhouettes of the fighters on the top screen */
   run_at(GC_ME_PILLAR_MEN, 3);
