@@ -57,6 +57,8 @@ jobs:
           make -C battle-core build/remaining-history-test build/remaining-history-guards-test
           make -C game-core build/remaining_history_host_test
           python3 battle-core/tools/check-remaining-history-proof.py
+      - name: A frenzy does not follow the Pokemon into the next wave
+        run: make -C game-core frenzy-end-host-test
       - name: Compare repeated faint history and actual phase/AI/command owners
         run: |
           make -C battle-core build/faint-history-test build/faint-history-guards-test

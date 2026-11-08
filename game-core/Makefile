@@ -1436,6 +1436,12 @@ $(BUILD)/faint_history_host_test: tests/faint_history_host_test.c tests/doubles_
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/faint_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 faint-history-host-test: $(BUILD)/faint_history_host_test
 	$(BUILD)/faint_history_host_test
+all: $(BUILD)/frenzy_end_host_test
+$(BUILD)/frenzy_end_host_test: tests/frenzy_end_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+frenzy-end-host-test: $(BUILD)/frenzy_end_host_test
+	$(BUILD)/frenzy_end_host_test
+test: frenzy-end-host-test
 test: faint-history-host-test
 .PHONY: faint-history-host-test
 
