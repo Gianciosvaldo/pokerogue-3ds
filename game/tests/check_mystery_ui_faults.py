@@ -47,6 +47,14 @@ FAULTS = [
  ('breeder-rarity-swapped', UI[0], 'm.args[2] = pr_arg_key("rarity", rarity[t]);', 'm.args[2] = pr_arg_key("rarity", rarity[1 - t]);'),
  ('breeder-counts-swapped', UI[0], 'snprintf(name, sizeof name, "pokemon%d%sEggs", i + 1, kind[t]);', 'snprintf(name, sizeof name, "pokemon%d%sEggs", i + 1, kind[1 - t]);'),
  ('breeder-wrong-option-tooltip', UI[0], 'snprintf(sub, sizeof sub, "option.%d.tooltipBase", i + 1);', 'snprintf(sub, sizeof sub, "option.%d.tooltipBase", 1);'),
+ ('superfan-plain-selected', UI[0], 'if (F.type == GC_ME_BUG_TYPE_SUPERFAN && option == 1) superfan_count_text(page, sizeof page), append_page', 'if (0) superfan_count_text(page, sizeof page), append_page'),
+ ('superfan-band-low', UI[0], 'count < 2 ? 0 : count < 4 ? 1 : count < 6 ? 2 : 3', 'count < 2 ? 0 : count < 3 ? 1 : count < 6 ? 2 : 3'),
+ ('superfan-band-high', UI[0], 'count < 2 ? 0 : count < 4 ? 1 : count < 6 ? 2 : 3', 'count < 2 ? 0 : count < 4 ? 1 : count < 5 ? 2 : 3'),
+ ('superfan-count-dropped', UI[0], 'pr_msg m = {.key = key, .n_args = 2};', 'pr_msg m = {.key = key, .n_args = 1};'),
+ ('superfan-count-word', UI[0], '"$t(mysteryEncounters/bugTypeSuperfan:numBugTypes)", 0};', '"", 0};'),
+ ('superfan-no-thanks', UI[0], 'option == 2 && fmt("option.3.selectedDialogue"', 'option == 9 && fmt("option.3.selectedDialogue"'),
+ ('superfan-item-token', UI[0], 'extra[n_extra++] = (pr_msg_arg){.name = "selectedItem"', 'extra[n_extra++] = (pr_msg_arg){.name = "selectedItemX"'),
+ ('superfan-no-prompt', UI[0], 'F.type == GC_ME_DELIBIRDY || F.type == GC_ME_BUG_TYPE_SUPERFAN', 'F.type == GC_ME_DELIBIRDY'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 
