@@ -213,7 +213,7 @@ static void sh_confirm(int n) {
   for (int i = 0; i < n && i < total; i++) pick[i] = list[i].species;
   gc_starter team[6];
   const char* why = NULL;
-  if (!ss_team(sysd_get(), pick, n, team, &why)) {
+  if (!ss_team(sysd_get(), SH.mode, pick, n, team, &why)) {
     printf("the fake player's team was refused: %s\n", why ? why : "?");
     exit(1);
   }

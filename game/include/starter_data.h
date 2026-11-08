@@ -69,9 +69,9 @@ bool ss_set_form(gc_system* sys, uint16_t species, int form);
 bool ss_set_gender(gc_system* sys, uint16_t species, bool female);
 
 /* The team the player confirmed, as game-core takes it: each one through ss_starter and gc_starter_is_available, the cost against
- * gc_starter_budget. False with `why` (a locale key such as "starterSelectUiHandler:cost" or game-core's own text) when game-core
+ * gc_starter_budget(mode) (15 in Endless and Spliced Endless, 10 otherwise: the mode of the run being started, never assumed). False with `why` (a locale key such as "starterSelectUiHandler:cost" or game-core's own text) when game-core
  * would refuse it; nothing is then written to `out`. */
-bool ss_team(const gc_system* sys, const uint16_t* species, int n, gc_starter* out, const char** why);
+bool ss_team(const gc_system* sys, int mode, const uint16_t* species, int n, gc_starter* out, const char** why);
 
 #ifdef __cplusplus
 }
