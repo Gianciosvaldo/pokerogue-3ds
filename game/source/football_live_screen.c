@@ -100,24 +100,50 @@ static void leave(ui_screen *s)
     (void)s;C3D_FrameSync();football_render_free(&L.renderer);free(L.scratch);L.scratch=NULL;ui_set_game_speed(L.old_speed);
 }
 static void exit_game(void){L.leaving=true;if(L.args.on_exit)L.args.on_exit(L.args.arg);}
+/* Removes the live playoff's checkpoint files; false when one could not be removed. */
+static bool clear_checkpoint(void)
+{
+    const char *paths[]={SAVE_DIR "/football_live.sav",SAVE_DIR "/football_live.sav.bak",SAVE_DIR "/football_live.sav.tmp"};
+    bool ok=true;
+    for(unsigned i=0;i<3;++i)if(remove(paths[i]) && errno!=ENOENT)ok=false;
+    return ok;
+}
 static void delete_done(int selected,void *arg)
 {
     (void)arg;if(selected!=1)return;
-    const char *paths[]={SAVE_DIR "/football_live.sav",SAVE_DIR "/football_live.sav.bak",SAVE_DIR "/football_live.sav.tmp"};
-    for(unsigned i=0;i<3;++i)if(remove(paths[i]) && errno!=ENOENT){L.save_failed=true;return;}
+    if(!clear_checkpoint()){L.save_failed=true;return;}
     exit_game();
+}
+/* Leaving the end screen: the playoff is over, so its checkpoint goes and the next visit to Football starts a new draft by itself. The
+ * checkpoint is written once more first when it is behind (the last match's candy and vouchers reach the profile with it); if that fails
+ * the player stays here with the notice. A checkpoint that cannot be removed is harmless: a finished one is discarded when it is loaded. */
+static void leave_playoff(void)
+{
+    if(L.args.persistence && !L.save_bad){
+        if((L.save_failed || L.checkpoint!=token()) && !save_checkpoint()){L.save_failed=true;return;}
+        clear_checkpoint();
+    }
+    exit_game();
+}
+/* Whether the finished playoff's own checkpoint is the one on disk. */
+static bool end_checkpoint_saved(void)
+{
+    return L.args.persistence && !L.save_bad && L.career.phase==FB_CAREER_END && !L.save_failed && L.checkpoint==token();
 }
 static void pause_done(int selected,void *arg)
 {
     (void)arg;L.ignore_keys=true;
-    if(selected==1){if(football_career_save_ready(&L.career)){if(!save_checkpoint()){L.save_failed=true;return;}}exit_game();}
+    if(selected==1){
+        if(L.career.phase==FB_CAREER_END){leave_playoff();return;}
+        if(football_career_save_ready(&L.career)){if(!save_checkpoint()){L.save_failed=true;return;}}exit_game();
+    }
     if(selected==2){football_screen_args args=L.args;/* Old six-player saves are preserved and remain explicitly accessible. */
         ui_set_game_speed(L.old_speed);
         if(!football_legacy_screen_open(&args))L.save_failed=true;
         ui_set_game_speed(1);
     }
     if(selected==3){static const char *const options[]={"Keep live playoff","Delete live playoff checkpoint"};ui_push_options(options,2,true,delete_done,NULL);}
-    if(selected==4)exit_game();
+    if(selected==4){if(end_checkpoint_saved())clear_checkpoint();exit_game();} /* a finished playoff is not left behind to be resumed */
 }
 static void pause_menu(void)
 {
@@ -244,7 +270,7 @@ static void choose_current(void)
     case FB_CAREER_RESULT:football_career_continue(c);L.cursor=0;break;
     case FB_CAREER_EVOLVE:football_career_evolve(c,L.cursor<c->evolution_count?(int)L.cursor:-1);L.cursor=0;break;
     case FB_CAREER_SHOP:if(L.cursor==FB_SHOP_FIXED+c->evo_count){football_career_continue(c);L.cursor=0;}else football_career_buy(c,L.cursor,L.member);break;
-    case FB_CAREER_END:exit_game();break;
+    case FB_CAREER_END:leave_playoff();break;
     default:break;
     }
 }
@@ -671,10 +697,18 @@ bool football_screen_open(const football_screen_args *args)
     L.scratch=calloc(1,sizeof *L.scratch);if(!L.scratch)return false;
     if(!football_render_init(&L.renderer) || !football_career_new(&L.career,L.scratch,args->profile,args->entropy)){football_render_free(&L.renderer);free(L.scratch);L.scratch=NULL;return false;}
     catalog();
-    if(L.catalog_count>=22){double cheapest=0;for(unsigned i=0;i<22;++i)cheapest+=gc_starter_value(args->profile,L.catalog[i]);
+    if(args->persistence){int loaded=load_checkpoint();if(loaded<0){L.save_bad=true;L.career.phase=FB_CAREER_ERROR;snprintf(L.career.message,sizeof L.career.message,"Live save unavailable for this profile or unreadable. START offers deletion.");}else if(loaded>0){
+        L.checkpoint=token();
+        /* A checkpoint of a playoff that is over (left on the end screen, or by an older version) is not resumed: it goes, and a new draft starts. */
+        if(L.career.phase==FB_CAREER_END){
+            clear_checkpoint();L.checkpoint=0;
+            if(!football_career_new(&L.career,L.scratch,args->profile,args->entropy)){football_render_free(&L.renderer);free(L.scratch);L.scratch=NULL;return false;}
+        }
+    }}
+    if(L.career.phase==FB_CAREER_DRAFT && !L.career.message[0] && L.catalog_count>=22){ /* a new draft that cannot fit the budget says so */
+        double cheapest=0;for(unsigned i=0;i<22;++i)cheapest+=gc_starter_value(args->profile,L.catalog[i]);
         if(cheapest>FB_ROSTER_BUDGET)snprintf(L.career.message,sizeof L.career.message,"Unlock cheaper starters or reduce Classic costs to fit 55 points.");
     }
-    if(args->persistence){int loaded=load_checkpoint();if(loaded<0){L.save_bad=true;L.career.phase=FB_CAREER_ERROR;snprintf(L.career.message,sizeof L.career.message,"Live save unavailable for this profile or unreadable. START offers deletion.");}else if(loaded>0)L.checkpoint=token();}
     ui_set_game_speed(1);ui_set(&live_screen);return true;
 }
 

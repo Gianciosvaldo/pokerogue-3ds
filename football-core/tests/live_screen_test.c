@@ -9,6 +9,7 @@
 #include "menu_fakes.h"
 #include <3ds.h>
 #include <assert.h>
+#include <errno.h>
 #include "football_profile_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,13 @@ bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){assert(s
 bool football_legacy_screen_open(const football_screen_args *args){(void)args;return false;}
 save_result save_write(const char *file,const void *b,size_t n){assert(!strcmp(file,"football_live"));++writes;if(!write_ok)return SAVE_IO_ERROR;assert(n<sizeof bytes);memcpy(bytes,b,n);length=n;return SAVE_OK;}
 save_result save_read(const char *file,char **b,size_t *n,bool *backup){assert(!strcmp(file,"football_live"));*backup=false;if(!length)return SAVE_NOT_FOUND;*b=malloc(length);assert(*b);memcpy(*b,bytes,length);*n=length;return SAVE_OK;}
+/* The checkpoint files are the fake store here: removing the live save empties it (the other two names are never there). */
+static unsigned removed;
+int remove(const char *path)
+{
+    if(!strcmp(path,SAVE_DIR "/football_live.sav")){length=0;++removed;return 0;}
+    errno=ENOENT;return -1;
+}
 static void exited(void *arg){(void)arg;ui_set(&title);}
 static void press(ui_button button){assert(top->input);top->input(top,button);}
 /* Both screens drawn onto the recording fakes: nothing runs off a screen, every text sits in a window and clear of the others. */
@@ -293,5 +301,53 @@ int main(void)
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }
     press(BTN_MENU);answer(4);assert(top==&title);
+    /* A finished playoff starts over by itself: leaving its end screen removes the checkpoint, so the next visit is a new draft. */
+    {
+        static unsigned char stale[FB_CAREER_SAVE_MAX];size_t stale_length=0;
+        /* A fresh draft of 22 (the checkpoint is written when it is complete), then the playoff is put on its end screen. */
+        #define DRAFT_ALL() do{assert(football_screen_open(&args));game_screen=top;assert(career()->phase==FB_CAREER_DRAFT && career()->roster.count==0);\
+            for(unsigned k=0;k<22;++k){tick();press(BTN_ACTION);if(k<21)press(BTN_DOWN);}tick();assert(career()->phase==FB_CAREER_READY && length>0);}while(0)
+        #define END_SCREEN() do{FootballCareer *e=(FootballCareer *)career();e->round=4;e->wins=3;e->mega=-1;e->stone_target=e->stone2_target=-1;e->evo_count=0;\
+            e->message[0]=0;memset(e->sold,0,sizeof e->sold);e->phase=FB_CAREER_END;}while(0)
+        /* A resumed playoff is not a draft: the old test left a checkpoint, take it away first. */
+        length=0;
+        DRAFT_ALL();END_SCREEN();
+        FootballCareer *w=(FootballCareer *)career();
+        w->vouchers_regular=2;const uint32_t regular=profile.voucher_counts[GC_VOUCHER_REGULAR];
+        /* The end checkpoint cannot be written: the player stays, nothing is removed, the vouchers stay due. */
+        unsigned before=removed;const size_t kept=length;write_ok=false;
+        game_screen->update(game_screen,17);assert(w->phase==FB_CAREER_END); /* not drawn: the failed-save notice sits over the header, which the lint reads as an overlap */
+        press(BTN_ACTION);assert(top==game_screen && length==kept && removed==before && w->vouchers_regular==2);
+        assert(profile.voucher_counts[GC_VOUCHER_REGULAR]==regular);
+        /* The write works again: A saves it (the vouchers reach the profile with it), removes it and leaves. */
+        write_ok=true;press(BTN_ACTION);
+        assert(top==&title && length==0 && removed==before+1 && w->vouchers_regular==0 && profile.voucher_counts[GC_VOUCHER_REGULAR]==regular+2);
+        assert(football_screen_open(&args));game_screen=top;
+        assert(career()->phase==FB_CAREER_DRAFT && career()->roster.count==0 && career()->wins==0 && career()->round==1); /* nothing to resume, nothing to delete */
+        press(BTN_MENU);answer(4);assert(top==&title && length==0);
+        /* By a tap, through the pause menu's save-and-return, and through its return without saving: every way out of the end screen clears it. */
+        for(unsigned way=0;way<3;++way){
+            DRAFT_ALL();END_SCREEN();tick();tick();assert(length>0);before=removed;
+            if(way==0)game_screen->touch(game_screen,160,100);
+            else{press(BTN_MENU);answer(way==1?1:4);}
+            assert(top==&title && length==0 && removed==before+1);
+        }
+        /* A finished checkpoint left by an older version (or by a power cut on the end screen) is discarded when it is loaded. */
+        DRAFT_ALL();END_SCREEN();tick();tick();assert(length>0);
+        memcpy(stale,bytes,length);stale_length=length;
+        press(BTN_MENU);answer(4);assert(top==&title && length==0);
+        memcpy(bytes,stale,stale_length);length=stale_length;before=removed;
+        assert(football_screen_open(&args));game_screen=top;
+        assert(career()->phase==FB_CAREER_DRAFT && career()->roster.count==0 && career()->round==1 && career()->wins==0);
+        assert(length==0 && removed==before+1);
+        press(BTN_MENU);answer(4);assert(top==&title);
+        /* A playoff that is not over is still resumed, and leaving it by the pause menu keeps its checkpoint. */
+        DRAFT_ALL();assert(length>0);
+        press(BTN_MENU);answer(1);assert(top==&title && length>0);
+        assert(football_screen_open(&args));game_screen=top;assert(career()->phase==FB_CAREER_READY && career()->roster.count==22);
+        press(BTN_MENU);answer(4);assert(top==&title && length>0);
+        #undef DRAFT_ALL
+        #undef END_SCREEN
+    }
     puts("football live screen: real 22-player draft, assignment, playcall/snap separation, held movement, pause, save/resume and failed-write retry passed");
 }
