@@ -320,6 +320,14 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
       break;
     }
   S.col = 0;
+  /* back from the lock switch: the cursor stays on that button */
+  if (args && args->focus_lock)
+    for (int r = 0; r < S.n_rows; r++)
+      for (int c = 0; c < rows[r].count; c++)
+        if (S.touch_slots[rows[r].slot0 + c].type == SHOP_TARGET_LOCK) {
+          S.row = r;
+          S.col = c;
+        }
   S.active = true;
 }
 
@@ -342,10 +350,10 @@ static void trigger_slot(const shop_touch_slot* slot) {
         S.events.on_select_shop(S.events.ctx, slot->index);
       break;
     case SHOP_TARGET_REROLL:
-      if (S.events.on_reroll) S.events.on_reroll(S.events.ctx, S.lock_capsule_active);
+      if (S.events.on_reroll) S.events.on_reroll(S.events.ctx);
       break;
     case SHOP_TARGET_LOCK:
-      S.lock_capsule_active = !S.lock_capsule_active;
+      if (S.events.on_lock) S.events.on_lock(S.events.ctx);
       break;
     case SHOP_TARGET_SKIP:
       if (S.events.on_skip) S.events.on_skip(S.events.ctx);

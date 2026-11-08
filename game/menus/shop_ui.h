@@ -20,18 +20,22 @@ typedef struct shop_ui_events {
   /* Callbacks when player makes a selection */
   void (*on_select_reward)(void* ctx, int option_idx);
   void (*on_select_shop)(void* ctx, int shop_idx);
-  void (*on_reroll)(void* ctx, bool lock_capsule);
+  void (*on_reroll)(void* ctx);
   void (*on_skip)(void* ctx);
   void (*on_manage_items)(void* ctx); /* Manage Items: the party screen in MODIFIER_TRANSFER mode */
   void* ctx;
   void (*on_check_team)(void* ctx);
+  /* the Lock Rarities button: game-core switches its lock (GC_CH_LOCK_RARITIES) and shows the screen again with the new Reroll price.
+   * Only the Reroll button rerolls; the lock is game-core's state, not the screen's. */
+  void (*on_lock)(void* ctx);
 } shop_ui_events;
 
 typedef struct {
   const gc_screen* screen;  /* pointer to current GC_SCREEN_REWARD screen */
   double player_money;      /* player's current money balance */
   bool has_lock_capsule;    /* whether Lock Capsule is unlocked/owned */
-  bool lock_capsule_active; /* whether Lock Capsule tier lock is currently active */
+  bool lock_capsule_active; /* whether the lock is on: game-core's (gc_run_lock_rarities), never the screen's own */
+  bool focus_lock;          /* the cursor starts on the Lock Rarities button (the screen coming back after it was pressed) */
   int8_t locked_tiers[GC_MAX_OPTIONS]; /* tiers locked by Lock Capsule */
   int n_locked_tiers;
   int party_luck;           /* total party luck value */

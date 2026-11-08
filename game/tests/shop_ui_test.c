@@ -103,7 +103,7 @@ typedef struct {
   int reward_selected;
   int shop_selected;
   bool reroll_called;
-  bool reroll_locked;
+  int lock_pressed;
   bool skip_called;
 } test_results;
 
@@ -117,10 +117,14 @@ static void on_test_select_shop(void* ctx, int shop_idx) {
   res->shop_selected = shop_idx;
 }
 
-static void on_test_reroll(void* ctx, bool lock_capsule) {
+static void on_test_reroll(void* ctx) {
   test_results* res = (test_results*)ctx;
   res->reroll_called = true;
-  res->reroll_locked = lock_capsule;
+}
+
+static void on_test_lock(void* ctx) {
+  test_results* res = (test_results*)ctx;
+  res->lock_pressed++;
 }
 
 static void on_test_skip(void* ctx) {
@@ -168,7 +172,7 @@ int main(void) {
   test_results res;
   memset(&res, -1, sizeof res);
   res.reroll_called = false;
-  res.reroll_locked = false;
+  res.lock_pressed = 0;
   res.skip_called = false;
 
   shop_ui_args args;
@@ -187,6 +191,7 @@ int main(void) {
   ev.on_select_reward = on_test_select_reward;
   ev.on_select_shop = on_test_select_shop;
   ev.on_reroll = on_test_reroll;
+  ev.on_lock = on_test_lock;
   ev.on_skip = on_test_skip;
   ev.ctx = &res;
 
@@ -239,29 +244,35 @@ int main(void) {
   handled = shop_ui_input(MB_DOWN);
   assert(handled);
 
-  /* Col 0 is Reroll. Submit Reroll without Lock Capsule */
+  /* Col 0 is Reroll: it rerolls and nothing else */
   handled = shop_ui_input(MB_ACTION);
   assert(handled);
   assert(res.reroll_called);
-  assert(!res.reroll_locked);
+  assert(res.lock_pressed == 0);
   printf("Reroll action PASSED.\n");
 
-  /* Move right to Col 1 (Lock Capsule Toggle) and press ACTION */
+  /* Col 1 is Lock Rarities: it only asks game-core to switch the lock (no reroll, no price), and pressing it again asks again;
+   * the screen's own copy of the switch is never flipped (game-core's is the only one: the screen comes back with it) */
+  res.reroll_called = false;
   handled = shop_ui_input(MB_RIGHT);
   assert(handled);
   handled = shop_ui_input(MB_ACTION);
   assert(handled);
-  /* Lock Capsule is now active! */
+  assert(res.lock_pressed == 1);
+  assert(!res.reroll_called);
+  handled = shop_ui_input(MB_ACTION);
+  assert(handled);
+  assert(res.lock_pressed == 2);
+  assert(!res.reroll_called);
 
-  /* Move left back to Col 0 (Reroll) and press ACTION */
+  /* and Reroll still rerolls after the lock was pressed */
   handled = shop_ui_input(MB_LEFT);
   assert(handled);
-  res.reroll_called = false;
   handled = shop_ui_input(MB_ACTION);
   assert(handled);
   assert(res.reroll_called);
-  assert(res.reroll_locked);
-  printf("Locked Reroll with Lock Capsule PASSED.\n");
+  assert(res.lock_pressed == 2);
+  printf("Lock Rarities only switches the lock; Reroll rerolls PASSED.\n");
 
   /* Move to the Continue button (Col 2) and press ACTION */
   handled = shop_ui_input(MB_RIGHT);
@@ -441,6 +452,27 @@ int main(void) {
     printf("Item data: %d plain items and %d generated types, all with a row PASSED.\n", plain, gen);
   }
 
+  {
+    /* the screen coming back after the lock was pressed: game-core says the lock is on and the cursor is on Lock Rarities */
+    shop_ui_args a = args;
+    a.lock_capsule_active = true;
+    a.focus_lock = true;
+    test_results r2;
+    memset(&r2, 0, sizeof r2);
+    shop_ui_events e2 = ev;
+    e2.ctx = &r2;
+    shop_ui_open(&a, &e2);
+    assert(shop_ui_input(MB_ACTION));
+    assert(r2.lock_pressed == 1 && !r2.reroll_called);
+    /* without the hint the cursor starts on the first option, as before */
+    a.focus_lock = false;
+    shop_ui_open(&a, &e2);
+    r2.lock_pressed = 0;
+    assert(shop_ui_input(MB_ACTION));
+    assert(r2.lock_pressed == 0);
+    shop_ui_close();
+    printf("Cursor back on Lock Rarities PASSED.\n");
+  }
   printf("shop_ui_test PASSED ALL CHECKS!\n");
   {
     gc_screen sc={0};sc.kind=GC_SCREEN_REWARD;sc.reroll_cost=100;
