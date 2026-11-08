@@ -930,9 +930,14 @@ static bool cancel_encounter_charges(gc_run *run)
         int frenzy_move=frenzy?frenzy->source_move:-1;
         if(frenzy&&frenzy->turn_count>0)pr_remove_tag(&run->bt,&run->eng,p,BATTLER_TAG_TYPE_FRENZY);
         else frenzy_move=-1;
+        if(frenzy_move>0){
+            int kept=0;
+            for(int q=0;q<p->n_move_queue;q++)if(p->move_queue[q].move!=frenzy_move)p->move_queue[kept++]=p->move_queue[q];
+            p->n_move_queue=(uint8_t)kept;
+        }
         int keep=0;
         for(int q=0;q<p->n_move_queue;q++)
-            if(!unfinished_charge_move(p->move_queue[q].move)&&p->move_queue[q].move!=frenzy_move)p->move_queue[keep++]=p->move_queue[q];
+            if(!unfinished_charge_move(p->move_queue[q].move))p->move_queue[keep++]=p->move_queue[q];
         p->n_move_queue=(uint8_t)keep;
         for(int k=p->n_tags-1;k>=0;k--){
             const pr_battler_tag *t=&p->tags[k];
