@@ -294,6 +294,24 @@ static void breeder_tooltip(const gc_screen* s, int i, char* out, size_t n)
   }
 }
 
+/* The Bug-Type Superfan's Show Your Bug-types: the page for the number of Bug types (0-1, 2-3, 4-5, 6), {{numBugTypes}} being "N Bug-type(s)" (the count the core
+ * put on the screen, worded by numBugTypes_one / _other); built here, as fmt() passes only the tokens the line itself names */
+static void superfan_count_text(char* out, size_t n)
+{
+  int count = 0;
+  const gc_screen* s = gc_run_screen(F.run);
+  for (int k = 0; k < s->n_me_args; k++)
+    if (!strcmp(s->me_args[k].name, "numBugTypes")) count = (int)s->me_args[k].v;
+  static const char* const band[4] = {"selected0To1", "selected2To3", "selected4To5", "selected6"};
+  char key[96];
+  snprintf(key, sizeof key, "mysteryEncounters/bugTypeSuperfan:option.2.%s", band[count < 2 ? 0 : count < 4 ? 1 : count < 6 ? 2 : 3]);
+  pr_msg m = {.key = key, .n_args = 2};
+  m.args[0] = (pr_msg_arg){"numBugTypes", PR_ARG_TEMPLATE, 0, "$t(mysteryEncounters/bugTypeSuperfan:numBugTypes)", 0};
+  m.args[1] = pr_arg_int("count", count);
+  be_format_message(&m, out, n);
+  strip_tokens(out, n);
+}
+
 static void open_question(int cursor);
 static void open_members(void);
 static void open_moves(void);
@@ -317,6 +335,8 @@ static void finish(int option, int b, int c)
       const gm_item_ui* display = gm_item_ui_find(it->key, it->arg);
       snprintf(chosen_item, sizeof chosen_item, "%s", display && display->name ? display->name : it->key);
       extra[n_extra++] = (pr_msg_arg){.name = "chosenItem", .kind = PR_ARG_STR, .s = chosen_item};
+      /* the Bug-Type Superfan names it {{selectedItem}} (modifier.type.name) */
+      if (F.type == GC_ME_BUG_TYPE_SUPERFAN && n_extra < 4) extra[n_extra++] = (pr_msg_arg){.name = "selectedItem", .kind = PR_ARG_STR, .s = chosen_item};
     }
   }
   /* Dancing Lessons' third option: "{{selectedPokemon}} shows off {{selectedMove}}" */
@@ -341,13 +361,16 @@ static void finish(int option, int b, int c)
       if (sc->me_args[i].name && !strcmp(sc->me_args[i].name, "raceLost") && sc->me_args[i].v) lost = true;
   }
   snprintf(sub, sizeof sub, lost && option == 1 ? "option.%d.selectedBad" : "option.%d.selected", option + 1);
-  if (fmt(sub, extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+  /* Show Your Bug-types has no plain "selected" page: onPreOptionPhase replaces the dialogue with the one for the number of Bug types */
+  if (F.type == GC_ME_BUG_TYPE_SUPERFAN && option == 1) superfan_count_text(page, sizeof page), append_page(ch.selected, sizeof ch.selected, page);
+  else if (fmt(sub, extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (fmt("option.selected", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (F.type == GC_ME_TRASH_TO_TREASURE && option == 0 && fmt("option.1.selected2", extra, n_extra, true, page, sizeof page)) append_page(ch.selected,sizeof ch.selected,page);
   if (F.type == GC_ME_FIELD_TRIP) {
     if (fmt(field_correct ? "correct" : "incorrect", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
     if (fmt(field_correct ? "correctExp" : "incorrectExp", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   }
+  if (F.type == GC_ME_BUG_TYPE_SUPERFAN && option == 2 && fmt("option.3.selectedDialogue", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (F.type == GC_ME_THE_POKEMON_SALESMAN && option == 0) {
     if (fmt("option.1.selectedMessage", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
     if (fmt("option.1.selectedDialogue", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
@@ -491,7 +514,7 @@ static void open_items(void)
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose an item to trade.");
-  if (F.type == GC_ME_DELIBIRDY) { /* "Select an item to give." */
+  if (F.type == GC_ME_DELIBIRDY || F.type == GC_ME_BUG_TYPE_SUPERFAN) { /* "Select an item to give." */
     char sub[48], prompt[ME_LABEL_LEN];
     snprintf(sub, sizeof sub, "option.%d.selectPrompt", F.option + 1);
     if (fmt(sub, NULL, 0, false, prompt, sizeof prompt)) snprintf(a.query, sizeof a.query, "%s", prompt);

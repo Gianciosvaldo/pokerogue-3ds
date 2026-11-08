@@ -792,6 +792,66 @@ int main(void) {
     }
   }
 
+  /* The Bug-Type Superfan: Show Your Bug-types words the page by the number of Bug types ("1 Bug-type", "3 Bug-types") and has no plain "selected"
+   * page; Gift a Bug Item names the Quick Claw / Grip Claw / Bug booster in its tooltips, asks for the Pokemon and then the item (the prompt "Select an item to give."),
+   * and answers with "You hand the Trainer a <item>." and the Trainer's thanks. */
+  {
+    use_source_locales = true;
+    static const struct { int bugs; const char* page; } bands[] = {
+        {1, "Huh? You only have 1 Bug-type"}, {3, "Hey, you’ve got 3 Bug-types!"}, {5, "What? You have 5 Bug-types?"}, {6, "Whoa! 6 Bug-types!"}};
+    for (int b = 0; b < 4; b++) {
+      g_depth = n_got = 0;
+      gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-superfan", 818);
+      CHECK(gc_run_set_starters(&R, starters, 2, &why), "real Superfan party: %s", why ? why : "");
+      R.wave = 63;
+      pr_run_reset_seed(&R.run, R.wave);
+      for (int i = 2; i < 6; i++) {
+        R.party[i] = R.party[0];
+        R.party[i].b.id = R.party[0].b.id + 100 * (uint32_t)i;
+        R.party_order[i] = (int8_t)i;
+      }
+      R.n_party = 6;
+      for (int i = 0; i < 6; i++) R.party[i].b.species = i < bands[b].bugs ? SPECIES_ID_BEEDRILL : SPECIES_ID_SNORLAX;
+      R.mystery_type = R.screen.mystery_type = GC_ME_BUG_TYPE_SUPERFAN;
+      R.screen.kind = GC_SCREEN_MYSTERY;
+      gc_mystery_setup_screen(&R);
+      CHECK(R.screen.n_options == 3 && R.screen.option_ok[0] && R.screen.option_ok[1] && !R.screen.option_ok[2], "Superfan: the fight and the Bug types are on, the gift is not");
+      CHECK(me_flow_open(&R, chosen, NULL), "the Superfan opens");
+      draw(0);
+      CHECK(has_text(0, "The Bug-Type Superfan"), "title");
+      draw(1);
+      CHECK(has_text(1, "Offer to Battle") && has_text(1, "Show Your Bug-types") && has_text(1, "Gift a Bug Item"), "the three options");
+      press(BTN_DOWN);
+      press(BTN_ACTION);
+      CHECK(n_got == 1 && got.option == 1 && strstr(got.selected, bands[b].page) && !strstr(got.selected, "{{") && !strstr(got.selected, "You show the Trainer"),
+            "%d Bug types: %s", bands[b].bugs, got.selected);
+    }
+    /* Gift a Bug Item: a Quick Claw on Snorlax (slot 5) and a Fire booster on slot 4 */
+    g_depth = n_got = 0;
+    gc_item_add(&R, "QUICK_CLAW", -1, R.party[5].b.id, 1);
+    gc_item_add(&R, "ATTACK_TYPE_BOOSTER", POKEMON_TYPE_FIRE, R.party[4].b.id, 1);
+    gc_mystery_setup_screen(&R);
+    CHECK(R.screen.option_ok[2] && R.screen.option_pick[2] == GC_PICK_MEMBER_ITEM, "the gift is on with a Quick Claw");
+    CHECK(me_flow_open(&R, chosen, NULL), "the Superfan reopens");
+    draw(1);
+    CHECK(!has_text(1, "{{"), "no raw token in the tooltips");
+    press(BTN_DOWN); press(BTN_DOWN);
+    draw(1);
+    CHECK(has_text(1, "Give the Trainer a Quick Claw/Grip Claw/Silver Powder"), "the tooltip names the three items");
+    press(BTN_ACTION);
+    press(BTN_ACTION);   /* the cursor starts on the first row that can be taken: slot 5 */
+    draw(0);
+    CHECK(has_text(0, "Select an item to give.") && n_got == 0, "the item list asks for the item");
+    const gm_item_ui* claw = gm_item_ui_find("QUICK_CLAW", -1);
+    draw(1);
+    CHECK(claw && has_text(1, claw->name), "the Quick Claw is listed");
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 2 && got.b == 5 && got.c == 0 && claw && strstr(got.selected, "You hand the Trainer a ") && strstr(got.selected, claw->name) &&
+              strstr(got.selected, "for me?") && !strstr(got.selected, "{{"),
+          "option %d b %d c %d: %s", got.option, got.b, got.c, got.selected);
+    use_source_locales = false;
+  }
+
   /* Audit the actual English texts of all fourteen source-backed encounters, not invented short translations. */
   use_source_locales = true;
   const int ported[] = {GC_ME_DEPARTMENT_STORE_SALE, GC_ME_SHADY_VITAMIN_DEALER, GC_ME_LOST_AT_SEA, GC_ME_FIELD_TRIP,
