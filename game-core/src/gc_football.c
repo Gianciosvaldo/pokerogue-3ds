@@ -239,18 +239,27 @@ const pr_form *gc_football_owned_mega(const gc_run *r,unsigned party)
     }
     return NULL;
 }
-int gc_football_mega_item(const gc_run *r,unsigned party)
+int gc_football_mega_items(const gc_run *r,unsigned party,int *items,int max)
 {
-    if (!r || r->n_party<1 || r->n_party>6 || party>=(unsigned)r->n_party || gc_football_owned_mega(r,party)) return -1;
+    if (!items || max<=0 || !r || r->n_party<1 || r->n_party>6 || party>=(unsigned)r->n_party || gc_football_owned_mega(r,party)) return 0;
+    int n=0;
     for (int i=0;i<pr_item_fc_species_count;++i) {
         const pr_species_slice *s=&pr_item_fc_species[i];
         if (s->species!=r->party[party].b.species) continue;
-        for (unsigned k=0;k<s->n;++k) {
+        for (unsigned k=0;k<s->n && n<max;++k) {
             const pr_item_fc *f=&pr_item_fcs[s->start+k];
-            if (gc_football_mega_form(r,party,f->item)) return f->item;
+            if (!gc_football_mega_form(r,party,f->item)) continue;
+            bool seen=false;
+            for (int j=0;j<n;++j) if (items[j]==f->item) seen=true;
+            if (!seen) items[n++]=f->item;
         }
     }
-    return -1;
+    return n;
+}
+int gc_football_mega_item(const gc_run *r,unsigned party)
+{
+    int item=0;
+    return gc_football_mega_items(r,party,&item,1)>0?item:-1;
 }
 bool gc_football_give_mega(gc_run *r,unsigned party,int item)
 {
