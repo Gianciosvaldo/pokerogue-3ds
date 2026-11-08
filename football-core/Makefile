@@ -369,7 +369,7 @@ test: live-art-test
 .PHONY: stadium-test
 stadium-test: $(BUILD)/stadium_test
 	$(BUILD)/stadium_test
-$(BUILD)/stadium_test: tests/stadium_test.c ../game/source/football_stadium.c ../game/include/football_stadium.h src/football_camera.c
+$(BUILD)/stadium_test: tests/stadium_test.c ../game/source/football_stadium.c ../game/include/football_stadium.h src/football_camera.c include/football_goal.h
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/stadium_test.c ../game/source/football_stadium.c src/football_camera.c -lm -o $@
 test: stadium-test

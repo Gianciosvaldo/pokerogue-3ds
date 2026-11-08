@@ -1,4 +1,5 @@
 #include "football_live_systems.h"
+#include "football_goal.h"
 #include <math.h>
 /* Punts, field goals, extra points and kickoffs on the live field. The kicking team is rules.offense until the ball
  * is caught; a return then flips rules.offense to the receiving team, so its carrier, blockers and the kicking
@@ -163,9 +164,9 @@ static void kick_goal(FootballLive *m)
     unsigned ks=m->kick_side,kb=base(ks);float d=dir(ks);const FootballLiveActor *k=&m->actors[kb];
     m->kick_good=football_live_random(m)%100<(m->special==FB_SPECIAL_EXTRA_POINT?football_live_extra_point_chance(m):football_live_fg_chance(m));
     float spread=jitter(m);
-    m->from_x=k->x;m->from_y=k->y;m->to_x=d>0?116:4;
-    /* Good kicks split the posts; a miss goes wide, left or right. */
-    m->to_y=26.67f+(m->kick_good?spread*1.8f:(spread>=0?1:-1)*(4.2f+fabsf(spread)*3));
+    m->from_x=k->x;m->from_y=k->y;m->to_x=d>0?120.0f-FB_GOAL_POST_INSET:FB_GOAL_POST_INSET;
+    /* Good kicks split the posts (the half width between the uprights is FB_GOAL_HALF_WIDTH); a miss goes wide, left or right. */
+    m->to_y=FB_GOAL_MIDDLE+(m->kick_good?spread*1.8f:(spread>=0?1:-1)*(4.2f+fabsf(spread)*3));
     m->flight=0;m->flight_time=1.1f+football_live_fg_distance(m)*.012f;m->flying=true;m->stage=FB_STAGE_FLIGHT;
     m->kick_yards=(int16_t)football_live_fg_distance(m);
 }
