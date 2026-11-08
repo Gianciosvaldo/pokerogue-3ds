@@ -303,6 +303,13 @@ friendship-test: core-libs
 	$(BUILD)/friendship_test
 test: friendship-test
 
+.PHONY: voucher-test
+voucher-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/voucher_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/voucher_test
+	$(BUILD)/voucher_test
+test: voucher-test
+
 .PHONY: pace-test
 pace-test: core-libs
 	mkdir -p $(BUILD)

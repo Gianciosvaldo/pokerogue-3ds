@@ -376,6 +376,25 @@ or end checkpoint, a resume earning nothing twice, a career without a profile), 
 touchdown is worth, a bar filling across matches, many candies at once, a full candy store); `live_screen_test` checks that a
 failed checkpoint write leaves the points pending and the saved one hands them over.
 
+## Egg vouchers
+
+lorenzo 2026-11-08: every match won pays an egg voucher, and winning the seventh match (the title) pays a Premium one. The Regular
+voucher (`GC_VOUCHER_REGULAR`, "Egg Voucher") is the per-win one and `GC_VOUCHER_PREMIUM` ("Egg Voucher Premium") the title one, my
+reading of "a voucher for every game and a premium after winning 7": a title run is 7 Regular and 1 Premium, a run knocked out
+after three wins is 3 Regular. `FB_VOUCHER_REGULAR_PER_WIN` and `FB_VOUCHER_PREMIUM_FOR_TITLE` (both 1) are the knobs.
+
+- A win is counted in `football_career_continue` (`++wins`), which adds the vouchers to `vouchers_regular` and
+  `vouchers_premium` (due, not serialized). `football_career_flush_vouchers` moves them to the profile (`voucher_counts`, the
+  counters the Capsule machine spends) and the screen calls it right after it writes a checkpoint, next to
+  `football_career_flush_candy` and before it saves the profile. The shop checkpoint after a win is the first one that records
+  it, so a voucher is never in the profile for a win no checkpoint knows about: quit between the win and the shop and the
+  match is replayed and paid once. A career with no profile earns nothing; a loss pays nothing.
+- The result screen of a win says `+1 Egg Voucher` (and `+1 Egg Voucher Premium for the title` after the seventh); the end
+  screen of a champion says the Premium voucher was earned. A career that was already running when this arrived is not paid back
+  for its earlier wins.
+`tests/voucher_test.c` covers a title run, a run knocked out in round 4, checkpoint and resume (once per win), and a career
+with no profile; `live_screen_test` checks the texts and that a failed checkpoint write leaves the vouchers due.
+
 ## Motion
 
 The engine records the moments worth animating in `FootballLive.fx` (a ring of eight, `FootballFx`: kind, who, who it
