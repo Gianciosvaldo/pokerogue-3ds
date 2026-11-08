@@ -389,6 +389,13 @@ mega-career-test: core-libs
 	$(BUILD)/mega_career_test
 test: mega-career-test
 
+.PHONY: mega-split-test
+mega-split-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_split_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/mega_split_test
+	$(BUILD)/mega_split_test
+test: mega-split-test
+
 .PHONY: return-camera-test
 return-camera-test: core-libs
 	mkdir -p $(BUILD)

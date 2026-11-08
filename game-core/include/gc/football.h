@@ -48,8 +48,14 @@ int gc_football_item_evolutions(gc_run *run, unsigned party, gc_football_item_ev
  * names the slot a new move replaces (NULL or -1 leaves the move unlearned). False, with nothing changed, when the item does not
  * evolve it. Same isolated scratch run as the rest of this header. */
 bool gc_football_item_evolve(gc_run *run, unsigned party, int item, int (*forget_slot)(const pr_pokemon *), const char **why);
-/* Read classic form-change item catalog for a compatible rare shop offer. */
+/* Read classic form-change item catalog for a compatible rare shop offer: the first stone the member can use, -1 for none. A species with
+ * two (Mewtwonite X and Y, Charizardite X and Y, Raichunite X and Y, Absolite and Absolite Z, Garchompite and Garchompite Z,
+ * Lucarionite and Lucarionite Z) has more than this one: see gc_football_mega_items. */
 int gc_football_mega_item(const gc_run *run, unsigned party);
+/* Every distinct stone the member can use now, in catalog order, at most max of them (GC_FOOTBALL_MAX_MEGA_ITEMS is enough for any species);
+ * 0 when it has none or already holds one. */
+#define GC_FOOTBALL_MAX_MEGA_ITEMS 4
+int gc_football_mega_items(const gc_run *run, unsigned party, int *items, int max);
 /* Returns a supported mega form only for a matching, applicable item. */
 const pr_form *gc_football_mega_form(const gc_run *run, unsigned party, int item);
 const pr_form *gc_football_owned_mega(const gc_run *run, unsigned party);

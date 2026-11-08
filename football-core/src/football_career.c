@@ -164,6 +164,16 @@ static void roll_evolutions(FootballCareer *c)
 }
 int football_career_stone_target(const FootballCareer *c,unsigned offer){return !c||offer<2||offer>=2+FB_SHOP_STONES?-1:offer==2?c->stone_target:c->stone2_target;}
 int football_career_stone_item(const FootballCareer *c,unsigned offer){return !c||offer<2||offer>=2+FB_SHOP_STONES?0:offer==2?c->stone_item:c->stone2_item;}
+/* Which of the stones a member can use is on offer this round. A species with two (Mewtwonite X and Y) used to be offered only the first
+ * of them, every round; the pick now moves with the seed, the round and the member (a hash, not the round's parity: the pair of members
+ * on offer moves by two a round, which would pin a member to one parity), so over a playoff a member is offered each of its stones. */
+static int pick_stone(const FootballCareer *c,unsigned member,const int *list,int count)
+{
+    if(count<=1)return list[0];
+    unsigned h=c->seed*2654435761u^(c->round*40503u)^(member*9973u);
+    h^=h>>15;h*=2246822519u;h^=h>>13;
+    return list[h%(unsigned)count];
+}
 /* Two mega stones are on offer each round, for two different members who have none and can use one. When more than two can, the pair moves
  * on by two every round, so every member comes up in turn. */
 static void shop(FootballCareer *c)
@@ -174,8 +184,9 @@ static void shop(FootballCareer *c)
     unsigned able[22],items[22],n=0;
     for(unsigned i=0;i<22;++i){
         if(c->roster.mega_item[i])continue;
-        prepare(c,i);int item=gc_football_mega_item(c->scratch,0);
-        if(item>0){able[n]=i;items[n]=(unsigned)item;++n;}
+        int list[GC_FOOTBALL_MAX_MEGA_ITEMS];prepare(c,i);
+        const int count=gc_football_mega_items(c->scratch,0,list,GC_FOOTBALL_MAX_MEGA_ITEMS);
+        if(count>0){able[n]=i;items[n]=(unsigned)pick_stone(c,i,list,count);++n;}
     }
     if(n){
         const unsigned first=(c->seed%n+(c->round-1)*FB_SHOP_STONES)%n;
