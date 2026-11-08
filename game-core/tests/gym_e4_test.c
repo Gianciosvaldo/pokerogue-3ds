@@ -12,6 +12,7 @@
  *    the boss AI for the bosses, the second boss the same team's second form of the first (the fights share one seed offset), the bosses' reward screen.
  * Each fixture fails on game-core as it was (the wave would be a wild battle). */
 #include "../src/internal.h"
+#include "gc/achv.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -186,9 +187,17 @@ static void fight(const char *seed, int wave, int biome, int kind)
     check_save_load();
 
     const double money = run.money, mult = cfg->money_multiplier;
+    const int beaten_type = run.trainer_type;
+    CHECK(!sys.voucher_unlocks[beaten_type]);
     bool defeated = false, boss = false;
     CHECK(win(&defeated, &boss));
     CHECK(defeated && boss);
+    /* the first win sets the voucher bit that the trainer achievements (gc/achv.h, group E) read, and the first of its kind unlocks the
+     * first achievement of its group: Gym Challenger, Elite Challenger or Champion Slayer */
+    CHECK(sys.voucher_unlocks[beaten_type]);
+    gc_achv_evaluate(&sys, "gym-e4", 0, NULL);
+    CHECK(gc_achv_unlocked(&sys, kind == 0 ? 68 : kind == 1 ? 73 : 77));
+    CHECK(!gc_achv_unlocked(&sys, kind == 0 ? 73 : 68));
     CHECK(!run.stubs[GC_STUB_TRAINER_REWARDS]);
     /* MoneyRewardPhase: getMoneyAmount(waveIndex) * moneyMultiplier (no Amulet Coin, no Happy Hour here) */
     const double prize = pr_run_get_money_reward(wave, mult, NULL, 0, false);

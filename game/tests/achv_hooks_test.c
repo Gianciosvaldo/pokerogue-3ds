@@ -217,6 +217,25 @@ int main(void)
   CHECK(m && strstr(m, "Achievement unlocked: Collector!"), "and it is told: %s", m ? m : "(none)");
   CHECK(!ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false), "the same wave asks for nothing more");
 
+  /* group E: a Gym Leader, an Elite Four member or a Champion beaten sets the profile's voucher bit during the wave; the next wave's first
+   * command screen (a wave with no reward screen goes straight on) reads it and tells it, a Classic run and a Custom run alike */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(20, 'n');
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  CHECK(!gc_achv_unlocked(&S, 68), "nobody beaten yet");
+  S.voucher_unlocks[TRAINER_TYPE_BROCK] = 1;      /* the wave-20 Gym Leader falls */
+  R.wave = 21;
+  CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 68), "the next wave's command screen unlocks Gym Challenger and asks for a write");
+  m = ach_take_message();
+  CHECK(m && strstr(m, "Achievement unlocked: Gym Challenger!") && strstr(m, "1 Egg Voucher"), "and says so: %s", m ? m : "(none)");
+  CHECK(ach_take_message() == NULL, "one achievement, one message");
+  S.voucher_unlocks[TRAINER_TYPE_LORELEI] = 1;    /* an Elite Four member, then the Champion, before the run ends */
+  S.voucher_unlocks[TRAINER_TYPE_BLUE] = 1;
+  CHECK(ach_on_screen(&R, GC_SCREEN_CLEAR, -1, true), "the end of the run reads them too");
+  CHECK(gc_achv_unlocked(&S, 73) && gc_achv_unlocked(&S, 77), "Elite Challenger and Champion Slayer");
+  CHECK(drain() >= 2, "and both are told");
+
   printf("achv_hooks_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

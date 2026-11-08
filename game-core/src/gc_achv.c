@@ -12,6 +12,7 @@
 #define RUN GC_ACHV_GROUP_RUNS
 #define COL GC_ACHV_GROUP_COLLECTION
 #define EGGS GC_ACHV_GROUP_EGGS
+#define TR GC_ACHV_GROUP_TRAINERS
 /* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -85,11 +86,36 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Epic Hatch", "Hatch an Epic egg.", EGGS, V(GC_VOUCHER_REGULAR, 2)},
     {"Legendary Hatch", "Hatch a Legendary egg.", EGGS, V(GC_VOUCHER_PLUS, 1)},
     {"Shiny Hatch", "Hatch a shiny from an egg.", EGGS, V(GC_VOUCHER_REGULAR, 2)},
+    /* 68..90: the trainers (Gym Leaders, Elite Four, Champions, then a region at a time) */
+    {"Gym Challenger", "Defeat a Gym Leader.", TR, V(GC_VOUCHER_REGULAR, 1)},
+    {"Badge Collector", "Defeat 8 different Gym Leaders.", TR, V(GC_VOUCHER_REGULAR, 2)},
+    {"Gym Veteran", "Defeat 25 different Gym Leaders.", TR, V(GC_VOUCHER_PLUS, 1)},
+    {"Gym Master", "Defeat 50 different Gym Leaders.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Gym Legend", "Defeat every Gym Leader.", TR, V(GC_VOUCHER_GOLDEN, 1)},
+    {"Elite Challenger", "Defeat an Elite Four member.", TR, V(GC_VOUCHER_REGULAR, 2)},
+    {"Elite Squad", "Defeat 4 different Elite Four members.", TR, V(GC_VOUCHER_PLUS, 1)},
+    {"Elite Veteran", "Defeat 16 different Elite Four members.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Elite Legend", "Defeat every Elite Four member.", TR, EGG(2)},
+    {"Champion Slayer", "Defeat a Champion.", TR, V(GC_VOUCHER_PLUS, 1)},
+    {"Champion Collector", "Defeat 5 different Champions.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Champion of Champions", "Defeat every Champion.", TR, EGG(2)},
+    {"Kanto Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Kanto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Johto Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Johto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Hoenn Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Hoenn.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Sinnoh Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Sinnoh.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Unova Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Unova.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Kalos Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Kalos.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Alola Conqueror", "Defeat every Elite Four member and Champion of Alola (it has no Gym Leaders).", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Galar Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Galar.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Paldea Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Paldea.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Blueberry Conqueror", "Defeat every Elite Four member and Champion of Blueberry (it has no Gym Leaders).", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Grand Tour", "Conquer all 10 regions.", TR, EGG(2)},
 };
 #undef J
 #undef RUN
 #undef COL
 #undef EGGS
+#undef TR
 
 static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
 static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
@@ -98,6 +124,69 @@ static const uint32_t SET_P4 = 1u << GC_JOJO_KOICHI | 1u << GC_JOJO_KIRA;
 static const uint32_t SET_P5 = 1u << GC_JOJO_DIAVOLO | 1u << GC_JOJO_MISTA | 1u << GC_JOJO_RISOTTO;
 static const uint32_t SET_P6 = 1u << GC_JOJO_JOLYNE | 1u << GC_JOJO_PUCCI;
 static const uint32_t SET_P7 = 1u << GC_JOJO_VALENTINE | 1u << GC_JOJO_GYRO;
+
+/* ---- the trainers: TrainerType values, the groups of pr_enums.h (Gym Leaders 200.., Elite Four 300.., Champions 350..) ---- */
+#define GYM_FIRST TRAINER_TYPE_BROCK
+#define GYM_LAST TRAINER_TYPE_GRUSHA
+#define ELITE_FIRST TRAINER_TYPE_LORELEI
+#define ELITE_LAST TRAINER_TYPE_DRAYTON
+#define CHAMPION_FIRST TRAINER_TYPE_BLUE
+#define CHAMPION_LAST TRAINER_TYPE_KIERAN
+
+/* The regions, in the order of GC_REGION_*: run-core's e4_fixed table (a run's Elite Four and Champion come from one column of it) and the
+ * Gym Leaders' enum ranges. Bruno is in two Elite Fours (Kanto and Johto). */
+static const gc_region REGIONS[GC_REGION_COUNT] = {
+    {"Kanto", TRAINER_TYPE_BROCK, TRAINER_TYPE_GIOVANNI, {TRAINER_TYPE_LORELEI, TRAINER_TYPE_BRUNO, TRAINER_TYPE_AGATHA, TRAINER_TYPE_LANCE}, {TRAINER_TYPE_BLUE}},
+    {"Johto", TRAINER_TYPE_FALKNER, TRAINER_TYPE_CLAIR, {TRAINER_TYPE_WILL, TRAINER_TYPE_KOGA, TRAINER_TYPE_BRUNO, TRAINER_TYPE_KAREN}, {TRAINER_TYPE_RED, TRAINER_TYPE_LANCE_CHAMPION}},
+    {"Hoenn", TRAINER_TYPE_ROXANNE, TRAINER_TYPE_JUAN, {TRAINER_TYPE_SIDNEY, TRAINER_TYPE_PHOEBE, TRAINER_TYPE_GLACIA, TRAINER_TYPE_DRAKE}, {TRAINER_TYPE_STEVEN, TRAINER_TYPE_WALLACE}},
+    {"Sinnoh", TRAINER_TYPE_ROARK, TRAINER_TYPE_VOLKNER, {TRAINER_TYPE_AARON, TRAINER_TYPE_BERTHA, TRAINER_TYPE_FLINT, TRAINER_TYPE_LUCIAN}, {TRAINER_TYPE_CYNTHIA}},
+    {"Unova", TRAINER_TYPE_CILAN, TRAINER_TYPE_MARLON, {TRAINER_TYPE_SHAUNTAL, TRAINER_TYPE_MARSHAL, TRAINER_TYPE_GRIMSLEY, TRAINER_TYPE_CAITLIN}, {TRAINER_TYPE_ALDER, TRAINER_TYPE_IRIS}},
+    {"Kalos", TRAINER_TYPE_VIOLA, TRAINER_TYPE_WULFRIC, {TRAINER_TYPE_MALVA, TRAINER_TYPE_SIEBOLD, TRAINER_TYPE_WIKSTROM, TRAINER_TYPE_DRASNA}, {TRAINER_TYPE_DIANTHA}},
+    {"Alola", 0, 0, {TRAINER_TYPE_HALA, TRAINER_TYPE_MOLAYNE, TRAINER_TYPE_OLIVIA, TRAINER_TYPE_ACEROLA, TRAINER_TYPE_KAHILI}, {TRAINER_TYPE_KUKUI, TRAINER_TYPE_HAU}},
+    {"Galar", TRAINER_TYPE_MILO, TRAINER_TYPE_RAIHAN, {TRAINER_TYPE_MARNIE_ELITE, TRAINER_TYPE_BEDE_ELITE, TRAINER_TYPE_NESSA_ELITE, TRAINER_TYPE_BEA_ELITE, TRAINER_TYPE_ALLISTER_ELITE, TRAINER_TYPE_RAIHAN_ELITE}, {TRAINER_TYPE_LEON, TRAINER_TYPE_MUSTARD}},
+    {"Paldea", TRAINER_TYPE_KATY, TRAINER_TYPE_GRUSHA, {TRAINER_TYPE_RIKA, TRAINER_TYPE_POPPY, TRAINER_TYPE_LARRY_ELITE, TRAINER_TYPE_HASSEL}, {TRAINER_TYPE_GEETA, TRAINER_TYPE_NEMONA}},
+    {"Blueberry", 0, 0, {TRAINER_TYPE_CRISPIN, TRAINER_TYPE_AMARYS, TRAINER_TYPE_LACEY, TRAINER_TYPE_DRAYTON}, {TRAINER_TYPE_KIERAN}},
+};
+
+const gc_region *gc_achv_region(int region) { return region >= 0 && region < GC_REGION_COUNT ? &REGIONS[region] : NULL; }
+
+static bool beaten(const gc_system *sys, int trainer) { return gc_system_has_voucher_unlock(sys, trainer); }
+
+/* how many of the trainers first..last (TrainerType) have been beaten, and how many there are */
+static uint32_t beaten_in(const gc_system *sys, int first, int last, uint32_t *total)
+{
+    uint32_t n = 0;
+    for (int t = first; t <= last; t++) n += beaten(sys, t);
+    if (total) *total = (uint32_t)(last - first + 1);
+    return n;
+}
+
+/* progress through a region: Gym Leaders, Elite Four and Champions beaten of all of them */
+static void region_progress(const gc_system *sys, int region, uint32_t *have, uint32_t *need)
+{
+    const gc_region *r = &REGIONS[region];
+    uint32_t h = 0, n = 0;
+    if (r->gym_first) h += beaten_in(sys, r->gym_first, r->gym_last, &n);
+    for (int i = 0; r->elite[i]; i++, n++) h += beaten(sys, r->elite[i]);
+    /* the Champion is one slot: a run meets one of a region's Champions (a Red/Lance coin), so beating either one counts, as upstream plays it */
+    bool champ = false;
+    for (int i = 0; r->champion[i]; i++) champ = champ || beaten(sys, r->champion[i]);
+    h += champ;
+    n++;
+    *have = h;
+    *need = n;
+}
+
+static uint32_t regions_done(const gc_system *sys)
+{
+    uint32_t done = 0;
+    for (int r = 0; r < GC_REGION_COUNT; r++) {
+        uint32_t h, n;
+        region_progress(sys, r, &h, &n);
+        done += h >= n;
+    }
+    return done;
+}
 
 static int popcount32(uint32_t v)
 {
@@ -233,8 +322,34 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case 62: h = sys->stats.total_hatches; n = 50; break;
     case 63: h = sys->stats.total_hatches; n = 100; break;
     case 64: h = sys->stats.total_hatches; n = 500; break;
+    case 68: case 69: case 70: case 71: case 72: {
+        static const uint32_t NEED[5] = {1, 8, 25, 50, 0};
+        uint32_t total;
+        h = beaten_in(sys, GYM_FIRST, GYM_LAST, &total);
+        n = id == 72 ? total : NEED[id - 68];
+        break;
+    }
+    case 73: case 74: case 75: case 76: {
+        static const uint32_t NEED[4] = {1, 4, 16, 0};
+        uint32_t total;
+        h = beaten_in(sys, ELITE_FIRST, ELITE_LAST, &total);
+        n = id == 76 ? total : NEED[id - 73];
+        break;
+    }
+    case 77: case 78: case 79: {
+        static const uint32_t NEED[3] = {1, 5, 0};
+        uint32_t total;
+        h = beaten_in(sys, CHAMPION_FIRST, CHAMPION_LAST, &total);
+        n = id == 79 ? total : NEED[id - 77];
+        break;
+    }
+    case GC_ACHV_GRAND_TOUR: h = regions_done(sys); n = GC_REGION_COUNT; break;
     default:
-        if (id < 44) return false;
+        if (id >= GC_ACHV_REGION_FIRST && id < GC_ACHV_REGION_FIRST + GC_REGION_COUNT) {
+            region_progress(sys, id - GC_ACHV_REGION_FIRST, &h, &n);
+            break;
+        }
+        if (id < 44 || id >= 68) return false;
         {
             dex_counts c;
             count_dex(sys, &c);
