@@ -310,6 +310,13 @@ voucher-test: core-libs
 	$(BUILD)/voucher_test
 test: voucher-test
 
+.PHONY: achv-football-test
+achv-football-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/achv_football_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/achv_football_test
+	$(BUILD)/achv_football_test
+test: achv-football-test
+
 .PHONY: pace-test
 pace-test: core-libs
 	mkdir -p $(BUILD)

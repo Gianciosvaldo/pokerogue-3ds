@@ -13,6 +13,7 @@
 #define COL GC_ACHV_GROUP_COLLECTION
 #define EGGS GC_ACHV_GROUP_EGGS
 #define TR GC_ACHV_GROUP_TRAINERS
+#define FB GC_ACHV_GROUP_FOOTBALL
 /* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -110,12 +111,23 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Paldea Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Paldea.", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Blueberry Conqueror", "Defeat every Elite Four member and Champion of Blueberry (it has no Gym Leaders).", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Grand Tour", "Conquer all 10 regions.", TR, EGG(2)},
+    /* 91..99: the football playoffs */
+    {"Kickoff", "Win a Football Playoffs match.", FB, V(GC_VOUCHER_REGULAR, 1)},
+    {"Wild Card", "Win 10 Football Playoffs matches.", FB, V(GC_VOUCHER_PLUS, 1)},
+    {"Playoff Regular", "Win 50 Football Playoffs matches.", FB, V(GC_VOUCHER_PREMIUM, 1)},
+    {"League Legend", "Win 200 Football Playoffs matches.", FB, EGG(2)},
+    {"Football Champion", "Win the Football Playoffs title.", FB, V(GC_VOUCHER_PLUS, 1)},
+    {"Dynasty", "Win the Football Playoffs title 3 times.", FB, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Hall of Famer", "Win the Football Playoffs title 10 times.", FB, V(GC_VOUCHER_GOLDEN, 1)},
+    {"Shutout", "Win a Football Playoffs match without conceding a point.", FB, V(GC_VOUCHER_REGULAR, 2)},
+    {"Blowout", "Win a Football Playoffs match by 21 points or more.", FB, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
 #undef COL
 #undef EGGS
 #undef TR
+#undef FB
 
 static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
 static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
@@ -281,6 +293,17 @@ void gc_achv_egg_hatched(gc_system *sys, int tier, bool shiny)
     if (shiny) sys->achv.hatch_feats |= GC_HATCH_SHINY;
 }
 
+static void add_sat(uint32_t *v, unsigned n) { *v = n > UINT32_MAX - *v ? UINT32_MAX : *v + n; }
+
+void gc_achv_football_won(gc_system *sys, unsigned wins, unsigned titles, unsigned shutouts, unsigned blowouts)
+{
+    if (!sys) return;
+    add_sat(&sys->achv.fb_wins, wins);
+    add_sat(&sys->achv.fb_titles, titles);
+    add_sat(&sys->achv.fb_shutouts, shutouts);
+    add_sat(&sys->achv.fb_blowouts, blowouts);
+}
+
 void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats)
 {
     if (!sys) return;
@@ -344,12 +367,21 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
         break;
     }
     case GC_ACHV_GRAND_TOUR: h = regions_done(sys); n = GC_REGION_COUNT; break;
+    case 91: h = a->fb_wins; n = 1; break;
+    case 92: h = a->fb_wins; n = 10; break;
+    case 93: h = a->fb_wins; n = 50; break;
+    case 94: h = a->fb_wins; n = 200; break;
+    case 95: h = a->fb_titles; n = 1; break;
+    case 96: h = a->fb_titles; n = 3; break;
+    case 97: h = a->fb_titles; n = 10; break;
+    case 98: h = a->fb_shutouts; n = 1; break;
+    case 99: h = a->fb_blowouts; n = 1; break;
     default:
         if (id >= GC_ACHV_REGION_FIRST && id < GC_ACHV_REGION_FIRST + GC_REGION_COUNT) {
             region_progress(sys, id - GC_ACHV_REGION_FIRST, &h, &n);
             break;
         }
-        if (id < 44 || id >= 68) return false;
+        if (id < 44 || id >= 68) return false; /* 91.. are cases above */
         {
             dex_counts c;
             count_dex(sys, &c);

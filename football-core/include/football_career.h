@@ -1,6 +1,7 @@
 #ifndef FOOTBALL_CAREER_H
 #define FOOTBALL_CAREER_H
 #include "football_live.h"
+#include "gc/achv.h"
 typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN /* unused: level-up moves are learned without a prompt; kept so saved phase numbers stay valid */,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
 /* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0..3 are Carbos, Protein
  * and the two mega stones (2 and 3), 4 + n is evo[n]. */
@@ -34,6 +35,10 @@ typedef struct {
     /* Egg vouchers due for the profile (not serialized): a win adds them, football_career_flush_vouchers moves them over. A resumed career
      * starts at zero, because the checkpoint it resumes from is older than the win that earned them or newer than their payment. */
     unsigned vouchers_regular,vouchers_premium;
+    /* Football achievements due for the profile (not serialized, like the vouchers): the matches won, titles, shutouts and blowouts that
+     * football_career_flush_achievements counts into the profile and evaluates. achv_new keeps what that unlocked, for the screen to tell
+     * (achv_told is how many of them it has told). */
+    unsigned achv_wins,achv_titles,achv_shutouts,achv_blowouts,achv_told;gc_achv_new achv_new;
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
     unsigned prices[FB_SHOP_FIXED];bool sold[FB_SHOP_FIXED];int stone_target,stone_item,stone2_target,stone2_item,mega; /* stone*: the first mega stone offer (offer 2), stone2*: the second (offer 3) */
     unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
@@ -66,6 +71,9 @@ unsigned football_career_flush_candy(FootballCareer *c);
  * checkpoint that records the wins is written, and before it saves the profile, so a voucher is never in the profile for a win the
  * checkpoint does not know about. A career with no profile pays nothing. */
 unsigned football_career_flush_vouchers(FootballCareer *c);
+/* Counts the matches won since the last call into the profile's football achievements, unlocks what is met (their rewards go into the profile
+ * too) and returns how many were unlocked now; they are appended to c->achv_new. The screen calls it with the vouchers, after the checkpoint. */
+unsigned football_career_flush_achievements(FootballCareer *c);
 /* What candy points are worth for a member, in thousandths of a candy: the bar of the species it started as is as long as its
  * friendship cap in the classic game, so the same play is worth far less to a legendary than to a common Pokemon. */
 unsigned football_candy_milli(const FootballCareer *c,unsigned member,unsigned points);
