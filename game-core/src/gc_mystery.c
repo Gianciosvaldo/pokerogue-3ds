@@ -3,6 +3,7 @@
  * at pinned upstream 8555c08. Encounter actions are intentionally Task 46. */
 #include "internal.h"
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct {
@@ -149,6 +150,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
     if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
     if (type == GC_ME_DELIBIRDY && option >= 1 && option <= 2) return gc_delibirdy_pick_ok(run, option, idx);
+    if (type == GC_ME_BUG_TYPE_SUPERFAN && option == 2) return gc_superfan_pick_ok(run, idx);
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);
     return false;
@@ -180,15 +182,7 @@ static bool available(const gc_run *r, int type, int tier)
     /* These encounters have additional held-item/primary-Pokemon spawn gates upstream.
      * If the simple sufficient condition below is not met, exclude instead of selecting an
      * encounter upstream may reject. */
-    if (type == GC_ME_BUG_TYPE_SUPERFAN) {
-        bool bug = false;
-        for (int i = 0; i < r->n_party && !bug; i++) {
-            int8_t ty[PR_MAX_TYPES];
-            int nt = pr_get_types(&r->party[i].b, ty, PR_TYPES_NO_TERA);
-            for (int k = 0; k < nt; k++) if (ty[k] == POKEMON_TYPE_BUG) bug = true;
-        }
-        if (!bug) return false;
-    }
+    if (type == GC_ME_BUG_TYPE_SUPERFAN && !gc_superfan_spawnable(r)) return false;
     if (type == GC_ME_DELIBIRDY && !gc_delibirdy_spawnable(r)) return false;
     /* onInit reads the three Pokemon allowed in battle with the least friendship: with fewer it throws, so the encounter is not offered then */
     if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER && !gc_breeder_picks(r, (int[3]){0})) return false;
@@ -246,16 +240,6 @@ void gc_mystery_increment_miss(gc_run *run)
         run->me.spawn_chance += 3;
         if (run->me.spawn_chance > 256) run->me.spawn_chance = 256;
     }
-}
-
-static bool bug_in_party(const gc_run *r)
-{
-    for (int i = 0; i < r->n_party; i++) {
-        int8_t ty[PR_MAX_TYPES];
-        int nt = pr_get_types(&r->party[i].b, ty, PR_TYPES_NO_TERA);
-        for (int k = 0; k < nt; k++) if (ty[k] == POKEMON_TYPE_BUG) return true;
-    }
-    return false;
 }
 
 /* applyDamageToPokemon(pokemon, damage): a Pokemon that is allowed in battle and would faint is left at 1 HP;
@@ -357,6 +341,17 @@ static void setup_texts(gc_run *run)
         screen_arg(s, pr_arg_int("roguePercent", 10));
         screen_arg(s, pr_arg_int("masterPercent", 5));
         break;
+    case GC_ME_BUG_TYPE_SUPERFAN: {
+        /* option 3 asks for a Pokemon and then for its Bug item; numBugTypes is the count (the app words it, and picks option 2's text by it) and
+         * requiredBugItems the three items the encounter names ("Quick Claw/Grip Claw/Silver Powder") */
+        s->option_pick[2] = GC_PICK_MEMBER_ITEM;
+        screen_arg(s, pr_arg_int("numBugTypes", gc_superfan_num_bug_types(run)));
+        static char items[200];
+        const pr_msg_arg booster = gc_m_item_arg("booster", "ATTACK_TYPE_BOOSTER", POKEMON_TYPE_BUG);
+        snprintf(items, sizeof items, "$t(modifierType:ModifierType.QUICK_CLAW.name)/$t(modifierType:ModifierType.GRIP_CLAW.name)/%s", booster.s ? booster.s : "");
+        screen_arg(s, (pr_msg_arg){"requiredBugItems", PR_ARG_TEMPLATE, 0, items, 0});
+        break;
+    }
     case GC_ME_SHADY_VITAMIN_DEALER:
         s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -543,6 +538,7 @@ int gc_mystery_held_items(const gc_run *run, int option, int member, int *out, i
     int n = 0;
     if (run->screen.mystery_type == GC_ME_DELIBIRDY) n = gc_delibirdy_held_items(run, option, member, held);
     else if (run->screen.mystery_type == GC_ME_GLOBAL_TRADE_SYSTEM) n = gc_gts_held_items(run, member, held);
+    else if (run->screen.mystery_type == GC_ME_BUG_TYPE_SUPERFAN && option == 2) n = gc_superfan_held_items(run, member, held);
     if (n > max) n = max;
     for (int i = 0; i < n; i++) out[i] = held[i];
     return n;
@@ -576,6 +572,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND: case GC_ME_DELIBIRDY:
+    case GC_ME_BUG_TYPE_SUPERFAN:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_SAFARI_ZONE: case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -650,7 +647,8 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_ABSOLUTE_AVARICE) {
         s->option_ok[1] = berry_stacks(run) >= 6;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
-        s->option_ok[0] = bug_in_party(run);
+        /* the fight needs nothing; a Bug type on the team for the second, a Quick Claw, a Grip Claw or a Bug attack type booster for the third */
+        for (int o = 0; o < 3; o++) s->option_ok[o] = gc_superfan_option_ok(run, o);
     } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
         /* Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade and Leave are always on
          * (the item trade's party screen filters on a transferable held item) */
@@ -1525,11 +1523,12 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
 
     case GC_ME_BUG_TYPE_SUPERFAN:
         if (option == 0) {
-            gc_port_give_reward(run, "EXP_SHARE");
+            gc_port_give_reward(run, "EXP_SHARE");   /* stand-in: the fight and the move tutor are not ported yet */
             end_mystery_encounter_leave(run);
             return true;
         }
-        end_mystery_encounter_leave(run);
+        /* Show Your Bug-types and Gift a Bug Item (src/gc_superfan.c); a rejected pick leaves the screen as it was */
+        if (!gc_superfan_execute(run, option, b, c, why)) { *ok = false; return false; }
         return true;
 
     case GC_ME_FUN_AND_GAMES:

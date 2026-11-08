@@ -463,6 +463,15 @@ int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
 bool gc_gts_pick_ok(const gc_run *run, int option, int idx);
 int gc_gts_allowed(const gc_run *run);
 bool gc_gts_execute(gc_run *run, int option, int b, int c, const char **why);
+/* The Bug-Type Superfan's options 2 and 3 (src/gc_superfan.c) */
+int gc_superfan_num_bug_types(const gc_run *run);                 /* the party's Bug types, fainted ones too */
+bool gc_superfan_pick_ok(const gc_run *run, int idx);              /* option 3's party screen filter: holds a Quick Claw, a Grip Claw or a Bug attack type booster */
+int gc_superfan_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);   /* the transferable ones, as run->items indexes */
+bool gc_superfan_spawnable(const gc_run *run);                     /* the encounter's primary requirement */
+bool gc_superfan_option_ok(const gc_run *run, int option);
+extern pr_rng gc_superfan_pre_rng;   /* the option select's stream after option 2's rolls (for the differential) */
+bool gc_superfan_execute(gc_run *run, int option, int b, int c, const char **why);   /* option 1 or 2 (the screen's 2 and 3); b = the Pokemon, c = which of gc_superfan_held_items */
+
 /* Delibird-y (src/gc_delibirdy.c) */
 int gc_delibirdy_held_items(const gc_run *run, int option, int idx, int out[GC_MAX_ITEMS]);   /* the held items option 1 or 2 takes from party member idx, as run->items indexes */
 bool gc_delibirdy_pick_ok(const gc_run *run, int option, int idx);
