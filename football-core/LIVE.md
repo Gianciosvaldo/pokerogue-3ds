@@ -376,6 +376,23 @@ or end checkpoint, a resume earning nothing twice, a career without a profile), 
 touchdown is worth, a bar filling across matches, many candies at once, a full candy store); `live_screen_test` checks that a
 failed checkpoint write leaves the points pending and the saved one hands them over.
 
+## A finished playoff starts over
+
+lorenzo 2026-11-08: after a playoff was over, the next visit to Football offered the finished run again and the only way to a new
+one was "Delete live playoff save" in the pause menu. Cause: the end screen (`FB_CAREER_END`) is a safe checkpoint, so it was
+written to `football_live.sav`, and that checkpoint loaded straight back onto the end screen every time.
+
+- Leaving the end screen (A, a tap, the pause menu's save-and-return) calls `leave_playoff` in `football_live_screen.c`: the
+  checkpoint is written once more first if it is behind or a write failed (the last match's candy and vouchers reach the profile
+  with it; if that write fails the player stays with the notice), then `clear_checkpoint` removes `football_live.sav`, `.bak` and
+  `.tmp`. The pause menu's return-without-saving also removes it when the end checkpoint is the one on disk (`end_checkpoint_saved`).
+- A checkpoint that loads on the end screen (left by an older version, or by a power cut there) is discarded when the screen opens:
+  the files go and a new career starts at the draft. A removal that fails is harmless, the next load discards it again and the first
+  checkpoint of the new playoff overwrites it.
+- Mid-playoff nothing changes: the pause menu's return keeps the checkpoint, Football resumes it, and "Delete live playoff save" stays
+  for abandoning a run on purpose. `live_screen_test` covers every way out of the end screen, a failed end write, a stale end
+  checkpoint and a resumed unfinished one.
+
 ## Egg vouchers
 
 lorenzo 2026-11-08: every match won pays an egg voucher, and winning the seventh match (the title) pays a Premium one. The Regular
