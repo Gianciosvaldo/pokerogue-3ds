@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COLLECTION, GC_ACHV_GROUP_EGGS, GC_ACHV_GROUP_COUNT } gc_achv_group;
+typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COLLECTION, GC_ACHV_GROUP_EGGS, GC_ACHV_GROUP_TRAINERS, GC_ACHV_GROUP_COUNT } gc_achv_group;
 
 typedef enum {
     GC_AREW_VOUCHER,      /* arg = VoucherType, n = how many */
@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 68
+#define GC_ACHV_COUNT 91
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -62,6 +62,28 @@ void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats);
  * `tier` is the egg's EggTier (0 common .. 3 legendary). */
 enum { GC_HATCH_EPIC = 1, GC_HATCH_LEGENDARY = 2, GC_HATCH_SHINY = 4 };
 void gc_achv_egg_hatched(gc_system *sys, int tier, bool shiny);
+
+/* Group E, the trainers, reads the profile itself (nothing to report): the first win against a Gym Leader, an Elite Four member or a Champion
+ * sets voucherUnlocks[trainer type] (TrainerVictoryPhase's validateVoucher, game-core's trainer_victory, checked against upstream by
+ * trainer_victory_diff_test), and that set is what these count. A profile that beat them before the achievements existed gets them at once.
+ * A "region" is the set of trainers a Classic run can meet in that region: its Gym Leaders (none in Alola and Blueberry), its four Elite Four
+ * members and its Champion; where upstream picks one of two (Hala/Molayne, Red/Lance, Steven/Wallace...) "every" asks for both, which takes
+ * more than one run. A run meets one region's Elite Four and Champion (run-core's pr_run_fixed_e4_trainer), so a region's table is checked
+ * against it by achv_test. */
+enum { GC_REGION_KANTO, GC_REGION_JOHTO, GC_REGION_HOENN, GC_REGION_SINNOH, GC_REGION_UNOVA, GC_REGION_KALOS, GC_REGION_ALOLA, GC_REGION_GALAR,
+       GC_REGION_PALDEA, GC_REGION_BLUEBERRY, GC_REGION_COUNT };
+/* The first achievement of the region list: its id is GC_ACHV_REGION_FIRST + GC_REGION_*, and GC_ACHV_GRAND_TOUR follows the last. */
+#define GC_ACHV_REGION_FIRST 80
+#define GC_ACHV_GRAND_TOUR (GC_ACHV_REGION_FIRST + GC_REGION_COUNT)
+/* The trainer types (TrainerType values) of a region: gym[] lists the Gym Leaders (0-terminated, empty in Alola and Blueberry), elite[] the
+ * Elite Four members (4 to 6, 0-terminated) and champion[] the Champions (1 or 2, 0-terminated). False for a bad region. */
+typedef struct {
+    const char *name;
+    uint16_t gym_first, gym_last;   /* TrainerType range of its Gym Leaders; 0, 0 = none */
+    uint16_t elite[7];
+    uint16_t champion[3];
+} gc_region;
+const gc_region *gc_achv_region(int region);
 
 /* A progress line for the screen: how far a count-based achievement is. False for one with no count. */
 bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t *need);

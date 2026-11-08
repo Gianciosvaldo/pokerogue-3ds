@@ -5,7 +5,9 @@
 
 #include "gc/achv.h"
 #include "gc/gacha.h"
+#include "gc/run.h"
 #include "gc/system.h"
+#include "pr/reward.h"
 #include "pr/run.h"
 
 static gc_system S;
@@ -382,6 +384,206 @@ int main(void)
         const char *why = NULL;
         gc_system_init_defaults(&loaded);
         assert(n && gc_system_load(&loaded, buf, n, &why) && loaded.achv.hatch_feats == (GC_HATCH_LEGENDARY | GC_HATCH_SHINY));
+    }
+
+    /* group E, the trainers: the profile's voucherUnlocks, which the first win against a Gym Leader, an Elite Four member or a Champion sets */
+    {
+        enum { GYMS = 74, ELITES = 42, CHAMPS = 16 };
+        uint32_t h, n;
+        /* every one of them has a voucher in the reward table, so the real victory sets the bit this group reads (trainer_victory_diff_test and
+         * gym_e4_test check the flow itself) */
+        for (int t = TRAINER_TYPE_BROCK; t <= TRAINER_TYPE_GRUSHA; t++) {
+            pr_reward_trainer_victory tv;
+            assert(pr_reward_trainer_victory_rewards(t, false, false, &tv) == 0 && tv.voucher_type >= 0 && tv.unlock_voucher);
+        }
+        for (int t = TRAINER_TYPE_LORELEI; t <= TRAINER_TYPE_DRAYTON; t++) {
+            pr_reward_trainer_victory tv;
+            assert(pr_reward_trainer_victory_rewards(t, false, false, &tv) == 0 && tv.voucher_type >= 0 && tv.unlock_voucher);
+        }
+        for (int t = TRAINER_TYPE_BLUE; t <= TRAINER_TYPE_KIERAN; t++) {
+            pr_reward_trainer_victory tv;
+            assert(pr_reward_trainer_victory_rewards(t, false, false, &tv) == 0 && tv.voucher_type >= 0 && tv.unlock_voucher);
+        }
+        assert(TRAINER_TYPE_GRUSHA - TRAINER_TYPE_BROCK + 1 == GYMS && TRAINER_TYPE_DRAYTON - TRAINER_TYPE_LORELEI + 1 == ELITES
+               && TRAINER_TYPE_KIERAN - TRAINER_TYPE_BLUE + 1 == CHAMPS);
+
+        /* a new profile has beaten nobody */
+        fresh();
+        assert(eval(NULL) == 0);
+        for (int id = 68; id < GC_ACHV_COUNT; id++) assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0 && n > 0);
+
+        /* each one alone gives its own first achievement, once, and no count above one */
+        for (int t = TRAINER_TYPE_BROCK; t <= TRAINER_TYPE_GRUSHA; t++) {
+            fresh();
+            S.voucher_unlocks[t] = 1;
+            gc_achv_new nn;
+            assert(eval(&nn) == 1 && nn.n == 1 && nn.id[0] == 68 && S.voucher_counts[GC_VOUCHER_REGULAR] == 1);
+            assert(eval(NULL) == 0);
+        }
+        for (int t = TRAINER_TYPE_LORELEI; t <= TRAINER_TYPE_DRAYTON; t++) {
+            fresh();
+            S.voucher_unlocks[t] = 1;
+            gc_achv_new nn;
+            assert(eval(&nn) == 1 && nn.id[0] == 73 && S.voucher_counts[GC_VOUCHER_REGULAR] == 2);
+        }
+        for (int t = TRAINER_TYPE_BLUE; t <= TRAINER_TYPE_KIERAN; t++) {
+            fresh();
+            S.voucher_unlocks[t] = 1;
+            gc_achv_new nn;
+            assert(eval(&nn) == 1 && nn.id[0] == 77 && S.voucher_counts[GC_VOUCHER_PLUS] == 1);
+        }
+        /* an evil team boss or a rival is none of them */
+        fresh();
+        S.voucher_unlocks[TRAINER_TYPE_MAXIE] = 1;
+        S.voucher_unlocks[TRAINER_TYPE_RIVAL] = 1;
+        S.voucher_unlocks[TRAINER_TYPE_ROCKET_BOSS_GIOVANNI_1] = 1;
+        assert(eval(NULL) == 0);
+
+        /* the counts; "every" is the whole table */
+        static const struct { int first, last, total; int ids[5]; int need[5]; } SETS[3] = {
+            {TRAINER_TYPE_BROCK, TRAINER_TYPE_GRUSHA, GYMS, {68, 69, 70, 71, 72}, {1, 8, 25, 50, GYMS}},
+            {TRAINER_TYPE_LORELEI, TRAINER_TYPE_DRAYTON, ELITES, {73, 74, 75, 76, -1}, {1, 4, 16, ELITES, 0}},
+            {TRAINER_TYPE_BLUE, TRAINER_TYPE_KIERAN, CHAMPS, {77, 78, 79, -1, -1}, {1, 5, CHAMPS, 0, 0}},
+        };
+        for (int k = 0; k < 3; k++) {
+            fresh();
+            int given = 0;
+            for (int t = SETS[k].first; t <= SETS[k].last; t++) {
+                S.voucher_unlocks[t] = 1;
+                given++;
+                eval(NULL);
+                for (int j = 0; j < 5 && SETS[k].ids[j] >= 0; j++)
+                    assert(gc_achv_unlocked(&S, SETS[k].ids[j]) == (given >= SETS[k].need[j]));
+            }
+            assert(given == SETS[k].total);
+            for (int j = 0; j < 5 && SETS[k].ids[j] >= 0; j++) {
+                assert(gc_achv_progress_of(&S, SETS[k].ids[j], &h, &n) && h == n && n == (uint32_t)SETS[k].need[j]);
+            }
+        }
+        fresh();
+        for (int t = TRAINER_TYPE_BROCK; t < TRAINER_TYPE_GRUSHA; t++) S.voucher_unlocks[t] = 1;   /* all but the last */
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 71) && !gc_achv_unlocked(&S, 72));
+        assert(gc_achv_progress_of(&S, 72, &h, &n) && h == GYMS - 1 && n == GYMS);
+
+        /* the regions: every member of one unlocks it and only it; one short does not */
+        static const int WANT[GC_REGION_COUNT] = {13, 14, 15, 13, 19, 13, 7, 20, 14, 5};   /* gym leaders + Elite Four + Champions */
+        for (int r = 0; r < GC_REGION_COUNT; r++) {
+            const gc_region *reg = gc_achv_region(r);
+            assert(reg && reg->name[0]);
+            int members[40], nm = 0;
+            if (reg->gym_first)
+                for (int t = reg->gym_first; t <= reg->gym_last; t++) members[nm++] = t;
+            for (int i = 0; reg->elite[i]; i++) members[nm++] = reg->elite[i];
+            for (int i = 0; reg->champion[i]; i++) members[nm++] = reg->champion[i];
+            assert(nm == WANT[r]);
+            assert(strstr(gc_achv_defs[GC_ACHV_REGION_FIRST + r].name, reg->name));   /* the achievement is this region's */
+            assert(strstr(gc_achv_defs[GC_ACHV_REGION_FIRST + r].desc, reg->name));
+            for (int skip = -1; skip < nm; skip++) {
+                fresh();
+                for (int i = 0; i < nm; i++) if (i != skip) S.voucher_unlocks[members[i]] = 1;
+                eval(NULL);
+                for (int q = 0; q < GC_REGION_COUNT; q++) {
+                    const bool want = q == r && skip < 0;
+                    /* Bruno stands in two Elite Fours, but a region also needs its Gym Leaders (and none shares them), so no other region follows */
+                    assert(gc_achv_unlocked(&S, GC_ACHV_REGION_FIRST + q) == want);
+                }
+                assert(gc_achv_progress_of(&S, GC_ACHV_REGION_FIRST + r, &h, &n) && n == (uint32_t)nm && h == (uint32_t)(skip < 0 ? nm : nm - 1));
+                assert(!gc_achv_unlocked(&S, GC_ACHV_GRAND_TOUR));
+            }
+        }
+        /* Alola and Blueberry have no Gym Leaders: their Elite Four and Champions alone are the whole region */
+        assert(gc_achv_region(GC_REGION_ALOLA)->gym_first == 0 && gc_achv_region(GC_REGION_BLUEBERRY)->gym_first == 0);
+        assert(!gc_achv_region(-1) && !gc_achv_region(GC_REGION_COUNT));
+
+        /* every region, then the Grand Tour (a tier of the egg reward); one region short is not */
+        fresh();
+        for (int t = TRAINER_TYPE_BROCK; t <= TRAINER_TYPE_GRUSHA; t++) S.voucher_unlocks[t] = 1;
+        for (int t = TRAINER_TYPE_LORELEI; t <= TRAINER_TYPE_DRAYTON; t++) S.voucher_unlocks[t] = 1;
+        for (int t = TRAINER_TYPE_BLUE; t <= TRAINER_TYPE_KIERAN; t++) S.voucher_unlocks[t] = 1;
+        S.voucher_unlocks[TRAINER_TYPE_KIERAN] = 0;   /* the last Champion: Blueberry is one short */
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, GC_ACHV_GRAND_TOUR) && !gc_achv_unlocked(&S, 79) && !gc_achv_unlocked(&S, GC_ACHV_REGION_FIRST + GC_REGION_BLUEBERRY));
+        assert(gc_achv_progress_of(&S, GC_ACHV_GRAND_TOUR, &h, &n) && h == GC_REGION_COUNT - 1 && n == GC_REGION_COUNT);
+        S.voucher_unlocks[TRAINER_TYPE_KIERAN] = 1;
+        gc_achv_new all;
+        eval(&all);
+        assert(gc_achv_unlocked(&S, GC_ACHV_GRAND_TOUR) && gc_achv_unlocked(&S, 72) && gc_achv_unlocked(&S, 76) && gc_achv_unlocked(&S, 79));
+        assert(S.n_eggs >= 1);
+
+        /* a profile that beat them before the achievements existed gets them all at the first evaluation, once */
+        {
+            gc_achv_new again;
+            assert(eval(&again) == 0 && again.n == 0);
+        }
+
+        /* the group survives a save (it keeps no counter of its own: the voucher bits are the data) */
+        {
+            static uint8_t buf[4 << 20];
+            size_t sz = gc_system_save(&S, buf, sizeof buf);
+            static gc_system loaded;
+            const char *why = NULL;
+            gc_system_init_defaults(&loaded);
+            assert(sz && gc_system_load(&loaded, buf, sz, &why));
+            for (int id = 68; id < GC_ACHV_COUNT; id++) assert(gc_achv_unlocked(&loaded, id) == gc_achv_unlocked(&S, id));
+            assert(!memcmp(loaded.voucher_unlocks, S.voucher_unlocks, sizeof S.voucher_unlocks));
+        }
+
+        /* the region tables against run-core: a run meets one region's Elite Four and Champion, so the five trainers of every seed belong to
+         * one table; every Elite Four member and Champion is in some region; every Gym Leader is in exactly one */
+        {
+            static gc_run run;
+            static const int waves[5] = {CLASSIC_FIXED_BOSS_WAVES_ELITE_FOUR_1, CLASSIC_FIXED_BOSS_WAVES_ELITE_FOUR_2, CLASSIC_FIXED_BOSS_WAVES_ELITE_FOUR_3,
+                                         CLASSIC_FIXED_BOSS_WAVES_ELITE_FOUR_4, CLASSIC_FIXED_BOSS_WAVES_CHAMPION};
+            static bool seen_region[GC_REGION_COUNT], seen_type[400];
+            for (int seed = 0; seed < 400; seed++) {
+                char text[32];
+                snprintf(text, sizeof text, "region-%d", seed);
+                memset(&run, 0, sizeof run);
+                gc_run_new(&run, GAME_MODES_CLASSIC, text, 31337);
+                int t[5];
+                for (int w = 0; w < 5; w++) {
+                    t[w] = pr_run_fixed_e4_trainer(&run.run, waves[w]);
+                    assert(t[w] > 0);
+                    seen_type[t[w]] = true;
+                }
+                int fit = 0;
+                for (int r = 0; r < GC_REGION_COUNT; r++) {
+                    const gc_region *reg = gc_achv_region(r);
+                    bool all_in = true;
+                    for (int w = 0; w < 5; w++) {
+                        bool in = false;
+                        if (w < 4) {
+                            for (int i = 0; reg->elite[i]; i++) in |= reg->elite[i] == t[w];
+                        } else {
+                            for (int i = 0; reg->champion[i]; i++) in |= reg->champion[i] == t[w];
+                        }
+                        all_in &= in;
+                    }
+                    if (all_in) { fit++; seen_region[r] = true; }
+                }
+                assert(fit >= 1);   /* Bruno is in two Elite Fours, but a Champion, a third member or a fourth tells them apart */
+            }
+            for (int r = 0; r < GC_REGION_COUNT; r++) assert(seen_region[r]);
+            for (int t = TRAINER_TYPE_LORELEI; t <= TRAINER_TYPE_DRAYTON; t++) {
+                bool in = false;
+                for (int r = 0; r < GC_REGION_COUNT; r++) for (int i = 0; gc_achv_region(r)->elite[i]; i++) in |= gc_achv_region(r)->elite[i] == t;
+                assert(in && seen_type[t]);   /* in a table, and a run really meets it */
+            }
+            for (int t = TRAINER_TYPE_BLUE; t <= TRAINER_TYPE_KIERAN; t++) {
+                bool in = false;
+                for (int r = 0; r < GC_REGION_COUNT; r++) for (int i = 0; gc_achv_region(r)->champion[i]; i++) in |= gc_achv_region(r)->champion[i] == t;
+                assert(in);
+            }
+            for (int t = TRAINER_TYPE_BROCK; t <= TRAINER_TYPE_GRUSHA; t++) {
+                int in = 0;
+                for (int r = 0; r < GC_REGION_COUNT; r++) {
+                    const gc_region *reg = gc_achv_region(r);
+                    in += reg->gym_first && t >= reg->gym_first && t <= reg->gym_last;
+                }
+                assert(in == 1);
+            }
+        }
     }
 
     /* every achievement has a name, a description and a reward text; progress lines never exceed their need */
