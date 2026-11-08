@@ -744,6 +744,54 @@ int main(void) {
 
   g_frame.src_h = g_frame.src_w = 0;
 
+  /* The Expert Pokemon Breeder: each option is named after its Pokemon, and its tooltip is built in code (upstream's onInit): tooltipBase, then
+   * eggsTooltip for the Rare eggs and again for the Common ones, each naming "N Rare Eggs" / "N Common Eggs" (a single one without the plural) */
+  {
+    use_source_locales = true;
+    g_depth = n_got = 0;
+    gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-breeder", 817);
+    CHECK(gc_run_set_starters(&R, starters, 2, &why), "real Breeder party: %s", why ? why : "");
+    R.wave = 37;
+    pr_run_reset_seed(&R.run, R.wave);
+    R.party[2] = R.party[0];
+    R.party[2].b.id = R.party[0].b.id + 100;
+    R.party_order[2] = 2;
+    R.n_party = 3;
+    R.party[0].b.friendship = 10;
+    R.party[1].b.friendship = 20;
+    R.party[2].b.friendship = 30;
+    R.mystery_type = R.screen.mystery_type = GC_ME_THE_EXPERT_POKEMON_BREEDER;
+    R.screen.kind = GC_SCREEN_MYSTERY;
+    gc_mystery_setup_screen(&R);
+    CHECK(R.screen.n_options == 3 && R.screen.option_ok[0] && R.screen.option_ok[1] && R.screen.option_ok[2], "three Breeder options are on");
+    int commons[3], rares[3];
+    for (int i = 0; i < 3; i++) gc_breeder_eggs(&R.party[i], &commons[i], &rares[i]);
+    CHECK(me_flow_open(&R, chosen, NULL), "the Breeder opens");
+    draw(0);
+    CHECK(has_text(0, "The Expert Pokémon Breeder"), "title");
+    for (int i = 0; i < 3; i++) {
+      draw(1);
+      char want[64];
+      CHECK(!has_text(1, "{{") && !has_text(1, "a pokemon"), "no raw token or placeholder in the tooltip of option %d", i + 1);
+      static const char* const named[3] = {"Pikachu", "Lapras", "Pikachu"};   /* the least friendship first */
+      snprintf(want, sizeof want, "(+) Gain Friendship with %s", named[i]);
+      CHECK(has_text(1, "(-) Tough Battle") && has_text(1, want), "option %d: %s", i + 1, want);
+      if (rares[i] > 0) {
+        snprintf(want, sizeof want, "(+) Earn %d Rare Egg%s", rares[i], rares[i] == 1 ? "" : "s");
+        CHECK(has_text(1, want), "option %d: %s", i + 1, want);
+      } else {
+        CHECK(!has_text(1, "Rare Egg"), "option %d: no Rare line without Rare eggs", i + 1);
+      }
+      if (commons[i] > 0) {
+        snprintf(want, sizeof want, "(+) Earn %d Common Egg%s", commons[i], commons[i] == 1 ? "" : "s");
+        CHECK(has_text(1, want), "option %d: %s", i + 1, want);
+      } else {
+        CHECK(!has_text(1, "Common Egg"), "option %d: no Common line without Common eggs", i + 1);
+      }
+      press(BTN_DOWN);
+    }
+  }
+
   /* Audit the actual English texts of all fourteen source-backed encounters, not invented short translations. */
   use_source_locales = true;
   const int ported[] = {GC_ME_DEPARTMENT_STORE_SALE, GC_ME_SHADY_VITAMIN_DEALER, GC_ME_LOST_AT_SEA, GC_ME_FIELD_TRIP,
