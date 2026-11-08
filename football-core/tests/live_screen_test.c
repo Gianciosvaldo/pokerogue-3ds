@@ -142,6 +142,17 @@ int main(void)
         write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==100 && profile.starters[root].candy_count==had);
         write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+earned && profile.starters[root].friendship==left);
     }
+    /* Egg vouchers wait the same way: a failed write leaves them due, the saved checkpoint hands them to the profile (once). */
+    {
+        assert(football_screen_open(&args));game_screen=top;tick();
+        FootballCareer *w=(FootballCareer *)career();
+        const uint32_t regular=profile.voucher_counts[GC_VOUCHER_REGULAR],premium=profile.voucher_counts[GC_VOUCHER_PREMIUM];
+        w->vouchers_regular=3;w->vouchers_premium=1;
+        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->vouchers_regular==3 && w->vouchers_premium==1);
+        assert(profile.voucher_counts[GC_VOUCHER_REGULAR]==regular && profile.voucher_counts[GC_VOUCHER_PREMIUM]==premium);
+        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->vouchers_regular && !w->vouchers_premium);
+        assert(profile.voucher_counts[GC_VOUCHER_REGULAR]==regular+3 && profile.voucher_counts[GC_VOUCHER_PREMIUM]==premium+1);
+    }
     /* Special teams follow every offensive page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
     tick();for(unsigned p=0;p<(FB_PLAY_COUNT+3)/4;++p)press(BTN_RIGHT);tick();assert(special_cards==2);
@@ -204,6 +215,15 @@ int main(void)
             draw_both();
             if(phases[i]==FB_CAREER_RESULT){w->live.rules.winner=w->live.rules.winner==FB_HOME?FB_AWAY:FB_HOME;draw_both();} /* a win and a loss */
         }
+        /* The egg vouchers: a won match tells what it pays, a loss pays nothing, and only the seventh win adds the Premium one. */
+        w->phase=FB_CAREER_RESULT;w->live.rules.winner=FB_HOME;draw_both();
+        assert(on_bottom("+1 Egg Voucher") && !on_bottom("+1 Egg Voucher Premium"));
+        w->live.rules.winner=FB_AWAY;draw_both();assert(!on_bottom("+1 Egg Voucher"));
+        w->phase=FB_CAREER_END;w->wins=4;draw_both();assert(!on_bottom("Egg Voucher Premium"));
+        w->round=FB_PLAYOFF_ROUNDS;w->wins=FB_PLAYOFF_ROUNDS-1;w->phase=FB_CAREER_RESULT;w->live.rules.winner=FB_HOME;draw_both();
+        assert(on_bottom("+1 Egg Voucher") && fake_saw("+1 Egg Voucher Premium"));
+        w->wins=FB_PLAYOFF_ROUNDS;w->phase=FB_CAREER_END;draw_both();assert(on_bottom("Playoff champion") && on_bottom("Egg Voucher Premium earned"));
+        w->round=5;w->wins=4;
         w->phase=FB_CAREER_SHOP;press(BTN_RIGHT);press(BTN_DOWN);draw_both();
         w->message[0]=0;w->mega=-1;w->phase=FB_CAREER_READY;draw_both();
     }
@@ -268,7 +288,7 @@ int main(void)
         w->stone_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
     }
     {
-        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
+        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","+1 Egg Voucher Premium for the title","Egg Voucher Premium earned","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }

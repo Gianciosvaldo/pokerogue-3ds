@@ -79,6 +79,22 @@ unsigned football_career_flush_candy(FootballCareer *c)
     }
     return given;
 }
+/* The vouchers of the match just won. A career with no profile earns nothing. */
+static void earn_vouchers(FootballCareer *c)
+{
+    if(!c->profile)return;
+    c->vouchers_regular+=FB_VOUCHER_REGULAR_PER_WIN;
+    if(c->wins==FB_PLAYOFF_ROUNDS)c->vouchers_premium+=FB_VOUCHER_PREMIUM_FOR_TITLE;
+}
+unsigned football_career_flush_vouchers(FootballCareer *c)
+{
+    if(!c || !c->profile)return 0;
+    const unsigned regular=c->vouchers_regular,premium=c->vouchers_premium;
+    c->vouchers_regular=c->vouchers_premium=0;
+    gc_system_add_voucher_count(c->profile,GC_VOUCHER_REGULAR,(int)regular);
+    gc_system_add_voucher_count(c->profile,GC_VOUCHER_PREMIUM,(int)premium);
+    return regular+premium;
+}
 /* The dead ball has just made its credits: the player behind each of the human team's plays is paid at once. */
 static void pay_credits(FootballCareer *c)
 {
@@ -220,10 +236,10 @@ bool football_career_continue(FootballCareer *c)
     if(!c)return false;
     if(c->phase==FB_CAREER_RESULT){
         if(c->live.rules.winner!=FB_HOME){pay_match(c,false);c->phase=FB_CAREER_END;return true;}
-        ++c->wins;c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
+        ++c->wins;earn_vouchers(c);c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }
-    if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==7)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
+    if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==FB_PLAYOFF_ROUNDS)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
     return false;
 }
 bool football_career_evolve(FootballCareer *c,int pick)

@@ -81,6 +81,7 @@ static bool save_checkpoint(void)
     size_t n=football_career_save(&L.career,checkpoint_bytes,sizeof checkpoint_bytes);
     if(!n || save_write("football_live",checkpoint_bytes,n)!=SAVE_OK)return false;
     football_career_flush_candy(&L.career); /* the candy earned up to this checkpoint goes to the profile with it, never before */
+    football_career_flush_vouchers(&L.career); /* ... and so do the egg vouchers of the wins it records */
     if(L.args.save_profile && !L.args.save_profile(L.args.arg))return false;
     L.checkpoint=token();L.save_failed=false;return true;
 }
@@ -512,7 +513,7 @@ static void bottom_menu(void)
     case FB_CAREER_RESULT:{
         bool won=c->live.rules.winner==FB_HOME;
         football_menu_head(won?"Match won":"Playoff elimination",NULL);
-        football_menu_panel(4,32,312,112);
+        football_menu_panel(4,32,312,won?150:112);
         snprintf(left,sizeof left,"Final   Home %u - %u Away",c->live.rules.score[0],c->live.rules.score[1]);
         football_menu_text(TS_WINDOW,FM_PX_BODY,16,42,288,left);
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,72,288,"Species candy");
@@ -520,6 +521,10 @@ static void bottom_menu(void)
         snprintf(left,sizeof left,"+%u.%02u from plays",c->candy_plays_milli/1000,c->candy_plays_milli%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
         { const unsigned team=football_career_team_candy_milli(c,won);snprintf(left,sizeof left,"+%u.%02u more for the team",team/1000,team%1000/10);football_menu_text(TS_WINDOW,FM_PX_BODY,16,110,288,left); }
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,129,288,"Each candy bar is longer for rarer Pokemon.");
+        if(won){ /* the vouchers this win pays (they reach the profile with the next checkpoint) */
+            snprintf(left,sizeof left,"+%u Egg Voucher",FB_VOUCHER_REGULAR_PER_WIN);football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,147,288,left);
+            if(c->round==FB_PLAYOFF_ROUNDS){snprintf(left,sizeof left,"+%u Egg Voucher Premium for the title",FB_VOUCHER_PREMIUM_FOR_TITLE);football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,165,288,left);}
+        }
         football_menu_foot("A or tap: team progression");break;}
     case FB_CAREER_EXP:
         snprintf(right,sizeof right,"Player %u / 22",c->exp_member+1);football_menu_head("Experience",right);
@@ -542,8 +547,9 @@ static void bottom_menu(void)
         break;
     case FB_CAREER_END:
         snprintf(left,sizeof left,"Playoff complete: %u / 7 wins",c->wins);football_menu_head(left,NULL);
-        football_menu_panel(4,32,312,76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
+        football_menu_panel(4,32,312,c->wins==FB_PLAYOFF_ROUNDS?112:76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
         { const unsigned total=c->candy_plays_milli+c->candy_team_milli;snprintf(left,sizeof left,"+%u.%02u",total/1000,total%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left); }
+        if(c->wins==FB_PLAYOFF_ROUNDS){football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,90,288,"Playoff champion");football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,110,288,"Egg Voucher Premium earned");}
         football_menu_foot("A or tap: return to title");break;
     case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:

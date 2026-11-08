@@ -7,6 +7,11 @@ typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,
 #define FB_SHOP_EVO_MAX 8
 #define FB_SHOP_FIXED 4
 #define FB_SHOP_STONES 2 /* mega stones on offer each round: offers 2 and 3 */
+/* The playoff is seven rounds. Every match won pays one Regular Egg Voucher into the profile, and winning the seventh (the title) pays one
+ * Premium Egg Voucher on top. They are due the moment the win is counted and reach the profile with the next checkpoint, like the candy. */
+#define FB_PLAYOFF_ROUNDS 7
+#define FB_VOUCHER_REGULAR_PER_WIN 1u
+#define FB_VOUCHER_PREMIUM_FOR_TITLE 1u
 /* Cash for a won round, and the price of a Carbos or Protein in the shop after it. */
 #define FB_CAREER_WIN_PAY(round) (500u+125u*(round))
 #define FB_CAREER_VITAMIN_PRICE(round) (80u+15u*(round))
@@ -26,6 +31,9 @@ typedef struct {
      * so they are never in the profile without the checkpoint that knows about them. seen_snaps is how many dead balls have been
      * looked at for credits. */
     unsigned candy_plays,candy_team,seen_snaps,candy_pending[22],candy_plays_milli,candy_team_milli;
+    /* Egg vouchers due for the profile (not serialized): a win adds them, football_career_flush_vouchers moves them over. A resumed career
+     * starts at zero, because the checkpoint it resumes from is older than the win that earned them or newer than their payment. */
+    unsigned vouchers_regular,vouchers_premium;
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
     unsigned prices[FB_SHOP_FIXED];bool sold[FB_SHOP_FIXED];int stone_target,stone_item,stone2_target,stone2_item,mega; /* stone*: the first mega stone offer (offer 2), stone2*: the second (offer 3) */
     unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
@@ -54,6 +62,10 @@ bool football_career_save_ready(const FootballCareer *c);
 /* Gives the profile the candy points that are waiting (to the species each member started as, as steps of its candy bar) and
  * returns how many whole candies that made; the screen calls this when it saves a checkpoint, just before it saves the profile. */
 unsigned football_career_flush_candy(FootballCareer *c);
+/* Gives the profile the egg vouchers that are due (Regular and Premium) and returns how many that was. The screen calls it right after the
+ * checkpoint that records the wins is written, and before it saves the profile, so a voucher is never in the profile for a win the
+ * checkpoint does not know about. A career with no profile pays nothing. */
+unsigned football_career_flush_vouchers(FootballCareer *c);
 /* What candy points are worth for a member, in thousandths of a candy: the bar of the species it started as is as long as its
  * friendship cap in the classic game, so the same play is worth far less to a legendary than to a common Pokemon. */
 unsigned football_candy_milli(const FootballCareer *c,unsigned member,unsigned points);
