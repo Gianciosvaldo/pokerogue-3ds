@@ -418,6 +418,13 @@ static void sh_enter(ui_screen* s) {
 static ui_screen g_screen = {"starter-select", UI_FADE, sh_enter, sh_leave, NULL, sh_input, sh_update, sh_draw, NULL, sh_touch};
 
 bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
+  /* The last run's battle graphics are still in texture memory when the starter select opens, and its sheets of icons and the Pokemon
+   * picture have to fit beside them: let them go (the next battle loads what it draws). */
+  img_drop_prefix("images/pokemon/");
+  img_drop_prefix("images/trainer/");
+  img_drop_prefix("images/arenas/");
+  img_drop_prefix("images/battle_anims/");
+  img_drop_prefix("images/effects/");
   H.sys = sys;
   time_t now=time(NULL);H.pokerus_bucket=now>0?(uint64_t)now/10800:0;
   H.ev = *ev;
