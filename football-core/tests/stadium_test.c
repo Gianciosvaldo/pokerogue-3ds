@@ -1,4 +1,5 @@
 #include "football_stadium.h"
+#include "football_goal.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -64,6 +65,29 @@ int main(void)
     unsigned dn=count;draw(60,26.67f,7,0,false);unsigned long night=0;for(unsigned i=0;i<count;++i)night+=(rects[i].color&255)+((rects[i].color>>8)&255)+((rects[i].color>>16)&255);
     CHECK(dn==count && night<day);
     CHECK(draw(60,26.67f,0,0,false)>0 && draw(60,26.67f,99,0,false)>0); /* a bad round is still a stadium */
+    /* The goal posts stand on the plane the kicks are aimed at (football_goal.h), one at each end of the field, and are only drawn where they
+     * can be seen: not at midfield, and never the far one next to the near one. A post is a pole, a crossbar and two uprights, all of them
+     * above the end zone's paint and below the yard lines. */
+    {
+        const FootballCamera near_end={.x=108,.y=26.67f,.ready=true},far_end={.x=12,.y=26.67f,.ready=true},middle={.x=60,.y=26.67f,.ready=true};
+        const float ends[2]={FB_GOAL_POST_INSET,120.0f-FB_GOAL_POST_INSET};
+        for(unsigned end=0;end<2;++end){
+            const FootballCamera *cam=end?&near_end:&far_end;
+            count=0;football_stadium_draw(cam,1,0,false);
+            const float gx=football_camera_x(cam,ends[end]),gy=football_camera_y(cam,FB_GOAL_MIDDLE);
+            unsigned bars=0,uprights=0,poles=0;
+            for(unsigned i=0;i<count;++i){
+                const Rect *r=&rects[i];
+                if(r->z<.0299f || r->z>.0311f)continue;
+                if(r->w>20 && r->h<=4 && fabsf(r->x+r->w*.5f-gx)<.51f && r->y+r->h<gy){++bars;CHECK(r->w>=20 && r->w<=30);}   /* the crossbar, centred on the post */
+                else if(r->h>=25 && r->w<=4 && r->y+r->h<gy-10){++uprights;CHECK(fabsf(r->x+r->w*.5f-gx)>10 && fabsf(r->x+r->w*.5f-gx)<16);} /* an upright, either side of it */
+                else if(r->w<=4 && r->h<=18 && fabsf(r->x+r->w*.5f-gx)<.51f && fabsf(r->y+r->h-gy)<2.5f){++poles;}               /* the pole, standing on its spot */
+            }
+            CHECK(bars==1 && uprights==2 && poles==1);
+        }
+        count=0;football_stadium_draw(&middle,1,0,false);
+        for(unsigned i=0;i<count;++i)CHECK(rects[i].z<.0299f || rects[i].z>.0311f || rects[i].w>4); /* no post at midfield (only fans are that deep, and they are wider) */
+    }
     football_stadium_draw(NULL,1,0,false);
     const char *dir=getenv("STADIUM_PPM");
     if(dir){
