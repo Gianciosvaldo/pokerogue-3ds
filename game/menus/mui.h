@@ -82,6 +82,11 @@ const rr_frame* mui_frame(const char* key, const char* frame);
 bool mui_image(const char* key, const char* frame, float x, float y, float ox, float oy);
 bool mui_image_ex(const char* key, const char* frame, float x, float y, const rr_draw_opts* o);
 void mui_unload_all(void);
+/* Frees the Pokemon icon sheets no screen drew this frame (they reload the next time one is drawn); returns how many. For a screen whose
+ * own big load (a Pokemon picture) just failed for lack of texture memory. */
+int mui_reclaim_images(void);
+/* How many image loads failed for lack of texture memory since start, and the key of the last (NULL when none). */
+const char* mui_image_failure(unsigned* count);
 
 /* rr_set_origin that mui remembers (for mui_clip): call it instead. */
 void mui_set_origin(rr_screen s, int px, int py);
