@@ -1,4 +1,5 @@
 #include "football_stadium.h"
+#include "football_goal.h"
 #include <math.h>
 /* Depth layers, back to front. The yard lines are at .04, so nothing here may reach it. */
 #define Z_TURF .005f
@@ -137,15 +138,24 @@ static void ellipse(const FootballCamera *cam,float cx,float cy,float a,float b,
         world(cam,cx-half,y,half*2.f,2.f*b/(float)slices+.02f,z,shade(c,light_k));
     }
 }
+/* A goal post. The field is seen from the side and above (FB_CAMERA_SQUASH), where a real post is no help: the crossbar runs along the width
+ * of the field and the uprights stand on its ends, so height and width are both "up the screen" and the whole thing is one vertical line
+ * with gaps. So the post is drawn as the picture everyone knows, a pole with a crossbar and two uprights, standing on the ground at the
+ * middle of the goal. It stands where the kicks are aimed (football_goal.h: FB_GOAL_POST_INSET yards inside each end line, the middle of
+ * the field's width), so the ball flies at it and a kick that is good ends at its foot while a miss ends well to one side. */
+#define POST_STEM_H 16.f   /* pixels from the ground to the crossbar */
+#define POST_UP_H 30.f     /* and from the crossbar to the tip of an upright */
+#define POST_SPAN 26.f     /* the width between the uprights, in pixels */
 static void goal_post(const FootballCamera *cam,float x,float light_k)
 {
-    /* Seen from above and in front: a crossbar across the end line and two uprights standing up from its ends. */
-    if(!seen(cam,x-1.f,22.f,2.f,10.f))return;
-    u32 yellow=shade((Rgb){255,210,63},light_k);
-    world(cam,x-.25f,23.4f,.5f,6.6f,Z_POST,yellow);
-    float py0=football_camera_y(cam,23.4f),py1=football_camera_y(cam,30.f),px=football_camera_x(cam,x)-1.5f;
-    rect(px,py0-22,3,22,Z_POST,yellow);rect(px,py1-22,3,22,Z_POST,yellow);
-    rect(px+1,py0+6,2,4,Z_POST,shade((Rgb){238,244,234},light_k)); /* the post's foot */
+    float gx=football_camera_x(cam,x),gy=football_camera_y(cam,FB_GOAL_MIDDLE);
+    if(gx<-40.f || gx>440.f || gy-POST_STEM_H-POST_UP_H>240.f || gy+4.f<44.f)return;
+    u32 yellow=shade((Rgb){255,210,63},light_k),pole=shade((Rgb){226,230,222},light_k);
+    rect(gx-7.f,gy-1.f,14.f,4.f,Z_POST-.001f,C2D_Color32(10,40,18,150));                       /* where it stands */
+    rect(gx-1.5f,gy-POST_STEM_H,3.f,POST_STEM_H+1.f,Z_POST,pole);                              /* the pole */
+    rect(gx-POST_SPAN*.5f,gy-POST_STEM_H-3.f,POST_SPAN,3.f,Z_POST+.001f,yellow);             /* the crossbar */
+    rect(gx-POST_SPAN*.5f,gy-POST_STEM_H-POST_UP_H,3.f,POST_UP_H,Z_POST+.001f,yellow);       /* the uprights */
+    rect(gx+POST_SPAN*.5f-3.f,gy-POST_STEM_H-POST_UP_H,3.f,POST_UP_H,Z_POST+.001f,yellow);
 }
 void football_stadium_draw(const FootballCamera *cam,unsigned round,unsigned steps,bool cheering)
 {
@@ -176,5 +186,5 @@ void football_stadium_draw(const FootballCamera *cam,unsigned round,unsigned ste
     stand_side(cam,true,k,steps,cheering);stand_side(cam,false,k,steps,cheering);
     stand_end(cam,true,k,steps,cheering);stand_end(cam,false,k,steps,cheering);
     bench(cam,22.f,END_HOME,k);bench(cam,86.f,END_AWAY,k);
-    goal_post(cam,0.f,k);goal_post(cam,PITCH_W,k);
+    goal_post(cam,FB_GOAL_POST_INSET,k);goal_post(cam,PITCH_W-FB_GOAL_POST_INSET,k);
 }

@@ -16,6 +16,14 @@ previews that holder, and explains that Mega must be selected before the next
 match. Vitamin target controls do not change a stone's holder. The legacy six-player season retains its rare offer.
 
 Both modes use the existing form-change catalog and held-item inventory.
+A species with two stones (Mewtwonite X and Y, Charizardite X and Y, Raichunite X and Y, Absolite and Absolite Z, Garchompite and
+Garchompite Z, Lucarionite and Lucarionite Z) is offered each of them in turn: `gc_football_mega_items` lists every stone the member
+can use, and the shop picks one with a hash of the seed, the round and the member (lorenzo 2026-11-08: only Mewtwonite X ever came up,
+because the shop took the first stone of the catalog every round). The pick is deliberately not the round's parity: the pair of
+holders moves by two a round, which would pin a holder to one parity. A holder buys one stone and keeps it; the other is not offered
+for it afterwards. The legacy six-player season still offers the first stone (`gc_football_mega_item`). `tests/mega_split_test.c`
+sweeps all six species.
+
 The holder must match the item's species and current pre-form key. The generated
 inactive transition identifies the corresponding mega form, including distinct
 Charizard X/Y and Mewtwo X/Y targets. Conditional transitions that the football

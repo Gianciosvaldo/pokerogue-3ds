@@ -190,6 +190,8 @@ static bool available(const gc_run *r, int type, int tier)
         if (!bug) return false;
     }
     if (type == GC_ME_DELIBIRDY && !gc_delibirdy_spawnable(r)) return false;
+    /* onInit reads the three Pokemon allowed in battle with the least friendship: with fewer it throws, so the encounter is not offered then */
+    if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER && !gc_breeder_picks(r, (int[3]){0})) return false;
     return true;
 }
 
@@ -425,6 +427,23 @@ static void setup_texts(gc_run *run)
         if (gc_berries_tokens(run, &enemy, &fastest, &grab)) { screen_arg(s, enemy); screen_arg(s, fastest); screen_arg(s, pr_arg_int("numBerries", grab)); screen_arg(s, pr_arg_int("raceLost", gc_berries_race_lost(run))); }
         break;
     }
+    case GC_ME_THE_EXPERT_POKEMON_BREEDER: {
+        /* pokemon1Name..pokemon3Name and, for each, the Common and Rare Eggs the fight earns (the tooltips' numbers) */
+        int pick[3];
+        if (gc_breeder_picks(run, pick)) {
+            static const char *const names[3] = {"pokemon1Name", "pokemon2Name", "pokemon3Name"};
+            static const char *const commons[3] = {"pokemon1CommonEggs", "pokemon2CommonEggs", "pokemon3CommonEggs"};
+            static const char *const rares[3] = {"pokemon1RareEggs", "pokemon2RareEggs", "pokemon3RareEggs"};
+            for (int k = 0; k < 3; k++) {
+                int c, r;
+                gc_breeder_eggs(&run->party[pick[k]], &c, &r);
+                screen_arg(s, pr_arg_pokemon_name(&run->bt, names[k], &run->party[pick[k]].b));
+                screen_arg(s, pr_arg_int(commons[k], c));
+                screen_arg(s, pr_arg_int(rares[k], r));
+            }
+        }
+        break;
+    }
     case GC_ME_FIGHT_OR_FLIGHT: {
         pr_msg_arg enemy, item;
         if (gc_fof_tokens(run, &enemy, &item)) { screen_arg(s, enemy); screen_arg(s, item); }
@@ -636,15 +655,19 @@ void gc_mystery_setup_screen(gc_run *run)
         /* Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade and Leave are always on
          * (the item trade's party screen filters on a transferable held item) */
         s->option_ok[0] = s->option_ok[1] = gc_gts_allowed(run) >= 2;
-    } else if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER) {
-        s->option_ok[0] = run->n_party >= 1;
-        s->option_ok[1] = run->n_party >= 1;
     }
     setup_texts(run);
 }
 
 static void end_mystery_encounter_leave(gc_run *run)
 {
+    gc_internal *in = gc_int(run);
+    /* PostMysteryEncounterPhase: the outro the encounter set, after its shop and ahead of the next wave */
+    if (in->me_post.pending) {
+        in->me_post.pending = false;
+        gc_rq_push(run, gc_rp(RP_ME_POST, in->me_post.a, in->me_post.b, in->me_post.c));
+    }
+    in->me_tera_static = 0;
     /* leaveEncounterWithoutBattle -> handleMysteryEncounterVictory pushes MysteryEncounterRewardsPhase and an EggLapsePhase */
     if (run->sys) gc_system_increment_egg_steps(run->sys);
     run->in_battle = false;
@@ -1300,6 +1323,7 @@ static void the_pokemon_salesman(gc_run *run, int option)
  * run by then and nothing calls it afterwards, so the experience is never given (traced in the producer) */
 void gc_mystery_post(gc_run *run, const gc_rphase *p)
 {
+    if (p->a == GC_ME_THE_EXPERT_POKEMON_BREEDER) { gc_breeder_outro(run, p); return; }
     if (p->a != GC_ME_SHADY_VITAMIN_DEALER || p->b < 0 || p->b >= run->n_party) return;
     gc_mon *m = &run->party[p->b];
     if (p->c == 1) {
@@ -1524,18 +1548,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_THE_EXPERT_POKEMON_BREEDER:
-        if (option == 0 || option == 1) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            int min_iv_idx = 0;
-            for (int i = 1; i < 6; i++) {
-                if (run->party[target].b.ivs[i] < run->party[target].b.ivs[min_iv_idx]) min_iv_idx = i;
-            }
-            run->party[target].b.ivs[min_iv_idx] = 31;
-            pr_calculate_stats(&run->bt, &run->party[target].b);
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_breeder_execute(run, option);
         return true;
 
     default:

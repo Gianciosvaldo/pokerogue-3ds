@@ -144,9 +144,24 @@ void rr_nineslice(const rr_frame* f, float x, float y, float w, float h, int bor
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
 
 /* sprites and icons: the screen asks for them, nothing is loaded */
+static int g_sprite_calls;       /* menu_sprite_load calls */
+static int g_sprite_ok_after = -1; /* the load succeeds from the call after this many (-1: never) */
+static int g_reclaims;           /* mui_reclaim_images calls */
+static char g_dropped[256];      /* the prefixes img_drop_prefix was given */
+static int g_dummy_atlas;
 bool menu_sprite_load(menu_sprite* s, const menu_mon* m, bool back) {
-  (void)s, (void)m, (void)back;
+  (void)m, (void)back;
+  g_sprite_calls++;
+  memset(s, 0, sizeof *s);
+  if (g_sprite_ok_after >= 0 && g_sprite_calls > g_sprite_ok_after) {
+    s->atlas = (rr_atlas*)&g_dummy_atlas;
+    return true;
+  }
   return false;
+}
+int mui_reclaim_images(void) { return ++g_reclaims; }
+void img_drop_prefix(const char* prefix) {
+  if (strlen(g_dropped) + strlen(prefix) + 2 < sizeof g_dropped) strcat(strcat(g_dropped, prefix), "|");
 }
 void menu_sprite_free(menu_sprite* s) { memset(s, 0, sizeof *s); }
 const rr_frame* menu_sprite_frame(const menu_sprite* s, uint32_t ms) {
@@ -570,6 +585,39 @@ static void test_touch(void) {
   draw();
   CHECK(!drawn(num), "a tap in the upper half scrolls back");
   CHECK(!g_screen->touch(g_screen, 278, 40 + 30), "(and there is no page above the first)");
+}
+
+/* The Pokemon picture that failed to load (texture memory full) is tried again, with the idle icon sheets given back first, instead of staying
+ * blank for as long as the cursor rests on that species; and the last run's battle graphics are dropped when the screen opens. */
+static void test_sprite_retry(void) {
+  gc_system_init_defaults(&SYS);
+  g_sprite_calls = g_reclaims = 0;
+  g_dropped[0] = 0;
+  g_sprite_ok_after = 2; /* two loads fail, the third works */
+  CHECK(open_screen(NULL), "open");
+  CHECK(strstr(g_dropped, "images/pokemon/|") && strstr(g_dropped, "images/trainer/|") && strstr(g_dropped, "images/arenas/|") &&
+            strstr(g_dropped, "images/battle_anims/|") && strstr(g_dropped, "images/effects/|"),
+        "the last run's battle graphics are dropped on open: %s", g_dropped);
+  tick(100);
+  CHECK(g_sprite_calls == 0, "the cursor has to rest first");
+  tick(300);
+  CHECK(g_sprite_calls == 1 && g_reclaims == 0, "the first try fails: %d calls", g_sprite_calls);
+  tick(100);
+  CHECK(g_sprite_calls == 1, "no second try before the wait is over");
+  tick(400);
+  CHECK(g_sprite_calls == 2 && g_reclaims == 1, "second try after icons are given back: %d calls %d reclaims", g_sprite_calls, g_reclaims);
+  tick(300);
+  CHECK(g_sprite_calls == 2, "the wait doubles");
+  tick(600);
+  CHECK(g_sprite_calls == 3 && g_reclaims == 2, "third try works: %d calls %d reclaims", g_sprite_calls, g_reclaims);
+  tick(10000);
+  CHECK(g_sprite_calls == 3 && g_reclaims == 2, "and it stays loaded");
+  /* a species with no picture at all gives up */
+  g_sprite_calls = g_reclaims = 0;
+  g_sprite_ok_after = -1;
+  CHECK(open_screen(NULL), "open again");
+  tick(60000);
+  CHECK(g_sprite_calls == 6 && g_reclaims == 5, "gives up after 6 tries: %d calls %d reclaims", g_sprite_calls, g_reclaims);
 }
 
 static void test_exit(void) {
@@ -1113,6 +1161,7 @@ int main(int argc, char** argv) {
   test_no_hidden_ability_purchase();
   test_happy_path();
   test_touch();
+  test_sprite_retry();
   test_exit();
   test_remove();
   test_refused();

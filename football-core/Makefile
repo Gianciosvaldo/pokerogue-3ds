@@ -369,7 +369,7 @@ test: live-art-test
 .PHONY: stadium-test
 stadium-test: $(BUILD)/stadium_test
 	$(BUILD)/stadium_test
-$(BUILD)/stadium_test: tests/stadium_test.c ../game/source/football_stadium.c ../game/include/football_stadium.h src/football_camera.c
+$(BUILD)/stadium_test: tests/stadium_test.c ../game/source/football_stadium.c ../game/include/football_stadium.h src/football_camera.c include/football_goal.h
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/stadium_test.c ../game/source/football_stadium.c src/football_camera.c -lm -o $@
 test: stadium-test
@@ -388,6 +388,13 @@ mega-career-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_career_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/mega_career_test
 	$(BUILD)/mega_career_test
 test: mega-career-test
+
+.PHONY: mega-split-test
+mega-split-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_split_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/mega_split_test
+	$(BUILD)/mega_split_test
+test: mega-split-test
 
 .PHONY: return-camera-test
 return-camera-test: core-libs

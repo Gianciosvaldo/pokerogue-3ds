@@ -266,6 +266,34 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
 
 /* ------------------------------------------------------------------ the picks */
 
+/* The Expert Pokemon Breeder builds each tooltip in code (onInit): the locale's tooltipBase, then eggsTooltip once for the Rare eggs and once for the
+ * Common ones, each with numEggs ("2 Rare Eggs") as its {{eggs}}; the counts are the core's pokemonNRareEggs / pokemonNCommonEggs */
+static void breeder_tooltip(const gc_screen* s, int i, char* out, size_t n)
+{
+  char sub[32], name[32];
+  snprintf(sub, sizeof sub, "option.%d.tooltipBase", i + 1);
+  if (!fmt(sub, NULL, 0, false, out, n)) out[0] = 0;
+  static const char* const kind[2] = {"Rare", "Common"};
+  static const char* const rarity[2] = {"egg:greatTier", "egg:defaultTier"};
+  for (int t = 0; t < 2; t++) {
+    snprintf(name, sizeof name, "pokemon%d%sEggs", i + 1, kind[t]);
+    int count = 0;
+    for (int k = 0; k < s->n_me_args; k++)
+      if (!strcmp(s->me_args[k].name, name)) count = (int)s->me_args[k].v;
+    if (count <= 0) continue;
+    /* not through fmt(): {{eggs}} nests numEggs, which needs count and rarity beside it, and fmt() passes only the tokens the line itself names */
+    pr_msg m = {.key = "mysteryEncounters/theExpertPokemonBreeder:eggsTooltip", .n_args = 3};
+    m.args[0] = (pr_msg_arg){"eggs", PR_ARG_TEMPLATE, 0, "$t(mysteryEncounters/theExpertPokemonBreeder:numEggs)", 0};
+    m.args[1] = pr_arg_int("count", count);
+    m.args[2] = pr_arg_key("rarity", rarity[t]);
+    char line[ME_TOOLTIP_LEN];
+    be_format_message(&m, line, sizeof line);
+    if (!line[0]) continue;
+    const size_t l = strlen(out);
+    if (l + 2 < n) snprintf(out + l, n - l, "%s", line);
+  }
+}
+
 static void open_question(int cursor);
 static void open_members(void);
 static void open_moves(void);
@@ -590,6 +618,8 @@ static void open_question(int cursor)
       }
     }
   }
+  if (F.type == GC_ME_THE_EXPERT_POKEMON_BREEDER)
+    for (int i = 0; i < 3 && i < s->n_options; i++) breeder_tooltip(s, i, a.options[i].tooltip, sizeof a.options[i].tooltip);
   if (F.type == GC_ME_PILLAR_MEN)
     for (int i = 0; i < 3 && i < s->n_options; i++) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/custom/%s", PILLAR_ID[i]);
   if (F.type == GC_ME_MYSTERIOUS_CHALLENGERS) /* the three trainers drawn when the encounter began, tint 1: black silhouettes */

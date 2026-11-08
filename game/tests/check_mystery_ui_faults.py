@@ -43,6 +43,10 @@ FAULTS = [
  ('dance-every-move-selectable', UI[0], 'a.options[a.n].ok = gc_mystery_move_ok(F.run, F.option, F.member, i);', 'a.options[a.n].ok = true;'),
  ('dance-silent-move-token', UI[0], 'extra[n_extra++] = pr_arg_move("selectedMove", F.run->party[b].b.moves[c]);', '(void)pr_arg_move("selectedMove", F.run->party[b].b.moves[c]);'),
  ('dance-first-move-token', UI[0], 'pr_arg_move("selectedMove", F.run->party[b].b.moves[c])', 'pr_arg_move("selectedMove", F.run->party[b].b.moves[0])'),
+ ('breeder-no-egg-lines', UI[0], 'if (count <= 0) continue;', 'continue;'),
+ ('breeder-rarity-swapped', UI[0], 'm.args[2] = pr_arg_key("rarity", rarity[t]);', 'm.args[2] = pr_arg_key("rarity", rarity[1 - t]);'),
+ ('breeder-counts-swapped', UI[0], 'snprintf(name, sizeof name, "pokemon%d%sEggs", i + 1, kind[t]);', 'snprintf(name, sizeof name, "pokemon%d%sEggs", i + 1, kind[1 - t]);'),
+ ('breeder-wrong-option-tooltip', UI[0], 'snprintf(sub, sizeof sub, "option.%d.tooltipBase", i + 1);', 'snprintf(sub, sizeof sub, "option.%d.tooltipBase", 1);'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

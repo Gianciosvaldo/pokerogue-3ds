@@ -213,7 +213,8 @@ int gc_party_luck(gc_run *run)
  * Same draws as the first step of run-core's pr_run_generate_enemy_items */
 void gc_enemy_pool_thresholds(gc_run *run)
 {
-    const int pool = run->battle_type == BATTLE_TYPE_TRAINER ? 1 : 0;
+    /* battle.battleType === TRAINER picks the trainer pool: a mystery encounter's battle is a MYSTERY_ENCOUNTER battle even with a trainer, so the wild pool */
+    const int pool = run->battle_type == BATTLE_TYPE_TRAINER && !run->me_battle ? 1 : 0;
     const int n_field = run->n_enemy < (run->double_battle ? 2 : 1) ? run->n_enemy : (run->double_battle ? 2 : 1);
     pr_rng *r = &run->run.rng;
     for (int t = 0; t < 6; t++) {
@@ -580,7 +581,7 @@ static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new
 /* What follows the enemy party's generation: passives and stats, the dex's seen flags, the enemy's items, the AI's view, the trainer names.
  * Also run after a custom rematch replaced the wild enemy (gc_custom_build_enemy), so the rematch enemy goes through the same paths. */
 #define GC_ME_RANDOM_ITEMS (-2)
-static void finish_party(gc_run *run, const gc_item *given, int n_given)
+static void finish_party_ex(gc_run *run, const gc_item *given, int n_given, bool own_holders)
 {
     gc_internal *in = gc_int(run);
     for (int i = 0; i < run->n_enemy; i++) {
@@ -612,7 +613,7 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
         for (int k = 0; k < n_given && run->n_enemy_items < GC_MAX_ITEMS; k++) {
             gc_item *it = &run->enemy_items[run->n_enemy_items++];
             *it = given[k];
-            it->pokemon_id = run->enemy[0].b.id;
+            if (!own_holders) it->pokemon_id = run->enemy[0].b.id;
             it->detached = false;
             it->virtual_stack = 0;
             it->type_ref = 0;
@@ -655,6 +656,8 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
     gc_trainer_names(run);
 }
 
+static void finish_party(gc_run *run, const gc_item *given, int n_given) { finish_party_ex(run, given, n_given, false); }
+
 void gc_enemy_finish_party(gc_run *run) { finish_party(run, NULL, -1); }
 
 /* the same for the party of an initBattleWithEnemyConfig whose configs name no items: the ordinary item rolls, then the stats made again */
@@ -662,6 +665,7 @@ void gc_enemy_finish_party_me(gc_run *run) { finish_party(run, NULL, GC_ME_RANDO
 
 /* the same for an encounter whose EnemyPokemonConfig names the first Pokemon's held items (modifierConfigs) */
 void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n) { finish_party(run, items, n); }
+void gc_enemy_finish_party_holders(gc_run *run, const gc_item *items, int n) { finish_party_ex(run, items, n, true); }
 
 /* setNature changes the underlying nature even if a Mint/custom nature keeps
  * getNature (b.nature) unchanged. The scene owns that split and saves both. */

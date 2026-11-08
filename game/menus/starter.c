@@ -32,6 +32,8 @@ static struct {
   uint16_t info_species;
   menu_sprite sprite;
   bool sprite_tried;
+  int sprite_tries;       /* loads of this species' picture that failed (lack of texture memory, most likely); 0 once it is there */
+  float sprite_retry;     /* ms until the next try */
   float sprite_wait;      /* ms until the sprite is loaded: the cursor has to rest first (the SD card is slow) */
   float now;              /* ms since open */
   float sprite_t0;
@@ -90,6 +92,7 @@ static void hide_message(void) {
 static void drop_sprite(void) {
   menu_sprite_free(&S.sprite);
   S.sprite_tried = false;
+  S.sprite_tries = 0;
   S.sprite_wait = SPRITE_DELAY_MS;
 }
 
@@ -324,6 +327,12 @@ bool starter_input(mui_button b) {
   return r != SM_IGNORED;
 }
 
+#define SPRITE_MAX_TRIES 6
+static void sprite_failed(void) {
+  S.sprite_tries++;
+  S.sprite_retry = 400.0f * (float)(1 << (S.sprite_tries < 4 ? S.sprite_tries - 1 : 3));
+}
+
 void starter_update(float dt) {
   if (!S.active) return;
   S.now += dt;
@@ -332,8 +341,21 @@ void starter_update(float dt) {
     S.sprite_wait -= dt;
     if (S.sprite_wait <= 0) {
       S.sprite_tried = true;
-      menu_sprite_load(&S.sprite, &S.info.mon, false);
+      if (!menu_sprite_load(&S.sprite, &S.info.mon, false)) sprite_failed();
       S.sprite_t0 = S.now;
+    }
+  } else if (S.info_species && !S.sprite.atlas && S.sprite_tries > 0 && S.sprite_tries < SPRITE_MAX_TRIES) {
+    /* The picture did not load: the texture memory may have been full (the last run's battle graphics, a sheet of icons). Give back the
+     * icon sheets nobody is drawing and try again, a little later each time; a species with no picture at all gives up after a few tries. */
+    S.sprite_retry -= dt;
+    if (S.sprite_retry <= 0) {
+      mui_reclaim_images();
+      if (menu_sprite_load(&S.sprite, &S.info.mon, false)) {
+        S.sprite_tries = 0;
+        S.sprite_t0 = S.now;
+      } else {
+        sprite_failed();
+      }
     }
   }
 }

@@ -140,6 +140,12 @@ typedef struct {
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
     struct { bool pending; int8_t primary; double base; bool wave; } me_exp;   /* setEncounterExp(primary.id, base, wave) of a fight (Teleporting Hijinks), run by the rewards phase of the won fight */
+    /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
+     * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
+    struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
+    /* a text the encounter says after its shop (PostMysteryEncounterPhase: the outro), queued ahead of the next wave by the encounter's leave */
+    struct { bool pending; int a, b, c; } me_post;
+    uint8_t me_tera_static;   /* trainerAI.instantTeras slots an encounter's config set (setInstantTera) on top of the trainer class's own */
     bool fiery_item;   /* Fiery Fallout: the won fight's rewards phase gives the lead an attack type booster (setEncounterRewards' callback) */
     struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
     /* A football run (gc_football_new): its members evolve by the football rules (gc_mon_football_evolutions). Never set on a classic or
@@ -478,6 +484,16 @@ bool gc_breed_roll(gc_run *run, gc_mon *mon, int *egg_move);   /* onInit's Pokem
 void gc_fiery_execute(gc_run *run, int option);                    /* Fiery Fallout (src/gc_fiery.c) */
 void gc_fiery_init(gc_run *run);                                   /* onInit: the weather turns Sunny */
 void gc_fiery_reward(gc_run *run);
+/* The Expert Pokemon Breeder (src/gc_breeder.c) */
+bool gc_breeder_execute(gc_run *run, int option);
+extern int gc_breeder_generated[3][4];   /* the last fight's three movesets as the constructor made them (the differential compares them) */
+void gc_breeder_reward(gc_run *run);                       /* the won fight's rewards callback (doPostEncounterCleanup) and the eggs */
+bool gc_breeder_game_over(gc_run *run);                    /* onGameOver: true = the run goes on */
+bool gc_breeder_picks(const gc_run *run, int out[3]);      /* the three Pokemon onInit offers (storage indexes), the ones allowed in battle with the least friendship */
+void gc_breeder_eggs(const gc_mon *m, int *commons, int *rares);
+void gc_breeder_party_species(const gc_run *run, int out[3]);
+void gc_breeder_outro(gc_run *run, const gc_rphase *p);
+void gc_enemy_finish_party_holders(gc_run *run, const gc_item *items, int n);   /* as _items, each item keeps the holder it names */
 int gc_fiery_primary(const gc_run *run);                           /* the third option's primary Pokemon (a storage index), -1 without */
 bool gc_fiery_option_ok(const gc_run *run);
 void gc_me_apply_damage(gc_mon *m, int damage);                    /* applyDamageToPokemon */
@@ -532,4 +548,5 @@ bool gc_lure_count(gc_run *run,int *count);
 int gc_lure_apply(gc_run *run,const gc_offer *o,const char **why);
 int gc_soothe_add(gc_run *run,int storage);
 bool gc_soothe_battle_gain(gc_run *run,int storage);
+bool gc_soothe_friendship(gc_run *run,int storage,int base);   /* Pokemon.addFriendship(base), positive: the Soothe Bell's multiplier, then the candy bar */
 int gc_soothe_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);

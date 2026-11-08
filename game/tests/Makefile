@@ -310,6 +310,14 @@ build/bgmtest: $(BGM_SRCS)
 bgmtest: build/bgmtest
 .PHONY: bgmtest
 
+# the menus' image cache rules (menus/img_cache.c) against fake loads: a failed load is not "missing", idle icon sheets are given back
+# make img_cache_test && build/img_cache_test
+build/img_cache_test: img_cache_test.c ../menus/img_cache.c ../menus/img_cache.h
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../menus -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined img_cache_test.c ../menus/img_cache.c -o $@
+img_cache_test: build/img_cache_test
+.PHONY: img_cache_test
+
 # the profile transaction owner (profile_tx.c over system_data.c and custom_store.c, real game-core gacha and the real save.c) under fault
 # injection; make profile_tx_test && build/profile_tx_test [fuzz scenarios]
 PTX_SRCS := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c $(CORE_SRCS)

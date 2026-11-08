@@ -1,4 +1,5 @@
 #include "football_live_systems.h"
+#include "football_goal.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -148,6 +149,33 @@ int main(void)
     }
     assert(good_short>tries*8/10 && good_short<tries && good_long>tries/10 && good_long<tries*6/10 && good_short>good_long+tries/5);
     printf("special: fg 32yd %u/%u, 60yd %u/%u\n",good_short,tries,good_long,tries);
+
+    /* The goal posts: a kick is aimed at the plane the stadium draws the posts on (football_goal.h), a good one ends between the uprights and a miss
+     * outside them, to either side. */
+    {
+        unsigned good=0,wide=0,blocked=0,defended=0;bool above=false,below=false;
+        for(uint32_t seed=1;seed<=300;++seed){
+            const bool human_kicks=seed%3!=0; /* every third kick is the CPU's, aimed at the other end */
+            if(human_kicks){begin(seed,FB_HOME,90,10,4);assert(football_live_special(&m,FB_SPECIAL_FIELD_GOAL));}
+            else{begin(seed,FB_AWAY,88,10,4);assert(football_live_defend(&m,FB_DEF_MAN) && m.special==FB_SPECIAL_FIELD_GOAL);}
+            float to_x=0,to_y=0;bool aimed=false;unsigned guard=0;
+            while(m.phase!=FB_LIVE_DEAD && m.phase!=FB_LIVE_END){
+                assert(++guard<4000);
+                FootballLiveInput in={.receiver=-1};
+                if(m.phase==FB_LIVE_SET && human_kicks)in.pressed=FB_LIVE_ACTION;
+                football_live_tick(&m,16,in);
+                if(!aimed && m.special==FB_SPECIAL_FIELD_GOAL && m.flying){aimed=true;to_x=m.to_x;to_y=m.to_y;}
+            }
+            if(!aimed){assert(m.event==FB_EVENT_BLOCKED);++blocked;continue;}
+            assert(fabsf(to_x-(human_kicks?120.0f-FB_GOAL_POST_INSET:FB_GOAL_POST_INSET))<.001f);
+            const float off=fabsf(to_y-FB_GOAL_MIDDLE);
+            defended+=!human_kicks;
+            if(m.event==FB_EVENT_FIELD_GOAL){assert(off<FB_GOAL_HALF_WIDTH);++good;}
+            else{assert(m.event==FB_EVENT_FIELD_GOAL_MISSED && off>FB_GOAL_HALF_WIDTH);++wide;above|=to_y>FB_GOAL_MIDDLE;below|=to_y<FB_GOAL_MIDDLE;}
+        }
+        assert(good>100 && wide>5 && above && below && defended>20);
+        printf("special: %u good kicks split the posts, %u missed outside them (both sides), %u blocked\n",good,wide,blocked);
+    }
 
     /* A field goal as the CPU's defender: the human steers a rusher and can dive at the kicker. A rush through the line
      * almost never gets there in time, but the kick always resolves and a block is possible. */

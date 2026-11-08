@@ -10,13 +10,18 @@
 
 #include <citro2d.h>
 
+#include "img_cache.h"
 #include "pak.h"
 #include "snd.h"
 
 static uint32_t g_now;
 static float g_now_frac;
 
+static void img_ready(void);
+static bool g_img_ready;
+
 void mui_tick(float dt_ms) {
+  if (g_img_ready) imgc_tick();
   g_now_frac += dt_ms;
   uint32_t whole = (uint32_t)g_now_frac;
   g_now += whole;
@@ -27,39 +32,41 @@ uint32_t mui_now(void) { return g_now; }
 
 /* ------------------------------------------------------------------ images */
 
-#define IMG_SLOTS 96
-typedef struct {
-  char key[64];
-  rr_atlas* atlas; /* NULL + tried = missing */
-  bool tried;
-} img_slot;
-static img_slot g_imgs[IMG_SLOTS];
+/* The cache itself is img_cache.c (its rules are tested on the host): a key the pack lacks is remembered as missing, a load that failed for
+ * lack of texture memory is not, and idle icon sheets are freed to make room. This file only supplies the loads. */
+static char* pack_key(char* out, size_t n, const char* key) {
+  snprintf(out, n, "images/%s", key);
+  return out;
+}
+static rr_atlas* img_load(const char* key) {
+  char k[96];
+  return rr_atlas_load_key(pack_key(k, sizeof k, key));
+}
+static void img_unload(rr_atlas* a) { rr_atlas_free(a); }
+static bool img_exists(const char* key) {
+  char k[96];
+  pak_entry e;
+  return pak_find(NULL, pack_key(k, sizeof k, key), &e);
+}
+static void img_ready(void) {
+  if (g_img_ready) return;
+  static const imgc_ops ops = {img_load, img_unload, img_exists};
+  imgc_init(&ops);
+  g_img_ready = true;
+}
 
 static rr_atlas* img_get(const char* key) {
-  int free_i = -1;
-  for (int i = 0; i < IMG_SLOTS; i++) {
-    if (g_imgs[i].tried && !strcmp(g_imgs[i].key, key)) return g_imgs[i].atlas;
-    if (!g_imgs[i].tried && free_i < 0) free_i = i;
-  }
-  if (free_i < 0) { /* full: drop everything (screens reload what they use) */
-    mui_unload_all();
-    free_i = 0;
-  }
-  img_slot* s = &g_imgs[free_i];
-  snprintf(s->key, sizeof s->key, "%s", key);
-  char k[96];
-  snprintf(k, sizeof k, "images/%s", key);
-  s->atlas = rr_atlas_load_key(k);
-  s->tried = true;
-  return s->atlas;
+  img_ready();
+  return imgc_get(key);
 }
 
 void mui_unload_all(void) {
-  for (int i = 0; i < IMG_SLOTS; i++) {
-    rr_atlas_free(g_imgs[i].atlas);
-    memset(&g_imgs[i], 0, sizeof g_imgs[i]);
-  }
+  if (g_img_ready) imgc_clear();
 }
+
+int mui_reclaim_images(void) { return g_img_ready ? imgc_reclaim() : 0; }
+
+const char* mui_image_failure(unsigned* count) { return g_img_ready ? imgc_last_failure(count) : NULL; }
 
 const rr_frame* mui_frame(const char* key, const char* frame) {
   rr_atlas* a = img_get(key);
