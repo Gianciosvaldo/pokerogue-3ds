@@ -154,10 +154,13 @@ static void random_system(gc_system* sys, int n) {
 
 /* a run that takes the team: game-core's own verdict on it */
 static gc_run RUN;
-static bool core_takes(const gc_system* sys, const gc_starter* team, int n, const char** why) {
-  gc_run_new(&RUN, GAME_MODES_CLASSIC, "starterdatatestseed00001", 7);
+static bool core_takes_in(const gc_system* sys, int mode, const gc_starter* team, int n, const char** why) {
+  gc_run_new(&RUN, mode, "starterdatatestseed00001", 7);
   RUN.sys = (gc_system*)sys;
   return gc_run_set_starters(&RUN, team, n, why);
+}
+static bool core_takes(const gc_system* sys, const gc_starter* team, int n, const char** why) {
+  return core_takes_in(sys, GAME_MODES_CLASSIC, team, n, why);
 }
 
 /* ------------------------------------------------------------------ system data on the SD card */
@@ -284,7 +287,7 @@ static void test_new_save(void) {
     }
   gc_starter team[6];
   const char* why = NULL;
-  CHECK(ss_team(&S1, pick, k, team, &why), "a legal team: %s", why ? why : "");
+  CHECK(ss_team(&S1, GAME_MODES_CLASSIC, pick, k, team, &why), "a legal team: %s", why ? why : "");
   for (int i = 0; i < k; i++) {
     CHECK(team[i].species == pick[i] && team[i].form == 0 && team[i].ability_index == 0, "member %d", i);
     CHECK(team[i].tera_type == -1 && !team[i].passive && !team[i].shiny && team[i].pokerus==rotating_carrier(pick[i]), "member %d defaults", i);
@@ -297,15 +300,15 @@ static void test_new_save(void) {
 
   /* what is not a team */
   uint16_t two[2] = {pick[0], pick[0]};
-  CHECK(!ss_team(&S1, two, 2, team, &why), "the same species twice");
-  CHECK(!ss_team(&S1, pick, 0, team, &why) && !strcmp(why, "starterSelectUiHandler:invalidParty"), "an empty team");
+  CHECK(!ss_team(&S1, GAME_MODES_CLASSIC, two, 2, team, &why), "the same species twice");
+  CHECK(!ss_team(&S1, GAME_MODES_CLASSIC, pick, 0, team, &why) && !strcmp(why, "starterSelectUiHandler:invalidParty"), "an empty team");
   uint16_t seven[7];
   for (int i = 0; i < 7; i++) seven[i] = pick[0];
-  CHECK(!ss_team(&S1, seven, 7, team, &why), "seven");
+  CHECK(!ss_team(&S1, GAME_MODES_CLASSIC, seven, 7, team, &why), "seven");
   uint16_t unknown[1] = {150}; /* Mewtwo: a starter, never caught in a new save */
-  CHECK(!ss_team(&S1, unknown, 1, team, &why), "a species the dex lacks: %s", why ? why : "");
+  CHECK(!ss_team(&S1, GAME_MODES_CLASSIC, unknown, 1, team, &why), "a species the dex lacks: %s", why ? why : "");
   unknown[0] = 2; /* Ivysaur: not a starter */
-  CHECK(!ss_team(&S1, unknown, 1, team, &why), "not a starter species");
+  CHECK(!ss_team(&S1, GAME_MODES_CLASSIC, unknown, 1, team, &why), "not a starter species");
   gc_starter one;
   CHECK(!ss_starter(&S1, 0, &one) && !ss_starter(&S1, 2, &one), "ss_starter of a non-starter");
 }
@@ -323,7 +326,7 @@ static void test_everything_unlocked(void) {
   for (int i = 0; i < n; i++) {
     gc_starter team[6];
     uint16_t sp = list[i].species;
-    if (!ss_team(&S1, &sp, 1, team, &why)) {
+    if (!ss_team(&S1, GAME_MODES_CLASSIC, &sp, 1, team, &why)) {
       refused++;
       if (refused < 10) printf("  refused alone: species %u: %s\n", sp, why ? why : "?");
       continue;
@@ -343,14 +346,50 @@ static void test_everything_unlocked(void) {
     if (list[i].cost >= 8 && !dear) dear = list[i].species;
   }
   gc_starter team[6];
-  CHECK(nc == 6 && ss_team(&S1, cheap, 6, team, &why), "six cheap species");
+  CHECK(nc == 6 && ss_team(&S1, GAME_MODES_CLASSIC, cheap, 6, team, &why), "six cheap species");
   uint16_t mix[6];
   for (int i = 0; i < 5; i++) mix[i] = cheap[i];
   mix[5] = dear;
   double total = 0;
   for (int i = 0; i < 6; i++) total += gc_starter_value(&S1, mix[i]);
-  CHECK(total > 10 ? !ss_team(&S1, mix, 6, team, &why) : ss_team(&S1, mix, 6, team, &why), "total %.1f against the budget", total);
+  CHECK(total > 10 ? !ss_team(&S1, GAME_MODES_CLASSIC, mix, 6, team, &why) : ss_team(&S1, GAME_MODES_CLASSIC, mix, 6, team, &why), "total %.1f against the budget", total);
   if (total > 10) CHECK(!strcmp(why, "starterSelectUiHandler:cost"), "the reason is the cost: %s", why);
+
+  /* the budget is the run's mode's (getRunValueLimit): 15 in Endless and Spliced Endless, 10 elsewhere. A team between 10 and 15
+   * points is a legal Endless team; ss_team once held every mode to Classic's 10 and refused it at Begin. */
+  uint16_t mid[6];
+  int nm = 0;
+  double mid_total = 0;
+  for (int i = 0; i < n && nm < 6; i++) {
+    const double c = gc_starter_value(&S1, list[i].species);
+    if (c < 3 || mid_total + c > 15 + 1e-9) continue;
+    mid[nm++] = list[i].species;
+    mid_total += c;
+    if (mid_total > 10 + 1e-9) break;
+  }
+  CHECK(nm >= 2 && mid_total > 10 && mid_total <= 15, "a team of %d between 10 and 15 points exists (%.1f)", nm, mid_total);
+  gc_starter mid_team[6];
+  for (int i = 0; i < nm; i++) CHECK(ss_starter(&S1, mid[i], &mid_team[i]), "ss_starter %u", mid[i]);
+  const int modes[] = {GAME_MODES_CLASSIC, GAME_MODES_ENDLESS, GAME_MODES_SPLICED_ENDLESS, GAME_MODES_DAILY, GAME_MODES_CHALLENGE};
+  for (int m = 0; m < 5; m++) {
+    const bool endless = modes[m] == GAME_MODES_ENDLESS || modes[m] == GAME_MODES_SPLICED_ENDLESS;
+    const char* w = NULL;
+    const bool ok = ss_team(&S1, modes[m], mid, nm, team, &w);
+    CHECK(ok == endless, "%.1f points in mode %d: ss_team %s", mid_total, modes[m], ok ? "takes it" : "refuses it");
+    if (!ok) CHECK(w && !strcmp(w, "starterSelectUiHandler:cost"), "mode %d: the reason is the cost: %s", modes[m], w ? w : "?");
+    /* game-core's verdict on the same team in the same mode is the same one */
+    CHECK(core_takes_in(&S1, modes[m], mid_team, nm, &w) == ok, "mode %d: game-core and ss_team agree on %.1f points", modes[m], mid_total);
+  }
+  /* and 15 is still a limit in Endless: six species of 3 points or more are over it */
+  uint16_t over[6];
+  int no = 0;
+  for (int i = 0; i < n && no < 6; i++)
+    if (gc_starter_value(&S1, list[i].species) >= 3) over[no++] = list[i].species;
+  double over_total = 0;
+  for (int i = 0; i < no; i++) over_total += gc_starter_value(&S1, over[i]);
+  CHECK(no == 6 && over_total > 15, "six species over 15 points exist (%.1f)", over_total);
+  CHECK(!ss_team(&S1, GAME_MODES_ENDLESS, over, no, team, &why) && !strcmp(why, "starterSelectUiHandler:cost"), "Endless still refuses %.1f points", over_total);
+  CHECK(!ss_team(&S1, GAME_MODES_SPLICED_ENDLESS, over, no, team, &why), "Spliced Endless still refuses %.1f points", over_total);
 }
 
 /* The known disagreement with upstream, on its own: a prevolution reached only through an evolved form with a form of its own. */
@@ -411,7 +450,7 @@ static void test_random_systems(int systems) {
       const char* why = NULL;
       uint16_t sp = list[i].species;
       alone++;
-      if (!ss_team(&S1, &sp, 1, team, &why) || !core_takes(&S1, team, 1, &why)) {
+      if (!ss_team(&S1, GAME_MODES_CLASSIC, &sp, 1, team, &why) || !core_takes(&S1, team, 1, &why)) {
         refused++;
         if (refused < 12)
           printf("  system %d: species %u (%s) listed but refused alone: %s (caught %llx, full unlocks %llx, %d forms)\n", s, sp,
@@ -436,7 +475,7 @@ static void test_random_systems(int systems) {
       gc_starter team[6];
       const char* why = NULL;
       teams++;
-      if (!ss_team(&S1, pick, k, team, &why) || !core_takes(&S1, team, k, &why)) {
+      if (!ss_team(&S1, GAME_MODES_CLASSIC, pick, k, team, &why) || !core_takes(&S1, team, k, &why)) {
         refused++;
         if (refused < 12) printf("  system %d: a team of %d within the budget was refused: %s\n", s, k, why ? why : "?");
       }
@@ -574,7 +613,7 @@ static void check_cycles_for(gc_system* sys, uint16_t id, bool deep) {
       if (deep || k == 0) {
         uint16_t one = id;
         gc_starter team[6];
-        CHECK(ss_team(sys, &one, 1, team, &why) && core_takes(sys, team, 1, &why), "species %u form %d does not start a run: %s", id, seen[k], why ? why : "?");
+        CHECK(ss_team(sys, GAME_MODES_CLASSIC, &one, 1, team, &why) && core_takes(sys, team, 1, &why), "species %u form %d does not start a run: %s", id, seen[k], why ? why : "?");
         CHECK(team[0].form == seen[k], "the team carries the form");
       }
     }
@@ -597,7 +636,7 @@ static void check_cycles_for(gc_system* sys, uint16_t id, bool deep) {
     if (deep) {
       uint16_t one = id;
       gc_starter team[6];
-      CHECK(ss_team(sys, &one, 1, team, &why) && core_takes(sys, team, 1, &why) && team[0].female == !was, "species %u: the other gender starts a run: %s", id, why ? why : "?");
+      CHECK(ss_team(sys, GAME_MODES_CLASSIC, &one, 1, team, &why) && core_takes(sys, team, 1, &why) && team[0].female == !was, "species %u: the other gender starts a run: %s", id, why ? why : "?");
     }
     CHECK(ss_cycle_gender(sys, id) && ss_starter(sys, id, &t) && t.female == was, "species %u: and back", id);
     sys->starters[id] = saved;

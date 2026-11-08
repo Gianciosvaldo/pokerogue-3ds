@@ -353,13 +353,15 @@ static void on_exit_cb(void* arg) {
   R.exited++;
 }
 
-static bool open_screen(const char* notice) {
+static bool open_screen_in(const char* notice, int mode) {
   memset(&R, 0, sizeof R);
   g_screen = NULL;g_option_cb=NULL;
   reset_logs();
-  const sh_events ev = {on_start, on_exit_cb, NULL};
+  sh_events ev = {on_start, on_exit_cb, NULL};
+  ev.mode = mode;
   return sh_open(&SYS, notice, &ev);
 }
+static bool open_screen(const char* notice) { return open_screen_in(notice, GAME_MODES_CLASSIC); }
 static void press(mui_button b) {
   if(g_option_cb) {
     if(b==MB_UP||b==MB_DOWN)g_option_cursor=(g_option_cursor+(b==MB_UP?g_option_count-1:1))%g_option_count;
@@ -379,11 +381,12 @@ static void draw(void) {
   if(g_option_cb)for(int i=0;i<g_option_count;i++)log_add(g_drawn,g_option_labels[i]);
 }
 
-static bool core_takes(const gc_starter* team, int n, const char** why) {
-  gc_run_new(&RUN, GAME_MODES_CLASSIC, "starteruitestseed0000001", 7);
+static bool core_takes_in(int mode, const gc_starter* team, int n, const char** why) {
+  gc_run_new(&RUN, mode, "starteruitestseed0000001", 7);
   RUN.sys = &SYS;
   return gc_run_set_starters(&RUN, team, n, why);
 }
+static bool core_takes(const gc_starter* team, int n, const char** why) { return core_takes_in(GAME_MODES_CLASSIC, team, n, why); }
 
 static double team_value(const gc_starter* team, int n) {
   double v = 0;
@@ -725,6 +728,46 @@ static void test_budget(void) {
   CHECK(core_takes(R.team, R.n_team, &why), "game-core takes it: %s", why ? why : "");
 }
 
+/* Endless and Spliced Endless have a 15 point budget (getRunValueLimit). The screen showed it, but the host checked the confirmed team
+ * against Classic's 10 and refused every team between 10 and 15 points at Begin ("invalid party"), so the extra points could not be
+ * spent. Here the team is built through the screen, over 10 points, and has to start in the mode that gave the budget. */
+static void test_budget_endless(void) {
+  const int modes[] = {GAME_MODES_CLASSIC, GAME_MODES_ENDLESS, GAME_MODES_SPLICED_ENDLESS};
+  for (int m = 0; m < 3; m++) {
+    const int mode = modes[m];
+    const int budget = mode == GAME_MODES_CLASSIC ? 10 : 15;
+    gc_system_init_defaults(&SYS);
+    for (int i = 0; i < gc_starter_cost_count; i++) {
+      const uint16_t id = gc_starter_costs[i].id;
+      SYS.dex[id].caught_attr = gc_species_full_unlocks_data(id);
+      SYS.dex[id].nature_attr = 0x3FFFFFEu;
+      SYS.starters[id].ability_attr = 7;
+    }
+    CHECK(open_screen_in(NULL, mode), "mode %d: open", mode);
+    draw();
+    char want[16];
+    snprintf(want, sizeof want, "0/%d", budget);
+    CHECK(drawn(want), "mode %d: an empty team costs %s", mode, want);
+    static sm_entry list[SS_MAX_ENTRIES];
+    const int n = ss_list(&SYS, list, SS_MAX_ENTRIES, NULL);
+    for (int rounds = 0; rounds < n; rounds++) { /* A, A on every species in turn: the team fills up to the budget */
+      press(MB_ACTION);
+      press(MB_ACTION);
+      press(MB_RIGHT);
+    }
+    press(MB_MENU);
+    tick(2500);
+    press(MB_ACTION);
+    CHECK(R.started == 1, "mode %d: the team begins (%d starts)", mode, R.started);
+    const double v = R.started ? team_value(R.team, R.n_team) : 0;
+    printf("  mode %d: %d members, %g of %d points\n", mode, R.n_team, v, budget);
+    CHECK(v <= budget + 1e-9, "mode %d: its cost %g is within %d", mode, v, budget);
+    if (mode != GAME_MODES_CLASSIC) CHECK(v > 10 + 1e-9, "mode %d: the team spends more than Classic's 10 points (%g)", mode, v);
+    const char* why = NULL;
+    CHECK(core_takes_in(mode, R.team, R.n_team, &why), "mode %d: game-core takes it: %s", mode, why ? why : "");
+  }
+}
+
 /* random buttons on random systems: nothing breaks, and every team handed over starts a run */
 static void test_fuzz(int sessions) {
   long presses = 0, teams = 0, exits = 0;
@@ -797,7 +840,7 @@ static void test_customization(void) {
   draw();CHECK(drawn("Luck: D (0/14)"),"empty team luck shown");
   /* Confirmed team and preview both read the stored choices. */
   uint16_t id=1;gc_starter team[6];const char* why=NULL;
-  CHECK(ss_team(&SYS,&id,1,team,&why)&&team[0].moves[0]==chosen&&team[0].nature==3&&team[0].variant==2,"actual starting team retains choices");
+  CHECK(ss_team(&SYS,GAME_MODES_CLASSIC,&id,1,team,&why)&&team[0].moves[0]==chosen&&team[0].nature==3&&team[0].variant==2,"actual starting team retains choices");
   CHECK(core_takes(team,1,&why),"customized team accepted by real game-core");
   static unsigned char profile[1024*1024];static gc_system restored;
   size_t bytes=gc_system_save(&SYS,profile,sizeof profile);
@@ -1076,6 +1119,7 @@ int main(int argc, char** argv) {
   test_notice();
   test_long_notice();
   test_budget();
+  test_budget_endless();
   test_fuzz(sessions);
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

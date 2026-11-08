@@ -361,7 +361,7 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
   return true;
 }
 
-bool ss_team(const gc_system* sys, const uint16_t* species, int n, gc_starter* out, const char** why) {
+bool ss_team(const gc_system* sys, int mode, const uint16_t* species, int n, gc_starter* out, const char** why) {
   const char* dummy;
   if (!why) why = &dummy;
   gc_starter t[6];
@@ -385,7 +385,7 @@ bool ss_team(const gc_system* sys, const uint16_t* species, int n, gc_starter* o
     }
     total += cost;
   }
-  if (total > (double)gc_starter_budget(GAME_MODES_CLASSIC) + 1e-9) {
+  if (total > (double)gc_starter_budget(mode) + 1e-9) {
     *why = "starterSelectUiHandler:cost";
     return false;
   }

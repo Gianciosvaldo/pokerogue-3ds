@@ -48,13 +48,18 @@ static int rnd(void* ctx, int n) {
   return n > 0 ? (int)(H.rng % (uint32_t)n) : 0;
 }
 
+/* the game mode whose starter budget this screen shows and enforces: the caller's (Classic when it names none) */
+static int game_mode(void) {
+  return H.ev.mode >= GAME_MODES_CLASSIC && H.ev.mode <= GAME_MODES_SPLICED_ENDLESS ? H.ev.mode : GAME_MODES_CLASSIC;
+}
+
 /* The team was confirmed: game-core's rules decide whether it is a team. The screen only offers what the dex holds, so a refusal
  * means the dex and game-core disagree about a default (the message says what game-core said). */
 static bool on_start(void* ctx, const uint16_t* species, int n) {
   (void)ctx;
   gc_starter team[6];
   const char* why = NULL;
-  if (!ss_team(H.sys, species, n, team, &why)) {
+  if (!ss_team(H.sys, game_mode(), species, n, team, &why)) {
     char text[200], base[96];
     i18n_t(base, sizeof base, "starterSelectUiHandler:invalidParty", NULL);
     snprintf(text, sizeof text, "%s (%s)", base, why ? why : "");
@@ -421,8 +426,7 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   if (H.n == 0) return false;
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
-  const int mode=ev->mode>=GAME_MODES_CLASSIC&&ev->mode<=GAME_MODES_SPLICED_ENDLESS?ev->mode:GAME_MODES_CLASSIC;
-  const starter_args args = {H.entries, H.n, gc_starter_budget(mode), H.all, H.n_all};
+  const starter_args args = {H.entries, H.n, gc_starter_budget(game_mode()), H.all, H.n_all};
   const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle};
   starter_open(&args, &events);
   ui_set(&g_screen);
