@@ -32,3 +32,14 @@ Reproduce tools/fell-stinger-diff.sh pinnedupstream2000 fourseeds; FELL_STINGER_
 |n8tOhc/fell-stinger-2000-777.txt|`5ac2979638b5093b84c4b84c1bc0d88a948c7de506d7770e6574fb1a2ff0cd84`|
 |n8tOhc/fell-stinger-2000-9001.txt|`4da1e65a8fe9a496ab69d50e4363522bb62f27d1294a965652abc48d2076cb71`|
 |ddknl6/fell-stinger-20-777.txt|`66aa9005da63c4fe7d70321b03e203b5b2577c470c706d8fd1867eecee5457b1`|
+
+## 2026-11-08: "Fell Stinger only raises Attack by 1" (lorenzo, real 3DS)
+
+The engine was right: the 4-seed differential above still gives 8000/8000 with Attack +3 applied 1355/1350/1344/1362 times.
+The screen was wrong: `PR_EV_STAT_STAGES` carried only the direction, so `game/source/battle_events.c` made every stat
+change ±1 and the banner read "ATK +1" (Swords Dance too). The event now carries `stat_stages_applied[]` (the stages each
+stat really moved, after Simple/Contrary and the ±6 clamp) and the banner uses it; `game/tests/stat_banner_test` checks
+Fell Stinger +3, Swords Dance +2, +1 at the cap, a −2 drop and a mixed event. Re-running `tools/fell-stinger-diff.sh`
+needed one comparator print repair: `tests/growth-replay.inc` printed the double `pr_get_effective_stat` with `%d`
+(garbage, every case a parse mismatch); it now prints `%.17g` like `effective-stat-item-replay.inc`. The same `%d` print
+is still in `speed-boost-replay.inc`, `temporary-turn-replay.inc` and `trainer-switch-replay.inc` (not touched here).

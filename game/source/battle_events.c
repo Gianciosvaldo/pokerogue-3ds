@@ -380,7 +380,9 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       case PR_EV_STAT_STAGES:
         if (!single) break;
         for (int s = STAT_ATK; s <= STAT_EVA; s++)
-          if (ev->value & (1 << s)) PUT(.type = BEV_STAT_STAGES, .battler = b, .a = s, .b = ev->id ? 1 : -1);
+          /* the stages the stat really moved (Fell Stinger +3, Swords Dance +2), not just the direction */
+          if (ev->value & (1 << s) && ev->stat_stages_applied[s - 1])
+            PUT(.type = BEV_STAT_STAGES, .battler = b, .a = s, .b = ev->stat_stages_applied[s - 1]);
         break;
       case PR_EV_ABILITY_SHOW:
         if(single){

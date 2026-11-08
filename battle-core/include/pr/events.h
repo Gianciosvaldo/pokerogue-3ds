@@ -42,7 +42,9 @@ typedef enum {
      * damage number shows it) or status damage (value < 0): battler */
     PR_EV_HP,
     /* Stat stage arrows (StatStageChangePhase): battler; value = a bit per Stat changed;
-     * id = 1 rising, 0 falling */
+     * id = 1 rising, 0 falling; stat_stages_applied[stat - 1] = the stages that stat actually
+     * moved (getAppliedChanges: after Simple/Contrary and the -6..6 clamp; Fell Stinger +3,
+     * Swords Dance +2, a +2 raise from +5 gives +1) */
     PR_EV_STAT_STAGES,
     /* The ability bar (ShowAbilityPhase / HideAbilityPhase): battler; id = AbilityId;
      * value = 1 when it is the passive. HIDE has battler -1 */
@@ -110,6 +112,7 @@ typedef struct pr_event {
     bool actor_ids_known;      /* explicit animation constructor references, including benches */
     uint32_t actor_id, target_id;
     int32_t value;             /* see the type */
+    int8_t stat_stages_applied[7]; /* PR_EV_STAT_STAGES: signed stages moved per Stat (index stat - 1), 0 elsewhere */
     pr_msg msg;                /* PR_EV_TEXT */
     uint8_t weather, terrain;  /* WeatherType and TerrainType after the event */
     pr_event_field field[4];   /* by BattlerIndex, after the event */

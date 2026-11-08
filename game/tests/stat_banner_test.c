@@ -76,7 +76,89 @@ static void test_departed_ability_and_promotion(const pr_battle *bt){
  n=be_convert_events(bt,events,1,false,&view,out,8);assert(n==0&&view.present[0]&&!view.present[2]);
 }
 
+/* The stat stage banner shows the stages a stat really moved. The event used to carry only the direction, so the
+ * converter made every change +1 or -1: Fell Stinger's +3 after a KO read "ATK +1" (lorenzo's real-3DS report). */
+static int stage_events(const bs_battle* b, int battler, int stat, int* last_delta) {
+  static bv_event out[256];
+  bv_mon sp = {0}, se = {0};
+  be_mon(&b->bt, b->bt.field[0], &sp);
+  if (b->bt.field[2]) be_mon(&b->bt, b->bt.field[2], &se);
+  int n = be_convert(&b->bt, &b->eng, &sp, &se, out, 256), found = 0;
+  for (int i = 0; i < n; i++)
+    if (out[i].type == BEV_STAT_STAGES && out[i].battler == battler && out[i].a == stat) {
+      found++;
+      *last_delta = out[i].b;
+    }
+  return found;
+}
+
+static void test_applied_stages(void) {
+  static bs_battle b;
+  int delta = 0;
+  /* Fell Stinger KO: the user's Attack +3 (PostVictoryStatStageChangeAttr, stages 3) */
+  {
+    int pm[] = {MOVE_ID_FELL_STINGER}, em[] = {MOVE_ID_SPLASH};
+    bs_begin(&b, BIOME_ID_GRASS, 5, "stat_banner_fell_stinger");
+    bs_add(&b, 0, SPECIES_ID_BEEDRILL, 100, pm, 1);
+    bs_add(&b, 1, SPECIES_ID_MAGIKARP, 2, em, 1);
+    bs_turn_fight(&b, 0);
+    assert(b.bt.party[1][0]->hp == 0);
+    assert(b.bt.party[0][0]->stat_stages[STAT_ATK - 1] == 3);
+    assert(stage_events(&b, 0, STAT_ATK, &delta) == 1 && delta == 3);
+  }
+  /* Swords Dance from +5: the stage moves +1 to the cap, the banner says +1 */
+  {
+    int pm[] = {MOVE_ID_SWORDS_DANCE}, em[] = {MOVE_ID_SPLASH};
+    bs_begin(&b, BIOME_ID_GRASS, 5, "stat_banner_cap");
+    pr_pokemon* p = bs_add(&b, 0, SPECIES_ID_SCIZOR, 50, pm, 1);
+    bs_add(&b, 1, SPECIES_ID_MAGIKARP, 50, em, 1);
+    p->stat_stages[STAT_ATK - 1] = 5;
+    bs_turn_fight(&b, 0);
+    assert(p->stat_stages[STAT_ATK - 1] == 6);
+    assert(stage_events(&b, 0, STAT_ATK, &delta) == 1 && delta == 1);
+  }
+  /* a drop: Screech takes the foe's Defense -2 and the banner shows -2 */
+  {
+    int pm[] = {MOVE_ID_SCREECH}, em[] = {MOVE_ID_SPLASH};
+    bs_begin(&b, BIOME_ID_GRASS, 5, "stat_banner_drop");
+    bs_add(&b, 0, SPECIES_ID_SCIZOR, 50, pm, 1);
+    pr_pokemon* foe = bs_add(&b, 1, SPECIES_ID_MAGIKARP, 50, em, 1);
+    bs_turn_fight(&b, 0);
+    if (foe->stat_stages[STAT_DEF - 1] == -2) assert(stage_events(&b, 2, STAT_DEF, &delta) == 1 && delta == -2);
+    else assert(stage_events(&b, 2, STAT_DEF, &delta) == 0); /* Screech missed (85% accuracy): no banner */
+  }
+  /* hand-made: one event raising two stats by different amounts gives one banner each with its own stages; a stat in the
+   * mask with nothing applied gives none */
+  {
+    be_view view;
+    bv_event out[8];
+    pr_event ev;
+    memset(&view, 0, sizeof view);
+    memset(&ev, 0, sizeof ev);
+    view.present[0] = true;
+    view.mon[0] = (bv_mon){.species = 212, .hp = 100, .max_hp = 100};
+    ev.type = PR_EV_STAT_STAGES;
+    ev.battler = 0;
+    ev.target = -1;
+    ev.id = 1;
+    ev.value = (1 << STAT_ATK) | (1 << STAT_SPATK) | (1 << STAT_SPD);
+    ev.stat_stages_applied[STAT_ATK - 1] = 1;
+    ev.stat_stages_applied[STAT_SPATK - 1] = 2;
+    ev.field[0] = (pr_event_field){.species = 212, .hp = 100, .max_hp = 100, .visible = true, .party_slot = 0};
+    int n = be_convert_events(&b.bt, &ev, 1, false, &view, out, 8), atk = 0, spatk = 0, other = 0;
+    for (int i = 0; i < n; i++) {
+      if (out[i].type != BEV_STAT_STAGES) continue;
+      if (out[i].a == STAT_ATK && out[i].b == 1) atk++;
+      else if (out[i].a == STAT_SPATK && out[i].b == 2) spatk++;
+      else other++;
+    }
+    assert(atk == 1 && spatk == 1 && other == 0);
+  }
+  printf("stat_banner_test: applied stages (Fell Stinger +3, capped +1, drop, mixed event) verified\n");
+}
+
 int main(int argc, char** argv) {
+  test_applied_stages();
   static bs_battle b;
   bs_begin(&b, BIOME_ID_GRASS, 5, "stat_banner_test_seed");
 
@@ -113,10 +195,11 @@ int main(int argc, char** argv) {
   for (int i = 0; i < n_conv; i++) {
     if (out_events[i].type == BEV_STAT_STAGES) {
       saw_stat_stage_event = true;
-      /* battler 0 (player), stat 1 (ATK), stage delta non-zero */
+      /* battler 0 (player), stat 1 (ATK), Swords Dance: +2, the stages it really moved (the banner reads "ATK +2") */
       assert(out_events[i].battler == 0);
       assert(out_events[i].a == STAT_ATK);
-      assert(out_events[i].b != 0);
+      assert(out_events[i].b == 2);
+      assert(b.bt.field[0]->stat_stages[STAT_ATK - 1] == 2);
     }
     if (out_events[i].type == BEV_MESSAGE) {
       saw_text_event = true;
