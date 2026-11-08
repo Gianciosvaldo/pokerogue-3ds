@@ -467,7 +467,7 @@ int main(void)
         assert(gc_achv_progress_of(&S, 72, &h, &n) && h == GYMS - 1 && n == GYMS);
 
         /* the regions: every member of one unlocks it and only it; one short does not */
-        static const int WANT[GC_REGION_COUNT] = {13, 14, 15, 13, 19, 13, 7, 20, 14, 5};   /* gym leaders + Elite Four + Champions */
+        static const int WANT[GC_REGION_COUNT] = {13, 13, 14, 13, 18, 13, 6, 19, 13, 5};   /* gym leaders + Elite Four + one Champion slot */
         for (int r = 0; r < GC_REGION_COUNT; r++) {
             const gc_region *reg = gc_achv_region(r);
             assert(reg && reg->name[0]);
@@ -475,7 +475,7 @@ int main(void)
             if (reg->gym_first)
                 for (int t = reg->gym_first; t <= reg->gym_last; t++) members[nm++] = t;
             for (int i = 0; reg->elite[i]; i++) members[nm++] = reg->elite[i];
-            for (int i = 0; reg->champion[i]; i++) members[nm++] = reg->champion[i];
+            members[nm++] = reg->champion[0];
             assert(nm == WANT[r]);
             assert(strstr(gc_achv_defs[GC_ACHV_REGION_FIRST + r].name, reg->name));   /* the achievement is this region's */
             assert(strstr(gc_achv_defs[GC_ACHV_REGION_FIRST + r].desc, reg->name));
@@ -490,6 +490,18 @@ int main(void)
                 }
                 assert(gc_achv_progress_of(&S, GC_ACHV_REGION_FIRST + r, &h, &n) && n == (uint32_t)nm && h == (uint32_t)(skip < 0 ? nm : nm - 1));
                 assert(!gc_achv_unlocked(&S, GC_ACHV_GRAND_TOUR));
+            }
+        }
+        /* a region's Champion is either of its pair: each one alone completes it, and with neither it is one short */
+        for (int r = 0; r < GC_REGION_COUNT; r++) {
+            const gc_region *reg = gc_achv_region(r);
+            for (int c = -1; reg->champion[c < 0 ? 0 : c]; c++) {
+                fresh();
+                if (reg->gym_first) for (int t = reg->gym_first; t <= reg->gym_last; t++) S.voucher_unlocks[t] = 1;
+                for (int i = 0; reg->elite[i]; i++) S.voucher_unlocks[reg->elite[i]] = 1;
+                if (c >= 0) S.voucher_unlocks[reg->champion[c]] = 1;
+                eval(NULL);
+                assert(gc_achv_unlocked(&S, GC_ACHV_REGION_FIRST + r) == (c >= 0));
             }
         }
         /* Alola and Blueberry have no Gym Leaders: their Elite Four and Champions alone are the whole region */

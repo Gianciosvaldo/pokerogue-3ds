@@ -99,15 +99,15 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Champion Slayer", "Defeat a Champion.", TR, V(GC_VOUCHER_PLUS, 1)},
     {"Champion Collector", "Defeat 5 different Champions.", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Champion of Champions", "Defeat every Champion.", TR, EGG(2)},
-    {"Kanto Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Kanto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Johto Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Johto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Hoenn Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Hoenn.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Sinnoh Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Sinnoh.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Unova Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Unova.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Kalos Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Kalos.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Kanto Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Kanto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Johto Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Johto.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Hoenn Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Hoenn.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Sinnoh Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Sinnoh.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Unova Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Unova.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Kalos Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Kalos.", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Alola Conqueror", "Defeat every Elite Four member and Champion of Alola (it has no Gym Leaders).", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Galar Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Galar.", TR, V(GC_VOUCHER_PREMIUM, 1)},
-    {"Paldea Conqueror", "Defeat every Gym Leader, Elite Four member and Champion of Paldea.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Galar Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Galar.", TR, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Paldea Conqueror", "Defeat every Gym Leader, Elite Four member and the Champion of Paldea.", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Blueberry Conqueror", "Defeat every Elite Four member and Champion of Blueberry (it has no Gym Leaders).", TR, V(GC_VOUCHER_PREMIUM, 1)},
     {"Grand Tour", "Conquer all 10 regions.", TR, EGG(2)},
 };
@@ -168,7 +168,11 @@ static void region_progress(const gc_system *sys, int region, uint32_t *have, ui
     uint32_t h = 0, n = 0;
     if (r->gym_first) h += beaten_in(sys, r->gym_first, r->gym_last, &n);
     for (int i = 0; r->elite[i]; i++, n++) h += beaten(sys, r->elite[i]);
-    for (int i = 0; r->champion[i]; i++, n++) h += beaten(sys, r->champion[i]);
+    /* the Champion is one slot: a run meets one of a region's Champions (a Red/Lance coin), so beating either one counts, as upstream plays it */
+    bool champ = false;
+    for (int i = 0; r->champion[i]; i++) champ = champ || beaten(sys, r->champion[i]);
+    h += champ;
+    n++;
     *have = h;
     *need = n;
 }
