@@ -3842,7 +3842,14 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
         increase |= q->ssc_stages[i] > 0;
         if (applied[i]) moved |= 1 << q->ssc_stat[i];
     }
-    if (moved) pr_event_add(bt, e, PR_EV_STAT_STAGES, q->battler, -1, increase, moved, NULL);
+    if (moved) {
+        /* the screen shows how far each stat moved, not only the direction */
+        pr_event *sev = pr_event_add(bt, e, PR_EV_STAT_STAGES, q->battler, -1, increase, moved, NULL);
+        if (sev)
+            for (int i = 0; i < q->n_ssc; i++)
+                if (q->ssc_stat[i] >= STAT_ATK && q->ssc_stat[i] <= STAT_EVA)
+                    sev->stat_stages_applied[q->ssc_stat[i] - 1] = (int8_t)(sev->stat_stages_applied[q->ssc_stat[i] - 1] + applied[i]);
+    }
     /* queueStatChangeMessages: the supplied callback message, or one per group of
      * equal applied stages (Map.groupBy: in first-seen order), getStatStageChangeDescriptionKey
      * with the stats joined as formatStatsFragment does */
