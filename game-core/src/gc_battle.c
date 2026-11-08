@@ -914,7 +914,7 @@ static bool unfinished_charge_move(int move)
     return !strcmp(kind,"ChargingAttackMove")||!strcmp(kind,"ChargingSelfStatusMove");
 }
 
-/* User-requested encounter policy: unfinished two-turn moves end with the
+/* User-requested encounter policy: unfinished two-turn moves (and a frenzy) end with the
  * encounter. The pinned source preserves them across ordinary waves; retain
  * unrelated queues, stat boosts and history while preventing stale hidden state. */
 static bool cancel_encounter_charges(gc_run *run)
@@ -923,9 +923,16 @@ static bool cancel_encounter_charges(gc_run *run)
     for(int i=0;i<run->n_party;i++){
         pr_pokemon *p=&run->party[i].b;
         bool hidden=pr_find_battler_tag_class(p,PR_TAGCLASS_SEMI_INVULNERABLE)!=NULL;
+        /* A frenzy (Petal Dance, Outrage, Thrash...) ends with the encounter too: the last foe fainting leaves its
+         * next turn queued with no target, which the next wave's first turn cancels in silence (and the frenzy then
+         * ends without its confusion). The tag has turns left, so removing it confuses nobody. */
+        const pr_battler_tag *frenzy=pr_get_battler_tag(p,BATTLER_TAG_TYPE_FRENZY);
+        int frenzy_move=frenzy?frenzy->source_move:-1;
+        if(frenzy&&frenzy->turn_count>0)pr_remove_tag(&run->bt,&run->eng,p,BATTLER_TAG_TYPE_FRENZY);
+        else frenzy_move=-1;
         int keep=0;
         for(int q=0;q<p->n_move_queue;q++)
-            if(!unfinished_charge_move(p->move_queue[q].move))p->move_queue[keep++]=p->move_queue[q];
+            if(!unfinished_charge_move(p->move_queue[q].move)&&p->move_queue[q].move!=frenzy_move)p->move_queue[keep++]=p->move_queue[q];
         p->n_move_queue=(uint8_t)keep;
         for(int k=p->n_tags-1;k>=0;k--){
             const pr_battler_tag *t=&p->tags[k];
