@@ -86,6 +86,26 @@ static void earn_vouchers(FootballCareer *c)
     c->vouchers_regular+=FB_VOUCHER_REGULAR_PER_WIN;
     if(c->wins==FB_PLAYOFF_ROUNDS)c->vouchers_premium+=FB_VOUCHER_PREMIUM_FOR_TITLE;
 }
+/* The match just won, for the football achievements: a title is the seventh round's win. */
+static void earn_achievements(FootballCareer *c)
+{
+    if(!c->profile)return;
+    const unsigned home=c->live.rules.score[FB_HOME],away=c->live.rules.score[FB_AWAY];
+    ++c->achv_wins;
+    if(c->wins==FB_PLAYOFF_ROUNDS)++c->achv_titles;
+    if(away==0)++c->achv_shutouts;
+    if(home>=away+GC_FB_BLOWOUT_MARGIN)++c->achv_blowouts;
+}
+unsigned football_career_flush_achievements(FootballCareer *c)
+{
+    if(!c || !c->profile)return 0;
+    gc_achv_football_won(c->profile,c->achv_wins,c->achv_titles,c->achv_shutouts,c->achv_blowouts);
+    c->achv_wins=c->achv_titles=c->achv_shutouts=c->achv_blowouts=0;
+    char seed[32];snprintf(seed,sizeof seed,"fb%08xr%u",c->seed,c->round);
+    gc_achv_new fresh;gc_achv_evaluate(c->profile,seed,0,&fresh);
+    for(int i=0;i<fresh.n && c->achv_new.n<GC_ACHV_MAX_NEW;++i)c->achv_new.id[c->achv_new.n++]=fresh.id[i];
+    return (unsigned)fresh.n;
+}
 unsigned football_career_flush_vouchers(FootballCareer *c)
 {
     if(!c || !c->profile)return 0;
@@ -236,7 +256,7 @@ bool football_career_continue(FootballCareer *c)
     if(!c)return false;
     if(c->phase==FB_CAREER_RESULT){
         if(c->live.rules.winner!=FB_HOME){pay_match(c,false);c->phase=FB_CAREER_END;return true;}
-        ++c->wins;earn_vouchers(c);c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
+        ++c->wins;earn_vouchers(c);earn_achievements(c);c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }
     if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==FB_PLAYOFF_ROUNDS)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}

@@ -30,12 +30,14 @@ static struct {
     FootballPlayer evo_player;unsigned evo_key;bool evo_after; /* the evolved player the highlighted evolution offer would make */
     gc_run *scratch;
     uint16_t catalog[PR_SPECIES_COUNT];unsigned catalog_count,cursor,member,play_page,preview,preview_after,ms;
+    unsigned achv_ms;int achv_id; /* the football achievement being told in the header (achv_id -1 none), for achv_ms more milliseconds */
     int asset_offense;bool editing,save_bad,save_failed,leaving,ignore_keys;
     float old_speed,remainder;
     unsigned pending;int receiver;
     uint64_t checkpoint;
     FootballCareerPhase old_phase;
 } L;
+static void achv_toast_step(unsigned ms);
 static unsigned char checkpoint_bytes[FB_CAREER_SAVE_MAX];
 static ui_screen live_screen;
 /* Where the field map and the receiver buttons sit on the bottom screen during a live play (the touch handler reads the same numbers). */
@@ -82,6 +84,7 @@ static bool save_checkpoint(void)
     if(!n || save_write("football_live",checkpoint_bytes,n)!=SAVE_OK)return false;
     football_career_flush_candy(&L.career); /* the candy earned up to this checkpoint goes to the profile with it, never before */
     football_career_flush_vouchers(&L.career); /* ... and so do the egg vouchers of the wins it records */
+    football_career_flush_achievements(&L.career); /* ... and the football achievements those wins make (with their rewards) */
     if(L.args.save_profile && !L.args.save_profile(L.args.arg))return false;
     L.checkpoint=token();L.save_failed=false;return true;
 }
@@ -307,6 +310,7 @@ static void update(ui_screen *s,float dt)
     if(dt>100)dt=100;
     L.remainder+=dt;unsigned ms=(unsigned)L.remainder;L.remainder-=ms;L.ms+=ms;
     FootballCareer *c=&L.career;
+    achv_toast_step(ms);
     FootballLiveInput controls={.receiver=L.receiver,.pressed=L.pending};L.receiver=-1;L.pending=0;
     if(c->phase==FB_CAREER_MATCH && (c->live.phase==FB_LIVE_PLAY || c->live.phase==FB_LIVE_SET)){
         circlePosition stick;hidCircleRead(&stick);u32 held=hidKeysHeld(),down=L.ignore_keys?0:hidKeysDown();L.ignore_keys=false;
@@ -402,6 +406,19 @@ static void buttons(const char *left,const char *right,bool right_enabled)
     football_menu_button(FM_FOOT_X,FM_FOOT_Y,152,FM_FOOT_H,left,false,true);
     football_menu_button(FM_FOOT_X+160,FM_FOOT_Y,152,FM_FOOT_H,right,right_enabled,right_enabled);
 }
+/* A football achievement that has just been unlocked takes the header for a few seconds, one after another. */
+static void achv_toast_step(unsigned ms)
+{
+    FootballCareer *c=&L.career;
+    if(L.achv_ms>ms){L.achv_ms-=ms;return;}
+    L.achv_ms=0;L.achv_id=-1;
+    if(c->achv_told<(unsigned)c->achv_new.n){L.achv_id=c->achv_new.id[c->achv_told++];L.achv_ms=3500;}
+}
+static void achv_toast(bool on)
+{
+    if(on && L.achv_ms>0 && L.achv_id>=0 && L.achv_id<GC_ACHV_COUNT)football_menu_head_override("Achievement!",gc_achv_defs[L.achv_id].name);
+    else football_menu_head_override(NULL,NULL);
+}
 static void save_failed_notice(void)
 {
     football_menu_panel(FM_HEAD_X,FM_HEAD_Y,FM_HEAD_W,FM_HEAD_H);
@@ -488,6 +505,7 @@ static void match_live(void)
 static void bottom_menu(void)
 {
     FootballCareer *c=&L.career;char left[96],right[64];
+    achv_toast(true);
     switch(c->phase){
     case FB_CAREER_DRAFT:
         snprintf(left,sizeof left,"Pick your %s",football_slot_titles[draft_slot()]);snprintf(right,sizeof right,"%.2f / 55 pt",c->roster.cost);
@@ -555,6 +573,7 @@ static void bottom_menu(void)
     case FB_CAREER_ERROR:
         football_menu_head("Checkpoint preserved",NULL);football_menu_panel(4,32,312,120);football_menu_wrap(TS_WINDOW,FM_PX_SMALL,16,44,288,6,c->message);break;
     }
+    achv_toast(false);
     if(L.save_failed)save_failed_notice();
 }
 /* The member and species the top screen's info panel shows. */

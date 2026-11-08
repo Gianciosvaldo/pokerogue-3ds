@@ -35,6 +35,9 @@ enum { FM_LABEL_X=22,FM_TAG_W=44 };
 void football_menu_bottom(void);
 /* The header: left in white, right in gold. */
 void football_menu_head(const char *left,const char *right);
+/* While set (both strings kept by the caller), football_menu_head draws these in place of what it is given: a notice that takes the header
+ * over without drawing a second one on top. NULL clears it. */
+void football_menu_head_override(const char *left,const char *right);
 /* The list window with up to FM_ROWS rows. selected is the row the cursor is on (-1 for none); first is the index of rows[0] in the whole list
  * of total, for the scroll bar. */
 void football_menu_list(const FootballMenuRow *rows,unsigned count,int selected,unsigned first,unsigned total);

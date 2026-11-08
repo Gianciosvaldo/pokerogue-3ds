@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COLLECTION, GC_ACHV_GROUP_EGGS, GC_ACHV_GROUP_TRAINERS, GC_ACHV_GROUP_COUNT } gc_achv_group;
+typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COLLECTION, GC_ACHV_GROUP_EGGS, GC_ACHV_GROUP_TRAINERS, GC_ACHV_GROUP_FOOTBALL, GC_ACHV_GROUP_COUNT } gc_achv_group;
 
 typedef enum {
     GC_AREW_VOUCHER,      /* arg = VoucherType, n = how many */
@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 91
+#define GC_ACHV_COUNT 100
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -99,6 +99,12 @@ typedef struct {
 /* Unlocks every achievement that is met and whose reward could be given, and gives the rewards. `seed_text` (any text) and `now_ms` make a
  * reward egg. `out` may be NULL. Returns how many were unlocked. */
 int gc_achv_evaluate(gc_system *sys, const char *seed_text, uint64_t now_ms, gc_achv_new *out);
+
+/* Group F, football: the playoff tells the profile the matches it won (football-core's football_career_flush_achievements, at the checkpoint
+ * that records them). Each is a win; `title` is the seventh round's, `shutout` a win with nothing conceded, `blowout` a win by
+ * GC_FB_BLOWOUT_MARGIN points or more. Losses count for nothing. Ids 91..99: matches won 1/10/50/200, titles 1/3/10, shutout, blowout. */
+#define GC_FB_BLOWOUT_MARGIN 21u
+void gc_achv_football_won(gc_system *sys, unsigned wins, unsigned titles, unsigned shutouts, unsigned blowouts);
 
 /* "1 Egg Voucher", "1 Legendary Egg"... (a static string) */
 const char *gc_achv_reward_name(const gc_achv_def *d);

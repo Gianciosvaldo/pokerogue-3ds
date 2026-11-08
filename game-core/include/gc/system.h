@@ -96,6 +96,7 @@ typedef struct {
     uint32_t best_wave;     /* the highest wave any run reached */
     uint8_t feats;          /* GC_FEAT_* bits: won a run with that feat at least once */
     uint8_t hatch_feats;    /* GC_HATCH_* bits: hatched an Epic egg / a Legendary egg / a shiny from an egg */
+    uint32_t fb_wins, fb_titles, fb_shutouts, fb_blowouts; /* football playoff matches won / titles won / wins conceding nothing / wins by 21 or more */
 } gc_achv_progress;
 
 /* Overall system data (upstream GameData) */

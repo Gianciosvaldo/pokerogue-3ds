@@ -36,8 +36,11 @@ void football_menu_select(float x,float y,float w,float h)
     rr_rect(x-2,y-2,w+4,2,YELLOW);rr_rect(x-2,y+h,w+4,2,YELLOW);rr_rect(x-2,y,2,h,YELLOW);rr_rect(x+w,y,2,h,YELLOW);
 }
 void football_menu_bottom(void){rr_rect(0,0,320,240,TEAL);}
+static const char *head_left,*head_right;
+void football_menu_head_override(const char *left,const char *right){head_left=left;head_right=right;}
 void football_menu_head(const char *left,const char *right)
 {
+    if(head_left){left=head_left;right=head_right;}
     ui_window(FM_HEAD_X,FM_HEAD_Y,FM_HEAD_W,FM_HEAD_H,WIN_NORMAL);
     float used=0;
     if(right && right[0])used=football_menu_text_right(TS_MONEY,FM_PX_BODY,FM_HEAD_X+FM_HEAD_W-12,FM_HEAD_Y+FM_TEXT_PAD,150,right);

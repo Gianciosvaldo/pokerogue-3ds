@@ -233,6 +233,22 @@ int main(void)
         assert(!memcmp(&loaded.achv, &S.achv, sizeof S.achv) && loaded.achv.best_wave == 77 && loaded.achv.custom_wins == 1);
     }
 
+    /* group F, the football counters survive a save, and an old save (no counters) loads them at zero */
+    {
+        fresh();
+        gc_achv_football_won(&S, 12, 2, 3, 4);
+        static uint8_t buf[600000];
+        size_t n = gc_system_save(&S, buf, sizeof buf);
+        static gc_system loaded;
+        const char *why = NULL;
+        gc_system_init_defaults(&loaded);
+        assert(n && gc_system_load(&loaded, buf, n, &why));
+        assert(!memcmp(&loaded.achv, &S.achv, sizeof S.achv));
+        assert(loaded.achv.fb_wins == 12 && loaded.achv.fb_titles == 2 && loaded.achv.fb_shutouts == 3 && loaded.achv.fb_blowouts == 4);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 92) && gc_achv_unlocked(&S, 98) && gc_achv_unlocked(&S, 99) && !gc_achv_unlocked(&S, 93) && !gc_achv_unlocked(&S, 96));
+    }
+
     /* group C, the collection: the Pokedex of the profile */
     {
         static int all[1100], n_all, leg[200], n_leg, myth[100], n_myth;
