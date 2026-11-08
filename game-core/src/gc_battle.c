@@ -701,7 +701,7 @@ int gc_trainer_instant_teras(const gc_run *run, int8_t *out, int cap)
     const gc_trainer_config *tc = run->battle_type == BATTLE_TYPE_TRAINER ? gc_trainer_config_of(run->trainer_type) : NULL;
     int n = 0;
     if (!tc) return 0;
-    for (int i = 0; i < 8 && n < cap; i++) if (tc->tera_static & (1u << i)) out[n++] = (int8_t)i;
+    for (int i = 0; i < 8 && n < cap; i++) if ((tc->tera_static | gc_int((gc_run *)run)->me_tera_static) & (1u << i)) out[n++] = (int8_t)i;
     for (int i = 0; i < run->n_enemy && n < cap; i++) if (run->enemy[i].tera_instant) out[n++] = (int8_t)i;
     return n;
 }

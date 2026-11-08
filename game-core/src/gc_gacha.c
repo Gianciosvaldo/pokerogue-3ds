@@ -75,9 +75,13 @@ static bool egg_new_ex(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced,bool 
  return true;
 }
 static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){return egg_new_ex(s,ctx,e,forced,false);}
-bool gc_system_gift_egg(gc_system *sys,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms){
+/* The same free egg with another EggSourceType (4 = EVENT: a mystery encounter's reward): the pull's generator at the normal egg-move and shiny rates */
+static bool gift_egg_source(gc_system *sys,int source,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms);
+bool gc_system_gift_egg_source(gc_system *sys,int source,int tier,const char *seed_text,uint64_t timestamp_ms){return gift_egg_source(sys,source,tier,false,seed_text,timestamp_ms);}
+bool gc_system_gift_egg(gc_system *sys,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms){return gift_egg_source(sys,0,tier,tier3_shiny,seed_text,timestamp_ms);}
+static bool gift_egg_source(gc_system *sys,int source,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms){
  if(!sys||tier<0||tier>3||!seed_text||sys->n_eggs<0||sys->n_eggs>=99||timestamp_ms>UINT64_C(8640000000000000))return false;
- gc_gacha_ctx c;memset(&c,0,sizeof c);c.machine=0;c.timestamp_ms=timestamp_ms;
+ gc_gacha_ctx c;memset(&c,0,sizeof c);c.machine=source;c.timestamp_ms=timestamp_ms;
  pr_seedstr key;pr_seed_from_ascii(&key,seed_text);pr_rng_sow(&c.entropy,&key);
  /* a gift moves neither the pity counters nor the pull statistics */
  uint32_t pity[4],unlock[4];memcpy(pity,sys->egg_pity,sizeof pity);memcpy(unlock,sys->unlock_pity,sizeof unlock);gc_stat_milestones st=sys->stats;

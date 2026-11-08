@@ -20,4 +20,6 @@ bool gc_system_buy_species_egg(gc_system *sys, uint16_t species, gc_gacha_ctx *c
  * (any text; the same one gives the same egg), with a guaranteed tier-3 shiny when asked. Pity counters and pull statistics stay as they
  * were. False when the egg list is full or nothing could be generated; the profile is then unchanged. */
 bool gc_system_gift_egg(gc_system *sys,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms);
+/* The same with an EggSourceType (4 = EVENT, a mystery encounter's egg: the normal egg-move and shiny rates); tier 0..2 */
+bool gc_system_gift_egg_source(gc_system *sys,int source,int tier,const char *seed_text,uint64_t timestamp_ms);
 #endif
