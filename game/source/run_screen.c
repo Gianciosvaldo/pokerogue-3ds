@@ -1365,15 +1365,23 @@ static void on_shop_select_shop(void* ctx, int shop_idx) {
   }
 }
 
-static void on_shop_reroll(void* ctx, bool lock_capsule) {
+static void on_shop_reroll(void* ctx) {
   (void)ctx;
   rh_close();
   memset(&rc, 0, sizeof rc);
-  if (lock_capsule) {
-    rc.kind = GC_CH_LOCK_RARITIES;
-  } else {
-    rc.kind = GC_CH_REROLL;
-  }
+  rc.kind = GC_CH_REROLL;
+  answer(&rc);
+}
+
+/* Lock Rarities: only game-core's switch (toggleRerollLock). The screen comes back with the new Reroll price and the button
+ * still under the cursor; nothing is rerolled or paid until Reroll is pressed. */
+static bool shop_focus_lock;
+static void on_shop_lock(void* ctx) {
+  (void)ctx;
+  rh_close();
+  memset(&rc, 0, sizeof rc);
+  rc.kind = GC_CH_LOCK_RARITIES;
+  shop_focus_lock = true;
   answer(&rc);
 }
 
@@ -1456,6 +1464,9 @@ static void open_shop_ui(void) {
   args.screen = s;
   args.player_money = G.run.money;
   args.has_lock_capsule = gc_item_stack(&G.run, "LOCK_CAPSULE") > 0;
+  args.lock_capsule_active = gc_run_lock_rarities(&G.run);
+  args.focus_lock = shop_focus_lock;
+  shop_focus_lock = false;
   args.party_luck = calc_party_luck();
   args.party_has_held_item = party_has_held_item();
   args.wave = G.run.wave;
@@ -1477,7 +1488,8 @@ static void open_shop_ui(void) {
     on_shop_skip,
     on_shop_manage_items,
     NULL,
-    on_shop_check_team
+    on_shop_check_team,
+    on_shop_lock
   };
 
   rh_set_menu(G.cfg.on_quit ? open_run_menu : NULL, NULL);

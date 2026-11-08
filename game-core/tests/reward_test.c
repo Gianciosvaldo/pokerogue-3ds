@@ -295,9 +295,10 @@ static void test_phase_flow(void)
     const char *why = NULL;
     gc_choice lock = {GC_CH_LOCK_RARITIES, 0, 0, 0};
     CHECK(!gc_run_choose(&run, &lock, &why) && why);   /* no Lock Capsule */
+    CHECK(!gc_run_lock_rarities(&run));
     gc_item_add(&run, "LOCK_CAPSULE", -1, 0, 1);
     s = gc_run_screen(&run);
-    CHECK(gc_run_choose(&run, &lock, &why) && in->lock_rarities);
+    CHECK(gc_run_choose(&run, &lock, &why) && in->lock_rarities && gc_run_lock_rarities(&run));
     s = gc_run_screen(&run);
     CHECK(s->kind == GC_SCREEN_REWARD && s->n_options == 3 && !memcmp(s->options, first, sizeof first));
     CHECK(s->reroll_cost != first_cost && s->reroll_cost == gc_reward_reroll_cost(&run));
@@ -315,7 +316,7 @@ static void test_phase_flow(void)
     memcpy(second, s->options, sizeof second);
 
     /* switch the lock off: the price is the plain one again, for rerollCount 1 */
-    CHECK(gc_run_choose(&run, &lock, &why) && !in->lock_rarities);
+    CHECK(gc_run_choose(&run, &lock, &why) && !in->lock_rarities && !gc_run_lock_rarities(&run));
     s = gc_run_screen(&run);
     CHECK(s->reroll_cost == pr_run_get_reroll_cost(30, false, (int[]){0}, 3, 1, NAN, 1.0));
 

@@ -1394,6 +1394,111 @@ static void custom_commit(void) {
 }
 
 /* One thing the UI was waiting on is answered. False when nothing is pending. */
+/* RUNTEST_LOCK: the Lock Capsule through the app's own reward-screen callbacks (run_screen.c) over the real game-core. On the first reward
+ * screen of the process the player gets the capsule and presses Lock Rarities, then Reroll, then Lock Rarities again. Fails when
+ * Lock Rarities rerolls or charges anything (the old wiring answered Reroll with the lock switch instead of a reroll), when the screen
+ * does not say what game-core has, when the cursor does not stay on the button, when the price is not the upstream formula
+ * (getRerollCost: 250 x ceil(wave / 10) x 2^rerollCount, or the options' tier values added up while the lock is on), when the
+ * Reroll with the lock on does not charge the price that was on the screen, or when it changes a tier. */
+static struct {
+  bool enabled;
+  int stage;
+  double money, cost;
+  int n_options, wave;
+  int8_t tier[GC_MAX_OPTIONS];
+  const char* key[GC_MAX_OPTIONS];
+  bool upgraded;
+} LOCK;
+
+static double lock_expected_cost(const gc_screen* sc, bool locked, int reroll_count, int wave) {
+  static const double tier_value[5] = {50, 125, 300, 750, 2000};
+  double base = 250;
+  if (locked) {
+    base = 0;
+    for (int i = 0; i < sc->n_options; i++) base += tier_value[sc->options[i].tier < 0 || sc->options[i].tier > 4 ? 0 : sc->options[i].tier];
+  }
+  return floor(ceil(wave / 10.0) * base * pow(2.0, reroll_count));
+}
+
+static void lock_keep(const gc_run* r, const gc_screen* sc) {
+  LOCK.money = r->money;
+  LOCK.cost = sc->reroll_cost;
+  LOCK.n_options = sc->n_options;
+  LOCK.upgraded = false;
+  for (int i = 0; i < sc->n_options && i < GC_MAX_OPTIONS; i++) {
+    LOCK.tier[i] = sc->options[i].tier;
+    LOCK.key[i] = sc->options[i].key;
+    if (sc->options[i].upgrade_count > 0) LOCK.upgraded = true;
+  }
+}
+
+/* the screen is the one before the press: true when the fixture pressed a button (the driver does nothing else with this screen) */
+static bool lock_fixture(const gc_screen* sc, const shop_ui_events* ev) {
+  if (!LOCK.enabled || LOCK.stage >= 5 || sc->reroll_cost < 0 || sc->n_options < 1) return false;
+  gc_run* r = (gc_run*)rs_run();
+  const bool core_on = gc_run_lock_rarities(r);
+  if (LOCK.stage > 0 && X.shop_args.lock_capsule_active != core_on)
+    BAD("the reward screen says the lock is %s, game-core has it %s", X.shop_args.lock_capsule_active ? "on" : "off", core_on ? "on" : "off");
+  switch (LOCK.stage) {
+    case 0:
+      if (core_on) BAD("a new run starts with the lock on");
+      if (r->wave > 9) return false; /* the first screen only: the wave factor of the price below is 1 */
+      if (r->money < 100000) r->money = 100000;
+      gc_item_add(r, "LOCK_CAPSULE", -1, 0, 1);
+      if (sc->reroll_cost != lock_expected_cost(sc, false, 0, r->wave))
+        BAD("the first Reroll price is %.0f, upstream's is %.0f", sc->reroll_cost, lock_expected_cost(sc, false, 0, r->wave));
+      lock_keep(r, sc);
+      LOCK.wave = r->wave;
+      LOCK.stage = 1;
+      X.shop = false;
+      ev->on_lock(ev->ctx);
+      return true;
+    case 1: { /* back from Lock Rarities, pressed once */
+      if (!X.shop_args.has_lock_capsule || !core_on) BAD("Lock Rarities did not switch the lock on");
+      if (!X.shop_args.focus_lock) BAD("the cursor does not stay on Lock Rarities");
+      if (r->money != LOCK.money) BAD("Lock Rarities charged %.0f", LOCK.money - r->money);
+      if (sc->n_options != LOCK.n_options) BAD("Lock Rarities changed the number of options");
+      for (int i = 0; i < sc->n_options && i < LOCK.n_options; i++)
+        if (sc->options[i].tier != LOCK.tier[i] || sc->options[i].key != LOCK.key[i]) BAD("Lock Rarities rerolled option %d", i);
+      const double want = lock_expected_cost(sc, true, 0, LOCK.wave);
+      if (sc->reroll_cost != want) BAD("the Reroll price with the lock on is %.0f, upstream's is %.0f", sc->reroll_cost, want);
+      lock_keep(r, sc);
+      LOCK.stage = 2;
+      X.shop = false;
+      ev->on_reroll(ev->ctx);
+      return true;
+    }
+    case 2: { /* back from Reroll with the lock on */
+      if (!core_on) BAD("a Reroll switched the lock off");
+      if (r->money != LOCK.money - LOCK.cost) BAD("the Reroll with the lock on charged %.0f, the screen said %.0f", LOCK.money - r->money, LOCK.cost);
+      if (sc->n_options != LOCK.n_options) BAD("the locked Reroll gave %d options, not %d", sc->n_options, LOCK.n_options);
+      if (!LOCK.upgraded)
+        for (int i = 0; i < sc->n_options && i < LOCK.n_options; i++)
+          if (sc->options[i].tier < LOCK.tier[i] || (sc->options[i].upgrade_count == 0 && sc->options[i].tier != LOCK.tier[i]))
+            BAD("the locked Reroll changed option %d from tier %d to %d", i, LOCK.tier[i], sc->options[i].tier);
+      const double want = lock_expected_cost(sc, true, 1, LOCK.wave);
+      if (sc->reroll_cost != want) BAD("the next Reroll price with the lock on is %.0f, upstream's is %.0f", sc->reroll_cost, want);
+      lock_keep(r, sc);
+      LOCK.stage = 3;
+      X.shop = false;
+      ev->on_lock(ev->ctx);
+      return true;
+    }
+    case 3: { /* back from Lock Rarities, pressed again */
+      if (core_on) BAD("Lock Rarities pressed again did not switch the lock off");
+      if (!X.shop_args.focus_lock) BAD("the cursor does not stay on Lock Rarities (off)");
+      if (r->money != LOCK.money) BAD("Lock Rarities (off) charged %.0f", LOCK.money - r->money);
+      for (int i = 0; i < sc->n_options && i < LOCK.n_options; i++)
+        if (sc->options[i].tier != LOCK.tier[i] || sc->options[i].key != LOCK.key[i]) BAD("Lock Rarities (off) rerolled option %d", i);
+      const double want = lock_expected_cost(sc, false, 1, LOCK.wave);
+      if (sc->reroll_cost != want) BAD("the Reroll price with the lock off is %.0f, upstream's is %.0f", sc->reroll_cost, want);
+      LOCK.stage = 5;
+      return false; /* done: the driver plays on */
+    }
+  }
+  return false;
+}
+
 static bool step(void) {
   {
     static int last_refused;
@@ -1472,6 +1577,7 @@ static bool step(void) {
       if (any != X.shop_args.party_has_held_item) BAD("Manage Items shows %s, the party %s a transferable held item",
                                                       X.shop_args.party_has_held_item ? "up" : "not", any ? "has" : "has no");
     }
+    if (lock_fixture(sc, ev)) return true;
     if(FORM.enabled && FORM.stage==0) {
       gc_run* r=(gc_run*)rs_run();
       int item=FORM.active?FORM_CHANGE_ITEM_MEWTWONITE_X:r->party[0].b.species==SPECIES_ID_VENUSAUR?FORM_CHANGE_ITEM_CHARIZARDITE_X:FORM_CHANGE_ITEM_VENUSAURITE;
@@ -1513,7 +1619,7 @@ static bool step(void) {
     } else if (sc->n_shop && k < 85) {
       ev->on_select_shop(ev->ctx, (int)rnd((uint32_t)sc->n_shop));
     } else if (k < 90) {
-      ev->on_reroll(ev->ctx, false);
+      ev->on_reroll(ev->ctx);
     } else {
       ev->on_skip(ev->ctx);
     }
@@ -1864,6 +1970,7 @@ int main(int argc, char** argv) {
   const int seeded_runs = runs;
   scanner_fixture = getenv("RUNTEST_SCANNER") != NULL;
   FORM.enabled = getenv("RUNTEST_FORM") != NULL;
+  LOCK.enabled = getenv("RUNTEST_LOCK") != NULL;
   FORM.active = FORM.enabled && !strcmp(getenv("RUNTEST_FORM"),"active");
   verbose_bad = getenv("RUNTEST_VERBOSE") != NULL;
   rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
@@ -2124,6 +2231,10 @@ int main(int argc, char** argv) {
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls, %d in a party order that differs from storage)\n", n_key_bars,
          n_trays, n_fainted_balls, n_reordered_trays);
+  if (LOCK.enabled) {
+    printf("Lock Capsule: fixture stage %d of 5\n", LOCK.stage);
+    if (LOCK.stage != 5) BAD("the Lock Capsule fixture did not finish (stage %d)", LOCK.stage);
+  }
   if(FORM.enabled) {
     printf("Check Team: %d opens, directed form action stage %d\n",FORM.opens,FORM.stage);
     if(FORM.opens!=2 || FORM.stage!=3)BAD("Check Team form action/return was not exercised");

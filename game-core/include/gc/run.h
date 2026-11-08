@@ -466,6 +466,10 @@ void gc_run_set_battle_event_storage(gc_run *run, gc_battle_event_reserve_fn res
 /* What the player must answer now. */
 const gc_screen *gc_run_screen(const gc_run *run);
 
+/* Whether the Lock Capsule's lock is on (globalScene.lockModifierTiers): the reward screen's Lock Rarities button shows this, and the
+ * Reroll price on the screen already includes it. Switch it with GC_CH_LOCK_RARITIES. */
+bool gc_run_lock_rarities(const gc_run *run);
+
 /* The player's answer to the current screen. Runs on to the next screen, queuing events. false (and
  * *why) if the choice isn't legal on this screen. Vitamin purchase exception:
  * pinned upstream may add the item/update stats, then report an error with an
