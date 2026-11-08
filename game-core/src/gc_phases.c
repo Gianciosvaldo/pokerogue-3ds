@@ -818,7 +818,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_ME_BEFORE_REWARDS:
         if (gc_int(run)->training.away) gc_training_return(run);
-        else { gc_berries_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); }
+        else { gc_berries_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); gc_breeder_reward(run); }
         return true;
     case RP_MYSTERY: {
         gc_screen *s = &run->screen;
@@ -830,6 +830,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return false;
     }
     case RP_GAME_OVER: {
+        if (!p->a && gc_breeder_game_over(run)) return true;   /* GameOverPhase: the encounter's onGameOver says the run goes on */
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);
         bool clear = p->a || (run->run.mode == GAME_MODES_CLASSIC && run->wave > 200);

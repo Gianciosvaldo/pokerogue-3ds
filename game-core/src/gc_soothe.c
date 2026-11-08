@@ -75,18 +75,20 @@ int gc_soothe_scene_apply(gc_run *run,const gc_offer *o,int storage,const char *
  return GC_APPLY_DONE;
 }
 
-/* Only VictoryPhase's ordinary positive gain. Shared friendship/Candy callers
- * retain their existing semantics. Projection never changes inventory. */
-bool gc_soothe_battle_gain(gc_run *run,int storage) {
+/* Pokemon.addFriendship(base) for a positive gain: the first Soothe Bell's multiplier on its holder (applyModifier takes one modifier), then the
+ * candy bar. VictoryPhase's ordinary gain is base 3; shared friendship/Candy callers retain their existing semantics. Projection never changes
+ * inventory. */
+bool gc_soothe_friendship(gc_run *run,int storage,int base) {
  if(!run||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY||storage<0||storage>=run->n_party)return false;
  bool any=false;
  if(run->n_items<0||run->n_items>GC_MAX_ITEMS)return false;
  for(int j=0;j<run->n_items;j++)any|=!strcmp(run->items[j].key,"SOOTHE_BELL");
- if(!any){gc_system_add_friendship(run->sys,run,&run->party[storage],3,false);return true;}
+ if(!any){gc_system_add_friendship(run->sys,run,&run->party[storage],base,false);return true;}
  if(run->run.mode!=GAME_MODES_CLASSIC&&run->run.mode!=GAME_MODES_ENDLESS)return false;
  /* Friendship selects by stable holder ID; fusion does not alter the Bell gain. */
  static pr_reward_ctx c;int target;double amount;
- if(!context(run,&c,storage,&target,true)||!pr_reward_soothe_bell_gain(&c,target,3,&amount,NULL))return false;
+ if(!context(run,&c,storage,&target,true)||!pr_reward_soothe_bell_gain(&c,target,base,&amount,NULL))return false;
  gc_system_add_friendship(run->sys,run,&run->party[storage],(int)amount,false);
  return true;
 }
+bool gc_soothe_battle_gain(gc_run *run,int storage) { return gc_soothe_friendship(run,storage,3); }
