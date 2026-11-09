@@ -246,6 +246,7 @@ void gc_mystery_record(gc_run *run, int type, int tier)
     run->me.spawn_chance = 3;
     run->mystery_type = (int8_t)type;
     run->mystery_tier = (int8_t)tier;
+    gc_weird_start(run);
 }
 
 void gc_mystery_increment_miss(gc_run *run)
@@ -688,6 +689,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
         /* the fight needs nothing; a Bug type on the team for the second, a Quick Claw, a Grip Claw or a Bug attack type booster for the third */
         for (int o = 0; o < 3; o++) s->option_ok[o] = gc_superfan_option_ok(run, o);
+    } else if (type == GC_ME_WEIRD_DREAM) {
+        /* onInit: the new species of every party member are chosen when the encounter starts, whatever the player picks (and widen the BST ranges when short) */
+        gc_weird_plan(run);
     } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
         /* Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade and Leave are always on
          * (the item trade's party screen filters on a transferable held item) */
@@ -1498,15 +1502,12 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_WEIRD_DREAM:
-        if (option == 0) {
+        /* the transformation (option 0) and refusing it (option 2): src/gc_weird.c; the fight against the alternate team (option 1) is still a stand-in */
+        if (option == 1) {
             start_mystery_wild_battle(run, SPECIES_ID_DARKRAI, wave_level, true, 4, 1);
             return true;
-        } else if (option == 1) {
-            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
-            end_mystery_encounter_leave(run);
-            return true;
         }
-        end_mystery_encounter_leave(run);
+        gc_weird_execute(run, option);
         return true;
 
     case GC_ME_THE_WINSTRATE_CHALLENGE:

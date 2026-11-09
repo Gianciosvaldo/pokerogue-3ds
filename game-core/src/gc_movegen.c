@@ -36,7 +36,7 @@
 #include <math.h>
 #include <string.h>
 
-#define MG_POOL_MAX 256
+#define MG_POOL_MAX 640   /* Mew: every TM plus its level moves is over 256 (a Weird Dream Pokemon is a player's, so it gets the trainer pools); the arrays below are static: 10 KB each is too much for a 32 KB stack */
 
 typedef struct { uint16_t move; double w; } mg_ent;
 typedef struct { mg_ent e[MG_POOL_MAX]; int n; } mg_pool;
@@ -274,7 +274,7 @@ static int force_signature(mg_ctx *c, pr_rng *rng, mg_pool *base)
 
 static void force_stab(mg_ctx *c, pr_rng *rng, mg_pool *base)
 {
-    mg_ent chosen[MG_POOL_MAX];
+    static mg_ent chosen[MG_POOL_MAX];
     int n = 0;
     double total = 0;
     for (int i = 0; i < base->n; i++) {
@@ -452,7 +452,7 @@ static int nonlevel_cap(int level, const int thresholds[4]);
 static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
 {
     while (c->n_moves < 4) {
-        mg_ent remaining[MG_POOL_MAX];
+        static mg_ent remaining[MG_POOL_MAX];
         int n = 0;
         double total = 0;
         for (int i = 0; i < base->n; i++) {
@@ -510,7 +510,8 @@ static bool sorted_has(const uint16_t *list, int n, int move)
 /* filterSupercededMoves(pool): a move goes when any move that supercedes it is in the pool as it stood before the filter */
 static void filter_superceded_extra(mg_pool *p, const mg_pool *a, const mg_pool *b)
 {
-    bool del[MG_POOL_MAX] = {false};
+    static bool del[MG_POOL_MAX];
+    memset(del, 0, sizeof del);
     for (int i = 0; i < p->n; i++) {
         int lo = 0, hi = gc_mg_superceded_count - 1;
         const gc_mg_superceded *row = NULL;
@@ -716,10 +717,33 @@ static bool plain_egg_gym(int type)
 /* the constructor's moveset; gc_int(run)->ctor_will_tera is set by the caller that knows the member's party slot (willTerastallize) */
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m) { return gc_generate_moveset_stale(run, rng, m, NULL, gc_int(run)->ctor_will_tera); }
 
+static bool generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera, bool player);
+
 bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera)
 {
+    return generate_moveset(run, rng, m, stats_of, will_tera, false);
+}
+
+/* Pokemon.generateAndPopulateMoveset() for a PlayerPokemon made inside a mystery encounter (Weird Dream's transformed Pokemon): hasTrainer() is true for the player's
+ * Pokemon, so the pools are a trainer's (relearn moves, the TM pool, the trainer weights and blocklists), but there is no battle trainer to allow egg moves
+ * (currentBattle.trainer is undefined), it is not a boss and it will not Terastallize; the encounter's wave is a single battle. Challenges do not change the pools
+ * (applyChallenges(MOVESET_MODIFY) is the constructor's own step, which a Weird Dream Pokemon is made with a moveset of []). A species whose form changes on learning
+ * a move (Keldeo with Secret Sword) is generated as usual; its QuietFormChangePhase is not run (see gc_weird.c). */
+bool gc_generate_moveset_player(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of)
+{
+    /* challenges only decline a trainer's or wild Pokemon's generator; this entry is a player's */
+    const bool had_challenges = run->run.has_challenges;
+    run->run.has_challenges = false;
+    const bool ok = generate_moveset(run, rng, m, stats_of, false, true);
+    run->run.has_challenges = had_challenges;
+    return ok;
+}
+
+static bool generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera, bool player)
+{
     if (run->run.has_challenges) return false;
-    const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
+    /* a player's Pokemon is not a battle trainer's: these guards do not apply to it (its pools are made a trainer's below, in c.trainer) */
+    const bool trainer = !player && (m->b.has_trainer || m->trainer_slot || m->b.trainer_slot);
     if (trainer && plain_grunt(run->trainer_type)
         && (run->trainer_variant < TRAINER_VARIANT_DEFAULT || run->trainer_variant > TRAINER_VARIANT_DOUBLE
             || run->double_battle != (run->trainer_variant == TRAINER_VARIANT_DOUBLE))) return false;
@@ -745,21 +769,30 @@ bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon
     if (m->b.fusion_species && (!gc_species(m->b.fusion_species)
         || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger))))
         return false;
+    if (player && (m->b.fusion_species || m->b.n_moves)) return false;
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
     if (!ctx_init(&c, run, m, stats_of)) return false;
-    c.eggs_allowed = trainer && gc_mg_trainer_egg[run->trainer_type];
-    c.will_tera = trainer && will_tera;
+    if (player) {
+        c.trainer = true;
+        c.single = true;
+        c.eggs_allowed = false;
+        c.will_tera = false;
+    } else {
+        c.eggs_allowed = trainer && gc_mg_trainer_egg[run->trainer_type];
+        c.will_tera = trainer && will_tera;
+    }
     if (m->b.fusion_species && (m->b.passive_flag || (!c.boss && c.passive)
         || c.boss != (m->b.boss_segments > 0))) return false;
     const pr_rng before = *rng;
 
     int pp_up[4] = {0, 0, 0, 0};
-    if (m->b.species == SPECIES_ID_SMEARGLE) {
+    /* the two fixed sets are EnemyPokemon's override; a player's Pokemon (a Weird Dream one) uses the base class's generator, Smeargle and Eternatus included */
+    if (!player && m->b.species == SPECIES_ID_SMEARGLE) {
         /* Smeargle: four Sketches, nothing rolled */
         for (int i = 0; i < 4; i++) c.moves[i] = MOVE_ID_SKETCH;
         c.n_moves = 4;
-    } else if (m->b.species == SPECIES_ID_ETERNATUS) {
+    } else if (!player && m->b.species == SPECIES_ID_ETERNATUS) {
         /* Eternatus: the fixed sets; the form's Recover has -4 PP ups */
         int fixed[4];
         pr_run_get_eternatus_moveset(m->b.form, false, fixed);
