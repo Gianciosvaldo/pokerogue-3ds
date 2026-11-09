@@ -823,8 +823,13 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             return GC_APPLY_REFUSED;
         }
         const uint16_t move_id = moves[move_slot].move;
+        /* addModifier -> RememberMoveModifier.apply queues LearnMovePhase(..., MEMORY, cost) (cost -1 for a free reward), then
+         * applyModifier queues the copy of the screen: the learn runs first and decides what the cost and the copy become
+         * (gc_phases.c learned_tm) */
+        gc_rphase learn = gc_rp(RP_LEARN_MOVE, party, move_id, 2);
+        learn.d = o->is_purchase || o->cost > 0 ? o->cost : -1;
+        gc_rq_unshift(run, learn);
         gc_reward_queue_copy(run);
-        gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, party, move_id, 0));
         return GC_APPLY_DONE;
     }
 

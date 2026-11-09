@@ -251,6 +251,23 @@ test: fusion-replay
 fusion-replay: $(BUILD)/fusion_diff_test tests/fixtures/fusion-splicers.native.txt.gz
 	gzip -dc tests/fixtures/fusion-splicers.native.txt.gz | $(BUILD)/fusion_diff_test /dev/stdin
 .PHONY: fusion-replay
+# a form index kept by an evolution into a species with fewer forms (Burmy's cloaks -> Mothim) must survive a save and a load
+all: $(BUILD)/retained_form_save_test
+$(BUILD)/retained_form_save_test: tests/retained_form_save_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: retained-form-save-test
+retained-form-save-test: $(BUILD)/retained_form_save_test
+	$(BUILD)/retained_form_save_test
+.PHONY: retained-form-save-test
+# Memory Mushroom / TM learning against upstream's LearnMovePhase.learnMove and SelectModifierPhase.applyModifier
+# (tests/memory-learn.producer.test.ts at 8555c08, replayed without upstream; regenerate with tools/memorylearndiff.sh)
+all: $(BUILD)/memory_learn_diff_test
+$(BUILD)/memory_learn_diff_test: tests/memory_learn_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: memory-learn-replay
+memory-learn-replay: $(BUILD)/memory_learn_diff_test tests/fixtures/memory-learn.native.txt
+	$(BUILD)/memory_learn_diff_test tests/fixtures/memory-learn.native.txt
+.PHONY: memory-learn-replay
 all: $(BUILD)/mystery_gts_diff_test
 $(BUILD)/mystery_gts_diff_test: tests/mystery_gts_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
