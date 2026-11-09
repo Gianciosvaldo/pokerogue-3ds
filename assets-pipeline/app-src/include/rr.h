@@ -100,11 +100,17 @@ typedef struct {
 } rr_recolor_pair;
 
 rr_atlas* rr_atlas_load_rrt(const void* data, size_t len, const rr_recolor_pair* map, int n);
+/* Two maps one after the other (the first match of each wins): a shiny variant's colours, then a fusion's (game/source/fusion_palette.c) */
+rr_atlas* rr_atlas_load_rrt2(const void* data, size_t len, const rr_recolor_pair* map, int nmap, const rr_recolor_pair* map2, int nmap2);
 rr_atlas* rr_atlas_load_key(const char* key);
 /* Shiny variant colours (upstream variant JSON maps, variant 0..2):
  * variant_map_key e.g. "images/pokemon/variant/back/6.json". Like upstream's
  * sprite shader, only the first 32 pairs apply and the first match wins. */
 rr_atlas* rr_atlas_load_key_variant(const char* key, const char* variant_map_key, int variant);
+/* The pairs (up to cap) of variant `variant` in a variant map; 0 when the map or the variant is absent */
+int rr_variant_pairs(const char* variant_map_key, int variant, rr_recolor_pair* out, int cap);
+/* A sheet drawn with its variant map (map_key may be NULL) and then with `extra` pairs on top (a fusion's colours) */
+rr_atlas* rr_atlas_load_key_maps(const char* key, const char* variant_map_key, int variant, const rr_recolor_pair* extra, int nextra);
 /* Single-frame, single-page images as a plain texture (NULL otherwise). */
 rr_tex* rr_tex_load_key(const char* key);
 int rr_atlas_pages(const rr_atlas* a);

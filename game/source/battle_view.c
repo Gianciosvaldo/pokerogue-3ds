@@ -258,6 +258,14 @@ static void load_mon_sprite(side* sd, bool player) {
   menu_sprite_free(&sd->sprite);
   menu_mon visual = {.species = m->species, .form = m->form, .gender = m->gender,
                      .shiny = m->shiny, .variant = m->variant};
+  if (m->fusion_species) {
+    visual.fusion = true;
+    visual.fusion_species = (uint16_t)m->fusion_species;
+    visual.fusion_form = (uint8_t)m->fusion_form;
+    visual.fusion_gender = (int8_t)m->fusion_gender;
+    visual.fusion_shiny = m->fusion_shiny;
+    visual.fusion_variant = (uint8_t)m->fusion_variant;
+  }
   sd->sprite_key[0]=0;
   if(!m->species)return;
   /* The shared loader owns the atlas. Do not load a second copy into img's cache. */

@@ -75,6 +75,10 @@ void be_format_message(const pr_msg *msg,char *out,size_t size){
 
 /* ------------------------------------------------------------------ Pokemon */
 
+static bool (*fusion_shine)(uint32_t pokemon_id, bool* shiny, int* variant);
+
+void be_set_fusion_shine(bool (*lookup)(uint32_t pokemon_id, bool* shiny, int* variant)) { fusion_shine = lookup; }
+
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
   /* PR_DEV_ILLUSION: a disguised Pokemon looks, is named and is typed as its disguise */
@@ -88,6 +92,12 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   m->female = m->gender == 1;
   m->shiny = p->shiny;
   m->variant = p->variant;
+  if (p->fusion_species && !look) {
+    m->fusion_species = p->fusion_species;
+    m->fusion_form = p->fusion_form;
+    m->fusion_gender = p->fusion_gender;
+    if (fusion_shine) fusion_shine(p->id, &m->fusion_shiny, &m->fusion_variant);
+  }
   m->sprite_scale = (float)pr_get_sprite_scale(p);
   /* a fusion is named as both halves (upstream getNameToRender); a disguise shows the disguise's halves */
   fused_mon_name(m->name, sizeof m->name, form->species, look ? p->illusion.fusion_species : p->fusion_species);

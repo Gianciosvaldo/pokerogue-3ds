@@ -237,6 +237,22 @@ build/result_gains_test: $(RG_SRCS)
 result_gains_test: build/result_gains_test
 .PHONY: result_gains_test
 
+# source/fusion_palette.c (a fused Pokemon's sprite colours) against the real Pokemon.updateFusionPalette: fixtures/fusion-palette.native.txt.gz
+# is a trace of the upstream run (game/tools/fusionpalettediff.sh makes a new one and replays it)
+FP_SRCS := fusion_palette_test.c ../source/fusion_palette.c $(BC)/src/rng.c
+build/fusion_palette_test: $(FP_SRCS)
+	@mkdir -p build
+	$(CC) -I../include -I$(BC)/include $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(FP_SRCS) -lm -o $@
+fusion_palette_test: build/fusion_palette_test
+.PHONY: fusion_palette_test
+
+# fp_rrt_first_frame on a sheet made by the pipeline's own encoder (tile order, palette); fixtures/rrt-first-frame.txt comes from game/tools/make_rrt_fixture.py
+build/rrt_first_frame_test: rrt_first_frame_test.c ../source/fusion_palette.c $(BC)/src/rng.c
+	@mkdir -p build
+	$(CC) -I../include -I$(BC)/include $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $^ -lm -o $@
+rrt_first_frame_test: build/rrt_first_frame_test
+.PHONY: rrt_first_frame_test
+
 # upstream's CharSprite (source/char_sprite.c) with a fake drawing layer
 CS_SRCS := char_sprite_test.c ../source/char_sprite.c
 build/char_sprite_test: $(CS_SRCS)

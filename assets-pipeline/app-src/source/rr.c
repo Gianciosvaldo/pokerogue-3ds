@@ -341,6 +341,11 @@ static void apply_recolor(u32* pal, int n, const rr_recolor_pair* map, int nmap)
 }
 
 rr_atlas* rr_atlas_load_rrt(const void* data, size_t len, const rr_recolor_pair* map, int nmap) {
+  return rr_atlas_load_rrt2(data, len, map, nmap, NULL, 0);
+}
+
+rr_atlas* rr_atlas_load_rrt2(const void* data, size_t len, const rr_recolor_pair* map, int nmap, const rr_recolor_pair* map2,
+                             int nmap2) {
   const u8* p = data;
   if (len < sizeof(rrt_header)) return NULL;
   rrt_header h;
@@ -374,6 +379,7 @@ rr_atlas* rr_atlas_load_rrt(const void* data, size_t len, const rr_recolor_pair*
     int n = h.npal > 256 ? 256 : h.npal;
     memcpy(pal32, a->palette, n * 4u);
     if (map && nmap > 0) apply_recolor(pal32, n, map, nmap);
+    if (map2 && nmap2 > 0) apply_recolor(pal32, n, map2, nmap2); /* a fusion's colours come after the variant's */
     if (rgba8)
       pal32[0] = 0;
     else
@@ -447,12 +453,9 @@ rr_atlas* rr_atlas_load_key(const char* key) {
   return a;
 }
 
-rr_atlas* rr_atlas_load_key_variant(const char* key, const char* map_key, int variant) {
-  size_t len, mlen;
-  void* d = pak_read(key, &len);
-  if (!d) return NULL;
+int rr_variant_pairs(const char* map_key, int variant, rr_recolor_pair* out, int cap) {
+  size_t mlen;
   u8* m = map_key ? pak_read(map_key, &mlen) : NULL;
-  rr_recolor_pair pairs[64];
   int n = 0;
   if (m && mlen >= 5 && !memcmp(m, "RVM1", 4)) {
     size_t o = 5;
@@ -461,9 +464,9 @@ rr_atlas* rr_atlas_load_key_variant(const char* key, const char* map_key, int va
       u16 cnt = m[o + 2] | (m[o + 3] << 8);
       o += 4;
       if (which == variant) {
-        for (int k = 0; k < cnt && k < 64 && o + 8 * (k + 1) <= mlen; k++) {
-          memcpy(&pairs[k].from, m + o + 8 * k, 4);
-          memcpy(&pairs[k].to, m + o + 8 * k + 4, 4);
+        for (int k = 0; k < cnt && k < cap && o + 8 * (k + 1) <= mlen; k++) {
+          memcpy(&out[k].from, m + o + 8 * k, 4);
+          memcpy(&out[k].to, m + o + 8 * k + 4, 4);
           n = k + 1;
         }
       }
@@ -471,9 +474,22 @@ rr_atlas* rr_atlas_load_key_variant(const char* key, const char* map_key, int va
     }
   }
   free(m);
-  rr_atlas* a = rr_atlas_load_rrt(d, len, pairs, n);
+  return n;
+}
+
+rr_atlas* rr_atlas_load_key_maps(const char* key, const char* map_key, int variant, const rr_recolor_pair* extra, int nextra) {
+  size_t len;
+  void* d = pak_read(key, &len);
+  if (!d) return NULL;
+  rr_recolor_pair pairs[64];
+  int n = map_key ? rr_variant_pairs(map_key, variant, pairs, 64) : 0;
+  rr_atlas* a = rr_atlas_load_rrt2(d, len, pairs, n, extra, nextra);
   free(d);
   return a;
+}
+
+rr_atlas* rr_atlas_load_key_variant(const char* key, const char* map_key, int variant) {
+  return rr_atlas_load_key_maps(key, map_key, variant, NULL, 0);
 }
 
 rr_tex* rr_tex_load_key(const char* key) {

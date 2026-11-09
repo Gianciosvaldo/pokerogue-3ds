@@ -32,6 +32,9 @@ typedef struct {
   int species, form;         /* SpeciesId, form index */
   bool female, shiny;
   int variant;               /* 0..2 */
+  int fusion_species;        /* the other half of a fused Pokemon (0 = not fused): the sprite is recoloured towards its palette */
+  int fusion_form, fusion_gender, fusion_variant;
+  bool fusion_shiny;
   int pokeball;              /* stored ball, supplied by the run for the opening throw */
   char name[40];             /* the name to render (nickname or species name) */
   int level;

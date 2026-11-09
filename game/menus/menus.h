@@ -290,8 +290,9 @@ void learn_move_start(const learn_move_args* args, const learn_move_host* host);
 /* ------------------------------------------------------------ sprites */
 
 /* A Pokemon's battle sprite (front or back; upstream getSpriteKey: forms,
- * female sprites, shiny and variant colours) and its animation. Fusions use
- * the base species' sprite: the fusion palette swap isn't ported yet. */
+ * female sprites, shiny and variant colours) and its animation. A fusion
+ * (menu_mon.fusion) is the base species' sprite with its colours moved towards
+ * the fusion half's palette (source/fusion_palette.c, upstream updateFusionPalette). */
 #define MENU_SPRITE_MAX_FRAMES 400
 typedef struct {
   rr_atlas* atlas;
