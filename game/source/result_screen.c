@@ -6,6 +6,7 @@
 
 #include "char_sprite.h"
 #include "dialogue_view.h"
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "postmortem_screen.h"
@@ -234,48 +235,80 @@ static void draw_fade(float w, float h) {
   rr_rect(0, 0, w, h, RR_RGBA(0, 0, 0, (int)(a * 255.0f + 0.5f)));
 }
 
-/* the arena the last wave was fought in, with nobody on it: the rival comes in over it */
+/* the arena's background picture of the last wave ("images/arenas/<biome>_bg"); false when the biome has none */
+static bool arena_bg_key(char* key, size_t n) {
+  char name[48];
+  gm_enum_lower(GM_E_BIOME_ID, R.a.run.biome, name, sizeof name);
+  if (!name[0]) return false;
+  snprintf(key, n, "images/arenas/%s_bg", name);
+  return img_has(key);
+}
+
+/* the 400x240 screen around the 320x180 field: the background mirrored over the bands, as the battle draws it (field_border.h) */
+static void draw_arena_border(void) {
+  char key[96];
+  if (arena_bg_key(key, sizeof key)) field_border_draw(key);
+}
+
+/* the arena the last wave was fought in, with nobody on it: the rival comes in over it. The platforms are drawn FIELD_ZOOM times bigger
+ * about the arena's bottom centre, as the battle does (battle_view.c field_zoom), so she stands where she stands when she is met */
 static void draw_arena(void) {
   char name[48], key[96];
   gm_enum_lower(GM_E_BIOME_ID, R.a.run.biome, name, sizeof name);
   if (!name[0]) return;
   snprintf(key, sizeof key, "images/arenas/%s_bg", name);
   if (img_has(key)) img_draw(key, NULL, 0, 0, 0, 0);
+  rr_set_zoom(FIELD_ZOOM, 160, 132);
   snprintf(key, sizeof key, "images/arenas/%s_b", name);
   if (img_has(key)) img_draw(key, NULL, 0, 0, 0, 0);
   snprintf(key, sizeof key, "images/arenas/%s_a", name);
   if (img_has(key)) img_draw(key, NULL, 0, 0, 0, 0);
+  rr_set_zoom(1, 160, 132);
+}
+
+/* the end card's picture (upstream: addImage(0, 0, "end_m") at origin 0 and scale 0.5, 320x180) fills the 400x240 screen: scaled to cover it
+ * (2/3 of its 640x360, so 426 px wide) and centred, the 13 px that run over each side cropped by the screen. In physical pixels. */
+#define END_CARD_SCALE (240.0f / 360.0f)
+#define END_CARD_X (-(640.0f * END_CARD_SCALE - 400.0f) / 2)
+
+static void draw_end_card_art(void) {
+  if (!img_has("images/cg/end_m")) return;
+  rr_draw_opts d = RR_DEFAULT_OPTS;
+  d.scale_x = d.scale_y = END_CARD_SCALE;
+  img_draw_opts("images/cg/end_m", NULL, END_CARD_X, 0, &d);
 }
 
 static void draw_top(void) {
   if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
-  if (ui_space(UI_FIELD)) {
-    text_opts o = text_defaults();
-    o.origin_x = o.origin_y = 0.5f;
-    o.font_px = 128;
-    if (R.a.victory && R.stage >= ST_FADE_IN && R.stage <= ST_HIDE) {
+  const bool rival = R.a.victory && R.stage >= ST_FADE_IN && R.stage <= ST_HIDE;
+  if (ui_space(UI_PHYS_TOP)) {
+    if (rival || !R.a.victory)
+      draw_arena_border(); /* under the field: she slides in across it */
+    else
+      draw_end_card_art();
+  }
+  text_opts o = text_defaults();
+  o.origin_x = o.origin_y = 0.5f;
+  o.font_px = 128;
+  if (rival) {
+    if (ui_space(UI_FIELD)) {
       draw_arena();
       if (!R.endless_talk) chs_draw();
-    } else if (R.a.victory) {
-      /* addImage(0, 0, "end_m") with origin 0 and scale 0.5; the text at (width / 2, height - 16) */
-      if (img_has("images/cg/end_m")) {
-        rr_draw_opts d = RR_DEFAULT_OPTS;
-        d.scale_x = d.scale_y = 0.5f;
-        img_draw_opts("images/cg/end_m", NULL, 0, 0, &d);
-      }
+    }
+  } else if (R.a.victory) {
+    if (ui_space(UI_FIELD)) {
+      /* the text at (width / 2, height - 16) of the card: that is 91% down it, as the picture is now 240 px tall (physical y 219, field y 189) */
       char t[64];
       i18n_t(t, sizeof t, "battle:congratulations", NULL);
-      text_draw(TS_SUMMARY, 160, 164, t, &o);
-    } else {
-      char name[48], key[96];
-      gm_enum_lower(GM_E_BIOME_ID, R.a.run.biome, name, sizeof name);
-      if (name[0]) {
-        snprintf(key, sizeof key, "images/arenas/%s_bg", name);
-        if (img_has(key)) img_draw(key, NULL, 0, 0, 0, 0);
-      }
-      rr_rect(0, 0, 320, 180, RR_RGBA(0, 0, 0, 160));
-      text_draw(TS_SUMMARY, 160, 90, "Game Over", &o);
+      text_draw(TS_SUMMARY, 160, 189, t, &o);
     }
+  } else {
+    if (ui_space(UI_FIELD)) {
+      char key[96];
+      if (arena_bg_key(key, sizeof key)) img_draw(key, NULL, 0, 0, 0, 0);
+    }
+    if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 160)); /* the darkening of the card, over the bands as over the field */
+    if (ui_space(UI_FIELD)) text_draw(TS_SUMMARY, 160, 90, "Game Over", &o);
   }
   if (ui_space(UI_PHYS_TOP)) draw_fade(400, 240);
   /* the bars are the UI's, over the fade as over the scene */

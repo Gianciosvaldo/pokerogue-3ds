@@ -16,6 +16,7 @@
 
 #include "char_sprite.h"
 #include "dialogue_view.h"
+#include "field_border.h"
 #include "i18n.h"
 #include "postmortem_screen.h"
 #include "result_screen.h"
@@ -58,11 +59,13 @@ bool ui_space(ui_space_id sp) {
   return top == (g_which == 0);
 }
 /* the black laid over a whole screen (ui.fadeIn / fadeOut): its alpha, per screen; -1 = none drawn since the last reset */
+static int n_dark; /* full-screen 0.63 black laid over the top screen (the defeat card's darkening) */
 static int g_fade_top, g_fade_top_n, g_fade_bottom = -1;
 #define FADE_TOP (g_fade_top_n >= 2 ? g_fade_top : 0) /* the screen's own black is the first full black rectangle, the fade is the second */
 void rr_rect(float x, float y, float w, float h, rr_color c) {
   (void)x, (void)y;
   if (h == 240.0f && (c & 0xFFFFFF00u) == 0) {
+    if (w == 400.0f && g_which == 0 && (int)(c & 0xFF) == 160) n_dark++;
     if (w == 400.0f && g_which == 0) {
       g_fade_top = (int)(c & 0xFF);
       g_fade_top_n++;
@@ -75,11 +78,27 @@ void ui_window(float x, float y, float w, float h, win_variant v) {
   (void)x, (void)y, (void)w, (void)v;
   if (g_which == 1) g_box_h = h;
 }
+/* the field_border helper (the biome's background over the 40 px and 30 px bands) and the field's zoom: what they were asked for */
+static int n_borders;
+static char g_border[96];
+static float g_zoom = 1;
+void field_border_draw(const char* key) { n_borders++; snprintf(g_border, sizeof g_border, "%s", key); }
+void rr_set_zoom(float z, float cx, float cy) { (void)cx, (void)cy; g_zoom = z; }
+static float g_opt_x, g_opt_scale;   /* the last image drawn with options: where and how big (the end card) */
 /* what the top screen drew: the images, in order (keys only) */
 static char g_imgs[16][48];
+static float g_img_zoom[16];   /* the field zoom each was drawn under */
 static int n_imgs;
 static void note_img(const char* key) {
-  if (n_imgs < 16) snprintf(g_imgs[n_imgs++], 48, "%s", key);
+  if (n_imgs < 16) {
+    g_img_zoom[n_imgs] = g_zoom;
+    snprintf(g_imgs[n_imgs++], 48, "%s", key);
+  }
+}
+static float zoom_of(const char* key) {
+  for (int i = 0; i < n_imgs; i++)
+    if (!strcmp(g_imgs[i], key)) return g_img_zoom[i];
+  return -1;
 }
 static bool drew(const char* key) {
   for (int i = 0; i < n_imgs; i++)
@@ -88,7 +107,7 @@ static bool drew(const char* key) {
 }
 bool img_has(const char* key) { return !strncmp(key, "images/cg/", 10) || !strncmp(key, "images/arenas/", 14); }
 void img_draw(const char* key, const char* frame, float x, float y, float ox, float oy) { (void)frame, (void)x, (void)y, (void)ox, (void)oy; note_img(key); }
-void img_draw_opts(const char* key, const char* frame, float x, float y, const rr_draw_opts* o) { (void)frame, (void)x, (void)y, (void)o; note_img(key); }
+void img_draw_opts(const char* key, const char* frame, float x, float y, const rr_draw_opts* o) { (void)frame; g_opt_x = x; g_opt_scale = o ? o->scale_x : 1; (void)y; note_img(key); }
 const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, RR_RGBA(255, 255, 255, 255)};
 text_opts text_defaults(void) {
   text_opts o;
@@ -245,6 +264,9 @@ static void draw_top(void) {
   g_which = 0;
   n_bars = 0;
   n_imgs = 0;
+  n_borders = 0;
+  n_dark = 0;
+  g_zoom = 1;
   n_cs_draw = 0;
   g_fade_top = 0;
   g_fade_top_n = 0;
@@ -602,6 +624,40 @@ int main(void) {
     run(2000);
     draw_bottom();
     CHECK(n_cs_log == 1 && !strcmp(g_cs_log[0], "reset") && !strcmp(g_box_text, LINE), "its B comes back to the line, without her again (%d, %s)", n_cs_log, g_box_text);
+  }
+
+  /* ---- the Ivy screens fill the 400x240 top screen (lorenzo, 2026-11-09: "still has a black outline"): the biome's background over the
+   * bands under the rival's talk and the defeat card, the end card scaled to cover and centred, the platforms under the battle's zoom */
+  {
+    int gift[][2] = {{WG_UNLOCK, 0}};
+    wg_gains gg = gains_of(gift, 1);
+    n_cs_log = 0;
+    result_args a = args(true, &gg, NULL);
+    a.ending = true;
+    result_screen_open(&a);
+    run(500);   /* the fade-in is over, she is in */
+    draw_top();
+    CHECK(n_borders == 1 && !strcmp(g_border, "images/arenas/town_bg"), "the rival's scene has the biome's bands (%d, %s)", n_borders, g_border);
+    CHECK(drew("images/arenas/town_bg") && drew("images/arenas/town_b") && drew("images/arenas/town_a"), "with the background and both platforms");
+    CHECK(zoom_of("images/arenas/town_bg") == 1.0f, "the background is not zoomed (%.2f)", zoom_of("images/arenas/town_bg"));
+    CHECK(zoom_of("images/arenas/town_b") == FIELD_ZOOM && zoom_of("images/arenas/town_a") == FIELD_ZOOM, "the platforms are drawn as the battle draws them (%.2f, %.2f)", zoom_of("images/arenas/town_b"), zoom_of("images/arenas/town_a"));
+    CHECK(g_zoom == 1.0f, "and the zoom is back to 1 for what comes after (%.2f)", g_zoom);
+    CHECK(n_dark == 0 && !drew("images/cg/end_m"), "no darkening, no end card in her scene");
+
+    /* the end card: the picture covers the whole 400x240 and its centre is the screen's */
+    g_no_ending_text = true;
+    result_screen_open(&a);
+    draw_top();
+    g_no_ending_text = false;
+    CHECK(drew("images/cg/end_m") && n_borders == 0, "the end card is the whole picture, no bands under it (%d)", n_borders);
+    CHECK(fabsf(g_opt_scale * 360.0f - 240.0f) < 0.01f, "it is 240 px tall (%.2f)", g_opt_scale * 360.0f);
+    CHECK(g_opt_scale * 640.0f >= 400.0f && fabsf(2 * g_opt_x + g_opt_scale * 640.0f - 400.0f) < 0.01f, "at least 400 px wide and centred (x %.2f, w %.2f)", g_opt_x, g_opt_scale * 640.0f);
+
+    /* the defeat card: the background over the bands, and the darkening over all 400x240 */
+    result_args d = args(false, NULL, NULL);
+    result_screen_open(&d);
+    draw_top();
+    CHECK(n_borders == 1 && !strcmp(g_border, "images/arenas/town_bg") && n_dark == 1, "the defeat card has the bands and darkens the whole screen (%d bands, %d dark)", n_borders, n_dark);
   }
 
   printf("result_gains_test: %d checks, %d failed\n", checks, failed);

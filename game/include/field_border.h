@@ -12,6 +12,11 @@
 extern "C" {
 #endif
 
+/* The field's platforms, Pokemon and animations are drawn FIELD_ZOOM times bigger than upstream's 320x180 field, about the arena's bottom
+ * centre (160, 132): at 1.25 the ground would reach the screen's side edges, 1.2 keeps a tall front sprite (96 px cells) in the screen.
+ * The battle (battle_view.c) and the rival's ending (result_screen.c) share it, so the platforms stand where they do in a fight. */
+#define FIELD_ZOOM 1.2f
+
 /* Draws the bands of the top screen (physical pixels, UI_PHYS_TOP) from the 320 x 180 background image `key` ("images/arenas/<biome>_bg").
  * Without the image the bands are black. Drawn after the field, it also hides what slides past the field's edge. */
 void field_border_draw(const char* key);
