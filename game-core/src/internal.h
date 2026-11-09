@@ -149,6 +149,9 @@ typedef struct {
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
     struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
+    /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
+     * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
+    struct { bool valid; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;
     struct { bool active; uint8_t pick, egg; } trtest;   /* A Trainer's Test: the fight is running (pick = the stat trainer, 0..4). Not saved, as fg */
     struct { bool active; uint8_t next; } winstrate;   /* The Winstrate Challenge: the chain of five trainer fights is running; next = the fight to make when this one is won. Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
@@ -551,6 +554,16 @@ void gc_trtest_reward(gc_run *run);                             /* RP_ME_BEFORE_
 void gc_trtest_outro(gc_run *run, const gc_rphase *p);          /* PostMysteryEncounterPhase: "X gave you an Epic Egg!" */
 /* The Expert Pokemon Breeder (src/gc_breeder.c) */
 bool gc_breeder_execute(gc_run *run, int option);
+/* ---- Weird Dream (src/gc_weird.c) ---- */
+bool gc_generate_moveset_player(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of);   /* Pokemon.generateAndPopulateMoveset() of a PlayerPokemon; its stats stay those of `stats_of` (src/gc_movegen.c) */
+void gc_weird_start(gc_run *run);          /* an encounter begins: its plan is chosen when first asked for */
+bool gc_weird_plan(gc_run *run);           /* onInit: false when a party Pokemon cannot be transformed (a species the data does not cover) */
+int gc_weird_species(gc_run *run, int position);   /* the species the party member at `position` (party order) becomes, 0 = none */
+bool gc_weird_new_pokemon(gc_run *run, int position, gc_mon *out);   /* the transformation's new Pokemon as onInit made it (constructor rolls, Tera type) */
+void gc_weird_execute(gc_run *run, int option);   /* option 0: the transformation, 1: the fight (still the stand-in), 2: lose 10% of every level */
+void gc_weird_reset_ranges(void);          /* tests: the BST ranges back to their initial values (a new page load upstream) */
+void gc_weird_set_ranges(int high, int standard);   /* tests: widened by that many steps of 10 each way */
+void gc_weird_get_ranges(int *high, int *standard);
 extern int gc_breeder_generated[3][4];   /* the last fight's three movesets as the constructor made them (the differential compares them) */
 void gc_breeder_reward(gc_run *run);                       /* the won fight's rewards callback (doPostEncounterCleanup) and the eggs */
 bool gc_breeder_game_over(gc_run *run);                    /* onGameOver: true = the run goes on */
