@@ -138,6 +138,7 @@ static bool any_over_half_hp(const gc_run *r)
  * any Pokemon that is not fainted */
 bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
 {
+    if (run->screen.me_stage == GC_ME_STAGE_TUTOR && type == GC_ME_BUG_TYPE_SUPERFAN) return option < 4 && idx >= 0 && idx < run->n_party;   /* the tutor: any Pokemon learns any of the four */
     if (idx < 0 || idx >= run->n_party) return false;
     const gc_mon *m = &run->party[idx];
     if (type == GC_ME_SHADY_VITAMIN_DEALER) {

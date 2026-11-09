@@ -832,6 +832,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         party_heal(run);
         return true;
     case RP_ME_BEFORE_REWARDS:
+        if (gc_superfan_tutor_start(run)) return false;   /* the Bug-type move tutor waits for the player's pick */
         if (gc_int(run)->training.away) gc_training_return(run);
         else { gc_berries_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); gc_breeder_reward(run); }
         return true;
@@ -1003,6 +1004,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     case RP_MYSTERY:
         if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
         return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
+    case RP_ME_BEFORE_REWARDS:
+        return gc_superfan_tutor_choose(run, c, why, ok);
     case RP_CATCH:
         return gc_catch_choose(run, p, c, why, ok);
     default:
