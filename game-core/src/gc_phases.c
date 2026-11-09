@@ -309,7 +309,16 @@ static void learn(gc_run *run, int idx, int move, int slot)
         gc_rq_push(run, gc_rp(RP_REWARD_FORM, idx, form, 0));
 }
 
+/* LearnMovePhase.learnMove's first lines, by learn type (p->c: 1 = TM, 2 = Memory Mushroom with its price in p->d, -1 for a free
+ * reward; 0 = a level-up move, which does nothing here). A TM and a free Memory Mushroom take the queued copy of the reward screen
+ * with them (SelectModifierPhase.applyModifier queued it so a move that is NOT learned returns to the screen); a bought Memory Mushroom
+ * is paid for only now, and the copy stays as the shop goes on */
 static void learned_tm(gc_run *run,const gc_rphase *p){
+    if(p->c==2){
+        if(p->d<0){gc_rq_remove(run,RP_SELECT_MODIFIER);gc_int(run)->reward.copy_pending=false;}
+        else{run->money-=p->d;gc_ev_money(run,-p->d);}
+        return;
+    }
     if(p->c!=1)return;
     if(!gc_mon_remember_tm(run,pm(run,p->a),p->b))return;
     gc_rq_remove(run,RP_SELECT_MODIFIER);
@@ -560,11 +569,17 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         o.is_purchase = true;
         if (run->money < o.cost) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         if (!gc_port_apply_reward(run, &o, c->b, c->c, why)) return false;
-        run->money -= o.cost;
-        gc_ev_money(run, -o.cost);
+        /* applyModifier: a Memory Mushroom is not paid for here but by the LearnMovePhase that learns the move (cancel it and you keep
+         * the money); every other purchase is paid now */
+        const bool memory = !strcmp(o.key, "MEMORY_MUSHROOM");
+        if (!memory) {
+            run->money -= o.cost;
+            gc_ev_money(run, -o.cost);
+        }
         *ok = true;
-        /* a purchase keeps the screen open (applyModifier with a cost doesn't end the phase) */
-        return false;
+        /* a purchase keeps the screen open (applyModifier with a cost doesn't end the phase), except the Memory Mushroom's: that phase
+         * ends, the LearnMovePhase runs, and the copy of the screen it queued comes back */
+        return memory;
     }
     case GC_CH_REROLL:
         if (s->reroll_cost < 0) { *why = "no reroll here"; return false; }

@@ -698,15 +698,26 @@ static bool berry_history_ok(const pr_pokemon *b)
 }
 
 /* A Pokemon that can't be played with (a species or move this build lacks, counts out of range) */
+/* The most forms any species has. An evolution that names no form keeps the form index (Pokemon.evolve), so a species with fewer forms
+ * can hold an index of its own range's end or beyond (Burmy's Sandy Cloak, form 1, evolves to Mothim, which has one form): upstream's
+ * getSpeciesForm() and gc_form() read it as the species' first form, and the save has to take the state. Only an index no species has is
+ * damage. */
+static int most_forms(void)
+{
+    static int most;
+    if (!most) for (int i = 0; i < PR_SPECIES_COUNT; i++) if (pr_species_table[i].nforms > most) most = pr_species_table[i].nforms;
+    return most;
+}
+
 static bool mon_ok(const gc_mon *m)
 {
     const pr_pokemon *b = &m->b;
     const pr_species *sp = gc_species(b->species);
-    if (!sp || b->form >= sp->nforms || b->level < 1 || m->met_level < 0) return false;
+    if (!sp || b->form >= most_forms() || b->level < 1 || m->met_level < 0) return false;
     if (m->has_custom_nature && (m->base_nature > 24 || b->nature > 24)) return false;
     if (b->fusion_species != 0) {
         const pr_species *fsp = gc_species(b->fusion_species);
-        if (!fsp || b->fusion_form >= fsp->nforms) return false;
+        if (!fsp || b->fusion_form >= most_forms()) return false;
         if (b->fusion_gender_known && (b->fusion_gender < -1 || b->fusion_gender > 1)) return false;
         if (b->fusion_ability_index < -1 || b->fusion_ability_index > 2) return false;
     }

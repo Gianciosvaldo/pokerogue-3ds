@@ -1156,6 +1156,102 @@ static void random_cases(int count)
     }
 }
 
+/* LearnMovePhase.learnMove for a Memory Mushroom (tests/memory-learn.producer.test.ts, upstream 8555c08):
+ *   R MEMORY -1  5000 5000 0 0   a free one learned: the queued copy of the reward screen is gone, no money
+ *   R MEMORY 800 5000 4200 1 0   a bought one learned: 800 paid now, the copy stays
+ * and applyModifier (Q lines) queues LearnMovePhase, then the copy; a bought one is NOT paid there. A move that is not learned
+ * (declined at a full moveset) leaves the copy and the money. */
+static void memory_mushroom_learn(gc_mon *m, int n_moves)
+{
+    (void)n_moves;
+    gc_internal *in = gc_int(&run);
+    const char *why = NULL;
+    gc_rphase p;
+    gc_offer free_offer = offer("MEMORY_MUSHROOM", 0);
+
+    /* free, learned into an empty slot */
+    gc_rq_clear(&run);
+    in->reward.copy_pending = false;
+    m->b.n_moves = 1;
+    m->b.moves[0] = MOVE_ID_SPLASH;
+    run.money = 5000;
+    CHECK(gc_reward_apply(&run, &free_offer, 0, 0, &why) == GC_APPLY_DONE);
+    CHECK(in->reward.copy_pending && gc_rq_has(&run, RP_SELECT_MODIFIER));
+    CHECK(gc_rq_next(&in->rq, &p) && p.type == RP_LEARN_MOVE);
+    CHECK(gc_phase_start(&run, &p));
+    CHECK(!gc_rq_has(&run, RP_SELECT_MODIFIER) && !in->reward.copy_pending);   /* nothing else to pick */
+    CHECK(run.money == 5000);
+    gc_rq_clear(&run);
+
+    /* free, declined at a full moveset: the copy stays so the screen comes back as it was; the answer to "forget which?" ends it */
+    m->b.n_moves = 4;
+    m->b.moves[0] = MOVE_ID_TACKLE; m->b.moves[1] = MOVE_ID_SCRATCH; m->b.moves[2] = MOVE_ID_GROWL; m->b.moves[3] = MOVE_ID_LEER;
+    CHECK(gc_reward_apply(&run, &free_offer, 0, 0, &why) == GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq, &p) && p.type == RP_LEARN_MOVE && !gc_phase_start(&run, &p));
+    bool chosen = false;
+    gc_choice no = {GC_CH_FORGET, -1, 0, 0};
+    CHECK(gc_phase_choose(&run, &p, &no, &why, &chosen) && chosen);
+    CHECK(gc_rq_has(&run, RP_SELECT_MODIFIER) && in->reward.copy_pending && run.money == 5000);
+    gc_rq_clear(&run);
+    in->reward.copy_pending = false;
+
+    /* free, learned over a move */
+    CHECK(gc_reward_apply(&run, &free_offer, 0, 0, &why) == GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq, &p) && p.type == RP_LEARN_MOVE && !gc_phase_start(&run, &p));
+    chosen = false;
+    gc_choice yes = {GC_CH_FORGET, 0, 0, 0};
+    CHECK(gc_phase_choose(&run, &p, &yes, &why, &chosen) && chosen);
+    CHECK(!gc_rq_has(&run, RP_SELECT_MODIFIER) && !in->reward.copy_pending && run.money == 5000);
+    gc_rq_clear(&run);
+
+    /* bought: the shop's choice pays nothing yet, ends the phase, and the learn pays 800 and leaves the copy for the shop */
+    m->b.n_moves = 1;
+    m->b.moves[0] = MOVE_ID_SPLASH;
+    gc_screen *s = &run.screen;
+    memset(s, 0, sizeof *s);
+    s->kind = GC_SCREEN_REWARD;
+    s->n_shop = 1;
+    s->shop[0] = offer("MEMORY_MUSHROOM", 800);
+    gc_rphase select = gc_rp(RP_SELECT_MODIFIER, 0, 0, 0);
+    gc_choice buy = {GC_CH_SHOP, 0, 0, 0};
+    chosen = false;
+    in->reward.copy_pending = false;
+    CHECK(gc_phase_choose(&run, &select, &buy, &why, &chosen) && chosen);   /* true: the phase ends */
+    CHECK(run.money == 5000);
+    CHECK(gc_rq_next(&in->rq, &p) && p.type == RP_LEARN_MOVE && p.c == 2 && p.d == 800);
+    CHECK(gc_phase_start(&run, &p));
+    CHECK(run.money == 4200 && gc_rq_has(&run, RP_SELECT_MODIFIER) && in->reward.copy_pending);
+    gc_rq_clear(&run);
+    in->reward.copy_pending = false;
+
+    /* bought, then declined at a full moveset: no money lost */
+    m->b.n_moves = 4;
+    m->b.moves[0] = MOVE_ID_TACKLE; m->b.moves[1] = MOVE_ID_SCRATCH; m->b.moves[2] = MOVE_ID_GROWL; m->b.moves[3] = MOVE_ID_LEER;
+    run.money = 5000;
+    chosen = false;
+    CHECK(gc_phase_choose(&run, &select, &buy, &why, &chosen) && chosen);
+    CHECK(gc_rq_next(&in->rq, &p) && p.type == RP_LEARN_MOVE && !gc_phase_start(&run, &p));
+    chosen = false;
+    CHECK(gc_phase_choose(&run, &p, &no, &why, &chosen) && chosen);
+    CHECK(run.money == 5000 && gc_rq_has(&run, RP_SELECT_MODIFIER));
+    gc_rq_clear(&run);
+    in->reward.copy_pending = false;
+
+    /* a bought TM is still paid when picked and keeps the screen open */
+    run.money = 5000;
+    memset(s, 0, sizeof *s);
+    s->kind = GC_SCREEN_REWARD;
+    s->n_shop = 1;
+    s->shop[0] = offer("TM_COMMON", 300);
+    s->shop[0].arg = MOVE_ID_FLAMETHROWER;
+    m->b.n_moves = 1;
+    m->b.moves[0] = MOVE_ID_SPLASH;
+    chosen = false;
+    CHECK(!gc_phase_choose(&run, &select, &buy, &why, &chosen) && chosen && run.money == 4700);
+    gc_rq_clear(&run);
+    in->reward.copy_pending = false;
+}
+
 static void test_tm_and_memory_mushroom(void)
 {
     setup("tm-memory-test", 1);
@@ -1267,16 +1363,18 @@ static void test_tm_and_memory_mushroom(void)
     /* Memory Mushroom applying slot 0 asserts moves[0].move is learned */
     res = gc_reward_apply(&run, &mm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
+    /* addModifier queues the LearnMovePhase, then applyModifier the copy of the screen (tests/memory-learn.producer.test.ts, "Q" lines) */
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == moves[0].move && queued_p.c == 2 && queued_p.d == -1);
     CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
-    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == moves[0].move);
     gc_rq_clear(&run);
 
     /* Memory Mushroom applying slot 1 asserts moves[1].move is learned */
     res = gc_reward_apply(&run, &mm_offer, 0, 1, &why);
     CHECK(res == GC_APPLY_DONE);
-    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
     CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == moves[1].move);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
     gc_rq_clear(&run);
+    in->reward.copy_pending = false;
 
     /* Invalid party member for TM or Memory Mushroom */
     res = gc_reward_apply(&run, &tm_offer, -1, 0, &why);
@@ -1284,6 +1382,8 @@ static void test_tm_and_memory_mushroom(void)
 
     res = gc_reward_apply(&run, &mm_offer, 5, 0, &why);
     CHECK(res == GC_APPLY_REFUSED && !strcmp(why, "pick a Pokemon"));
+
+    memory_mushroom_learn(m, n_moves);
 }
 
 int main(void)
