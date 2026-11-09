@@ -481,6 +481,7 @@ extern const gc_trader_class gc_trader_classes[];
 extern const int gc_trader_class_count;
 bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);    /* the 3 offers of a party member (generateTradeOption x3, then the 3 EnemyPokemon) */
 bool gc_gts_item_transferable(const gc_item *it);
+int gc_item_pool_tier(gc_run *run, const gc_item *it);          /* ModifierType.tier after withTierFromPool(PLAYER, party): -1 when the type has none */
 int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
 bool gc_gts_pick_ok(const gc_run *run, int option, int idx);
 int gc_gts_allowed(const gc_run *run);
@@ -529,6 +530,10 @@ void gc_winstrate_victory(gc_run *run);                          /* a fight of t
 void gc_winstrate_next(gc_run *run);                             /* RP_WINSTRATE: the next trainer's fight, or the end of the encounter */
 extern int gc_winstrate_generated[5][4];                         /* the last fight's movesets as the constructor made them (the differential compares them) */
 void gc_me_say_trainer_fight(gc_run *run, gc_internal *in);      /* the trainer's lines, the send-outs and the first turn of a mystery encounter's trainer fight */
+/* Clowning Around (src/gc_clown.c) */
+void gc_clown_roll(const gc_run *run, int *ability, int *first_type, int *second_type);   /* onInit: Blacephalon's ability (AbilityId) and its two types */
+void gc_clown_execute(gc_run *run, int option);                 /* options 2 and 3: the item shuffle, the type shuffle; both leave with the heal shop */
+
 /* A Trainer's Test (src/gc_trtest.c) */
 const char *gc_trtest_key(int pick);                            /* the stat trainer's key ("buck"): trainerNames:buck and the dialogue's section */
 int gc_trtest_pick(const gc_run *run);                          /* onInit's randSeedInt(5): Buck, Cheryl, Marley, Mira or Riley (0..4) */
