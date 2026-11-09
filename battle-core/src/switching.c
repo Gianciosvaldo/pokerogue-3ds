@@ -694,6 +694,13 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         p->me_post_summon = PR_ME_POST_NONE;
         pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/dancingLessons:option.1.bossEnraged", pr_arg_key("oricorioName", "pokemon:oricorio")));
         pr_unshift_stat_stage_change(bt, e, q->battler, stats, 4, 1, p);
+    } else if (p->me_post_summon == PR_ME_POST_AVARICE_LOW || p->me_post_summon == PR_ME_POST_AVARICE_HIGH) {
+        /* Absolute Avarice's Greedent: its message (the species' name as the dialogue token), then groupStatChange([SPDEF] below wave 50, else [SPDEF, SPD], 1) */
+        static const int32_t stats[2] = {STAT_SPDEF, STAT_SPD};
+        const bool is_low = p->me_post_summon == PR_ME_POST_AVARICE_LOW;
+        p->me_post_summon = PR_ME_POST_NONE;
+        pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/absoluteAvarice:option.1.bossEnraged", pr_arg_key("greedentName", "pokemon:greedent")));
+        pr_unshift_stat_stage_change(bt, e, q->battler, stats, is_low ? 1 : 2, 1, p);
     } else if (p->me_post_summon == PR_ME_POST_SPDEF_SPD) {
         /* Fiery Fallout's Volcarona: groupStatChange([SPDEF, SPD], 1), no message */
         static const int32_t stats[2] = {STAT_SPDEF, STAT_SPD};
