@@ -15,7 +15,10 @@
  * regular type it does not have. A fused Pokemon's fusion half gets the same types. The option then leaves with the heal shop.
  */
 #include "internal.h"
+#include <stdio.h>
 #include <string.h>
+
+extern int pr_reward_generate(pr_reward_ctx *ctx, int item);   /* reward-core/src/reward_internal.h: generateType of a generator item; below 0 it makes nothing */
 
 static const uint16_t ABILITY_POOL[15] = {
     ABILITY_ID_STURDY, ABILITY_ID_PICKUP, ABILITY_ID_INTIMIDATE, ABILITY_ID_GUTS, ABILITY_ID_DROUGHT, ABILITY_ID_DRIZZLE, ABILITY_ID_SNOW_WARNING,
