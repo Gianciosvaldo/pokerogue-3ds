@@ -330,6 +330,13 @@ static void setup_texts(gc_run *run)
         screen_arg(s, pr_arg_int("trainerPick", gc_trtest_pick(run)));
         break;
     }
+    case GC_ME_CLOWNING_AROUND: {
+        int ability;
+        gc_clown_roll(run, &ability, NULL, NULL);
+        screen_arg(s, pr_arg_ability("ability", ability));   /* onInit's setDialogueToken("ability", allAbilities[ability].name) */
+        screen_arg(s, pr_arg_key("blacephalonName", "pokemon:blacephalon"));
+        break;
+    }
     case GC_ME_TRASH_TO_TREASURE:
         screen_arg(s, (pr_msg_arg){"costMultiplier",PR_ARG_STR,0,"2.5"});
         break;
@@ -1457,12 +1464,8 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         if (option == 0) {
             start_mystery_wild_battle(run, SPECIES_ID_BLACEPHALON, wave_level, true, 3, 1);
             return true;
-        } else if (option == 1) {
-            gc_port_give_reward(run, "LUM_BERRY");
-            end_mystery_encounter_leave(run);
-            return true;
         }
-        end_mystery_encounter_leave(run);
+        gc_clown_execute(run, option);
         return true;
 
     case GC_ME_PART_TIMER:

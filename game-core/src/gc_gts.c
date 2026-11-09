@@ -189,6 +189,16 @@ bool gc_gts_item_transferable(const gc_item *it)
     return true;
 }
 
+/* withTierFromPool(PLAYER, party): the first tier the item weighs in, else the cached one. -1: the type has no tier at all (White Herb, Lucky Egg and Golden Egg are not in the pool) */
+int gc_item_pool_tier(gc_run *run, const gc_item *it)
+{
+    const int item = gc_reward_item_index(it->key);
+    int tier = -1;
+    if (item >= 0) tier = pr_reward_pregen_option(gc_reward_ctx(run), item, it->arg).tier;
+    if (tier < 0 && it->type_tier > 0) tier = it->type_tier - 1;
+    return tier;
+}
+
 /* the held items of the party member `idx` the item trade offers, as indexes into run->items in getHeldItems() order */
 int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS])
 {
@@ -393,10 +403,8 @@ static bool item_trade(gc_run *run, int holder, int which, const char **why)
     const int item = gc_reward_item_index(chosen.key);
     if (item < 0) { *why = "unknown item"; return false; }
 
-    /* withTierFromPool(PLAYER, party): the first tier the item weighs in, else the cached one; the three items the pool lacks */
     pr_reward_ctx *ctx = gc_reward_ctx(run);
-    int tier = pr_reward_pregen_option(ctx, item, chosen.arg).tier;
-    if (tier < 0 && chosen.type_tier > 0) tier = chosen.type_tier - 1;
+    int tier = gc_item_pool_tier(run, &chosen);
     if (tier < 0) tier = 1;   /* ModifierTier.GREAT */
     if (!strcmp(chosen.key, "WHITE_HERB")) tier = 1;
     else if (!strcmp(chosen.key, "LUCKY_EGG")) tier = 2;
