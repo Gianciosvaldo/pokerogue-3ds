@@ -243,6 +243,7 @@ int main(int argc, char **argv)
         {
             const gc_internal *in = gc_int(&run);
             EQ("reward active", in->me_reward.active, 1);
+            EQ("the callback before the rewards", in->me_reward.before, has_on_rewards);
             EQ("reward fill", in->me_reward.fill, 1);
             EQ("reward has no single item", in->me_reward.has_item, 0);
             EQ("reward function", in->me_reward.func, -1);

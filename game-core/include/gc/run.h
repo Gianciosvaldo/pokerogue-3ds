@@ -211,7 +211,12 @@ typedef struct {
     pr_msg_arg me_args[12];
     int n_me_args;
     uint8_t option_pick[8];
+    /* a stage of the encounter other than its first screen: GC_ME_STAGE_TUTOR (the Bug-Type Superfan's move tutor after the win: options 0..3 are the four moves, gc_superfan_tutor_move, each asks for a
+     * party member; option 4 teaches nothing) */
+    uint8_t me_stage;
 } gc_screen;
+enum { GC_ME_STAGE_FIRST = 0, GC_ME_STAGE_TUTOR = 1 };
+int gc_superfan_tutor_move(const gc_run *run, int k);   /* the k-th (0..3) move the Bug-Type Superfan's tutor offers */
 enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
        GC_PICK_MEMBER_ABILITY = 4,   /* a party member and then one of its abilities (c = the ability slot 0..2); gc_training_abilities lists them */

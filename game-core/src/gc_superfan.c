@@ -350,6 +350,7 @@ static void fight(gc_run *run)
     gc_enemy_finish_party_me(run);   /* no modifierConfigs: the ordinary item rolls */
     in->me_tera_static = 0;
 
+    in->superfan.tutor_pending = true;   /* encounter.onRewards = doBugTypeMoveTutor */
     in->me_post.pending = true;   /* the outro, after the shop */
     in->me_post.a = GC_ME_BUG_TYPE_SUPERFAN;
     in->me_post.b = in->me_post.c = 0;
@@ -357,13 +358,49 @@ static void fight(gc_run *run)
     in->me_reward.has_item = false;
     in->me_reward.func = -1;
     in->me_reward.fill = true;
-    in->me_reward.before = false;
+    in->me_reward.before = true;   /* the callback before the rewards */
     in->me_reward.n_more = in->me_reward.n_tiers = 0;
 
     run->me_catch_allowed = false;
     run->mystery_type = run->mystery_tier = -1;
     run->in_battle = true;
     say_trainer_fight(run, in);
+}
+
+int gc_superfan_tutor_move(const gc_run *run, int k)
+{
+    return k >= 0 && k < 4 ? gc_int((gc_run *)run)->superfan.tutor[k] : 0;
+}
+
+/* doBugTypeMoveTutor: the battleWon dialogue, then selectOptionThenPokemon(the four moves, teachMovePrompt): a move, then the Pokemon (the cancel button teaches nothing) */
+bool gc_superfan_tutor_start(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (!in->superfan.tutor_pending) return false;
+    in->superfan.tutor_pending = false;
+    gc_ev_msg(run, "mysteryEncounters/bugTypeSuperfan:battleWon", 0);
+    gc_screen *s = &run->screen;
+    memset(s, 0, sizeof *s);
+    s->kind = GC_SCREEN_MYSTERY;
+    s->mystery_type = GC_ME_BUG_TYPE_SUPERFAN;
+    s->mystery_tier = 0;
+    s->me_stage = GC_ME_STAGE_TUTOR;
+    s->n_options = 5;
+    for (int k = 0; k < 5; k++) s->option_ok[k] = true;
+    for (int k = 0; k < 4; k++) s->option_pick[k] = GC_PICK_MEMBER;
+    return true;
+}
+
+/* a = the move (0..3) or 4 for the cancel, b = the Pokemon: LearnMovePhase(selectedPokemonIndex, moveId) is unshifted */
+bool gc_superfan_tutor_choose(gc_run *run, const gc_choice *c, const char **why, bool *ok)
+{
+    if (c->kind != GC_CH_MYSTERY) { *why = "choose a move to teach"; return false; }
+    if (c->a < 0 || c->a > 4) { *why = "no such move"; return false; }
+    if (c->a < 4 && (c->b < 0 || c->b >= run->n_party)) { *why = "no such Pokemon"; return false; }
+    *ok = true;
+    memset(&run->screen, 0, sizeof run->screen);
+    if (c->a < 4) gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, c->b, gc_int(run)->superfan.tutor[c->a], 0));
+    return true;
 }
 
 void gc_superfan_outro(gc_run *run)

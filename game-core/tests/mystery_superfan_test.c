@@ -90,7 +90,7 @@ static void test_the_screen(void)
     puts("ok");
 }
 
-static int said_outro, said_appeared, said_send_out, trainer_events;
+static int said_won, said_outro, said_appeared, said_send_out, trainer_events;
 static void drain(void)
 {
     gc_event e;
@@ -98,6 +98,7 @@ static void drain(void)
         if (e.kind == GC_EV_TRAINER) trainer_events++;
         if (e.kind != GC_EV_MESSAGE || !e.msg.key) continue;
         if (!strcmp(e.msg.key, "mysteryEncounters/bugTypeSuperfan:outro")) said_outro++;
+        if (!strcmp(e.msg.key, "mysteryEncounters/bugTypeSuperfan:battleWon")) said_won++;
         if (!strcmp(e.msg.key, "battle:trainerAppeared")) said_appeared++;
         if (!strcmp(e.msg.key, "battle:trainerSendOut")) said_send_out++;
     }
@@ -141,18 +142,115 @@ static void test_the_fight(void)
         const gc_internal *in = gc_int(&run);
         assert(in->superfan.tutor[0] && in->superfan.tutor[1] && in->superfan.tutor[2] && in->superfan.tutor[3]);
         /* the shop that follows the win has fillRemaining, and the outro waits for it */
-        assert(in->me_reward.active && in->me_reward.fill && in->me_reward.func == -1 && !in->me_reward.before);
+        assert(in->me_reward.active && in->me_reward.fill && in->me_reward.func == -1 && in->me_reward.before && in->superfan.tutor_pending);
         assert(in->me_post.pending && in->me_post.a == GC_ME_BUG_TYPE_SUPERFAN);
+        gc_rq_reset(&gc_int(&run)->rq);   /* the turn the fight would have played is not queued: the win is */
         gc_me_win_rewards(&run);
-        int shop = 0, post = 0;
-        for (gc_rphase p; gc_rq_next(&gc_int(&run)->rq, &p);) {
-            if (p.type == RP_SELECT_MODIFIER) shop += p.a == 2;
-            if (p.type == RP_ME_POST) { post++; gc_phase_start(&run, &p); }
-        }
+        gc_run_until_screen(&run);
         drain();
-        assert(shop == 1 && post == 1 && said_outro == 1);
+        assert(said_won == 1 && !gc_int(&run)->superfan.tutor_pending);   /* showEncounterDialogue(battleWon); the callback runs once */
+        said_won = 0;
+        /* the tutor: the four moves and the cancel, any Pokemon of the party for the moves */
+        assert(run.screen.kind == GC_SCREEN_MYSTERY && run.screen.me_stage == GC_ME_STAGE_TUTOR && run.screen.n_options == 5);
+        for (int k = 0; k < 5; k++) assert(run.screen.option_ok[k] && run.screen.option_pick[k] == (k < 4 ? GC_PICK_MEMBER : GC_PICK_NONE));
+        for (int k = 0; k < 4; k++) assert(gc_superfan_tutor_move(&run, k) == (int)in->superfan.tutor[k] && gc_superfan_tutor_move(&run, k) > 0);
+        for (int k = 0; k < 4; k++) for (int i = 0; i < run.n_party; i++) assert(gc_mystery_pick_ok(&run, GC_ME_BUG_TYPE_SUPERFAN, k, i));
+        assert(!gc_mystery_pick_ok(&run, GC_ME_BUG_TYPE_SUPERFAN, 0, run.n_party));
+        /* a move and a Pokemon that do not exist are refused and the screen stays */
+        gc_choice bad = {GC_CH_MYSTERY, 5, 0, 0};
+        assert(!gc_run_choose(&run, &bad, &why) && run.screen.kind == GC_SCREEN_MYSTERY);
+        bad = (gc_choice){GC_CH_MYSTERY, 0, run.n_party, 0};
+        assert(!gc_run_choose(&run, &bad, &why) && run.screen.kind == GC_SCREEN_MYSTERY);
+        bad = (gc_choice){GC_CH_MYSTERY, 0, -1, 0};
+        assert(!gc_run_choose(&run, &bad, &why) && run.screen.kind == GC_SCREEN_MYSTERY);
+        const int want = (int)in->superfan.tutor[b % 4];
+        const int member = b % run.n_party;
+        if (b % 2) {
+            /* the cancel button: nothing is learned and the shop follows */
+            gc_choice cancel = {GC_CH_MYSTERY, 4, 0, 0};
+            assert(gc_run_choose(&run, &cancel, &why));
+            gc_run_until_screen(&run);
+            assert(run.screen.kind == GC_SCREEN_REWARD);
+        } else {
+            gc_choice teach = {GC_CH_MYSTERY, b % 4, member, 0};
+            assert(gc_run_choose(&run, &teach, &why));
+            gc_run_until_screen(&run);
+            drain();
+            /* LearnMovePhase: it learns the move, or asks which to forget when it knows four others */
+            bool knows = false;
+            for (int k = 0; k < run.party[member].b.n_moves; k++) knows = knows || run.party[member].b.moves[k] == want;
+            assert(knows || run.screen.kind == GC_SCREEN_LEARN_MOVE || run.screen.kind == GC_SCREEN_REWARD);
+            if (run.screen.kind == GC_SCREEN_LEARN_MOVE) {
+                gc_choice forget = {GC_CH_FORGET, -1, 0, 0};
+                assert(gc_run_choose(&run, &forget, &why));
+                gc_run_until_screen(&run);
+            }
+            assert(run.screen.kind == GC_SCREEN_REWARD);
+        }
         said_outro = 0;
+        leave_shop();
+        gc_run_until_screen(&run);
+        drain();
+        assert(said_outro == 1);
     }
+    puts("ok");
+}
+
+/* the fight won: the callback before the rewards has opened the tutor's screen */
+static void win_to_tutor(const char *seed, int wave)
+{
+    start(seed, wave, MIX, 4);
+    const char *why;
+    gc_choice ch = {GC_CH_MYSTERY, 0, 0, 0};
+    assert(gc_run_choose(&run, &ch, &why));
+    gc_run_until_screen(&run);
+    drain();
+    gc_rq_reset(&gc_int(&run)->rq);
+    gc_me_win_rewards(&run);
+    gc_run_until_screen(&run);
+    drain();
+    assert(run.screen.kind == GC_SCREEN_MYSTERY && run.screen.me_stage == GC_ME_STAGE_TUTOR);
+}
+
+static bool knows(int member, int move)
+{
+    for (int k = 0; k < run.party[member].b.n_moves; k++) if (run.party[member].b.moves[k] == move) return true;
+    return false;
+}
+
+/* the tutor teaches the chosen move to the chosen Pokemon only, nothing on the cancel, and refuses what is not a pick */
+static void test_the_tutor(void)
+{
+    puts("test_superfan_tutor...");
+    for (int k = 0; k < 4; k++) {
+        for (int member = 0; member < 4; member += 3) {
+            char seed[16];
+            snprintf(seed, sizeof seed, "sf-t%d%d", k, member);
+            win_to_tutor(seed, 63);
+            const int move = gc_superfan_tutor_move(&run, k);
+            const char *why;
+            gc_choice teach = {GC_CH_MYSTERY, k, member, 0};
+            assert(gc_run_choose(&run, &teach, &why));
+            gc_run_until_screen(&run);
+            for (int i = 0; i < 4; i++) assert(knows(i, move) == (i == member));
+            assert(run.screen.kind == GC_SCREEN_REWARD);
+        }
+    }
+    /* the cancel button teaches nothing */
+    win_to_tutor("sf-tc", 63);
+    gc_choice cancel = {GC_CH_MYSTERY, 4, 0, 0};
+    const char *why;
+    assert(gc_run_choose(&run, &cancel, &why));
+    gc_run_until_screen(&run);
+    for (int k = 0; k < 4; k++) for (int i = 0; i < 4; i++) assert(!knows(i, gc_superfan_tutor_move(&run, k)));
+    assert(run.screen.kind == GC_SCREEN_REWARD);
+    /* what is no answer is refused and the screen stays */
+    win_to_tutor("sf-tr", 63);
+    gc_choice skip = {GC_CH_SKIP, 0, 0, 0};
+    assert(!gc_run_choose(&run, &skip, &why) && run.screen.kind == GC_SCREEN_MYSTERY);
+    gc_choice low = {GC_CH_MYSTERY, -1, 0, 0};
+    assert(!gc_run_choose(&run, &low, &why) && run.screen.kind == GC_SCREEN_MYSTERY);
+    assert(!gc_mystery_pick_ok(&run, GC_ME_BUG_TYPE_SUPERFAN, 4, 0));   /* the cancel asks for no Pokemon */
     puts("ok");
 }
 
@@ -239,6 +337,7 @@ int main(void)
 {
     test_the_screen();
     test_the_fight();
+    test_the_tutor();
     test_show_your_bug_types();
     test_gift_a_bug_item();
     puts("all superfan host tests passed");
