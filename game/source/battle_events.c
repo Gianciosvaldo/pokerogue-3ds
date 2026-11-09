@@ -342,9 +342,6 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         break;
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
-        /* "Will you switch Pokemon?" is asked as a prompt in upstream (SET battle style only); the run doesn't
-         * ask it, and the question alone would be a dead end on screen */
-        if (!strcmp(ev->msg.key, "battle:switchQuestion")) break;
         be_format_message(&ev->msg,g_txt[nt],sizeof g_txt[nt]);
         if (i + 1 < n_events && events[i + 1].type == PR_EV_SWITCH_IN && events[i + 1].battler >= 0 &&
             events[i + 1].battler < 2) {

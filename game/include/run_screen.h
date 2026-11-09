@@ -59,6 +59,9 @@ typedef struct {
   /* A custom run (task C10, custom_run.h): the rematch hooks are installed, the run saves into the custom slot `slot` (a file the ordinary
    * loader never reads) with its overlay, and rs_resume loads from there. false = an ordinary run, played and saved exactly as before. */
   bool custom;
+  /* Upstream's battle style SWITCH (its default): a wild or mystery-encounter battle's start asks "Will you switch?" (CheckSwitchPhase). false = the SET
+   * style: no question. Not saved with the run, so rs_start and rs_resume set it from here. */
+  bool ask_switch;
   /* The run ended (screen kind GC_SCREEN_GAME_OVER or GC_SCREEN_CLEAR). The driver stops and calls this from the UI loop; the
    * run stays readable through rs_run() until the next rs_start / rs_resume. NULL = the stand-in: a message, then a new run. */
   void (*on_end)(int screen_kind, void* arg);

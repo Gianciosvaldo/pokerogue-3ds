@@ -927,6 +927,9 @@ void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
   }
 }
 
+static bool cfg_ask_switch;
+static int n_switch_yes, n_switch_no;
+
 static void evo_check(void) {
   if (!EVO.armed || EVO.choice == -1) return;
   EVO.armed = false;
@@ -1695,6 +1698,15 @@ static bool step(void) {
       if (learn_forget_ally_only >= 0) yes = 1;
       if (learn_decline_ally_only) yes = 0;
     }
+    {
+      /* RUNTEST_ASK_SWITCH: the "Will you switch?" question of the SWITCH battle style, never at a trainer's battle */
+      const gc_run* cs = rs_run();
+      if (cs->screen.kind == GC_SCREEN_CHECK_SWITCH) {
+        if (cs->battle_type == BATTLE_TYPE_TRAINER) BAD("Will you switch? asked at a trainer's battle");
+        if (!cfg_ask_switch) BAD("Will you switch? asked with the SET battle style");
+        if (yes) n_switch_yes++; else n_switch_no++;
+      }
+    }
     const gc_run* scan_run = rs_run();
     bool scan = scanner_fixture && scan_run->screen.kind == GC_SCREEN_COMMAND;
     pr_rng scan_rng = scan_run->run.rng, scan_battle_rng = scan_run->bt.battle_rng;
@@ -1979,6 +1991,7 @@ int main(int argc, char** argv) {
 
   rs_config cfg;
   memset(&cfg, 0, sizeof cfg);
+  cfg_ask_switch = cfg.ask_switch = getenv("RUNTEST_ASK_SWITCH") != NULL;
   cfg.entropy = (uint32_t)first * 7919u + 12345u;
   char seed[32];
   snprintf(seed, sizeof seed, "runtest%017d", first);
@@ -2337,6 +2350,7 @@ int main(int argc, char** argv) {
   if (violations) printf("first violation: %s\n", first_violation);
   if (deadlock) printf("DEADLOCK: nothing was pending after %ld steps (run %d, wave %d)\n", steps, st->runs, rs_run()->wave);
   if (no_progress) printf("NO PROGRESS: no new wave in 20000 steps (wave %d)\n", rs_run()->wave);
+  if(cfg_ask_switch){printf("will-you-switch answers: yes %d no %d\n",n_switch_yes,n_switch_no);if(!n_switch_yes||!n_switch_no)BAD("the Will you switch? question was not answered both ways");}
   if(getenv("RUNTEST_EVENT_STORE")){printf("external event storage promotions %d\n",event_store_promotions);if(!event_store_promotions)BAD("external event storage was not exercised");}
   const bool fail = violations || st->not_found || st->shown_mismatch || st->stuck || deadlock || no_progress || ended < runs;
   printf(fail ? "FAILED\n" : "OK\n");
