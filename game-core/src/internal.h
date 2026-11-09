@@ -138,6 +138,7 @@ typedef struct {
     bool me_no_stats;
     /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
+    struct { bool pending; } avarice;   /* Absolute Avarice: the Reviver Seeds the fight's win gives */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
     struct { bool pending; int8_t primary; double base; bool wave; } me_exp;   /* setEncounterExp(primary.id, base, wave) of a fight (Teleporting Hijinks), run by the rewards phase of the won fight */
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
@@ -438,6 +439,10 @@ void gc_me_start_data_battle(gc_run *run, const gc_mon *mon, int level, int post
 bool gc_me_roll_boss(gc_run *run, pr_rng *stream, gc_mon *boss, int *level);   /* the same boss rolled on a given stream (Teleporting Hijinks), src/gc_fof.c */
 bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after);   /* onInit's boss (Fight or Flight, Berries Abound), src/gc_fof.c */
 void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type);
+void gc_avarice_execute(gc_run *run, int option);                 /* Absolute Avarice (src/gc_avarice.c) */
+void gc_avarice_reward(gc_run *run);
+bool gc_avarice_spawnable(const gc_run *run);                     /* six BerryModifier stacks */
+void gc_avarice_tokens(gc_run *run, pr_msg_arg *name);
 void gc_berries_execute(gc_run *run, int option);                  /* Berries Abound (src/gc_berries.c) */
 void gc_berries_reward(gc_run *run);
 bool gc_berries_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *fastest_name, int *grab);

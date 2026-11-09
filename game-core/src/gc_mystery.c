@@ -109,14 +109,6 @@ static int legal_party(const gc_run *r)
     return n;
 }
 
-static int berry_stacks(const gc_run *r)
-{
-    int n = 0;
-    for (int i = 0; i < r->n_items; i++)
-        if (strstr(r->items[i].key, "BERRY") != NULL) n += r->items[i].stack;
-    return n;
-}
-
 /* HealthRatioRequirement([0.51, 1]): Pokemon.getHpRatio() is Math.round((hp / getMaxHp()) * 100) / 100, so a Pokemon
  * at 50.5% of its HP already counts as 0.51 */
 static bool hp_ratio_in_half_to_full(const pr_pokemon *p)
@@ -177,7 +169,7 @@ static bool available(const gc_run *r, int type, int tier)
 
     /* Encounter-level requirements whose state already exists in game-core. */
     if (type == GC_ME_PILLAR_MEN && !gc_pillar_offered(r)) return false;
-    if (type == GC_ME_ABSOLUTE_AVARICE && berry_stacks(r) < 6) return false;
+    if (type == GC_ME_ABSOLUTE_AVARICE && !gc_avarice_spawnable(r)) return false;
     if (type == GC_ME_SHADY_VITAMIN_DEALER && !any_over_half_hp(r)) return false;
 
     /* These encounters have additional held-item/primary-Pokemon spawn gates upstream.
@@ -471,6 +463,12 @@ static void setup_texts(gc_run *run)
         }
         break;
     }
+    case GC_ME_ABSOLUTE_AVARICE: {
+        pr_msg_arg name;
+        gc_avarice_tokens(run, &name);
+        screen_arg(s, name);
+        break;
+    }
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -645,8 +643,6 @@ void gc_mystery_setup_screen(gc_run *run)
         /* the battle and the hunkering need nothing; calming them needs a Fire Pokemon that is not fainted or a fire resistant ability */
         gc_fiery_init(run);
         s->option_ok[2] = gc_fiery_option_ok(run);
-    } else if (type == GC_ME_ABSOLUTE_AVARICE) {
-        s->option_ok[1] = berry_stacks(run) >= 6;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
         /* the fight needs nothing; a Bug type on the team for the second, a Quick Claw, a Grip Claw or a Bug attack type booster for the third */
         for (int o = 0; o < 3; o++) s->option_ok[o] = gc_superfan_option_ok(run, o);
@@ -1443,16 +1439,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_ABSOLUTE_AVARICE:
-        if (option == 0) {
-            start_mystery_wild_battle(run, SPECIES_ID_GREEDENT, wave_level, true, 4, 2);
-            return true;
-        } else if (option == 1) {
-            gc_item_remove_stacks(run, "BERRY", 6);
-            gc_port_give_reward(run, "REVIVER_SEED");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_avarice_execute(run, option);
         return true;
 
     case GC_ME_A_TRAINERS_TEST:

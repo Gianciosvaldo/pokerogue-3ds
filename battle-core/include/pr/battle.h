@@ -391,7 +391,8 @@ enum { PR_ME_POST_NONE, PR_ME_POST_STAT_BOOST /* Fight or Flight: one of Atk, De
        PR_ME_POST_TELEPORT_LOW /* Teleporting Hijinks below wave 50: Def, SpDef and Spd up one stage */, PR_ME_POST_TELEPORT_HIGH /* from wave 50: Atk, Def, SpAtk, SpDef and Spd */,
        PR_ME_POST_SPDEF_SPD /* Fiery Fallout's two Volcarona: SpDef and Spd up one stage, no message */,
        PR_ME_POST_BREED_LOW /* Uncommon Breed below wave 50: Def, SpDef and Spd up one stage */, PR_ME_POST_BREED_HIGH /* from wave 50: Atk, Def, SpAtk, SpDef and Spd */,
-       PR_ME_POST_DANCE /* Dancing Lessons' Oricorio: Atk, Def, SpAtk and SpDef up one stage */ };
+       PR_ME_POST_DANCE /* Dancing Lessons' Oricorio: Atk, Def, SpAtk and SpDef up one stage */,
+       PR_ME_POST_AVARICE_LOW /* Absolute Avarice's Greedent below wave 50: SpDef up one stage */, PR_ME_POST_AVARICE_HIGH /* from wave 50: SpDef and Spd */ };
 
 /* getMoveset(): temporary collection from Transform or Mimic; the fields above named
  * moves/PP always represent the permanent Pokemon.moveset. These selectors also
