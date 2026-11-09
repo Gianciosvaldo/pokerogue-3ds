@@ -559,11 +559,15 @@ int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags)
             } else f = pr_pokemon_base_form(p);
         }
         const pr_form *ff = pr_apparent_fusion_form(p, illusion);
-        int8_t type1 = f->type1;
-        int8_t second_type = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
+        /* customTypes[i] ?? form type: a custom slot of 0 is null and falls through */
+        int8_t type1 = p->custom_types[0] ? (int8_t)(p->custom_types[0] - 1) : f->type1;
+        int8_t second_type = p->custom_types[1] ? (int8_t)(p->custom_types[1] - 1)
+                           : f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
         if (ff) {
-            int8_t fusion_type1 = ff->type1;
-            int8_t fusion_type2 = ff->type2 < 0 ? POKEMON_TYPE_UNKNOWN : ff->type2;
+            /* the fusion half reads fusionCustomPokemonData.types the same way */
+            int8_t fusion_type1 = p->fusion_custom_types[0] ? (int8_t)(p->fusion_custom_types[0] - 1) : ff->type1;
+            int8_t fusion_type2 = p->fusion_custom_types[1] ? (int8_t)(p->fusion_custom_types[1] - 1)
+                                : ff->type2 < 0 ? POKEMON_TYPE_UNKNOWN : ff->type2;
             if (fusion_type2 != POKEMON_TYPE_UNKNOWN && fusion_type2 != type1) {
                 second_type = fusion_type2;
             } else if (fusion_type1 != type1) {
