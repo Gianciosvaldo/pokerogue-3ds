@@ -282,7 +282,7 @@ def main():
     rows, species, ops, items = [], [], [], []
     # the Elite Four and Champions (initForEliteFour / initForChampion) have the same partyMemberFuncs; the gym leaders (initForGymLeader) have none
     # but are scanned all the same, so one that gains a closure fails the run instead of being skipped
-    fixed = [n for _, n in starts if re.search(r"\.initFor(EliteFour|Champion|GymLeader)\(", blocks[n]) and n not in ADMINS + BOSSES]
+    fixed = [n for _, n in starts if re.search(r"\.initFor(EliteFour|Champion|GymLeader|StatTrainer)\(", blocks[n]) and n not in ADMINS + BOSSES]
     for n in ADMINS + BOSSES + fixed:
         block = re.sub(r"(?m)^(\s*)//[^\n]*|(?<=[;,{(\s])//[^\n]*", r"\1", blocks[n])   # a comment can hold an apostrophe
         seen = set()

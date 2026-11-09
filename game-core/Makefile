@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_chest.c src/gc_strong.c src/gc_teleport.c src/gc_fiery.c src/gc_breed.c src/gc_breeder.c src/gc_superfan.c src/gc_dance.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c src/gc_avarice.c src/gc_safari.c src/gc_winstrate.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_chest.c src/gc_strong.c src/gc_teleport.c src/gc_fiery.c src/gc_breed.c src/gc_breeder.c src/gc_superfan.c src/gc_dance.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c src/gc_avarice.c src/gc_safari.c src/gc_winstrate.c src/gc_trtest.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -144,6 +144,9 @@ $(BUILD)/mystery_fof_diff_test: tests/mystery_fof_diff_test.c $(BUILD)/libgc.a $
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/mystery_avarice_diff_test
 $(BUILD)/mystery_avarice_diff_test: tests/mystery_avarice_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_trtest_diff_test
+$(BUILD)/mystery_trtest_diff_test: tests/mystery_trtest_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/mystery_winstrate_diff_test
 $(BUILD)/mystery_winstrate_diff_test: tests/mystery_winstrate_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
@@ -1772,3 +1775,11 @@ test: safari-host-test
 safari-host-test: $(BUILD)/mystery_safari_test
 	$(BUILD)/mystery_safari_test
 .PHONY: safari-host-test
+
+all: $(BUILD)/mystery_trtest_test
+$(BUILD)/mystery_trtest_test: tests/mystery_trtest_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: trtest-host-test
+trtest-host-test: $(BUILD)/mystery_trtest_test
+	$(BUILD)/mystery_trtest_test
+.PHONY: trtest-host-test

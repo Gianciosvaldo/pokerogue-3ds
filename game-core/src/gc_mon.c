@@ -133,6 +133,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->boss_segments = (uint8_t)(g->boss_segments > 0 ? g->boss_segments : 0);
     p->boss_segment_index = (uint8_t)(g->boss_segments > 0 ? g->boss_segments - 1 : 0);
     m->trainer_slot = (uint8_t)trainer_slot;
+    m->pokeball = (uint8_t)g->pokeball;   /* a trainer's closure can set it (postProcess: pokeball = ULTRA_BALL); 0 = Poke Ball */
     m->met_wave = (int16_t)run->wave;
     m->met_level = level;
     m->met_biome = (int8_t)run->biome;
