@@ -1490,11 +1490,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_THE_WINSTRATE_CHALLENGE:
-        if (option == 0) {
-            start_mystery_wild_battle(run, 0, wave_level, true, 3, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_winstrate_execute(run, option);
         return true;
 
     case GC_ME_TELEPORTING_HIJINKS:
