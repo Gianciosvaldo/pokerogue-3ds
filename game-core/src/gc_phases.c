@@ -315,12 +315,12 @@ static void learn(gc_run *run, int idx, int move, int slot)
  * is paid for only now, and the copy stays as the shop goes on */
 static void learned_tm(gc_run *run,const gc_rphase *p){
     if(p->c==2){
-        if(p->d<0){gc_rq_remove(run,RP_SELECT_MODIFIER);gc_int(run)->reward.copy_pending=false;}
-        else{run->money-=p->d;gc_ev_money(run,-p->d);}
-        return;
+        /* Memory Mushroom: a bought one pays now (the pick did not), a free one drops the screen's copy like a TM */
+        if(p->d>=0){run->money-=p->d;gc_ev_money(run,-p->d);return;}
+    }else{
+        if(p->c!=1)return;
+        if(!gc_mon_remember_tm(run,pm(run,p->a),p->b))return;
     }
-    if(p->c!=1)return;
-    if(!gc_mon_remember_tm(run,pm(run,p->a),p->b))return;
     gc_rq_remove(run,RP_SELECT_MODIFIER);
     gc_int(run)->reward.copy_pending=false;
 }
