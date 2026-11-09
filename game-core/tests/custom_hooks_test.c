@@ -56,6 +56,8 @@ static void hash_run_state(const gc_run *r)
 static void new_run_in(gc_run *r, gc_system *s, const char *seed, const gc_custom_hooks *hooks)
 {
     memset(r, 0, sizeof *r);
+    /* Sleep Talk's pick lives on the move's attribute object upstream, i.e. for the whole process (battle-core keeps it the same way): a play must not inherit the last play's */
+    pr_called_selected_reset();
     gc_system_init_defaults(s);
     gc_run_new(r, GAME_MODES_CLASSIC, seed, 7);
     if (hooks) gc_run_set_custom(r, hooks);

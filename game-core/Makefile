@@ -151,6 +151,14 @@ $(BUILD)/mystery_trtest_diff_test: tests/mystery_trtest_diff_test.c $(BUILD)/lib
 all: $(BUILD)/mystery_clown_diff_test
 $(BUILD)/mystery_clown_diff_test: tests/mystery_clown_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+# the mystery encounters' selection rules against the pinned upstream (tests/mystery-rules.producer.test.ts at 8555c08), replayed without upstream; regenerate with tools/rulesdiff.sh
+all: $(BUILD)/mystery_rules_diff_test
+$(BUILD)/mystery_rules_diff_test: tests/mystery_rules_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: mystery-rules-replay
+mystery-rules-replay: $(BUILD)/mystery_rules_diff_test tests/fixtures/mystery-rules.native.txt
+	$(BUILD)/mystery_rules_diff_test tests/fixtures/mystery-rules.native.txt
+.PHONY: mystery-rules-replay
 all: $(BUILD)/mystery_winstrate_diff_test
 $(BUILD)/mystery_winstrate_diff_test: tests/mystery_winstrate_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

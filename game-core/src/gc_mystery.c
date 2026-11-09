@@ -15,44 +15,47 @@ typedef struct {
     uint8_t wave_mod_mask; /* bit r means wave % 10 == r is legal; 0 = no modulus gate */
 } me_rule;
 
+/* max_seen is 1 for every upstream encounter: MysteryEncounter's constructor sets `maxAllowedEncounters = (max ?? tier === ROGUE) ? 1 : 2`, and the builder's default max is 3
+ * (truthy), so even Delibirdy's explicit 4 and the plain Common encounters end up at one per run. */
 static const me_rule me_rules[GC_ME_COUNT] = {
-    [GC_ME_MYSTERIOUS_CHALLENGERS] = {GC_ME_GREAT, 10,180,0,0,0,0,0},
-    [GC_ME_MYSTERIOUS_CHEST]       = {GC_ME_COMMON,10,180,0,2,0,0,0},
-    [GC_ME_DARK_DEAL]               = {GC_ME_ROGUE, 30,180,0,2,(1u<<0)|(1u<<9),0,0},
-    [GC_ME_FIGHT_OR_FLIGHT]         = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_SLUMBERING_SNORLAX]      = {GC_ME_GREAT, 15,150,0,0,(1u<<11),0,0},
-    [GC_ME_TRAINING_SESSION]        = {GC_ME_ULTRA, 10,180,0,2,0,0,0},
-    [GC_ME_DEPARTMENT_STORE_SALE]   = {GC_ME_COMMON,10,100,0,0,0,0,0},
-    [GC_ME_SHADY_VITAMIN_DEALER]    = {GC_ME_COMMON,10,180,0,0,0,1.5,0},
-    [GC_ME_FIELD_TRIP]              = {GC_ME_COMMON,10,100,0,0,0,0,0},
-    [GC_ME_SAFARI_ZONE]             = {GC_ME_GREAT, 10,180,0,0,0,2.0,0},
-    [GC_ME_LOST_AT_SEA]             = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_FIERY_FALLOUT]           = {GC_ME_COMMON,40,180,0,0,0,0,0},
+    [GC_ME_MYSTERIOUS_CHALLENGERS] = {GC_ME_GREAT, 10,180,1,0,0,0,0},
+    [GC_ME_MYSTERIOUS_CHEST]       = {GC_ME_COMMON,10,180,1,2,0,0,0},
+    [GC_ME_DARK_DEAL]               = {GC_ME_ROGUE, 30,180,1,2,(1u<<0)|(1u<<9),0,0},
+    [GC_ME_FIGHT_OR_FLIGHT]         = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_SLUMBERING_SNORLAX]      = {GC_ME_GREAT, 15,150,1,0,(1u<<11),0,0},
+    [GC_ME_TRAINING_SESSION]        = {GC_ME_ULTRA, 10,180,1,2,0,0,0},
+    [GC_ME_DEPARTMENT_STORE_SALE]   = {GC_ME_COMMON,10,100,1,0,0,0,0},
+    [GC_ME_SHADY_VITAMIN_DEALER]    = {GC_ME_COMMON,10,180,1,0,0,1.5,0},
+    [GC_ME_FIELD_TRIP]              = {GC_ME_COMMON,10,100,1,0,0,0,0},
+    [GC_ME_SAFARI_ZONE]             = {GC_ME_GREAT, 10,180,1,0,0,2.0,0},
+    [GC_ME_LOST_AT_SEA]             = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_FIERY_FALLOUT]           = {GC_ME_COMMON,40,180,1,0,0,0,0},
     [GC_ME_THE_STRONG_STUFF]        = {GC_ME_COMMON,10,180,1,3,0,0,0},
-    [GC_ME_THE_POKEMON_SALESMAN]    = {GC_ME_ULTRA, 10,180,0,0,0,4.0,0},
-    [GC_ME_AN_OFFER_YOU_CANT_REFUSE]= {GC_ME_GREAT, 10,180,0,2,0,0,0},
-    [GC_ME_DELIBIRDY]               = {GC_ME_GREAT, 10,180,4,0,0,2.0,0},
-    [GC_ME_ABSOLUTE_AVARICE]        = {GC_ME_GREAT, 20,180,0,0,0,0,0},
-    [GC_ME_A_TRAINERS_TEST]         = {GC_ME_ROGUE,100,180,0,0,0,0,0},
+    [GC_ME_THE_POKEMON_SALESMAN]    = {GC_ME_ULTRA, 10,180,1,0,0,4.0,0},
+    [GC_ME_AN_OFFER_YOU_CANT_REFUSE]= {GC_ME_GREAT, 10,180,1,2,0,0,0},
+    [GC_ME_DELIBIRDY]               = {GC_ME_GREAT, 10,180,1,0,0,2.0,0},
+    [GC_ME_ABSOLUTE_AVARICE]        = {GC_ME_GREAT, 20,180,1,0,0,0,0},
+    [GC_ME_A_TRAINERS_TEST]         = {GC_ME_ROGUE,100,180,1,0,0,0,0},
     [GC_ME_TRASH_TO_TREASURE]       = {GC_ME_ULTRA,100,180,1,3,0,0,0},
-    [GC_ME_BERRIES_ABOUND]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_CLOWNING_AROUND]         = {GC_ME_ULTRA, 80,180,0,0,(1u<<1),0,0},
-    [GC_ME_PART_TIMER]              = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_DANCING_LESSONS]         = {GC_ME_GREAT, 30,180,0,0,0,0,0},
+    [GC_ME_BERRIES_ABOUND]          = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_CLOWNING_AROUND]         = {GC_ME_ULTRA, 80,180,1,0,(1u<<1),0,0},
+    [GC_ME_PART_TIMER]              = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_DANCING_LESSONS]         = {GC_ME_GREAT, 30,180,1,0,0,0,0},
     [GC_ME_WEIRD_DREAM]             = {GC_ME_ROGUE, 30,140,1,3,(1u<<0)|(1u<<1),0,0},
     [GC_ME_THE_WINSTRATE_CHALLENGE] = {GC_ME_ROGUE,100,180,1,3,0,0,0},
-    [GC_ME_TELEPORTING_HIJINKS]     = {GC_ME_COMMON,10,180,0,0,0,1.75,(1u<<2)|(1u<<3)|(1u<<4)},
+    [GC_ME_TELEPORTING_HIJINKS]     = {GC_ME_COMMON,10,180,1,0,0,1.75,(1u<<2)|(1u<<3)|(1u<<4)},
     [GC_ME_BUG_TYPE_SUPERFAN]       = {GC_ME_GREAT, 30,180,1,3,0,0,0},
-    [GC_ME_FUN_AND_GAMES]           = {GC_ME_GREAT, 10,180,0,0,0,1.5,0},
-    [GC_ME_UNCOMMON_BREED]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,0,4,(1u<<9),0,0},
+    [GC_ME_FUN_AND_GAMES]           = {GC_ME_GREAT, 10,180,1,0,0,1.5,0},
+    [GC_ME_UNCOMMON_BREED]          = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,1,0,0,0,0},
+    [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,1,4,(1u<<9),0,0},
     [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
 };
 
-static bool biome_has(const gc_run *r, int type)
+/* mysteryEncountersByBiome (mystery-encounter-biomes.ts): the biome's own entries, then the non-extreme, human-transitable, civilization and any-biome groups. Compared with
+ * the upstream map by tests/mystery_rules_diff_test.c. */
+static bool biome_has_id(int b, int type)
 {
-    const int b = r->biome;
     bool non_extreme = b != BIOME_ID_SEA && b != BIOME_ID_SEABED && b != BIOME_ID_BADLANDS
         && b != BIOME_ID_DESERT && b != BIOME_ID_ICE_CAVE && b != BIOME_ID_VOLCANO
         && b != BIOME_ID_WASTELAND && b != BIOME_ID_ABYSS && b != BIOME_ID_SPACE && b != BIOME_ID_END;
@@ -64,6 +67,7 @@ static bool biome_has(const gc_run *r, int type)
         || b == BIOME_ID_CONSTRUCTION_SITE || b == BIOME_ID_SLUM || b == BIOME_ID_ISLAND;
 
     if (type == GC_ME_BUG_TYPE_SUPERFAN && non_extreme) return true;
+    if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER && b == BIOME_ID_SPACE) return true;   /* its own entry beside the human-transitable group */
     if ((type == GC_ME_MYSTERIOUS_CHALLENGERS || type == GC_ME_PILLAR_MEN || type == GC_ME_SHADY_VITAMIN_DEALER
          || type == GC_ME_THE_POKEMON_SALESMAN || type == GC_ME_THE_WINSTRATE_CHALLENGE
          || type == GC_ME_THE_EXPERT_POKEMON_BREEDER) && human) return true;
@@ -71,13 +75,15 @@ static bool biome_has(const gc_run *r, int type)
          || type == GC_ME_FUN_AND_GAMES || type == GC_ME_GLOBAL_TRADE_SYSTEM) && civ) return true;
 
     switch (type) {
-    case GC_ME_FIGHT_OR_FLIGHT: case GC_ME_DARK_DEAL: case GC_ME_ABSOLUTE_AVARICE:
+    case GC_ME_FIGHT_OR_FLIGHT: case GC_ME_DARK_DEAL: case GC_ME_MYSTERIOUS_CHEST:
     case GC_ME_TRAINING_SESSION: case GC_ME_DELIBIRDY: case GC_ME_A_TRAINERS_TEST:
     case GC_ME_TRASH_TO_TREASURE: case GC_ME_BERRIES_ABOUND: case GC_ME_CLOWNING_AROUND:
     case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS: case GC_ME_UNCOMMON_BREED:
         return true; /* all biomes */
     case GC_ME_SLUMBERING_SNORLAX:
-        return b == BIOME_ID_PLAINS;
+        return b == BIOME_ID_PLAINS || b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS;
+    case GC_ME_ABSOLUTE_AVARICE:
+        return b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS || b == BIOME_ID_FOREST;
     case GC_ME_DANCING_LESSONS:
         return b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS || b == BIOME_ID_BEACH
             || b == BIOME_ID_BADLANDS || b == BIOME_ID_MEADOW || b == BIOME_ID_GRAVEYARD
@@ -93,6 +99,20 @@ static bool biome_has(const gc_run *r, int type)
     default:
         return false;
     }
+}
+
+static bool biome_has(const gc_run *r, int type) { return biome_has_id(r->biome, type); }
+
+bool gc_mystery_in_biome(int biome, int type) { return type >= 0 && type < GC_ME_COUNT && biome_has_id(biome, type); }
+
+/* the selection table, for the upstream comparator */
+bool gc_mystery_rule(int type, int *tier, int *min_wave, int *max_wave, int *max_seen, int *min_party, int *challenges, double *money, int *mod_mask)
+{
+    if (type < 0 || type >= GC_ME_COUNT) return false;
+    const me_rule *q = &me_rules[type];
+    *tier = q->tier; *min_wave = q->min_wave; *max_wave = q->max_wave; *max_seen = q->max_seen; *min_party = q->min_party;
+    *challenges = q->disallowed_challenges; *money = q->money_mult; *mod_mask = q->wave_mod_mask;
+    return true;
 }
 
 static int seen_count(const gc_run *r, int type)
