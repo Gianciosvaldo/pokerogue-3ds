@@ -1757,6 +1757,13 @@ static bool scan_wild_ivs(void) {
   return false;
 }
 
+/* CheckSwitchPhase: the question is in the events just played; Yes opens the party screen (a SWITCH screen), No (or B) goes on */
+static void on_check_switch_answer(int yes, void* arg) {
+  (void)arg;
+  gc_choice c = {.kind = GC_CH_CONFIRM, .a = yes == 1 ? 1 : 0};
+  answer(&c);
+}
+
 static void target_done(int row,void *arg){
   (void)arg;gc_choice c={.kind=row<0?GC_CH_CANCEL:GC_CH_TARGET,.a=row>=0&&row<G.target_count?G.target_values[row]:-1};answer(&c);
 }
@@ -1796,6 +1803,9 @@ static void screen_step(void) {
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
     case GC_SCREEN_TARGET:ask_target();break;
+    case GC_SCREEN_CHECK_SWITCH:
+      ui_push_confirm(on_check_switch_answer, NULL);
+      break;
     case GC_SCREEN_COMMAND:
       if (scan_wild_ivs()) break;
       if (!save_point()) break;
@@ -1885,6 +1895,7 @@ static bool new_run(bool from_black) {
   const int mode=G.cfg.custom?GAME_MODES_CLASSIC:(G.cfg.mode>=GAME_MODES_CLASSIC&&G.cfg.mode<=GAME_MODES_SPLICED_ENDLESS?G.cfg.mode:GAME_MODES_CLASSIC);
   gc_run_new(&G.run, mode, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   G.run.sys = G.cfg.sys;
+  G.run.ask_switch = G.cfg.ask_switch;   /* before the starters: the first wave's start is what asks */
   ach_reset();
   G.have_defeat = false;
   if (G.cfg.custom) {
@@ -1938,6 +1949,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   bes_bind(&G.run);
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  G.run.ask_switch = cfg->ask_switch;
   ach_reset_loaded();
   /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */
   if (cfg->custom)

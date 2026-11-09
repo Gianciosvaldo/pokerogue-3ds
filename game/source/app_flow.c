@@ -66,6 +66,7 @@ static rs_config run_config(int slot, bool fresh) {
     A.first_used = true;
   }
   c.custom = A.custom;
+  c.ask_switch = true; /* upstream's default battle style (SWITCH): "Will you switch?" at a wild battle's start */
   c.mode = A.custom ? GAME_MODES_CLASSIC : A.settings.mode;
   /* each run has its own randomness: the session's base, and when the player got here (frames since boot) */
   c.entropy = A.first.entropy ^ (A.runs_started * 0x9E3779B1u) ^ (ui_frame() * 2654435761u);
