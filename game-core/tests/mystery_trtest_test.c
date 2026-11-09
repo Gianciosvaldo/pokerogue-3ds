@@ -167,6 +167,8 @@ static void test_refusal(void)
     leave_shop();
     assert(said_outro == 1 && outro_rare == 1 && outro_epic == 0);
     assert(sys.n_eggs == eggs_before + 1);
+    gc_trtest_reward(&run);   /* the egg is given once, whoever asks again */
+    assert(sys.n_eggs == eggs_before + 1);
     puts("ok");
 }
 

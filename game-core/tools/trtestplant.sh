@@ -1,6 +1,7 @@
 #!/bin/sh
 # A Trainer's Test (src/gc_trtest.c): show the comparator (and the host test) can fail. Replays one trace (from tools/trtestdiff.sh) through copies of game-core, each with one line of src/gc_trtest.c (or gc_phases.c / gc_mystery.c / gc_mon.c) changed, and prints each one's totals. Every copy must be caught: by tests/mystery_trtest_diff_test.c exiting 1, or, for what the oracle does not play (the win's phases, the shop, the loss), by tests/mystery_trtest_test.c failing.
 # Not planted (equivalent for this encounter): the party template's trainer (the Elite Four template is shared by Lorelei, Bruno, Agatha, Lance and every stat trainer: the same sizes and strengths), the levels call's is_double flag (read only for a one-member double template; this team is a single six).
+# Not planted either (unobservable here): BattleEndPhase's victory flag (the shop is already queued, so the loss branch that would queue one is skipped, and the battle score it adds is 0 because two bosses squeeze the score multiplier to an ease of 0), gc_enemy_finish_party_me against gc_enemy_finish_party (the plant changed nothing the comparator or host test reads, over 150 fights with stat boosters held; why was not traced).
 # Usage: tools/trtestplant.sh <trace>   (TRTEST_PLANT_FROM=<name> starts at that plant, TRTEST_PLANT_ONLY="a b" runs those)
 set -e
 TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
@@ -76,17 +77,16 @@ plant exec-shop '0,/^        gc_me_leave_with_heal_shop(run);/s#^        gc_me_l
 plant exec-post "$EXEC"'s#^    in->me_post.pending = true;.*#    in->me_post.pending = false;#'
 plant exec-post-pick "$EXEC"'s#^    in->me_post.b = pick;#    in->me_post.b = 0;#'
 plant exec-me-battle "$EXEC"'s#^    run->me_battle = true;#    run->me_battle = false;#'
-plant exec-finish "$EXEC"'s#gc_enemy_finish_party_me(run);.*#gc_enemy_finish_party(run);#'
 plant exec-catch "$EXEC"'s#run->me_catch_allowed = false;#run->me_catch_allowed = true;#'
 plant exec-reward "$EXEC"'s#^    in->me_reward.active = false;#    in->me_reward.active = true;#'
 plant exec-nostats "$EXEC"'s#^    in->me_no_stats = false;#    in->me_no_stats = true;#'
 plant exec-active "$EXEC"'s#^    in->trtest.active = true;#    in->trtest.active = false;#'
 plant exec-say "$EXEC"'s#^    gc_me_say_trainer_fight(run, in);#    (void)0;#'
-plant victory-end "$VICT"'s#gc_rp(RP_BATTLE_END, 1, 0, 0)#gc_rp(RP_BATTLE_END, 0, 0, 0)#'
 plant victory-trainer "$VICT"'s#^    gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));#    (void)0;#'
 plant victory-rewards "$VICT"'s#^    gc_rq_push(run, gc_rp(RP_ME_BEFORE_REWARDS, 0, 0, 0));#    (void)0;#'
 plant victory-item "$VICT"'s#gc_reward_item_index("RELIC_GOLD")#gc_reward_item_index("LEFTOVERS")#'
-plant victory-tier1 "$VICT"'s#^    c->tiers\[c->n_tiers++\] = MODIFIER_TIER_ROGUE;#    c->tiers[c->n_tiers++] = MODIFIER_TIER_ULTRA;#'
+plant victory-tier1 '0,/^    c->tiers\[c->n_tiers++\] = MODIFIER_TIER_ROGUE;/s//    c->tiers[c->n_tiers++] = MODIFIER_TIER_ULTRA;/'
+plant victory-tier2 '/^    c->tiers\[c->n_tiers++\] = MODIFIER_TIER_ROGUE;/{n;s/MODIFIER_TIER_ROGUE/MODIFIER_TIER_ULTRA/}'
 plant victory-fill "$VICT"'s#c->fill_remaining = true;#c->fill_remaining = false;#'
 plant victory-shop "$VICT"'s#^    gc_me_end_with_shop(run);#    (void)0;#'
 plant victory-active "$VICT"'s#^    in->trtest.active = false;#    in->trtest.active = true;#'
