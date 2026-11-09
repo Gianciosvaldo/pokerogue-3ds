@@ -607,6 +607,11 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         if (!gc_item_discard(run, c->b, c->c)) { *why = "no such held item"; return false; }
         *ok = true;
         return false;
+    case GC_CH_UNFUSE:
+        /* the party screen's Unsplice, from the Splice and Check Team screens: the reward screen stays as it was */
+        if (!gc_fusion_unfuse(run, c->a)) { *why = "not a fusion"; return false; }
+        *ok = true;
+        return false;
     default:
         *why = "not a reward choice";
         return false;

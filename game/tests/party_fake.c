@@ -33,6 +33,7 @@ const char* mui_t(const char* key) {
   if (strcmp(key, "partyUiHandler:apply") == 0) return "Apply";
   if (strcmp(key, "partyUiHandler:splice") == 0) return "Splice";
   if (strcmp(key, "partyUiHandler:unsplice") == 0) return "Unsplice";
+  if (strcmp(key, "partyUiHandler:wasReverted") == 0) return "Was reverted.";
   if (strcmp(key, "partyUiHandler:cancel") == 0) return "Cancel";
   if (strcmp(key, "partyUiHandler:summary") == 0) return "Summary";
   if (strcmp(key, "partyUiHandler:unspliceConfirmation") == 0) return "Do you really want to unsplice?";
@@ -122,8 +123,17 @@ static bool is_farewell_text(const char* t) {
     if (!strcmp(t + 15, K[i])) return true;
   return false;
 }
+/* every message the screen showed (the fake runs a message's callback at once, so the text is never on screen to be drawn) */
+static char shown_msg[1024][192];
+static int n_shown_msg;
+int pf_msg_count(const char* text) {
+  int n = 0;
+  for (int i = 0; i < n_shown_msg; i++) n += !strcmp(shown_msg[i], text);
+  return n;
+}
 void mui_msg_show(mui_msg* msg, const char* text, int delay, mui_cb cb, void* ctx, bool prompt) {
   (void)delay, (void)prompt;
+  if (text && n_shown_msg < 1024) snprintf(shown_msg[n_shown_msg++], 192, "%s", text);
   memset(msg, 0, sizeof *msg);
   if (text && is_farewell_text(text)) g_farewells++;
   if (cb) cb(ctx);

@@ -193,7 +193,8 @@ static void remember_reward_cases(void) {
 
 /* DNA Splicers: the SPLICE screen over the reward screen's party. The first pick stays, the second leaves; the screen speaks party[] indexes
  * and filters both picks with game-core's gc_fusion_pickable. */
-static int fused_keep = -1, fused_donor = -1, fuse_calls;
+static int fused_keep = -1, fused_donor = -1, fuse_calls, unspliced = -1;
+static void on_unsplice(int party, void* arg) { (void)arg; unspliced = party; run.party[party].b.fusion_species = 0; }
 static void on_fuse_pick(int keep, int donor, void* arg) {
   (void)arg;
   fuse_calls++;
@@ -281,7 +282,7 @@ static void fusion_cases(void) {
   run.run.has_challenges = false;
   run.party[1].b.hp = 100;
 
-  /* a fused member shows its other half in the menus, and has no Unsplice option here (unsplicing isn't ported) */
+  /* a fused member shows its other half in the menus, and has no Unsplice option unless the host unsplices (ps_set_unsplice) */
   run.party[0].b.fusion_species = SPECIES_ID_BULBASAUR;
   open_fusion();
   memset(&summary_mon, 0, sizeof summary_mon);
@@ -300,6 +301,39 @@ static void fusion_cases(void) {
   input(BTN_ACTION); input(BTN_ACTION);                    /* party[0]'s summary */
   assert(summary_mon.fusion && summary_mon.fusion_species == SPECIES_ID_BULBASAUR && summary_mon.fusion_form == 1);
   assert(summary_mon.fusion_shiny && summary_mon.fusion_variant == 2);
+  ps_close();
+  /* with the host's unsplice the option is there; confirming it hands the host the member's party[] index and the screen lists the run again */
+  unspliced = -1;
+  ps_set_unsplice(on_unsplice, NULL);
+  open_fusion();
+  input(BTN_DOWN); input(BTN_ACTION);
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(pf_text_count("Unsplice"));
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION);       /* Apply, Summary, Unsplice: "Do you really want to unsplice...?" */
+  for (int i = 0; i < 4 && unspliced < 0; i++) input(BTN_ACTION);   /* the question, then its Yes */
+  assert(unspliced == 0);                                      /* the fused one, as party[] index */
+  assert(run.party[0].b.fusion_species == 0);
+  assert(pf_msg_count("Was reverted.") == 1 && depth == 2);   /* it says so, and the screen stays */
+  ps_close();
+  assert(ui_top() == &shop);
+  unspliced = -1;
+  open_fusion();                                              /* the callback went with the screen */
+  input(BTN_DOWN); input(BTN_ACTION);
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(!pf_text_count("Unsplice"));
+  ps_close();
+  /* reward Check Team: the same option for a fused member (Release stays unported there), and the list is built again after it */
+  run.party[0].b.fusion_species = SPECIES_ID_BULBASAUR;
+  run.screen.kind = GC_SCREEN_REWARD;
+  unspliced = -1;
+  ps_set_unsplice(on_unsplice, NULL);
+  ps_open_check(&run, 0, form_pick, NULL, check_done, NULL);
+  input(BTN_ACTION);                                           /* the fused one (the cursor starts on it): its options */
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(pf_text_count("Unsplice") && !pf_text_count("partyUiHandler:release"));
+  input(BTN_DOWN); input(BTN_ACTION);                          /* Summary, Unsplice */
+  for (int i = 0; i < 4 && unspliced < 0; i++) input(BTN_ACTION);
+  assert(unspliced == 0 && run.party[0].b.fusion_species == 0 && pf_msg_count("Was reverted.") == 2 && depth == 2);
   ps_close();
 }
 int main(void) {

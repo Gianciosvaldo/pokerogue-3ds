@@ -146,6 +146,7 @@ typedef enum {
                              * b = the held item's index in run->items, c = how many copies; the screen stays open */
     GC_CH_DISCARD,          /* REWARD: Manage Items' discard: b = the held item's index in run->items, c = how many copies */
     GC_CH_TARGET,           /* TARGET: a = target BattlerIndex 0..3 */
+    GC_CH_UNFUSE,           /* REWARD: the party screen's Unsplice (PlayerPokemon.unfuse): a = the fused member's party index; the screen stays open */
 } gc_choice_kind;
 
 typedef struct {
@@ -518,6 +519,9 @@ int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by nativ
 /* GC_TARGET_FUSE's party filter (FusePokemonModifierType.selectFilter) for one pick: false for a Pokemon that is already fused, or a
  * fainted one in a Hardcore run. The party screen shows "it won't have any effect" for it */
 bool gc_fusion_pickable(const gc_run *run, int party);
+/* PlayerPokemon.unfuse() (the party screen's Unsplice): the fusion half is dropped and nothing else comes back: the member that was
+ * spliced in stays gone and the held items it brought stay with this one. False when `party` is not a fusion */
+bool gc_fusion_unfuse(gc_run *run, int party);
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in Classic, 15 in Endless */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
 void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);

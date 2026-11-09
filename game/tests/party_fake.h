@@ -18,5 +18,6 @@ void pf_release(int slot);
 int pf_farewells(void);
 void pf_clear_text(void);
 int pf_text_count(const char* text);
+int pf_msg_count(const char* text);   /* how many times the screen showed this message (its callback ran at once) */
 
 #endif

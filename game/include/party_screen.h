@@ -39,6 +39,11 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
  * party[] (the member that stays, the member that goes), or slot 6 when the player backs out. The screen stays open until ps_close. */
 void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor, void* arg), void* arg);
 
+/* The party screen's Unsplice (PartyUiHandler.processUnspliceOption) for the Splice and reward Check Team screens opened next: with this
+ * set, a fused member gets the Unsplice option; on_unsplice gets its index in the run's party[] and must unfuse it in the run before it
+ * returns (GC_CH_UNFUSE); the screen then shows the run again and says the member was reverted. Cleared by ps_close. */
+void ps_set_unsplice(void (*on_unsplice)(int party, void* arg), void* arg);
+
 /* Opens the party screen in MODIFIER_TRANSFER mode over a gc_run party (the reward screen's Manage Items). on_move gets the item's
  * index in the run's item list, how many copies and the party index that gets them (-1 = discard them), and must apply the transfer to the run before
  * it returns (the screen then shows the run again). on_done runs when the player backs out; the screen stays open until ps_close. */

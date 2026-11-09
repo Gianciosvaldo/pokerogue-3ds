@@ -1305,6 +1305,16 @@ static int shown_index(int id) {
   return -1;
 }
 
+/* The party screen's Unsplice (Splice and Check Team): game-core drops the fusion half; the screen shows the run again */
+static void on_unsplice(int party, void* arg) {
+  (void)arg;
+  gc_choice c = {0};
+  c.kind = GC_CH_UNFUSE;
+  c.a = (int16_t)party;
+  const char* why = NULL;
+  gc_run_choose(&G.run, &c, &why);
+}
+
 static void on_fusion_picked(int keep, int donor, void* arg) {
   (void)arg;
   ps_close();
@@ -1325,6 +1335,7 @@ static void on_fusion_picked(int keep, int donor, void* arg) {
 
 static void prompt_item_target(const gc_offer* offer) {
   if (offer->target == GC_TARGET_FUSE) {
+    ps_set_unsplice(on_unsplice, NULL);
     ps_open_fusion(&G.run, on_fusion_picked, NULL);
     return;
   }
@@ -1439,6 +1450,7 @@ static void on_check_done(void* arg) {
   (void)arg;ps_close();G.return_to_check=false;open_shop_ui();
 }
 static void open_check_team(void) {
+  ps_set_unsplice(on_unsplice,NULL);
   ps_open_check(&G.run,G.check_cursor,on_check_form,on_check_pause,on_check_done,NULL);
 }
 static void on_shop_check_team(void* ctx) {

@@ -355,7 +355,7 @@ static void update_options(void) {
         P.options[P.nopt++] = PO_APPLY;
       }
       add_common_options(m);
-      if (m->fusion && !P.a.preserve_roster) P.options[P.nopt++] = PO_UNSPLICE;
+      if (m->fusion && (!P.a.preserve_roster || P.a.allow_unsplice)) P.options[P.nopt++] = PO_UNSPLICE;
       break;
     case PARTY_RELEASE:
       P.options[P.nopt++] = PO_RELEASE;
@@ -364,10 +364,8 @@ static void update_options(void) {
     case PARTY_CHECK:
       add_common_options(m);
       if (P.a.in_reward_phase) {
-        if (!P.a.preserve_roster) {
-          if (m->fusion) P.options[P.nopt++] = PO_UNSPLICE;
-          P.options[P.nopt++] = PO_RELEASE;
-        }
+        if (m->fusion && (!P.a.preserve_roster || P.a.allow_unsplice)) P.options[P.nopt++] = PO_UNSPLICE;
+        if (!P.a.preserve_roster) P.options[P.nopt++] = PO_RELEASE;
         if (P.ev.on_form_item && m->form_items && m->nform_items > 0 && m->nform_items <= MENU_MAX_FORM_ITEMS)
           for (int i = 0; i < m->nform_items; i++) P.options[P.nopt++] = PO_FORM_CHANGE_ITEM + i;
       }
