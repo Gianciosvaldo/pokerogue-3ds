@@ -87,7 +87,8 @@ typedef enum {
                     * (SubstituteTag.onRemove while the Pokemon is in focus) */
   BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
                     * frames later (onRemove); the queue doesn't wait */
-  BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change) */
+  BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change); target = 1: QuietFormChangePhase's white
+                    * tween (the final boss's Eternamax: white 1 s, shrinks to a point, grows as the new form, fades back, 3.5 s) */
   BEV_MAX_HP,      /* battler, a = new max HP (a form with other base stats); the HP follows in a heal or damage event */
   BEV_CATCH,       /* AttemptCapturePhase's animation on the enemy battler: the ball (a = PokeballType 0..4) is thrown, takes
                     * the Pokemon in, bounces and shakes b times. caught: the ball locks and the event ends with the Pokemon
@@ -116,6 +117,9 @@ typedef enum {
                     * it was, in the single layout. Nothing happens on a screen that already shows two player columns */
   BEV_TERA,        /* TeraPhase.end: battler, a = the PokemonType it is now Terastallized as, or -1 when it is not any more. The Tera icon
                     * appears beside the name (BattleInfo.updateTeraType) */
+  BEV_MUSIC,       /* the music hook (bv_set_music_hook) is called with a: 0 = fadeOutBgm(2000) (initFinalBossPhaseTwo, before the first
+                    * stage's dialogue), 1 = playBgm() for what the field now shows (QuietFormChangePhase.end of the final boss: the
+                    * Eternamax music). Does nothing without a hook; the queue does not wait */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 
@@ -206,6 +210,8 @@ void bv_set_info(const char* name, const char* desc);
 void bv_begin(const bv_setup* setup);
 /* Queues events (copied; text is copied too) and plays them; on_done runs after the last one. */
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
+/* where BEV_MUSIC goes (the app's music is not the view's): a is the event's a */
+void bv_set_music_hook(void (*hook)(int a));
 bool bv_playing(void);
 /* opts NULL = everything allowed. */
 void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck);

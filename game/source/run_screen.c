@@ -26,6 +26,7 @@
 #include "party_screen.h"
 #include "pr_enums.h"
 #include "reward_host.h"
+#include "run_history.h"
 #include "run_menu.h"
 #include "run_saves.h"
 #include "run_text.h"
@@ -268,6 +269,23 @@ static bool put_dialogue(const gc_event* d) {
   return true;
 }
 
+/* EncounterPhase.displayFinalBossDialogue: the boss's speech counts the cycles, 5643853 + classicSessionsPlayed (an ordinal after it in English).
+ * The app does not count the Classic runs played; the Run History's entries stand in (and this run, which is not in it yet). */
+static void put_final_boss_encounter(void) {
+  static char text[BV_DIALOGUE_TEXT], name[96];
+  char count[32], with_ord[64], ord[16];
+  const long n = 5643853L + rhist_count() + 1;
+  be_group_digits(n, count, sizeof count);
+  ord[0] = 0;
+  if (!strcmp(i18n_language(), "en")) i18n_t(ord, sizeof ord, be_ordinal_key(n), NULL);
+  snprintf(with_ord, sizeof with_ord, "%s%s", count, ord);
+  i18n_t(text, sizeof text, "battleSpecDialogue:encounter", "cycleCount", with_ord, "cycleCountNoOrdinal", count, NULL);
+  if (!text[0]) return;
+  snprintf(name, sizeof name, "%s", i18n_species_name(SPECIES_ID_ETERNATUS));
+  bv_event* e = ev_new();
+  if (e) *e = (bv_event){.type = BEV_DIALOGUE, .battler = -1, .text = text, .name = name};
+}
+
 static bool put_gc_msg(const pr_msg* m) {
   if (!m->key) return false; /* text not ported in battle-core: nothing to show */
   char* t = txt_new();
@@ -279,7 +297,14 @@ static bool put_gc_msg(const pr_msg* m) {
   return true;
 }
 
+/* BEV_MUSIC: the final boss's second phase (initFinalBossPhaseTwo's fadeOutBgm(2000), QuietFormChangePhase.end's playBgm) */
+static void phase_two_music(int a) {
+  if (a == 0) bgm_fade_out(2000);
+  else bgm_on_final_boss_phase_two(&G.run);
+}
+
 static void play_chunk(void) {
+  bv_set_music_hook(phase_two_music);
   int n = G.n_ev - G.ev_pos;
   if (n > CHUNK) n = CHUNK;
   const int pos = G.ev_pos;
@@ -489,6 +514,7 @@ static void wave_black(void* arg) {
   char* t = txt_new();
   t[0] = 0;
   const gc_event* dialogue = NULL;
+  bool boss = false;
   if (offer) {
     snprintf(t, TXT_LEN, "The %s that beat you wants a rematch!", i18n_species_name(cr_offer_species()));
   } else if (trainer || mystery) {
@@ -518,6 +544,13 @@ static void wave_black(void* arg) {
         G.skip[j] = true; /* the intro shows it */
         break;
       }
+    /* the Classic final boss: "Foe Eternatus appeared!" and its speech (EncounterPhase.displayFinalBossDialogue), not the wild line */
+    boss = G.run.n_enemy > 0 && pr_run_is_battle_classic_final_boss(&G.run.run, G.run.wave);
+    if (boss) {
+      char foe[96];
+      i18n_t(foe, sizeof foe, "battle:foePokemonWithAffix", "pokemonName", i18n_species_name(G.run.enemy[0].b.species), NULL);
+      i18n_t(t, TXT_LEN, "battle:bossAppeared", "bossName", foe, NULL);
+    }
   }
   if (dialogue && put_dialogue(dialogue)) {
     /* INTRO b=1: the slide only; the message follows the talk */
@@ -526,6 +559,12 @@ static void wave_black(void* arg) {
       bv_event* m = ev_new();
       if (m) *m = (bv_event){.type = BEV_MESSAGE, .battler = -1, .text = t};
     }
+  } else if (boss) {
+    /* the platforms slide in with the boss still a silhouette and the message, then the speech, then the boss shows itself (b = 2, b = 3) */
+    *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = 0, .b = 2, .text = t};
+    put_final_boss_encounter();
+    bv_event* r = ev_new();
+    if (r) *r = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = 0, .b = 3};
   } else {
     *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
     if (jojo) { /* then his iconic line, in the name box (BEV_DIALOGUE, no portrait) */

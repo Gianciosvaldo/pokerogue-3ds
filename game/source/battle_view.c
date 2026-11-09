@@ -111,6 +111,7 @@ static struct {
   int n_ev, cur;
   int step;       /* the current event's stage */
   float t;        /* ms in the current stage */
+  float form_scale; /* step_quiet_form: the sprite's scale as the change began */
   tween tw, tw2;
   void (*on_done)(void*);
   void* done_arg;
@@ -372,6 +373,7 @@ static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 
 /* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
  * sprite slides over 500 ms, Sine.easeOut. A screen that already has two player columns has nothing to do. */
+static void (*music_hook)(int a);   /* where BEV_MUSIC goes */
 static bool step_doubles(float dt) {
   if (B.step == 0) {
     if (player_doubles()) return true;
@@ -667,7 +669,28 @@ static void update_field_scale(bool instant) {
 
 /* The top screen is 400x240 around upstream's 320x180 field, so the field container (platforms, Pokemon, animations) is drawn FIELD_ZOOM
  * (field_border.h) times bigger about the arena's bottom centre. The G-Max zoom-out (field_scale) comes on top of it. */
-static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * FIELD_ZOOM : 1, 160, 132); }
+/* A Pokemon drawn bigger than its sheet (Eternamax is 1.5x) can stand taller than the field has room for: the zoom about (160, 132) pushes its
+ * top out of the screen (the 30 px top band is the last that shows). Then the whole field is drawn smaller, just enough for its top to stay in:
+ * a sprite top at field y t lands at 132 + (t - 132) * z, and the screen's top is field y -30. Sprites at their normal size never change it. */
+#define FIELD_TOP_Y (-30.0f)
+static float fit_zoom(float z) {
+  for (int k = 0; k < 4; k++) {
+    side* sd = &B.s[k];
+    if (!sd->present || !sd->sprite_on || sd->scale <= 1.0f || sd->mon.hidden) continue;
+    const rr_frame* f = sprite_frame(sd);
+    if (!f) continue;
+    float x, y;
+    mon_pos(sd, !(k % 2), &x, &y);
+    const float top = y - (f->src_h - f->off_y) * sd->scale;
+    if (top >= 132) continue;
+    const float fit = (132 - FIELD_TOP_Y) / (132 - top);
+    if (fit < z) z = fit;
+  }
+  return z;
+}
+static void field_zoom(bool on) {
+  rr_set_zoom(on ? fit_zoom(B.field_scale * FIELD_ZOOM) : 1, 160, 132);
+}
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
  * trainers use the native -4/+28 offsets; double-only art is one sprite. */
@@ -1354,6 +1377,55 @@ static float seg(float t, float delay, float ms, ease_fn f) {
   return ease(f, u < 0 ? 0 : u > 1 ? 1 : u);
 }
 
+/* QuietFormChangePhase.playFormChangeTween (the final boss's Eternamax): the Pokemon turns white over 1000 ms (Cubic.easeIn, the Transform
+ * sound at the start), the form changes, the old white shape shrinks to a point (delay 250, 500 ms, Cubic.easeInOut) as the new one grows from a
+ * point to its size (500 ms) and the white fades away (delay 250, 1000 ms, Cubic.easeOut). Upstream shrinks and grows at the same time with two
+ * sprites; one sprite is in texture memory here, so one follows the other. The silhouette is the catch's: black multiplied, the white added. */
+enum { FORM_FADE_IN = 1000, FORM_HOLD = 250, FORM_SHRINK = 500, FORM_GROW = 500, FORM_FADE_OUT = 1000 };
+static bool step_quiet_form(const bv_event* e, side* sd, bool player) {
+  const float t = B.t;
+  const float t_shrink = FORM_FADE_IN + FORM_HOLD, t_grow = t_shrink + FORM_SHRINK, t_out = t_grow + FORM_GROW + FORM_HOLD;
+  if (B.step == 0) {
+    update_mon_form(&sd->mon, e->a, e->b);   /* its data now; the picture changes at the swap */
+    if (e->c) {
+      sd->mon.gender = e->c - 2;
+      sd->mon.female = sd->mon.gender == 1;
+    }
+    update_field_scale(false);
+    ui_play_sound("battle_anims/PRSFX- Transform");
+    B.form_scale = sd->scale;
+    sd->catch_on = true;
+    sd->catch_rgb[0] = sd->catch_rgb[1] = sd->catch_rgb[2] = 255;
+    sd->catch_untint = 1;
+    B.step = 1;
+  }
+  const float target = get_mon_scale(&sd->mon);
+  if (t < FORM_FADE_IN) {
+    sd->catch_untint = 1 - seg(t, 0, FORM_FADE_IN, EASE_CUBIC_IN);
+  } else if (t < t_grow) {
+    sd->catch_untint = 0;
+    const float k = seg(t, t_shrink, FORM_SHRINK, EASE_CUBIC_IN_OUT);
+    sd->scale = B.form_scale + (0.01f - B.form_scale) * k;
+  } else if (t < t_out) {
+    if (B.step == 1) {   /* the swap, at the point: the new picture's load happens while nothing shows */
+      load_mon_sprite(sd, player);
+      sd->scale = 0.01f;
+      B.step = 2;
+    }
+    sd->catch_untint = 0;
+    sd->scale = 0.01f + (target - 0.01f) * seg(t, t_grow, FORM_GROW, EASE_CUBIC_IN_OUT);
+  } else if (t < t_out + FORM_FADE_OUT) {
+    sd->scale = target;
+    sd->catch_untint = seg(t, t_out, FORM_FADE_OUT, EASE_CUBIC_OUT);
+  } else {
+    sd->scale = target;
+    sd->catch_untint = 1;
+    sd->catch_on = false;
+    return true;
+  }
+  return false;
+}
+
 /* PokemonAnimPhase's Substitute animations at time t (ms). Returns true while running. */
 static bool substitute_anim(side* sd, int type, float t) {
   bool player = field_of(sd)<2;
@@ -1727,6 +1799,11 @@ static void run_event(float dt) {
       if (step_dialogue(e, dt)) finish_event();
       break;
 
+    case BEV_MUSIC:
+      if (music_hook) music_hook(e->a);
+      finish_event();
+      break;
+
     case BEV_TRAINER_SHOW:
       /* showEnemyTrainer: the sprite is back on the platform and moves in from 16 px up and right, fading in, over 750 ms */
       if (B.step == 0) {
@@ -1776,8 +1853,26 @@ static void run_event(float dt) {
       break;
 
     case BEV_INTRO_WILD: {
-      /* a = 1: a trainer battle, nobody on the enemy side yet and `text` is the message */
+      /* a = 1: a trainer battle, nobody on the enemy side yet and `text` is the message
+       * b = 1: (trainer) the slide only. b = 2: (the Classic final boss) the slide, then `text` with a button, the boss still a silhouette;
+       * b = 3: the boss shows itself (untint, cry, its box) once the speech that follows the message has been read */
       const bool trainer = e->a == 1;
+      if (e->b == 3) {
+        side* en = &B.s[1];
+        if (B.step == 0) {
+          en->black = false;
+          en->info_on = true;
+          en->info_dx = -info_slide(en, false);
+          update_field_scale(false);
+          cry(&en->mon);
+          tween_start(&B.tw2, en->info_dx, 0, 1000, EASE_CUBIC_OUT);
+          B.step = 2;
+        }
+        tween_update(&B.tw2, dt);
+        en->info_dx = B.tw2.value;
+        if (tween_done(&B.tw2)) finish_event();
+        break;
+      }
       if (B.step == 0) {
         side* en = &B.s[1];
         en->present = !trainer && en->mon.species > 0;
@@ -1797,6 +1892,13 @@ static void run_event(float dt) {
         if (tween_done(&B.tw) && trainer && e->b == 1) {
           B.arena_old_on = false; /* the dialogue and the message are events of their own */
           finish_event();
+          break;
+        }
+        if (tween_done(&B.tw) && e->b == 2) {
+          B.arena_old_on = false;
+          msgbox_show(&B.msg, e->text ? e->text : "", -1, true);   /* showText(message, null, cb, 1500, true) */
+          B.msg.wait_ms = 1500;
+          B.step = 4;
           break;
         }
         if (tween_done(&B.tw)) {
@@ -1821,6 +1923,10 @@ static void run_event(float dt) {
           B.msg.wait_ms = 1500;
           B.step = 2;
         }
+      }
+      if (B.step == 4) {
+        if (msgbox_done(&B.msg)) finish_event();
+        break;
       }
       if (B.step == 2) {
         tween_update(&B.tw2, dt);
@@ -2124,6 +2230,10 @@ static void run_event(float dt) {
     case BEV_FORM_CHANGE:
     case BEV_TRANSFORM:
     case BEV_ILLUSION:
+      if (e->type == BEV_FORM_CHANGE && e->target == 1) {   /* the quiet form change's white tween (the final boss) */
+        if (step_quiet_form(e, sd, player)) finish_event();
+        break;
+      }
       if (B.step == 0) {
         if ((e->type == BEV_TRANSFORM || e->type == BEV_ILLUSION) && e->mon) sd->mon = *e->mon;
         else update_mon_form(&sd->mon, e->a, e->b);
@@ -2517,6 +2627,8 @@ void bv_begin(const bv_setup* setup) {
   B.mode = M_IDLE;
   ui_set(&g_battle);
 }
+
+void bv_set_music_hook(void (*hook)(int a)) { music_hook = hook; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   B.n_ev = 0;

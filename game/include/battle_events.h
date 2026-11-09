@@ -26,6 +26,10 @@
  * to English as upstream's i18next does. */
 const pr_text_source* be_text_source(void);
 void be_format_message(const pr_msg *msg,char *out,size_t size);
+/* The final boss's encounter speech counts the cycles: count.toLocaleString() (en-US grouping: "5,643,854") and the English ordinal suffix's
+ * key by the plural rules (1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st...) */
+void be_group_digits(long n,char *out,size_t size);
+const char *be_ordinal_key(long n);
 
 /* A battle-core Pokemon as the screen shows it. */
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* out);

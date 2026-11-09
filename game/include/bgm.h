@@ -41,6 +41,9 @@ void bgm_on_starter_select(void);
  * `on_wave` starts the new one. battle_type is the WAVE event's BattleType. */
 void bgm_on_wave_coming(const gc_run* run, int wave, int biome, int battle_type);
 void bgm_on_wave(const gc_run* run, int wave, int biome, int battle_type);
+/* QuietFormChangePhase.end of the Classic final boss: playBgm() with the boss now Eternamax (the music was faded out before its first stage's
+ * speech). The phase-two music if the pack has it. */
+void bgm_on_final_boss_phase_two(const gc_run* run);
 /* A trainer sent out its first Pokemon: Battle.started becomes true, the encounter music gives way to the battle music
  * (EncounterPhase's doSummon). Harmless when the battle is not a trainer's or the music is already the battle's. */
 void bgm_on_foe_sent_out(const gc_run* run);

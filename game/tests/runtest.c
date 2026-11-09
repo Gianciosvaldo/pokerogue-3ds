@@ -484,6 +484,8 @@ void bv_begin(const bv_setup* setup) {
 bv_mon* bv_mon_of(int battler) { return &W.mon[screen_slot(battler)]; }
 int bv_biome(void) { return W.begun ? W.biome : -1; }
 
+void bv_set_music_hook(void (*hook)(int a)) { (void)hook; }
+
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   if (W.playing) BAD("bv_play while the last one is still playing");
   for (int i = 0; i < n; i++) {
