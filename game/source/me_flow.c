@@ -190,6 +190,7 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   F.type = gc_run_screen(run)->mystery_type;
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type move tutor after the win: battleWon came as an event, the intro is over */
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_SAFARI) return;   /* the Safari Zone's actions: the Pokemon's messages came as events, the intro is over */
+  if (gc_run_screen(run)->me_stage == GC_ME_STAGE_ABILITY) return;   /* Clowning Around's ability swap offer: the clown's lines and the prompt came as events */
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
@@ -233,7 +234,7 @@ static const struct {
         {'I', "ganlon_berry", 16, -11, 0, 0}, {'I', "apicot_berry", 14, -2, 0, 0}, {'I', "starf_berry", 18, 9, 0, 0}}},
     {GC_ME_TRASH_TO_TREASURE, 1, {{'P', "569-gigantamax", 0, 8, 1.5f, 0.4f}}},
     {GC_ME_BERRIES_ABOUND, 2, {{'M', "berries_abound_bush", 25, -6, 0, 0}, {0, "", -5, 0, 0, 0.25f}}},
-    {GC_ME_CLOWNING_AROUND, 3, {{0, "", -25, -3, 0, 0.3f}, {0, "", 25, -3, 0, 0.3f}, {'T', "harlequin", 0, 2, 0, 0}}},
+    {GC_ME_CLOWNING_AROUND, 3, {{'P', "122", -25, -3, 0, 0.3f}, {'P', "806", 25, -3, 0, 0.3f}, {'T', "harlequin", 0, 2, 0, 0}}},   /* Mr. Mime, Blacephalon (tint .3) and the harlequin */
     {GC_ME_PART_TIMER, 2, {{'M', "part_timer_crate", 15, 6, 0, 0}, {'T', "worker_f", -18, 4, 0, 0}}},
     {GC_ME_WEIRD_DREAM, 1, {{'M', "weird_dream_woman", 4, 11, 0, 0}}},
     {GC_ME_THE_WINSTRATE_CHALLENGE, 5, {{'T', "vito", 16, -4, 0, 0}, {'T', "vivi", -14, -4, 0, 0}, {'T', "victor", -32, 0, 0, 0},
@@ -376,6 +377,12 @@ static void finish(int option, int b, int c)
     void (*tutor_cb)(const me_choice*, void*) = F.on_choice;
     void* tutor_arg = F.arg;
     if (tutor_cb) tutor_cb(&ch, tutor_arg);
+    return;
+  }
+  if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_ABILITY) {   /* Yes (with the Pokemon) or No: the core says "abilityGained" and the outro itself */
+    void (*ability_cb)(const me_choice*, void*) = F.on_choice;
+    void* ability_arg = F.arg;
+    if (ability_cb) ability_cb(&ch, ability_arg);
     return;
   }
   if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_SAFARI) {   /* ball, bait and mud say "safari.N.selected" before they act; running has no line */
@@ -768,9 +775,28 @@ static void open_safari(int cursor)
   if (!me_screen_open(&a)) finish(3, 0, 0);
 }
 
+/* Clowning Around's ability swap offer after the shop (handleSwapAbility): the prompt "Would you like to permanently teach a Pokemon the <ability> ability?" with Yes
+ * and No (the confirm box); Yes asks for a Pokemon, and backing out of that asks again (onPokemonNotSelected). The offer's lines came as events. */
+static void open_ability(int cursor)
+{
+  static me_args a; /* static, as the others: me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  fmt("option.1.abilityPrompt", NULL, 0, false, a.query, sizeof a.query);
+  snprintf(a.options[0].label, ME_LABEL_LEN, "Yes");
+  snprintf(a.options[1].label, ME_LABEL_LEN, "No");
+  a.options[0].ok = a.options[1].ok = true;
+  a.n = 2;
+  a.cursor = cursor == 1 ? 1 : 0;
+  a.can_back = false;
+  a.on_pick = on_option;
+  if (!me_screen_open(&a)) finish(1, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage == GC_ME_STAGE_ABILITY) { open_ability(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */

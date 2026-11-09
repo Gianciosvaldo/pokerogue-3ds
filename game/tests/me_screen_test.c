@@ -844,6 +844,81 @@ int main(void) {
     use_source_locales = false;
   }
 
+  /* Clowning Around: the first screen (intro lines, the Blacephalon in the description, Mr. Mime / Blacephalon / harlequin sprites), then the ability swap offer after the
+   * shop: no intro (the clown's lines came as events), the prompt with the rolled ability, Yes and No; Yes asks for a Pokemon, backing out of that asks again, and
+   * neither answer has a line of its own (the core says "abilityGained" and the outro) */
+  {
+    use_source_locales = true;
+    g_depth = n_got = 0;
+    memset(&got, 0, sizeof got);
+    gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-clown", 818);
+    CHECK(gc_run_set_starters(&R, starters, 2, &why), "real Clowning Around party: %s", why ? why : "");
+    R.wave = 100;
+    pr_run_reset_seed(&R.run, R.wave);
+    R.mystery_type = R.screen.mystery_type = GC_ME_CLOWNING_AROUND;
+    R.screen.kind = GC_SCREEN_MYSTERY;
+    gc_mystery_setup_screen(&R);
+    char clown_intro[600];
+    me_flow_intro(&R, clown_intro, sizeof clown_intro);
+    CHECK(strstr(clown_intro, "a clown?") && strstr(clown_intro, "Bumbling buffoon") && !strstr(clown_intro, "{{"), "Clowning Around intro: %s", clown_intro);
+    me_intro_sprite sp[ME_MAX_INTRO];
+    const int n_sp = me_flow_intro_sprites(GC_ME_CLOWNING_AROUND, 160, 164, sp, ME_MAX_INTRO);
+    CHECK(n_sp == 3 && !strcmp(sp[0].key, "images/pokemon/122") && !strcmp(sp[1].key, "images/pokemon/806") && !strcmp(sp[2].key, "images/trainer/harlequin") &&
+              sp[0].x == 160 + 4 - 25 && sp[1].x == 160 + 4 + 25 && sp[0].y == 164 - 3 && sp[2].y == 164 + 2 && sp[0].dark > 0.29f && sp[1].dark > 0.29f && sp[2].dark == 0.0f,
+          "Mr. Mime, Blacephalon (tint .3) and the harlequin: %d %s %s", n_sp, n_sp > 0 ? sp[0].key : "", n_sp > 1 ? sp[1].key : "");
+    CHECK(me_flow_open(&R, chosen, NULL), "Clowning Around opens");
+    draw(0);
+    CHECK(has_text(0, "Clowning Around") && !has_text(0, "{{"), "title");
+    CHECK(has_text(0, "Something is off about this encounter"), "the description (its Blacephalon token is on a later page)");
+    draw(1);
+    CHECK(!has_text(1, "{{"), "no raw token");
+    CHECK(has_text(1, "Battle the Clown") && has_text(1, "Remain Unprovoked") && has_text(1, "Return the Insults"), "the three options");
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 0 && strstr(got.selected, "pitiful") && !strstr(got.selected, "{{"), "the fight answers with its line: %s", got.selected);
+
+    /* the offer after the shop */
+    g_depth = n_got = 0;
+    memset(&got, 0, sizeof got);
+    gc_rq_reset(&gc_int(&R)->rq);
+    gc_rq_unshift(&R, gc_rp(RP_ME_POST, GC_ME_CLOWNING_AROUND, 0, ABILITY_ID_INTIMIDATE));
+    gc_run_until_screen(&R);
+    CHECK(R.screen.kind == GC_SCREEN_MYSTERY && R.screen.me_stage == GC_ME_STAGE_ABILITY && R.screen.n_options == 2, "the offer's screen");
+    char offer_intro[200];
+    me_flow_intro(&R, offer_intro, sizeof offer_intro);
+    CHECK(!offer_intro[0], "the offer has no intro: %s", offer_intro);
+    CHECK(me_flow_open(&R, chosen, NULL), "the offer opens");
+    draw(0);
+    CHECK(has_text(0, "permanently teach a Pokémon the Intimidate ability") && !has_text(0, "{{"), "the prompt names the ability");
+    draw(1);
+    CHECK(has_text(1, "Yes") && has_text(1, "No") && !has_text(1, "Option"), "Yes and No");
+    press(BTN_DOWN);
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 1 && !got.selected[0], "No: option %d [%s]", got.option, got.selected);
+    /* Yes: the party; B asks again, a Pokemon (fainted or not) is taken */
+    g_depth = n_got = 0;
+    memset(&got, 0, sizeof got);
+    R.party[0].b.hp = 0;
+    CHECK(me_flow_open(&R, chosen, NULL), "the offer reopens");
+    press(BTN_ACTION);
+    CHECK(n_got == 0, "Yes alone answers nothing");
+    draw(0);
+    draw(1);
+    CHECK(has_text(1, i18n_species_name(R.party[R.party_order[0]].b.species)) && has_text(1, i18n_species_name(R.party[R.party_order[1]].b.species)), "the party is listed");
+    press(BTN_CANCEL);
+    draw(0);
+    CHECK(n_got == 0 && has_text(0, "permanently teach"), "backing out asks again");
+    press(BTN_ACTION);
+    press(BTN_ACTION);   /* the first Pokemon, fainted: still allowed */
+    CHECK(n_got == 1 && got.option == 0 && got.b == R.party_order[0] && !got.selected[0], "Yes: option %d b %d [%s]", got.option, got.b, got.selected);
+    {
+      const gc_choice yes = {GC_CH_MYSTERY, (int16_t)got.option, (int16_t)got.b, 0};
+      const char* clown_why = NULL;
+      CHECK(gc_run_choose(&R, &yes, &clown_why), "the core takes the answer: %s", clown_why ? clown_why : "");
+      CHECK(R.party[yes.b].b.custom_ability == ABILITY_ID_INTIMIDATE, "the ability is the Pokemon's now");
+    }
+    use_source_locales = false;
+  }
+
   /* The Bug-Type Superfan: Show Your Bug-types words the page by the number of Bug types ("1 Bug-type", "3 Bug-types") and has no plain "selected"
    * page; Gift a Bug Item names the Quick Claw / Grip Claw / Bug booster in its tooltips, asks for the Pokemon and then the item (the prompt "Select an item to give."),
    * and answers with "You hand the Trainer a <item>." and the Trainer's thanks. */
