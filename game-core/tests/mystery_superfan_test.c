@@ -1,4 +1,4 @@
-/* The Bug-Type Superfan's options 2 and 3 on the host: what the upstream differential (mystery_superfan_diff_test) cannot compare, because its oracle stops at the
+/* The Bug-Type Superfan on the host (the fight, option 2 and option 3): what the upstream differential (mystery_superfan_diff_test) cannot compare, because its oracle stops at the
  * recorded rewards: the screen (which options are on, the pick kinds and tokens), the choice through gc_run_choose (a rejected pick leaves the screen as it was),
  * and the shop that follows (the rewards the choice leaves with, and the held items after). */
 #include "../src/internal.h"
@@ -90,6 +90,72 @@ static void test_the_screen(void)
     puts("ok");
 }
 
+static int said_outro, said_appeared, said_send_out, trainer_events;
+static void drain(void)
+{
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_TRAINER) trainer_events++;
+        if (e.kind != GC_EV_MESSAGE || !e.msg.key) continue;
+        if (!strcmp(e.msg.key, "mysteryEncounters/bugTypeSuperfan:outro")) said_outro++;
+        if (!strcmp(e.msg.key, "battle:trainerAppeared")) said_appeared++;
+        if (!strcmp(e.msg.key, "battle:trainerSendOut")) said_send_out++;
+    }
+}
+
+static void leave_shop(void)
+{
+    const char *why;
+    gc_choice skip = {GC_CH_SKIP, 0, 0, 0};
+    for (int guard = 0; guard < 6 && run.screen.kind == GC_SCREEN_REWARD; guard++) {
+        assert(gc_run_choose(&run, &skip, &why));
+        drain();
+    }
+}
+
+/* option 1: the trainer and his team (by the wave's band), the Bug-type moves drawn, the win's shop and the outro after it */
+static void test_the_fight(void)
+{
+    puts("test_superfan_fight...");
+    static const struct { int wave, size; } bands[7] = {{35, 3}, {55, 4}, {75, 5}, {105, 5}, {125, 5}, {145, 5}, {175, 5}};
+    for (int b = 0; b < 7; b++) {
+        char seed[16];
+        snprintf(seed, sizeof seed, "sf-f%d", b);
+        start(seed, bands[b].wave, MIX, 4);
+        said_appeared = said_send_out = trainer_events = 0;
+        const char *why;
+        gc_choice ch = {GC_CH_MYSTERY, 0, 0, 0};
+        assert(gc_run_choose(&run, &ch, &why));
+        drain();
+        gc_run_until_screen(&run);
+        drain();
+        assert(run.in_battle && run.me_battle && run.battle_type == BATTLE_TYPE_TRAINER && !run.double_battle);
+        assert(run.trainer_type == TRAINER_TYPE_BUG_TYPE_SUPERFAN && run.trainer_variant == TRAINER_VARIANT_FEMALE);
+        assert(run.n_enemy == bands[b].size && gc_superfan_band(bands[b].wave) == b + 1);
+        assert(!run.me_catch_allowed);
+        assert(!strcmp(gc_int(&run)->custom_trainer_name, "$t(trainerNames:bugTypeSuperfan)"));   /* config.name */
+        assert(sys.dex[run.enemy[0].b.species].seen_count >= 1);   /* the encounter does not prevent the game stats' updates: the team is seen */
+        assert(said_appeared == 1 && said_send_out == 1 && trainer_events == 1);
+        assert(run.enemy[0].b.species == SPECIES_ID_BEEDRILL && run.enemy[1].b.species == SPECIES_ID_BUTTERFREE);
+        /* the four Bug-type moves were drawn, one of each kind */
+        const gc_internal *in = gc_int(&run);
+        assert(in->superfan.tutor[0] && in->superfan.tutor[1] && in->superfan.tutor[2] && in->superfan.tutor[3]);
+        /* the shop that follows the win has fillRemaining, and the outro waits for it */
+        assert(in->me_reward.active && in->me_reward.fill && in->me_reward.func == -1 && !in->me_reward.before);
+        assert(in->me_post.pending && in->me_post.a == GC_ME_BUG_TYPE_SUPERFAN);
+        gc_me_win_rewards(&run);
+        int shop = 0, post = 0;
+        for (gc_rphase p; gc_rq_next(&gc_int(&run)->rq, &p);) {
+            if (p.type == RP_SELECT_MODIFIER) shop += p.a == 2;
+            if (p.type == RP_ME_POST) { post++; gc_phase_start(&run, &p); }
+        }
+        drain();
+        assert(shop == 1 && post == 1 && said_outro == 1);
+        said_outro = 0;
+    }
+    puts("ok");
+}
+
 static int shop_options(void) { return run.screen.kind == GC_SCREEN_REWARD ? run.screen.n_options : -1; }
 
 static void test_show_your_bug_types(void)
@@ -104,6 +170,12 @@ static void test_show_your_bug_types(void)
     assert(!gc_int(&run)->reward.custom.fill_remaining && gc_int(&run)->reward.custom.allow_luck_upgrades && gc_int(&run)->reward.custom.n_funcs == 3);
     gc_run_until_screen(&run);
     assert(run.screen.kind == GC_SCREEN_REWARD && shop_options() == 3);
+    /* the outro follows the shop */
+    said_outro = 0;
+    leave_shop();
+    gc_run_until_screen(&run);
+    drain();
+    assert(said_outro == 1);
     /* no Bug type: the second option cannot be taken, and the screen stays */
     start("sf-e", 63, NONE, 3);
     gc_item_add(&run, "QUICK_CLAW", -1, run.party[0].b.id, 1);
@@ -166,6 +238,7 @@ static void test_gift_a_bug_item(void)
 int main(void)
 {
     test_the_screen();
+    test_the_fight();
     test_show_your_bug_types();
     test_gift_a_bug_item();
     puts("all superfan host tests passed");

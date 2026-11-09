@@ -1322,6 +1322,7 @@ static void the_pokemon_salesman(gc_run *run, int option)
 void gc_mystery_post(gc_run *run, const gc_rphase *p)
 {
     if (p->a == GC_ME_THE_EXPERT_POKEMON_BREEDER) { gc_breeder_outro(run, p); return; }
+    if (p->a == GC_ME_BUG_TYPE_SUPERFAN) { gc_superfan_outro(run); return; }
     if (p->a != GC_ME_SHADY_VITAMIN_DEALER || p->b < 0 || p->b >= run->n_party) return;
     gc_mon *m = &run->party[p->b];
     if (p->c == 1) {
@@ -1522,12 +1523,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_BUG_TYPE_SUPERFAN:
-        if (option == 0) {
-            gc_port_give_reward(run, "EXP_SHARE");   /* stand-in: the fight and the move tutor are not ported yet */
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        /* Show Your Bug-types and Gift a Bug Item (src/gc_superfan.c); a rejected pick leaves the screen as it was */
+        /* the fight (the Bug-type move tutor after the win is not ported yet), Show Your Bug-types and Gift a Bug Item (src/gc_superfan.c); a rejected pick leaves the screen as it was */
         if (!gc_superfan_execute(run, option, b, c, why)) { *ok = false; return false; }
         return true;
 
