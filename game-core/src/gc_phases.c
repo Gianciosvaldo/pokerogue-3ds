@@ -841,6 +841,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         if (gc_int(run)->training.away) gc_training_return(run);
         else { gc_berries_reward(run); gc_avarice_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); gc_breeder_reward(run); }
         return true;
+    case RP_SAFARI:
+        return gc_safari_next(run, p->a);
     case RP_MYSTERY: {
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);
@@ -1007,6 +1009,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         set_next_biome(run, run->screen.biomes[c->a]);
         return true;
     case RP_MYSTERY:
+    case RP_SAFARI:   /* the Safari Zone's four actions wait on the phase that summoned the Pokemon */
         if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
         return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
     case RP_ME_BEFORE_REWARDS:

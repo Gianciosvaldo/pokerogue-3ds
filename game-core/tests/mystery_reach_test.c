@@ -73,9 +73,9 @@ static void test_selection_reaches_the_pool(void)
 
 static void test_battle_encounter_has_an_enemy(void)
 {
-    /* Uncommon Breed's first option and the Safari Zone's second: a wild enemy of the biome (gc_gen_wild), boss or not */
-    const int cases[2][2] = {{GC_ME_UNCOMMON_BREED, 0}, {GC_ME_SAFARI_ZONE, 1}};
-    for (int c = 0; c < 2; c++)
+    /* Uncommon Breed's first option: a wild enemy of the biome (gc_gen_wild), boss or not */
+    const int cases[1][2] = {{GC_ME_UNCOMMON_BREED, 0}};
+    for (int c = 0; c < 1; c++)
         for (int i = 0; i < 60; i++) {
             char seed[16];
             snprintf(seed, sizeof seed, "enemy-%d-%d", c, i);

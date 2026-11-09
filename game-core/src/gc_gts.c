@@ -243,6 +243,40 @@ static int shiny_variant(gc_run *run, const gc_mon *m)
     return rand >= SHINY_VARIANT_CHANCE ? 0 : rand >= SHINY_EPIC_CHANCE ? 1 : 2;
 }
 
+/* Pokemon.trySetShinySeed(threshold, true, maxThreshold) on `r`: the Shiny Charm multiplies the threshold by 2^(1 + stacks), the cap
+ * applies when it is above 0, and a Pokemon that is not shiny yet rolls randSeedInt(65536) against it; a shiny one gets its variant
+ * (the higher of the current and the generated) and its luck */
+void gc_try_set_shiny_seed(gc_run *run, pr_rng *r, gc_mon *out, double threshold, double max_threshold)
+{
+    pr_pokemon *p = &out->b;
+    if (!p->shiny) {
+        const int charms = gc_item_stack(run, "SHINY_CHARM");
+        if (charms > 0) threshold *= pow(2, 1 + charms);
+        if (max_threshold > 0 && threshold > max_threshold) threshold = max_threshold;
+        p->shiny = pr_rng_seed_int(r, 65536, 0) < threshold;
+    }
+    if (p->shiny) {
+        const int v = shiny_variant(run, out);
+        if (v > out->variant) out->variant = (uint8_t)v;
+        out->luck = (int8_t)(out->variant + 1);
+    }
+}
+
+/* Pokemon.tryRerollHiddenAbilitySeed(threshold) on `r`: nothing for a species without a hidden ability; the Ability Charm divides the
+ * threshold by 2^(1 + stacks); a roll of 0 makes the ability the hidden one. A Pokemon that already has it is left alone (the callers
+ * loop only while the ability index is not 2) */
+void gc_try_reroll_hidden_ability(gc_run *run, pr_rng *r, gc_mon *out, double threshold)
+{
+    const pr_species_gen *sg = gc_species_gen(out->b.species);
+    if (out->ability_index == 2 || !sg || !sg->has_hidden) return;
+    const int stacks = gc_item_stack(run, "ABILITY_CHARM");
+    if (stacks > 0) threshold *= pow(2, -1 - stacks);
+    if (!pr_rng_seed_int(r, (int)threshold, 0)) {
+        out->ability_index = 2;
+        out->b.base_ability = out->b.ability = (uint16_t)gc_form_ability(out->b.species, gc_form(out->b.species, out->b.form), 2);
+    }
+}
+
 /* getRandomEncounterPokemon({level, speciesFunction: generateTradeOption(party), eventChance: 100 (no timed events here),
  * shinyRerolls: 1, hiddenRerolls: 1, hiddenAbilityChance: 64, shinyChance: 512, maxShinyChance: 4096}) and the common egg
  * move, on the run's RNG */
@@ -254,31 +288,10 @@ static bool wonder_trade_pokemon(gc_run *run, int level, gc_mon *out)
     const int species = generate_trade_option(r, used, run->n_party, -1);
     if (!species || !new_enemy(run, r, species, level, out)) return false;
     pr_pokemon *p = &out->b;
-    /* trySetShinySeed(512, true, 4096) */
-    if (!p->shiny) {
-        double threshold = 512;
-        const int charms = gc_item_stack(run, "SHINY_CHARM");
-        if (charms > 0) threshold *= pow(2, 1 + charms);
-        if (threshold > 4096) threshold = 4096;
-        p->shiny = pr_rng_seed_int(r, 65536, 0) < threshold;
-    }
-    if (p->shiny) {
-        const int v = shiny_variant(run, out);
-        if (v > out->variant) out->variant = (uint8_t)v;
-        out->luck = (int8_t)(out->variant + 1);
-    }
-    /* tryRerollHiddenAbilitySeed(64) while the ability is not the hidden one */
+    gc_try_set_shiny_seed(run, r, out, 512, 4096);
+    gc_try_reroll_hidden_ability(run, r, out, 64);
     const pr_species_gen *sg = gc_species_gen(species);
     const bool has_hidden = sg && sg->has_hidden;
-    if (out->ability_index != 2 && has_hidden) {
-        double chance = 64;
-        const int stacks = gc_item_stack(run, "ABILITY_CHARM");
-        if (stacks > 0) chance *= pow(2, -1 - stacks);
-        if (!pr_rng_seed_int(r, (int)chance, 0)) {
-            out->ability_index = 2;
-            p->base_ability = p->ability = (uint16_t)gc_form_ability(species, gc_form(species, p->form), 2);
-        }
-    }
     /* a common egg move when it is still not shiny and has no hidden ability */
     if (!p->shiny && (!has_hidden || out->ability_index < 2)) {
         const int root = gc_root_species(species);

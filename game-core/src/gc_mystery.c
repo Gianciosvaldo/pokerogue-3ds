@@ -463,6 +463,10 @@ static void setup_texts(gc_run *run)
         }
         break;
     }
+    case GC_ME_SAFARI_ZONE:
+        screen_arg(s, pr_arg_int("numEncounters", 3));
+        screen_arg(s, pr_arg_money_en_us("money", gc_safari_cost(run)));
+        break;
     case GC_ME_ABSOLUTE_AVARICE: {
         pr_msg_arg name;
         gc_avarice_tokens(run, &name);
@@ -574,7 +578,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_BUG_TYPE_SUPERFAN:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
-    case GC_ME_SAFARI_ZONE: case GC_ME_GLOBAL_TRADE_SYSTEM:
+    case GC_ME_GLOBAL_TRADE_SYSTEM:
         n = 4; break;
     default:
         n = 2; break;
@@ -601,6 +605,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_TRAINING_SESSION) {
         /* the three trainings need a Pokemon the party screen lets the player pick (isPokemonValidForEncounterOptionSelection); leaving needs nothing */
         for (int o = 0; o < 3; o++) s->option_ok[o] = any_pick_ok(run, type, o);
+    } else if (type == GC_ME_SAFARI_ZONE) {
+        /* MoneyRequirement(0, 2) on the entry; leaving needs nothing */
+        s->option_ok[0] = run->money >= gc_safari_cost(run);
     } else if (type == GC_ME_DARK_DEAL) {
         /* both options are open: the encounter's own requirement is a party of two */
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
@@ -1394,24 +1401,8 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_SAFARI_ZONE:
-        if (option == 0) {
-            double cost = pr_run_get_wave_money_amount(run->wave, 2.0);
-            if (run->money >= cost) run->money -= cost;
-            gc_port_give_reward(run, "GREAT_BALL");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            start_mystery_wild_battle(run, 0, wave_level, false, 0, 0);
-            return true;
-        } else if (option == 2) {
-            double cost = pr_run_get_wave_money_amount(run->wave, 1.5);
-            if (run->money >= cost) run->money -= cost;
-            gc_port_give_reward(run, "SUPER_POTION");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
-        return true;
+        /* the Safari Zone (src/gc_safari.c): the entry, then the minigame's four actions on screens of their own */
+        return gc_safari_execute(run, option);
 
     case GC_ME_LOST_AT_SEA:
         lost_at_sea(run, option);
