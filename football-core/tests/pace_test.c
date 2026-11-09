@@ -32,7 +32,7 @@ int main(void)
     assert(member_of(&scratch,4)); /* Charmander */
     const char *why=NULL;
     assert(!gc_football_award_levels(&scratch,1,0,&why) && why && !gc_football_award_levels(&scratch,1,100,&why));
-    assert(!gc_football_award_levels(&scratch,0,step,&why) && !gc_football_award_levels(&scratch,8,step,&why) && !gc_football_award_levels(NULL,1,step,&why));
+    assert(!gc_football_award_levels(&scratch,0,step,&why) && !gc_football_award_levels(&scratch,14,step,&why) && !gc_football_award_levels(NULL,1,step,&why));
     assert(scratch.party[0].b.level==5 && scratch.party[0].exp==gc_level_total_exp(5,rate_of(&scratch))); /* a refused award gives nothing */
     const unsigned friendship=scratch.party[0].b.friendship;
     assert(gc_football_award_levels(&scratch,1,step,&why) && scratch.party[0].b.friendship==friendship+GC_FOOTBALL_FRIENDSHIP_PER_WIN);

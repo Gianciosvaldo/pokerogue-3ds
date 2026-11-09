@@ -29,7 +29,7 @@ learn answer go through the shared EXP/evolution phase adapter.
 
 The shop shows classic item artwork, prices, sold stock and the selected
 teammate's stats. Tap the target row or use Left/Right to choose a teammate. Tap
-an offer or use D-pad/A to buy. B or Next match leaves the shop. After the seventh
+an offer or use D-pad/A to buy. B or Next match leaves the shop. After the thirteenth
 shop, the champion screen returns to the regular title; losing a match shows its
 score, then elimination and the title. Rare stones use existing held-item
 ownership. Before the next match, use Left/Right or tap the Mega row to select

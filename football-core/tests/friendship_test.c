@@ -30,7 +30,7 @@ int main(void)
     const unsigned base=scratch.party[0].b.friendship,gain=GC_FOOTBALL_FRIENDSHIP_PER_WIN;
     const gc_starter_entry starter_before=profile.starters[4];
     assert(base>0 && base<200);
-    assert(!gc_football_award_exp(&scratch,0,NULL) && !gc_football_award_exp(&scratch,8,NULL) && !gc_football_award_exp(NULL,1,NULL));
+    assert(!gc_football_award_exp(&scratch,0,NULL) && !gc_football_award_exp(&scratch,14,NULL) && !gc_football_award_exp(NULL,1,NULL));
     assert(scratch.party[0].b.friendship==base); /* a refused round gives nothing */
     assert(gc_football_award_exp(&scratch,1,NULL) && scratch.party[0].b.friendship==base+gain);
     assert(!gc_football_award_exp(&scratch,1,NULL) && scratch.party[0].b.friendship==base+gain); /* ... nor does one asked for twice while it is pending */

@@ -60,7 +60,7 @@ bool gc_football_draft(gc_run *r, const gc_starter *team, int count, const char 
 /* levels == 0: the season's EXP schedule; otherwise that many levels for each member */
 static bool award(gc_run *r, unsigned round, unsigned levels, const char **why)
 {
-    if (!r || !r->n_party || round<1 || round>7 || r->screen.kind!=GC_SCREEN_NONE)
+    if (!r || !r->n_party || round<1 || round>13 /* FB_CAREER_ROUNDS: the live playoff is thirteen matches */ || r->screen.kind!=GC_SCREEN_NONE)
         return fail(why,"invalid football EXP phase");
     gc_rqueue *q=&gc_int(r)->rq;
     if (q->waiting || q->current.type!=RP_NONE) return fail(why,"pending phase");

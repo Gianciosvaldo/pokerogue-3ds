@@ -41,7 +41,12 @@ void football_render_clear_sprites(FootballRenderer *r){assert(r->text);}
 bool football_render_load_front(FootballRenderer *r,unsigned slot,const menu_mon *m){assert(r->text && slot<22 && m->species);return true;}
 bool football_render_load_compact(FootballRenderer *r,unsigned slot,const menu_mon *m){assert(r->text && slot<22 && m->species);++loads;return true;}
 const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)slot;(void)ms;return NULL;}
-bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool left){(void)f;(void)x;(void)y;(void)scale;(void)left;return false;}
+static unsigned sprite_draws;
+bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool left){(void)x;(void)y;(void)scale;(void)left;if(f)++sprite_draws;return false;}
+/* the opponent card's portrait: the pack's trainer sprite of the round's Gym Leader, Elite Four member or Champion */
+static int portrait_trainer=-1;static unsigned portraits;static const rr_frame portrait_frame={.src_w=64,.src_h=80};
+const char *gm_trainer_sprite_key(int type,int variant,int partner){(void)variant;(void)partner;portrait_trainer=type;return "fake_trainer";}
+const rr_frame *img_anim_frame(const char *key,int i){assert(!strcmp(key,"images/trainer/fake_trainer") && i==0);++portraits;return &portrait_frame;}
 static unsigned icons_drawn;void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){assert(f && o && o->scale_x>0 && x>=0 && x<320 && y>=0 && y<240);++icons_drawn;}
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms){(void)r;(void)c;(void)cam;(void)ms;++draws;}
 static uint32_t offense_cards,defense_cards;
@@ -77,6 +82,7 @@ static void draw_both(void)
 static bool on_top(const char *prefix){for(unsigned i=0;i<top_text_count;++i)if(!strncmp(top_texts[i],prefix,strlen(prefix)))return true;return false;}
 /* A stat cell that shows a change ("52>67"): a digit, '>', a digit. */
 static bool on_top_change(void){for(unsigned i=0;i<top_text_count;++i){const char *t=top_texts[i];for(;t[0] && t[1] && t[2];++t)if(t[0]>='0' && t[0]<='9' && t[1]=='>' && t[2]>='0' && t[2]<='9')return true;}return false;}
+static bool bottom_is(const char *text){for(unsigned i=0;i<fake.text_count;++i)if(!strcmp(fake.texts[i].text,text))return true;return false;}
 static bool on_bottom(const char *prefix){for(unsigned i=0;i<fake.text_count;++i)if(!strncmp(fake.texts[i].text,prefix,strlen(prefix)))return true;return false;}
 static void tick(void){game_screen->update(game_screen,17);if(top==game_screen)draw_both();down=0;}
 static void answer(int n){top=game_screen;answer_fn(n,answer_arg);}
@@ -223,17 +229,37 @@ int main(void)
             draw_both();
             if(phases[i]==FB_CAREER_RESULT){w->live.rules.winner=w->live.rules.winner==FB_HOME?FB_AWAY:FB_HOME;draw_both();} /* a win and a loss */
         }
-        /* The egg vouchers: a won match tells what it pays, a loss pays nothing, and only the seventh win adds the Premium one. */
-        w->phase=FB_CAREER_RESULT;w->live.rules.winner=FB_HOME;draw_both();
-        assert(on_bottom("+1 Egg Voucher") && !on_bottom("+1 Egg Voucher Premium"));
-        w->live.rules.winner=FB_AWAY;draw_both();assert(!on_bottom("+1 Egg Voucher"));
-        w->phase=FB_CAREER_END;w->wins=4;draw_both();assert(!on_bottom("Egg Voucher Premium"));
-        w->round=FB_PLAYOFF_ROUNDS;w->wins=FB_PLAYOFF_ROUNDS-1;w->phase=FB_CAREER_RESULT;w->live.rules.winner=FB_HOME;draw_both();
-        assert(on_bottom("+1 Egg Voucher") && fake_saw("+1 Egg Voucher Premium"));
-        w->wins=FB_PLAYOFF_ROUNDS;w->phase=FB_CAREER_END;draw_both();assert(on_bottom("Playoff champion") && on_bottom("Egg Voucher Premium earned"));
+        /* The egg vouchers: a won match tells which one it pays (a Regular one for a Gym Leader, a Plus one for an Elite Four member, a Premium
+         * one for the Champion), a loss pays nothing, and only the Champion's win ends the playoff with the Premium one. */
+        static const char *const voucher[3]={"+1 Egg Voucher","+1 Egg Voucher Plus","+1 Egg Voucher Premium"};
+        for(unsigned round=1;round<=FB_CAREER_ROUNDS;++round){
+            const unsigned kind=round<=8?0:round<=12?1:2;
+            w->round=round;w->wins=round-1;w->phase=FB_CAREER_RESULT;w->live.rules.winner=FB_HOME;draw_both();
+            for(unsigned k=0;k<3;++k)assert(bottom_is(voucher[k])==(k==kind));
+            w->live.rules.winner=FB_AWAY;draw_both();assert(!on_bottom("+1 Egg Voucher"));
+        }
+        w->phase=FB_CAREER_END;w->round=FB_CAREER_ROUNDS;w->wins=4;draw_both();assert(!on_bottom("Egg Voucher Premium"));
+        w->wins=FB_CAREER_ROUNDS-1;draw_both();assert(!on_bottom("Playoff champion") && !on_bottom("Egg Voucher Premium"));
+        w->wins=FB_CAREER_ROUNDS;draw_both();assert(on_bottom("Playoff champion") && on_bottom("Egg Voucher Premium earned"));
         w->round=5;w->wins=4;
         w->phase=FB_CAREER_SHOP;press(BTN_RIGHT);press(BTN_DOWN);draw_both();
         w->message[0]=0;w->mega=-1;w->phase=FB_CAREER_READY;draw_both();
+        /* Before every match of the playoff the top screen introduces the opponent: the role, the name, the type of the team they bring (the
+         * Champion's has none) and the round, with the trainer's portrait. The bottom screen counts the rounds out of thirteen. */
+        {
+            static const char *const names[FB_CAREER_ROUNDS]={"Brock","Misty","Lt. Surge","Erika","Janine","Sabrina","Blaine","Giovanni","Lorelei","Bruno","Agatha","Lance","Blue"};
+            static const char *const kinds[FB_CAREER_ROUNDS]={"Rock","Water","Electric","Grass","Poison","Psychic","Fire","Ground","Ice","Fighting","Ghost","Dragon",NULL};
+            for(unsigned round=1;round<=FB_CAREER_ROUNDS;++round){
+                w->round=round;w->wins=round-1;w->phase=FB_CAREER_READY;portrait_trainer=-1;const unsigned before=portraits,drawn=sprite_draws;draw_both();
+                const FootballOpponent *o=football_opponent(round);
+                assert(o && on_top(round<=8?"Gym Leader":round<=12?"Elite Four":"Champion") && on_top(names[round-1]));
+                if(kinds[round-1]){char type[32];snprintf(type,sizeof type,"%s-type team",kinds[round-1]);assert(on_top(type));}else assert(on_top("Stacked team"));
+                char count[32];snprintf(count,sizeof count,"Round %u of 13",round);assert(on_top(count));
+                assert(portraits==before+1 && sprite_draws==drawn+1 && portrait_trainer==o->trainer_type);
+                char bottom[32];snprintf(bottom,sizeof bottom,"Round %u / 13",round);assert(on_bottom(bottom));char head[32];snprintf(head,sizeof head,"Round %u / 13",round);assert(on_top(head));
+            }
+            w->round=5;w->wins=4;w->phase=FB_CAREER_READY;draw_both();
+        }
     }
     /* The shop with evolution items: a Growlithe (Fire Stone), an Eevee (Water and Thunder Stones) and a Scyther (the rare Black Augurite). */
     {
@@ -296,7 +322,7 @@ int main(void)
         w->stone_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
     }
     {
-        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Achievement!","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","+1 Egg Voucher Premium for the title","Egg Voucher Premium earned","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
+        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 13","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Achievement!","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","+1 Egg Voucher Premium","Egg Voucher Premium earned","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }

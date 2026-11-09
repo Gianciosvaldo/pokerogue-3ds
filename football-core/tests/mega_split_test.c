@@ -5,10 +5,7 @@
 /* Species with two Mega Stones (Mewtwonite X and Y, Charizardite X and Y, Raichunite X and Y, Absolite and Absolite Z, Garchompite and
  * Garchompite Z, Lucarionite and Lucarionite Z): the shop used to offer only the first of the two, every round (lorenzo 2026-11-08: "only
  * Mewtwonite X appears in the football shop, never the Y counterpart"). Both must come up, each for the form it makes. */
-#ifndef FB_PLAYOFF_ROUNDS
-#define FB_PLAYOFF_ROUNDS 7
-#endif
-#define PLAYOFF_ROUNDS FB_PLAYOFF_ROUNDS
+#define PLAYOFF_ROUNDS FB_CAREER_ROUNDS
 static gc_run scratch,other,probe;
 static gc_system profile;
 static FootballCareer career,loaded;

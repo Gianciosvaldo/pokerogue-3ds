@@ -4,6 +4,7 @@
 #include "football_rules.h"
 #include "football_playbook.h"
 #include "football_defense.h"
+#include "football_opponent.h"
 #define FB_LIVE_ACTORS 22
 #define FB_LIVE_STEP (1.0f/60.0f)
 typedef enum { FB_LIVE_CALL,FB_LIVE_SET,FB_LIVE_PLAY,FB_LIVE_DEAD,FB_LIVE_END } FootballLivePhase;
