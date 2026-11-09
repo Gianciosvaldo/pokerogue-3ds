@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "gm_item_ui.h"
+#include "fused_name.h"
 #include "i18n.h"
 #include "menus.h"
 #include "pr_data.h"
@@ -128,7 +129,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->gender = p->gender;
   m->shiny = p->shiny;
   m->variant = p->variant;
-  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
+  fused_mon_name(m->name, sizeof m->name, p->species, p->fusion_species);
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];
@@ -173,7 +174,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->gender = p->gender;
   m->shiny = p->shiny;
   m->variant = p->variant;
-  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
+  fused_mon_name(m->name, sizeof m->name, p->species, p->fusion_species);
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];

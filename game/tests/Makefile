@@ -43,6 +43,14 @@ build/stat_banner_test: $(BANNER_SRCS)
 stat_banner_test: build/stat_banner_test
 .PHONY: stat_banner_test
 
+# the battle info box names a fused Pokemon as both halves (source/fused_name.h, be_mon)
+FUSED_NAME_SRCS := fused_name_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/fused_name_test: $(FUSED_NAME_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(FUSED_NAME_SRCS) -lm -o $@
+fused_name_test: build/fused_name_test
+.PHONY: fused_name_test
+
 # unit test for Mega/Dynamax/Gigantamax form animation states, event conversion, sprite keys, and scaling
 FORM_ANIM_SRCS := form_anim_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 TRANSFORM_VISUAL_SRCS := transform_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
