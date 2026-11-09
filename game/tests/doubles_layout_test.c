@@ -1,16 +1,20 @@
-/* The foes' side of a double battle on the top screen (lorenzo, 2026-11-09: "the enemy pokemon are way too high up and the platform is still in
- * the singles placement, making it look like they are floating out of the screen").
- * The foes stand FOE_RAISE higher than in a single battle so they clear the player's two full-sized boxes. The platform was raised with the
- * wrong sign (y grows downwards: it went down 36 px while the Pokemon went up 36), so they floated over a platform left far behind, and the
- * field was zoomed 1.1x, which cut the tallest off at the top. The real renderer is run with a recording stand-in for the drawing calls:
+/* The foes' side and the HP boxes of a double battle on the top screen (lorenzo, 2026-11-09: "the enemy pokemon are way too high up and the
+ * platform is still in the singles placement, making it look like they are floating out of the screen"; then, after a first fix that raised
+ * the platform 54 px and drew the field at 0.85x: "now the platform is floating in the sky: avoid the zoom out and shift the position of the
+ * two slightly. follow upstream's hp bar doubles design change").
+ * The platform used to be raised with the wrong sign (y grows downwards: it went down while the Pokemon went up). The real renderer is run
+ * with a recording stand-in for the drawing calls:
  *   1  a single battle is what it was: nothing raised, the platform at y 0, the doll and the trainer on their old marks, zoom 1.2
- *   2  a doubles encounter: the foe platform (and the old one sliding out) is drawn FOE_RAISE UP (negative y), under the foes that stand there
- *   3  the trainer's sprite goes up with the platform it stands on; the Substitute doll stands on its Pokemon's own column (it was drawn on
- *      the singles mark whatever the column)
- *   4  the field is drawn smaller (FIELD_ZOOM_DOUBLES < the single zoom) and, at that zoom, the foes' feet clear the player's top box (field y
- *      43) and the top of an 80 px sprite stays inside the screen's 30 px top band; the G-Max zoom-out comes on top
- * The numbers (platform images drawn at (0, y), the zoom about (160, 132), the box places) are the app's own constants, not an upstream
- * output; no upstream run. */
+ *   2  (with a raise that is not 0: the raise is a constant to tune, so the geometry is checked at 20 px) the foe platform, the old one sliding
+ *      out, the trainer and the Pokemon all go UP (negative y) together; the player's platform stays
+ *   3  the Substitute doll stands on its Pokemon's own column (it was drawn on the singles mark whatever the column)
+ *   4  the field is NOT zoomed out in a double (the same zoom as a single battle); with the raise the app ships (none) the foes stand on the
+ *      singles platform, LEFT (-32, -8) and RIGHT (+32, 0) of its mark, clear of the player's mini boxes and inside the top band
+ *   5  the HP boxes are upstream's doubles ones (Pokemon.setFieldPosition: setMini, setOffset): the player's pbinfo_player_mini with no HP
+ *      numbers and no EXP bar at (310, -84) and, offset 10 right and 27 down, (320, -57); the foes' at (140, -141) and (130, -114); a single
+ *      battle keeps the full box with its numbers and EXP bar
+ * The numbers (platform images drawn at (0, y), the zoom about (160, 132), the box places) are the app's own and upstream's constants, not an
+ * upstream output; no upstream run. */
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -82,23 +86,24 @@ int main(void){
  memset(&B,0,sizeof B);B.field_scale=1;B.setup.doubles=true;snprintf(B.biome,sizeof B.biome,"plains");
  put(side_of(0),6);put(side_of(1),7);put(side_of(2),25);put(side_of(3),26);
  B.arena_old_on=true;B.arena_old_x=20;B.arena_enemy_x=0;
- CHECK(near(foe_raise(),FOE_RAISE)&&FOE_RAISE>0);
+ foe_raise_px=20;                                    /* (the shipped raise is 0: the geometry is checked with one that is not) */
+ CHECK(near(foe_raise(),20)&&FOE_RAISE>=0);
  reset();draw_field();
  {
   const img_call *b=NULL;int nb=0;
-  for(int i=0;i<ni;i++)if(!strcmp(imgs[i].key,"images/arenas/plains_b")){nb++;b=&imgs[i];CHECK(near(imgs[i].y,-FOE_RAISE));}
+  for(int i=0;i<ni;i++)if(!strcmp(imgs[i].key,"images/arenas/plains_b")){nb++;b=&imgs[i];CHECK(near(imgs[i].y,-foe_raise_px));}
   CHECK(nb==2&&b);                                   /* the platform sliding out and the one in */
   const img_call *a=find("images/arenas/plains_a");CHECK(a&&near(a->y,0));  /* the player's platform stays */
  }
  {float x,y,fx,fy;
-  field_pos(side_of(2),false,&x,&y);CHECK(near(y,84-8-FOE_RAISE));       /* LEFT: (-32, -8), then the raise */
-  field_pos(side_of(3),false,&x,&y);CHECK(near(y,84-FOE_RAISE)&&near(x,236+B.enemy_slide+32));
+  field_pos(side_of(2),false,&x,&y);CHECK(near(y,84-8-foe_raise_px));       /* LEFT: (-32, -8), then the raise */
+  field_pos(side_of(3),false,&x,&y);CHECK(near(y,84-foe_raise_px)&&near(x,236+B.enemy_slide+32));
   mon_pos(side_of(3),false,&fx,&fy);CHECK(near(fx,x)&&near(fy,y)); /* no sprite gap, no catch, no doll: the field position */
  }
 
  /* ---- 3: the trainer goes up with the platform; the doll stands on its Pokemon's own column */
  B.trainer_visible=true;snprintf(B.setup.trainer_keys[0],sizeof B.setup.trainer_keys[0],"images/trainer/test");
- reset();draw_trainers();CHECK(nd==1&&near(draws[0].y,80-FOE_RAISE));
+ reset();draw_trainers();CHECK(nd==1&&near(draws[0].y,80-foe_raise_px));
  for(int col=0;col<4;col++){
   side *sd=side_of(col);const bool player=col%2==0;
   sd->sub_on=true;sd->sub_alpha=1;
@@ -108,21 +113,51 @@ int main(void){
  {float x2,y2,x3,y3;field_pos(side_of(2),false,&x2,&y2);field_pos(side_of(3),false,&x3,&y3);CHECK(!near(x2,x3));} /* the two foes' dolls are apart */
  B.setup.doubles=false;reset();B.trainer_visible=true;draw_trainers();CHECK(near(draws[0].y,80));B.setup.doubles=true;
 
- /* ---- 4: smaller field; at that zoom the foes clear the player's top box and fit under the top of the screen */
+ /* ---- 4: no zoom-out; with the raise the app ships (none) the foes stand on the singles platform and clear the mini boxes */
+ foe_raise_px=FOE_RAISE;
  {
   const float z=field_zoom_now();
-  CHECK(near(z,FIELD_ZOOM_DOUBLES)&&z<FIELD_ZOOM);
+  CHECK(near(z,FIELD_ZOOM));                                 /* the same zoom as a single battle */
+  B.field_scale=.75f;CHECK(near(field_zoom_now(),.75f*FIELD_ZOOM));B.field_scale=1;   /* (only G-Max's own zoom-out comes on top) */
   float x,y;field_pos(side_of(2),false,&x,&y);              /* the foe that stands higher (LEFT) */
+  CHECK(near(y,84-8-FOE_RAISE));
   const float feet2=zoomed_y(y,z);
   field_pos(side_of(3),false,&x,&y);
+  CHECK(near(y,84-FOE_RAISE)&&near(x,236+B.enemy_slide+32));
   const float feet3=zoomed_y(y,z);
-  const float box_top=180+player_info_y(side_of(0))-21;      /* the player's lead box: centre -116 under the field's bottom, 42 tall */
-  CHECK(near(box_top,43));
+  reset();draw_field();
+  {const img_call *b=find("images/arenas/plains_b");CHECK(b&&near(b->y,-FOE_RAISE));}   /* the platform where the foes are */
+  /* the player's lead box (mini): centre -84 under the field's bottom, the art in rows 2..24 of its 42 */
+  const float box_top=180+player_info_y(side_of(0))-21+2;
+  CHECK(near(box_top,77));
   CHECK(feet3<=box_top+3&&feet2<=feet3);                     /* standing on or above the top of the boxes (the platform's rim is a few px under the feet) */
-  CHECK(feet2-80*z>=-30);                                    /* a sprite 80 px tall (most are shorter; a full 96 px cell is the exception) fits in the 30 px band above the field */
-  /* the zoomed-out G-Max field only makes it smaller, so it still fits */
-  B.field_scale=.75f;{const float z2=field_zoom_now();CHECK(near(z2,.75f*FIELD_ZOOM_DOUBLES));CHECK(zoomed_y(y,z2)-80*z2>=-30);}
+  CHECK(feet2-76*z>=-30);                                    /* a sprite 76 px tall fits in the 30 px band above the field (a 96 px cell loses its top rows, as in upstream's own field) */
  }
- printf("Doubles layout: %d checks (single battle unchanged; foe platform raised with the foes, not lowered; trainer and doll on their marks; foes clear the player's boxes and fit the screen)\n",checks);
+
+ /* ---- 5: the boxes are upstream's doubles ones */
+ {
+  float bx,by;
+  const struct{int col;bool player;float x,y;}want[]={{0,true,310,-84},{1,true,320,-57},{2,false,140,-141},{3,false,130,-114}};
+  for(int i=0;i<4;i++){
+   side *sd=side_of(want[i].col);
+   CHECK(near(info_base_x(sd,want[i].player),want[i].x));
+   bx=want[i].x;by=want[i].player?player_info_y(sd):(B.setup.doubles&&second_column(sd)?-114:-141);
+   CHECK(near(by,want[i].y));
+  }
+  /* what the lead's box draws: the mini art, no HP numbers, no EXP bar; a single battle's box has them */
+  reset();draw_player_info(side_of(0));
+  int numbers_mini=0;for(int i=0;i<ni;i++)numbers_mini+=!strcmp(imgs[i].key,"images/ui/numbers");
+  CHECK(find("images/ui/pbinfo_player_mini")&&!find("images/ui/pbinfo_player")&&!find("images/ui/text_images/en/battle_ui/overlay_exp_label"));
+  CHECK(find("images/ui/pbinfo_player_mini")->x==310&&near(find("images/ui/pbinfo_player_mini")->y,-84));
+  const bool was=B.setup.doubles;B.setup.doubles=false;
+  reset();draw_player_info(side_of(0));
+  int numbers_full=0;for(int i=0;i<ni;i++)numbers_full+=!strcmp(imgs[i].key,"images/ui/numbers");
+  CHECK(find("images/ui/pbinfo_player")&&!find("images/ui/pbinfo_player_mini")&&find("images/ui/text_images/en/battle_ui/overlay_exp_label"));
+  CHECK(numbers_full>=numbers_mini+5);                       /* "30/30" is five glyphs more than the level alone */
+  B.setup.doubles=was;
+  /* the boxes of one column do not overlap on the screen: the art of the left box ends above where the right box's begins */
+  CHECK(player_info_y(side_of(0))-21+24<player_info_y(side_of(1))-21+2+4);
+ }
+ printf("Doubles layout: %d checks (single battle unchanged; foe platform raised with the foes, not lowered; trainer and doll on their marks; no zoom-out; upstream's mini boxes)\n",checks);
  return 0;
 }

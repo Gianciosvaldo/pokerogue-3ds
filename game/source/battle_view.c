@@ -367,6 +367,8 @@ static int foot_gap(const side* sd) {
 static bool player_doubles(void) { return B.setup.doubles || B.late_double; }
 /* How far the player's Pokemon are from the centre towards their column: 1 in a doubles encounter, BEV_DOUBLES' tween in the middle of one */
 static float player_split(void) { return B.setup.doubles ? 1.0f : B.late_double ? B.split : 0.0f; }
+static bool second_column(const side *sd){return field_of(sd)%2!=0;}
+static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 
 /* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
  * sprite slides over 500 ms, Sine.easeOut. A screen that already has two player columns has nothing to do. */
@@ -383,12 +385,14 @@ static bool step_doubles(float dt) {
   return tween_done(&B.tw);
 }
 
-/* Doubles: the whole foe side (its platform, trainers and Pokemon) stands FOE_RAISE field pixels higher than in a single battle, so it
- * clears the player's two full-sized boxes (field y 43 and down). Raised alone the Pokemon float over a platform left behind and the
- * tallest are cut off by the top of the screen (lorenzo, 2026-11-09), so the platform and the trainers go up with them and the field
- * is drawn smaller in a double (FIELD_ZOOM_DOUBLES), enough for a 96 px sprite to stand under the top edge. */
-#define FOE_RAISE 54.0f
-static float foe_raise(void) { return B.setup.doubles ? FOE_RAISE : 0; }
+/* Doubles: the whole foe side (its platform, trainers and Pokemon) stands FOE_RAISE field pixels higher than in a single battle. The
+ * player's boxes are upstream's mini ones in a double (field y 77 and down), so the foes clear them with no raise at all: they keep the
+ * singles platform and stand LEFT (-32, -8) and RIGHT (+32, 0) of its mark as upstream's do. Raised, the Pokemon float over a platform left
+ * behind and the tallest are cut off by the top of the screen (lorenzo, 2026-11-09, twice), so what is raised goes up together: the
+ * platform, the trainers and the Pokemon (y grows downwards: the platform's y is minus the raise). */
+#define FOE_RAISE 0.0f
+static float foe_raise_px = FOE_RAISE;   /* (a variable so the host test can run the raise's geometry with a raise that is not 0) */
+static float foe_raise(void) { return B.setup.doubles ? foe_raise_px : 0; }
 
 /* Where a side's Pokemon stands in its column: the field position alone, before a Substitute, a catch or the sprite's empty rows move it. */
 static void field_pos(const side* sd, bool player, float* x, float* y) {
@@ -665,8 +669,7 @@ static void update_field_scale(bool instant) {
  * bigger about the arena's bottom centre: at 1.25 the ground reaches the screen's side edges. 1.2 keeps a tall front sprite (96 px cells) in
  * the screen. The G-Max zoom-out (field_scale) comes on top of it. */
 #define FIELD_ZOOM 1.2f
-#define FIELD_ZOOM_DOUBLES 0.85f /* two foes and four boxes share the screen, so the field is drawn smaller than in a single battle */
-static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * (B.setup.doubles ? FIELD_ZOOM_DOUBLES : FIELD_ZOOM) : 1, 160, 132); }
+static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * FIELD_ZOOM : 1, 160, 132); }
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
  * trainers use the native -4/+28 offsets; double-only art is one sprite. */
@@ -788,10 +791,11 @@ static void draw_level(float lx, float ly, int level, bool red) {
   draw_numbers(red ? "images/ui/numbers_red" : "images/ui/numbers", s, lx + 9.5f, ly - 0.5f, 1);
 }
 
-static void draw_types(const bv_mon* m, bool player, float bx, float by) {
+static void draw_types(const bv_mon* m, bool player, bool mini, float bx, float by) {
   char k[48], fr[24];
   const char* who = player ? "player" : "enemy";
   float x1 = player ? -139 : -15, y1 = player ? -17 : -15.5f, y2 = player ? -1 : -2.5f;
+  if (player && mini) { x1 += 4; y1 -= 8; y2 -= 8; }   /* PlayerBattleInfo.setMini */
   snprintf(k, sizeof k, "images/ui/pbinfo_%s_type%s", who, m->n_types > 1 ? "1" : "");
   gm_enum_lower(GM_E_POKEMON_TYPE, m->types[0], fr, sizeof fr);
   img_draw(k, fr, bx + x1, by + y1, 0, 0);
@@ -880,7 +884,8 @@ static void draw_stat_indicators(side* sd, bool player, float bx, float by) {
  * signed number frames over each health box; HP reserves the enemy's first column. */
 static void draw_stat_panel(side *sd,bool player,float bx,float by){
   if(B.stats_alpha<=0)return;
-  const char *key=player?"images/ui/pbinfo_player_stats":sd->mon.boss?"images/ui/pbinfo_enemy_boss_stats":"images/ui/pbinfo_enemy_mini_stats";
+  const bool mini=player&&player_mini(sd);
+  const char *key=player?(mini?"images/ui/pbinfo_player_mini_stats":"images/ui/pbinfo_player_stats"):sd->mon.boss?"images/ui/pbinfo_enemy_boss_stats":"images/ui/pbinfo_enemy_mini_stats";
   const rr_frame *box=img_frame(key,NULL);if(!box)return;
   rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=1;o.origin_y=.5f;
   o.tint=RR_RGBA(255,255,255,(int)(255*B.stats_alpha));rr_draw(box,bx,by,&o);
@@ -902,24 +907,26 @@ static void draw_stat_panel(side *sd,bool player,float bx,float by){
     number_x[i]=x+(label?label->src_w:12);number_w[i]=initial?initial->src_w:6;
     if(!stat)continue;
     o.origin_x=o.origin_y=0;
-    /* PlayerBattleInfo.initInfo positions the full-size values container at (8,7). */
-    float parent_x=player?8:0,parent_y=player?7:0;
+    /* PlayerBattleInfo.initInfo positions the full-size values container at (8,7); setMini moves it by (2,-7). */
+    float parent_x=player?(mini?10:8):0,parent_y=player?(mini?0:7):0;
     if(label)rr_draw(label,x+parent_x,y+parent_y,&o);
     if(number)rr_draw(number,number_x[i]+parent_x,y+parent_y,&o);
   }
 }
 
+/* Pokemon.setFieldPosition: in a double both player boxes are the mini ones (setMini: 12 up, no HP numbers or EXP bar) and the one of the
+ * RIGHT position is offset (setOffset: 27 down, 10 to the right for the player and 10 to the left for the foe). */
 static float player_info_y(const side *sd){
-  /* Keep both full-sized player boxes above the command strip at y=-48. */
-  return player_doubles()?(field_of(sd)==1?-72:-116):-72;
+  if(!player_doubles())return -72;
+  return -72-12+(second_column(sd)?27:0);
 }
 
 /* A boss's box rests 48 px to the right of a mini one (Pokemon.showInfo slides it in by 246 px from -198, the others by 150 from -150):
  * the wide box (178 px against 130) keeps the same left margin. */
 static float info_base_x(const side *sd,bool player){
-  if(player)return player_doubles()?348:310;
-  if(!B.setup.doubles)return sd->mon.boss?188:140;
-  return sd->mon.boss?150:102;
+  if(player)return player_doubles()&&second_column(sd)?320:310;
+  const float base=B.setup.doubles&&second_column(sd)?130:140;
+  return base+(sd->mon.boss?48:0);
 }
 
 /* how far a box slides in from (and out to) the side: Pokemon.showInfo / hideInfo */
@@ -929,25 +936,30 @@ static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
   float bx = info_base_x(sd,true) + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
-  img_draw("images/ui/pbinfo_player", NULL, bx, by, 1, 0.5f);
-  draw_types(m, true, bx, by);
-  draw_name(m, true, bx - 115, by - 15.2f);
-  draw_level(bx - 41, by - 10, m->level, false);
+  /* a double: pbinfo_player_mini, the name, the status and the level 1.5 higher (PlayerBattleInfo.setMini), no HP numbers, no EXP bar */
+  const bool mini = player_mini(sd);
+  const float lift = mini ? -1.5f : 0;
+  img_draw(mini ? "images/ui/pbinfo_player_mini" : "images/ui/pbinfo_player", NULL, bx, by, 1, 0.5f);
+  draw_types(m, true, mini, bx, by);
+  draw_name(m, true, bx - 115, by - 15.2f + lift);
+  draw_level(bx - 41, by - 10 + lift, m->level, false);
   float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
   const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
   int w = (int)floorf(48 * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
   if (hf && w > 0) rr_draw_cropped(hf, bx - 61, by - 1, w, hf->src_h, NULL);
   img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bx - 62, by - 4, 1, 0);
-  /* HP numbers: right to left from (-15, 10), "hp/max" */
-  char s[24];
-  snprintf(s, sizeof s, "%d/%d", (int)ceilf(sd->hp_shown - 0.001f), m->max_hp);
-  draw_numbers("images/ui/numbers", s, bx - 15, by + 10, -1);
-  /* EXP bar: overlay_exp at (-98, 18) masked to 85 px */
-  img_draw("images/ui/text_images/en/battle_ui/overlay_exp_label", NULL, bx - 91, by + 20, 1, 1);
-  const rr_frame* ef = img_frame("images/ui/overlay_exp", NULL);
-  int ew = (int)floorf(85 * sd->exp_shown + 0.5f);
-  if (ef && ew > 0) rr_draw_cropped(ef, bx - 98, by + 18, ew, ef->src_h, NULL);
+  if (!mini) {
+    /* HP numbers: right to left from (-15, 10), "hp/max" */
+    char s[24];
+    snprintf(s, sizeof s, "%d/%d", (int)ceilf(sd->hp_shown - 0.001f), m->max_hp);
+    draw_numbers("images/ui/numbers", s, bx - 15, by + 10, -1);
+    /* EXP bar: overlay_exp at (-98, 18) masked to 85 px */
+    img_draw("images/ui/text_images/en/battle_ui/overlay_exp_label", NULL, bx - 91, by + 20, 1, 1);
+    const rr_frame* ef = img_frame("images/ui/overlay_exp", NULL);
+    int ew = (int)floorf(85 * sd->exp_shown + 0.5f);
+    if (ef && ew > 0) rr_draw_cropped(ef, bx - 98, by + 18, ew, ef->src_h, NULL);
+  }
   draw_stat_indicators(sd, true, bx, by);
   draw_stat_panel(sd,true,bx,by);
 }
@@ -973,10 +985,10 @@ static void draw_enemy_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
   const bool boss = m->boss;
-  float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles?(field_of(sd)==3?-103:-141):-141; /* EnemyBattleInfo container */
+  float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles&&second_column(sd)?-114:-141; /* EnemyBattleInfo container (setOffset: 27 down) */
   const float name_x = bx - (boss ? 172 : 124), bar_x = bx - (boss ? 109 : 71), bar_y = by + (boss ? 2.5f : 4.5f), bar_w = boss ? 86 : 48;
   img_draw(boss ? "images/ui/pbinfo_enemy_boss" : "images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
-  draw_types(m, false, bx, by);
+  draw_types(m, false, false, bx, by);
   draw_name(m, false, name_x, by - 11.2f);
   if (m->caught_before) img_draw("images/ui/icon_owned", NULL, name_x, by - 11.2f + 11.75f, 0, 0);
   draw_level(bx - (boss ? 52 : 50), by - 5, m->level, false);

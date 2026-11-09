@@ -5,7 +5,7 @@
  * The real renderer is run with a recording stand-in for the drawing calls:
  *   1  the single layout is what it was (lead at 106, box 310 / -72, boss box 188 / -141, nothing raised)
  *   2  BEV_DOUBLES: the lead slides to FieldPosition.LEFT (-32, -8) over 500 ms, Sine.easeOut; the player's two boxes take their doubles places
- *      (348, -116 for the lead and -72 for the ally, 44 apart); the ally stands at RIGHT (+32, 0); two different Pokemon, two different boxes
+ *      (310, -84 for the lead and 320, -57 for the ally, the mini boxes: upstream's setMini and setOffset); the ally stands at RIGHT (+32, 0); two different Pokemon, two different boxes
  *   3  the foe stays where it was: same position, same box, no FOE_RAISE, no doubles box shift (102 / 150), the zoom is the single one
  *   4  a doubles encounter (setup.doubles) is exactly what it was, and BEV_DOUBLES does nothing there
  * Positions are transcribed from the pinned source (pokemon.ts getFieldPositionOffset / setFieldPosition, battle-info.ts setOffset): the layout
@@ -55,7 +55,7 @@ static void put(side *sd,int species,bool boss){
 }
 
 /* one frame's drawn position of a player's info box: the first pbinfo_player the call draws */
-static bool player_box(side *sd,float *x,float *y){reset();draw_player_info(sd);const img_call *c=find("images/ui/pbinfo_player");if(!c)return false;*x=c->x;*y=c->y;return true;}
+static bool player_box(side *sd,float *x,float *y){reset();draw_player_info(sd);const img_call *c=find("images/ui/pbinfo_player");if(!c)c=find("images/ui/pbinfo_player_mini");if(!c)return false;*x=c->x;*y=c->y;return true;}
 
 int main(void){
  /* ---- 1: the single fight, as it was: the lead and the one boss */
@@ -79,7 +79,7 @@ int main(void){
  float x,y;
  mon_pos(side_of(0),true,&x,&y);CHECK(near(x,lx0)&&near(y,ly0)); /* no sprite has moved yet */
  /* the boxes change at once (setMini, setOffset), the sprite after it */
- {float bx,by;CHECK(player_box(side_of(0),&bx,&by)&&near(bx,348)&&near(by,-116));}
+ {float bx,by;CHECK(player_box(side_of(0),&bx,&by)&&near(bx,310)&&near(by,-84));}
  done=step_doubles(250);
  CHECK(!done);
  {float k=ease(EASE_SINE_OUT,.5f);mon_pos(side_of(0),true,&x,&y);CHECK(near(x,lx0-32*k)&&near(y,ly0-8*k));CHECK(x<lx0&&x>lx0-32);}
@@ -92,9 +92,9 @@ int main(void){
  {
   float bx0,by0,bx1,by1;
   CHECK(player_box(side_of(0),&bx0,&by0)&&player_box(side_of(1),&bx1,&by1));
-  CHECK(near(bx0,348)&&near(bx1,348)&&near(by0,-116)&&near(by1,-72));   /* the doubles places, two boxes: one HP bar for each Pokemon */
-  CHECK(by1-by0>=42);                                                  /* the boxes are 42 px tall: they do not overlap */
-  CHECK(by1+21<=-48&&by0-21>=-180);                                    /* both above the command strip */
+  CHECK(near(bx0,310)&&near(bx1,320)&&near(by0,-84)&&near(by1,-57));   /* the doubles places, two mini boxes: one HP bar for each Pokemon */
+  CHECK(by0-21+24<by1-21+2);                                           /* the mini art is rows 2..24 of 42: the two do not overlap */
+  CHECK(by1-21+24<=-48&&by0-21>=-180);                                 /* both above the command strip (its art's last row) */
  }
 
  /* ---- 3: the boss stays where it was */
@@ -116,8 +116,8 @@ int main(void){
   CHECK(near(x0,106-32)&&near(y0,PLAYER_Y-8)&&near(x2,106+32)&&near(y2,PLAYER_Y));
   float a,b;mon_pos(side_of(2),false,&a,&b);CHECK(near(a,236+0-32)&&near(b,84-8-FOE_RAISE));
   mon_pos(side_of(3),false,&a,&b);CHECK(near(a,236+32)&&near(b,84-FOE_RAISE));
-  CHECK(near(info_base_x(side_of(2),false),102)&&near(info_base_x(side_of(0),true),348));
-  CHECK(near(player_info_y(side_of(0)),-116)&&near(player_info_y(side_of(1)),-72));
+  CHECK(near(info_base_x(side_of(2),false),140)&&near(info_base_x(side_of(3),false),130)&&near(info_base_x(side_of(0),true),310)&&near(info_base_x(side_of(1),true),320));
+  CHECK(near(player_info_y(side_of(0)),-84)&&near(player_info_y(side_of(1)),-57));
   B.step=0;CHECK(step_doubles(0)&&!B.late_double&&near(B.split,0));
   mon_pos(side_of(0),true,&a,&b);CHECK(near(a,x0)&&near(b,y0));
  }
