@@ -148,6 +148,7 @@ typedef struct {
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
+    struct { bool active; uint8_t pick, egg; } trtest;   /* A Trainer's Test: the fight is running (pick = the stat trainer, 0..4). Not saved, as fg */
     struct { bool active; uint8_t next; } winstrate;   /* The Winstrate Challenge: the chain of five trainer fights is running; next = the fight to make when this one is won. Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
     /* a text the encounter says after its shop (PostMysteryEncounterPhase: the outro), queued ahead of the next wave by the encounter's leave */
@@ -527,6 +528,14 @@ void gc_winstrate_execute(gc_run *run, int option);              /* option 1: th
 void gc_winstrate_victory(gc_run *run);                          /* a fight of the chain is won: the battle's end, the trainer's rewards, then RP_WINSTRATE */
 void gc_winstrate_next(gc_run *run);                             /* RP_WINSTRATE: the next trainer's fight, or the end of the encounter */
 extern int gc_winstrate_generated[5][4];                         /* the last fight's movesets as the constructor made them (the differential compares them) */
+void gc_me_say_trainer_fight(gc_run *run, gc_internal *in);      /* the trainer's lines, the send-outs and the first turn of a mystery encounter's trainer fight */
+/* A Trainer's Test (src/gc_trtest.c) */
+const char *gc_trtest_key(int pick);                            /* the stat trainer's key ("buck"): trainerNames:buck and the dialogue's section */
+int gc_trtest_pick(const gc_run *run);                          /* onInit's randSeedInt(5): Buck, Cheryl, Marley, Mira or Riley (0..4) */
+void gc_trtest_execute(gc_run *run, int option);                /* option 1: the stat trainer's fight; option 2: the heal and the Rare Egg */
+void gc_trtest_victory(gc_run *run);                            /* the fight is won: the battle's end, the trainer's rewards, the shop and the Epic Egg */
+void gc_trtest_reward(gc_run *run);                             /* RP_ME_BEFORE_REWARDS: doEncounterRewards' eggs */
+void gc_trtest_outro(gc_run *run, const gc_rphase *p);          /* PostMysteryEncounterPhase: "X gave you an Epic Egg!" */
 /* The Expert Pokemon Breeder (src/gc_breeder.c) */
 bool gc_breeder_execute(gc_run *run, int option);
 extern int gc_breeder_generated[3][4];   /* the last fight's three movesets as the constructor made them (the differential compares them) */

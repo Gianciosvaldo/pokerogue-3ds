@@ -105,7 +105,7 @@ static bool make_member(gc_run *run, int e, const w_mon *w, int level, gc_mon *o
     return true;
 }
 
-static void say_trainer_fight(gc_run *run, gc_internal *in)
+void gc_me_say_trainer_fight(gc_run *run, gc_internal *in)
 {
     gc_event *ev = gc_ev_new(run, GC_EV_TRAINER);
     if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
@@ -167,7 +167,7 @@ static bool build_fight(gc_run *run, int k)
     run->me_catch_allowed = false;
     run->mystery_type = run->mystery_tier = -1;
     run->in_battle = true;
-    say_trainer_fight(run, in);
+    gc_me_say_trainer_fight(run, in);
     return true;
 }
 

@@ -323,6 +323,13 @@ static void setup_texts(gc_run *run)
     s->n_me_args = 0;
     memset(s->option_pick, 0, sizeof s->option_pick);
     switch (type) {
+    case GC_ME_A_TRAINERS_TEST: {
+        static char key[48];
+        snprintf(key, sizeof key, "trainerNames:%s", gc_trtest_key(gc_trtest_pick(run)));
+        screen_arg(s, pr_arg_key("statTrainerName", key));   /* onInit's setDialogueToken */
+        screen_arg(s, pr_arg_int("trainerPick", gc_trtest_pick(run)));
+        break;
+    }
     case GC_ME_TRASH_TO_TREASURE:
         screen_arg(s, (pr_msg_arg){"costMultiplier",PR_ARG_STR,0,"2.5"});
         break;
@@ -1327,6 +1334,7 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p)
 {
     if (p->a == GC_ME_THE_EXPERT_POKEMON_BREEDER) { gc_breeder_outro(run, p); return; }
     if (p->a == GC_ME_BUG_TYPE_SUPERFAN) { gc_superfan_outro(run); return; }
+    if (p->a == GC_ME_A_TRAINERS_TEST) { gc_trtest_outro(run, p); return; }
     if (p->a != GC_ME_SHADY_VITAMIN_DEALER || p->b < 0 || p->b >= run->n_party) return;
     gc_mon *m = &run->party[p->b];
     if (p->c == 1) {
@@ -1434,15 +1442,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_A_TRAINERS_TEST:
-        if (option == 0) {
-            start_mystery_wild_battle(run, 0, wave_level + 5, true, 3, 1);
-            return true;
-        } else if (option == 1) {
-            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_trtest_execute(run, option);
         return true;
 
     case GC_ME_TRASH_TO_TREASURE:
