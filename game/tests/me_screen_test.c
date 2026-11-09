@@ -881,6 +881,58 @@ int main(void) {
       press(BTN_CANCEL);
       CHECK(n_got == 1 && got.option == 4 && !got.selected[0], "B cancels: option %d [%s]", got.option, got.selected);
     }
+    /* The Safari Zone's actions: no intro (the Pokemon's messages came as events), the Pokemon in front of the player on the top screen, the four
+     * actions with their tooltips, the cursor where the core left it, and a line before ball, bait and mud ("safari.N.selected") but none for running */
+    {
+      gc_starter safari_party[2] = {{.species = SPECIES_ID_PIKACHU, .tera_type = -1}, {.species = SPECIES_ID_LAPRAS, .tera_type = -1}};
+      for (int k = 0; k < 2; k++) for (int j = 0; j < 6; j++) safari_party[k].ivs[j] = 15;
+      const char* safari_why = NULL;
+      g_depth = n_got = 0;
+      gc_run_new(&R, GAME_MODES_CLASSIC, "safari-ui", 812);
+      CHECK(gc_run_set_starters(&R, safari_party, 2, &safari_why), "safari party: %s", safari_why ? safari_why : "");
+      R.wave = 45; R.money = 100000;
+      R.battle_type = BATTLE_TYPE_WILD;
+      gc_rq_reset(&gc_int(&R)->rq);
+      R.mystery_type = GC_ME_SAFARI_ZONE;
+      gc_rq_unshift(&R, gc_rp(RP_MYSTERY, GC_ME_SAFARI_ZONE, GC_ME_GREAT, 0));
+      gc_run_until_screen(&R);
+      CHECK(R.screen.kind == GC_SCREEN_MYSTERY && R.screen.me_stage == GC_ME_STAGE_FIRST, "the Safari Zone's question");
+      { gc_choice enter = {GC_CH_MYSTERY, 0, 0, 0}; CHECK(gc_run_choose(&R, &enter, &safari_why), "enter"); }
+      CHECK(R.screen.me_stage == GC_ME_STAGE_SAFARI && R.screen.n_options == 4 && R.n_enemy == 1, "the actions screen");
+      char safari_intro[200];
+      me_flow_intro(&R, safari_intro, sizeof safari_intro);
+      CHECK(!safari_intro[0], "the actions have no intro: %s", safari_intro);
+      R.screen.slot = 2;   /* the core's cursor: the mud */
+      R.enemy[0].b.species = SPECIES_ID_EEVEE;
+      R.enemy[0].b.shiny = false;
+      CHECK(me_flow_open(&R, chosen, NULL), "the actions open");
+      n_sil = 0;
+      draw(0);
+      char want_key[64];
+      snprintf(want_key, sizeof want_key, "images/pokemon/%d", (int)SPECIES_ID_EEVEE);
+      CHECK(n_sil == 1 && !strcmp(g_sil_key[0], want_key), "the Pokemon is on the top screen: %d %s", n_sil, g_sil_key[0]);
+      draw(1);
+      CHECK(has_text(1, "Throw a Poké Ball") && has_text(1, "Throw Bait") && has_text(1, "Throw Mud") && has_text(1, "Flee"), "the four actions");
+      CHECK(!has_text(1, "Option") && !has_text(1, "{{"), "no placeholder labels or raw tokens");
+      CHECK(has_text(1, "(+)") || has_text(1, "(-)"), "the highlighted action carries its tooltip");
+      press(BTN_UP);   /* from the mud to the bait */
+      press(BTN_ACTION);
+      CHECK(n_got == 1 && got.option == 1 && strstr(got.selected, "You throw some bait!") != NULL && !strstr(got.selected, "{{"), "bait: option %d [%s]", got.option, got.selected);
+      /* the cursor starts where the core left it, and running says nothing */
+      g_depth = n_got = 0;
+      R.screen.slot = 3;
+      CHECK(me_flow_open(&R, chosen, NULL), "the actions reopen");
+      press(BTN_ACTION);
+      CHECK(n_got == 1 && got.option == 3 && !got.selected[0], "run: option %d [%s]", got.option, got.selected);
+      /* a shiny Pokemon is drawn from the shiny folder, the plain sprite behind it */
+      g_depth = n_got = 0;
+      R.enemy[0].b.shiny = true;
+      CHECK(me_flow_open(&R, chosen, NULL), "the actions reopen for a shiny");
+      n_sil = 0;
+      draw(0);
+      snprintf(want_key, sizeof want_key, "images/pokemon/shiny/%d", (int)SPECIES_ID_EEVEE);
+      CHECK(n_sil == 1 && !strcmp(g_sil_key[0], want_key), "the shiny sprite: %s", g_sil_key[0]);
+    }
     use_source_locales = false;
   }
 

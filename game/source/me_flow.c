@@ -172,6 +172,7 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   F.run = run;
   F.type = gc_run_screen(run)->mystery_type;
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type move tutor after the win: battleWon came as an event, the intro is over */
+  if (gc_run_screen(run)->me_stage == GC_ME_STAGE_SAFARI) return;   /* the Safari Zone's actions: the Pokemon's messages came as events, the intro is over */
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
@@ -326,6 +327,15 @@ static void finish(int option, int b, int c)
     void (*tutor_cb)(const me_choice*, void*) = F.on_choice;
     void* tutor_arg = F.arg;
     if (tutor_cb) tutor_cb(&ch, tutor_arg);
+    return;
+  }
+  if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_SAFARI) {   /* ball, bait and mud say "safari.N.selected" before they act; running has no line */
+    char sub[32], page[ME_TEXT_LEN * 2];
+    snprintf(sub, sizeof sub, "safari.%d.selected", option + 1);
+    if (fmt(sub, NULL, 0, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+    void (*safari_cb)(const me_choice*, void*) = F.on_choice;
+    void* safari_arg = F.arg;
+    if (safari_cb) safari_cb(&ch, safari_arg);
     return;
   }
   pr_msg_arg extra[4];
@@ -646,10 +656,66 @@ static void open_tutor(int cursor)
   if (!me_screen_open(&a)) finish(4, 0, 0);
 }
 
+/* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
+ * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
+static void safari_sprite(const gc_mon* e, me_intro_sprite* o)
+{
+  const pr_species* sp = NULL;
+  for (int lo = 0, hi = PR_SPECIES_COUNT - 1; lo <= hi && !sp;) {
+    const int mid = (lo + hi) / 2;
+    if (pr_species_table[mid].id == e->b.species) sp = &pr_species_table[mid];
+    else if (pr_species_table[mid].id < e->b.species) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const char* fk = "";
+  if (sp && sp->nforms > 1) {
+    const int form = e->b.form >= sp->nforms ? sp->nforms - 1 : e->b.form;
+    if (pr_forms[sp->form0 + form].form_key) fk = pr_forms[sp->form0 + form].form_key;
+  }
+  char plain[ME_SPRITE_LEN];
+  if (*fk) snprintf(plain, sizeof plain, "images/pokemon/%d-%s", (int)e->b.species, fk);
+  else snprintf(plain, sizeof plain, "images/pokemon/%d", (int)e->b.species);
+  memset(o, 0, sizeof *o);
+  if (e->b.shiny) {
+    snprintf(o->key, sizeof o->key, "images/pokemon/shiny/%s", plain + strlen("images/pokemon/"));
+    snprintf(o->alt, sizeof o->alt, "%s", plain);
+  } else {
+    snprintf(o->key, sizeof o->key, "%s", plain);
+  }
+  o->x = 160;
+  o->y = 164;
+  o->scale = 1.0f;
+}
+
+static void open_safari(int cursor)
+{
+  static me_args a; /* static, as the others: me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  for (int i = 0; i < 4; i++) {
+    char sub[32];
+    me_option* o = &a.options[a.n++];
+    o->ok = true;
+    snprintf(sub, sizeof sub, "safari.%d.label", i + 1);
+    if (!fmt(sub, NULL, 0, false, o->label, sizeof o->label)) snprintf(o->label, sizeof o->label, "Option %d", i + 1);
+    snprintf(sub, sizeof sub, "safari.%d.tooltip", i + 1);
+    fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+  }
+  a.cursor = cursor >= 0 && cursor < 4 ? cursor : 0;
+  if (F.run->n_enemy > 0) {
+    safari_sprite(&F.run->enemy[0], &a.intro[0]);
+    a.n_intro = 1;
+  }
+  a.can_back = false;
+  a.on_pick = on_option;
+  if (!me_screen_open(&a)) finish(3, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
   if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
+  if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);

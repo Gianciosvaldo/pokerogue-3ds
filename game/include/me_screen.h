@@ -39,6 +39,7 @@ typedef struct {
 typedef struct {
   char key[ME_SPRITE_LEN];   /* image key; with frame "" the image's first animation frame */
   char frame[32];            /* "items" atlas icon name (key is then "items"); "" otherwise */
+  char alt[ME_SPRITE_LEN];   /* drawn when key has no image (a shiny's or a form's sprite the pack lacks); "" = none */
   float x, y, scale;         /* x centre and y feet on the screen; scale 1 = native */
   float dark;                /* 0..1: how far the sprite is shaded toward black (upstream's tint) */
 } me_intro_sprite;
