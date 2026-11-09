@@ -55,6 +55,13 @@ FAULTS = [
  ('superfan-no-thanks', UI[0], 'option == 2 && fmt("option.3.selectedDialogue"', 'option == 9 && fmt("option.3.selectedDialogue"'),
  ('superfan-item-token', UI[0], 'extra[n_extra++] = (pr_msg_arg){.name = "selectedItem"', 'extra[n_extra++] = (pr_msg_arg){.name = "selectedItemX"'),
  ('superfan-no-prompt', UI[0], 'F.type == GC_ME_DELIBIRDY || F.type == GC_ME_BUG_TYPE_SUPERFAN', 'F.type == GC_ME_DELIBIRDY'),
+ ('tutor-intro-again', UI[0], 'if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type', 'if (0) return;   /* the Bug-type'),
+ ('tutor-selected-text', UI[0], 'if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_TUTOR) {   /* the tutor teaches', 'if (0) {   /* the tutor teaches'),
+ ('tutor-cancel-option', UI[0], 'finish(4, 0, 0);\n}\n\nstatic void open_tutor', 'finish(3, 0, 0);\n}\n\nstatic void open_tutor'),
+ ('tutor-no-cancel-button', UI[0], 'a.on_back = on_tutor_back;', 'a.can_back = false;'),
+ ('tutor-wrong-move', UI[0], 'const int move = gc_superfan_tutor_move(F.run, k);', 'const int move = gc_superfan_tutor_move(F.run, 0);'),
+ ('tutor-no-prompt', UI[0], 'fmt("teachMovePrompt", NULL, 0, false, a.query, sizeof a.query);', 'a.query[0] = 0;'),
+ ('tutor-no-details', UI[0], '"%s  %s\\nPower %s  Accuracy %s  PP %d"', '"%s  %s%s%s%d"'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

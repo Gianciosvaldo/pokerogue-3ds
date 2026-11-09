@@ -171,6 +171,7 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   out[0] = 0;
   F.run = run;
   F.type = gc_run_screen(run)->mystery_type;
+  if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type move tutor after the win: battleWon came as an event, the intro is over */
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
@@ -321,6 +322,12 @@ static void open_items(void);
 static void finish(int option, int b, int c)
 {
   me_choice ch = {.option = option, .b = b, .c = c};
+  if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_TUTOR) {   /* the tutor teaches without a line of its own: LearnMovePhase speaks */
+    void (*tutor_cb)(const me_choice*, void*) = F.on_choice;
+    void* tutor_arg = F.arg;
+    if (tutor_cb) tutor_cb(&ch, tutor_arg);
+    return;
+  }
   pr_msg_arg extra[4];
   int n_extra = 0;
   if (F.run && b >= 0 && b < F.run->n_party && F.run->screen.option_pick[option])
@@ -607,9 +614,42 @@ static void on_option(int idx, void* arg)
     finish(idx, 0, 0);
 }
 
+/* the Bug-Type Superfan's move tutor (selectOptionThenPokemon): the four moves, then a Pokemon; B is the cancel button (nothing is taught) */
+static void on_tutor_back(void* arg)
+{
+  (void)arg;
+  finish(4, 0, 0);
+}
+
+static void open_tutor(int cursor)
+{
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  fmt("teachMovePrompt", NULL, 0, false, a.query, sizeof a.query);
+  static const char* const category[3] = {"Physical", "Special", "Status"};
+  for (int k = 0; k < 4; k++) {
+    const int move = gc_superfan_tutor_move(F.run, k);
+    me_option* o = &a.options[a.n++];
+    o->ok = true;
+    snprintf(o->label, sizeof o->label, "%s", i18n_move_name(move));
+    const pr_move* m = &pr_moves[move];
+    char power[16] = "-", acc[16] = "-";
+    if (m->power > 0) snprintf(power, sizeof power, "%d", (int)m->power);
+    if (m->accuracy > 0) snprintf(acc, sizeof acc, "%d", (int)m->accuracy);
+    snprintf(o->tooltip, sizeof o->tooltip, "%s  %s\nPower %s  Accuracy %s  PP %d", i18n_type_name(m->type), category[m->category >= 0 && m->category < 3 ? m->category : 0], power, acc, (int)m->pp);
+  }
+  a.cursor = cursor;
+  a.can_back = true;
+  a.on_pick = on_option;
+  a.on_back = on_tutor_back;
+  if (!me_screen_open(&a)) finish(4, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);

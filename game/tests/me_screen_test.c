@@ -135,7 +135,8 @@ void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int 
 const char* i18n_species_name(int id) { return id == 25 ? "Pikachu" : id == 131 ? "Lapras" : "Mon"; }
 const char* i18n_ability_name(int id) { static char b[24]; snprintf(b, sizeof b, "Ability%d", id); return b; }
 const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, (size_t)n, "%s", key); return out; }
-const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : id == 14 ? "Swords Dance" : "Move"; }
+const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : id == 14 ? "Swords Dance" : id == MOVE_ID_MEGAHORN ? "Megahorn" : id == MOVE_ID_SIGNAL_BEAM ? "Signal Beam" : id == MOVE_ID_STICKY_WEB ? "Sticky Web" : id == MOVE_ID_U_TURN ? "U-turn" : "Move"; }
+const char* i18n_type_name(int type) { return type == POKEMON_TYPE_BUG ? "Bug" : "Type"; }
 
 /* a small locale: the real lines of Shady Vitamin Dealer and Lost at Sea (English), and the names the texts name */
 static const char* const SHADY =
@@ -849,6 +850,37 @@ int main(void) {
     CHECK(n_got == 1 && got.option == 2 && got.b == 5 && got.c == 0 && claw && strstr(got.selected, "You hand the Trainer a ") && strstr(got.selected, claw->name) &&
               strstr(got.selected, "for me?") && !strstr(got.selected, "{{"),
           "option %d b %d c %d: %s", got.option, got.b, got.c, got.selected);
+    /* The move tutor after the win: no intro (battleWon came as an event), the prompt, the four moves with their details, a Pokemon, and no
+     * text of its own; B is the cancel button (option 4) */
+    {
+      static const int moves[4] = {MOVE_ID_MEGAHORN, MOVE_ID_SIGNAL_BEAM, MOVE_ID_STICKY_WEB, MOVE_ID_U_TURN};
+      g_depth = n_got = 0;
+      memset(&got, 0, sizeof got);
+      for (int k = 0; k < 4; k++) gc_int(&R)->superfan.tutor[k] = (uint16_t)moves[k];
+      gc_int(&R)->superfan.tutor_pending = true;
+      CHECK(gc_superfan_tutor_start(&R) && R.screen.me_stage == GC_ME_STAGE_TUTOR, "the tutor opens its screen");
+      char tutor_intro[200];
+      me_flow_intro(&R, tutor_intro, sizeof tutor_intro);
+      CHECK(!tutor_intro[0], "the tutor has no intro: %s", tutor_intro);
+      CHECK(me_flow_open(&R, chosen, NULL), "the tutor opens");
+      draw(0);
+      CHECK(has_text(0, "Select a move to teach"), "the prompt");
+      draw(1);
+      for (int k = 0; k < 4; k++) CHECK(has_text(1, i18n_move_name(moves[k])), "move %d is listed", k);
+      CHECK(has_text(1, "Power") && !has_text(1, "{{") && !has_text(1, "Option"), "the highlighted move shows its details");
+      press(BTN_DOWN);
+      press(BTN_ACTION);   /* the second move: the Pokemon list */
+      CHECK(n_got == 0, "a move alone answers nothing");
+      draw(0);
+      CHECK(has_text(0, "Choose a Pokemon."), "the Pokemon is asked for");
+      press(BTN_ACTION);
+      CHECK(n_got == 1 && got.option == 1 && got.b >= 0 && got.b < 6 && !got.selected[0], "move 1 for a Pokemon, no text: option %d b %d selected [%s]", got.option, got.b, got.selected);
+      /* B on the list of moves is the cancel */
+      g_depth = n_got = 0;
+      CHECK(me_flow_open(&R, chosen, NULL), "the tutor reopens");
+      press(BTN_CANCEL);
+      CHECK(n_got == 1 && got.option == 4 && !got.selected[0], "B cancels: option %d [%s]", got.option, got.selected);
+    }
     use_source_locales = false;
   }
 
