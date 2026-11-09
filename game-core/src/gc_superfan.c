@@ -1,4 +1,4 @@
-/* The Bug-Type Superfan (src/data/mystery-encounters/encounters/bug-type-superfan-encounter.ts at pinned upstream 8555c08): the two options that do not fight.
+/* The Bug-Type Superfan (src/data/mystery-encounters/encounters/bug-type-superfan-encounter.ts at pinned upstream 8555c08).
  *
  * The encounter spawns when a Pokemon of the whole party (fainted ones too) is a Bug type (TypeRequirement(BUG, false), the Tera type left out), or holds a transferable
  * Quick Claw or Grip Claw (HeldItemRequirement of BypassSpeedChanceModifier / ContactHeldItemTransferChanceModifier) or a transferable Bug attack type booster
@@ -14,9 +14,16 @@
  * updateModifiers(true, true), and the shop has the Golden Bug Net (as a Rogue tier option) and a Reviver Seed (fillRemaining false). leaveEncounterWithoutBattle(true), but
  * a mystery encounter's own rewards replace the heal-only shop, so it is the same shop either way.
  *
- * Not ported here: option 1 (the trainer's fight and the Bug-type move tutor), the intro sprites. */
+ * 1 Offer to Battle: onInit builds the Superfan's team for the wave (getTrainerConfigForWave): 2 AVERAGE members below wave 30 (Beedrill and Butterfree), then
+ * 3, 4, 5 AVERAGE ones (a Pool 1 and Pool 2 Bug type added), from wave 100 forms (Beedrill and Butterfree form 1, regenerating the moveset), a Pool 3 Pokemon that
+ * onInit drew by randSeedShuffle on the wave's stream, then a STRONG Pool 4 one from wave 120, and bosses of 2 segments from wave 160. The option draws the four
+ * Bug-type moves the winner may learn (one of each kind, randSeedInt on the option's stream), sets fillRemaining rewards and starts the fight (female trainer).
+ * Each member is made on its own stream as Trainer.genPartyMember does (getRandomPartyMemberFunc with ignoreEvolution), the postProcess after the constructor.
+ *
+ * Not ported here: the Bug-type move tutor after the win, the intro sprites. */
 #include "internal.h"
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 int pr_reward_generate(pr_reward_ctx *ctx, int item);   /* reward-core/src/reward.c: generateType(party); -2 = the generator makes nothing */
@@ -98,6 +105,9 @@ static void shop(gc_run *run, const pr_reward_option *opts, int n_opts, const ch
     c->fill_remaining = false;
     c->reroll_multiplier = NAN;
     c->allow_luck_upgrades = true;
+    gc_int(run)->me_post.pending = true;   /* the outro, after the shop */
+    gc_int(run)->me_post.a = GC_ME_BUG_TYPE_SUPERFAN;
+    gc_int(run)->me_post.b = gc_int(run)->me_post.c = 0;
     gc_me_end_shop(run);
 }
 
@@ -148,8 +158,222 @@ static void show_bug_types(gc_run *run)
     }
 }
 
+
+/* the encounter's species pools (getRandomPartyMemberFunc's speciesPool) */
+static const uint16_t POOL1[23] = {SPECIES_ID_PARASECT, SPECIES_ID_VENOMOTH, SPECIES_ID_LEDIAN, SPECIES_ID_ARIADOS, SPECIES_ID_YANMA, SPECIES_ID_BEAUTIFLY, SPECIES_ID_DUSTOX, SPECIES_ID_MASQUERAIN, SPECIES_ID_NINJASK, SPECIES_ID_VOLBEAT, SPECIES_ID_ILLUMISE, SPECIES_ID_ANORITH, SPECIES_ID_KRICKETUNE, SPECIES_ID_WORMADAM, SPECIES_ID_MOTHIM, SPECIES_ID_SKORUPI, SPECIES_ID_JOLTIK, SPECIES_ID_LARVESTA, SPECIES_ID_VIVILLON, SPECIES_ID_CHARJABUG, SPECIES_ID_RIBOMBEE, SPECIES_ID_SPIDOPS, SPECIES_ID_LOKIX};
+static const uint16_t POOL2[23] = {SPECIES_ID_SCYTHER, SPECIES_ID_PINSIR, SPECIES_ID_HERACROSS, SPECIES_ID_FORRETRESS, SPECIES_ID_SCIZOR, SPECIES_ID_SHUCKLE, SPECIES_ID_SHEDINJA, SPECIES_ID_ARMALDO, SPECIES_ID_VESPIQUEN, SPECIES_ID_DRAPION, SPECIES_ID_YANMEGA, SPECIES_ID_LEAVANNY, SPECIES_ID_SCOLIPEDE, SPECIES_ID_CRUSTLE, SPECIES_ID_ESCAVALIER, SPECIES_ID_ACCELGOR, SPECIES_ID_GALVANTULA, SPECIES_ID_VIKAVOLT, SPECIES_ID_ARAQUANID, SPECIES_ID_ORBEETLE, SPECIES_ID_CENTISKORCH, SPECIES_ID_FROSMOTH, SPECIES_ID_KLEAVOR};
+static const uint16_t POOL4[4] = {SPECIES_ID_GENESECT, SPECIES_ID_SLITHER_WING, SPECIES_ID_BUZZWOLE, SPECIES_ID_PHEROMOSA};
+typedef struct { uint16_t species; uint8_t form; } pool3_t;   /* form 0: formIndex undefined */
+static const pool3_t POOL3[8] = {
+    {SPECIES_ID_PINSIR, 1}, {SPECIES_ID_SCIZOR, 1}, {SPECIES_ID_HERACROSS, 1}, {SPECIES_ID_ORBEETLE, 1},
+    {SPECIES_ID_CENTISKORCH, 1}, {SPECIES_ID_DURANT, 0}, {SPECIES_ID_VOLCARONA, 0}, {SPECIES_ID_GOLISOPOD, 0}};
+
+/* the Bug-type tutor's moves: a physical, a special, a status and a misc one are drawn */
+static const uint16_t TUTOR[4][5] = {
+    {MOVE_ID_MEGAHORN, MOVE_ID_ATTACK_ORDER, MOVE_ID_BUG_BITE, MOVE_ID_FIRST_IMPRESSION, MOVE_ID_LUNGE},
+    {MOVE_ID_SILVER_WIND, MOVE_ID_SIGNAL_BEAM, MOVE_ID_BUG_BUZZ, MOVE_ID_POLLEN_PUFF, MOVE_ID_STRUGGLE_BUG},
+    {MOVE_ID_STRING_SHOT, MOVE_ID_DEFEND_ORDER, MOVE_ID_RAGE_POWDER, MOVE_ID_STICKY_WEB, MOVE_ID_SILK_TRAP},
+    {MOVE_ID_LEECH_LIFE, MOVE_ID_U_TURN, MOVE_ID_HEAL_ORDER, MOVE_ID_QUIVER_DANCE, MOVE_ID_INFESTATION}};
+
+/* WAVE_LEVEL_BREAKPOINTS */
+static const int BREAKPOINT[7] = {30, 50, 70, 100, 120, 140, 160};
+
+enum { M_BEEDRILL, M_BUTTERFREE, M_POOL1, M_POOL2, M_POOL3A, M_POOL3B, M_POOL4 };
+typedef struct { uint8_t kind; bool form, boss; } sf_slot;
+/* the team by band of the wave (getTrainerConfigForWave); the last band's and the one before's 5th member are STRONG (the compound template) */
+static const struct { uint8_t size, n_strong; sf_slot m[5]; } BAND[8] = {
+    {2, 0, {{M_BEEDRILL, false, false}, {M_BUTTERFREE, false, false}}},
+    {3, 0, {{M_BEEDRILL, false, false}, {M_BUTTERFREE, false, false}, {M_POOL1, false, false}}},
+    {4, 0, {{M_BEEDRILL, false, false}, {M_BUTTERFREE, false, false}, {M_POOL1, false, false}, {M_POOL2, false, false}}},
+    {5, 0, {{M_BEEDRILL, false, false}, {M_BUTTERFREE, false, false}, {M_POOL1, false, false}, {M_POOL2, false, false}, {M_POOL2, false, false}}},
+    {5, 0, {{M_BEEDRILL, true, false}, {M_BUTTERFREE, true, false}, {M_POOL2, false, false}, {M_POOL2, false, false}, {M_POOL3A, false, false}}},
+    {5, 0, {{M_BEEDRILL, true, false}, {M_BUTTERFREE, true, false}, {M_POOL2, false, false}, {M_POOL3A, false, false}, {M_POOL3B, false, false}}},
+    {5, 1, {{M_BEEDRILL, true, false}, {M_BUTTERFREE, true, false}, {M_POOL2, false, false}, {M_POOL3A, false, false}, {M_POOL4, false, false}}},
+    {5, 1, {{M_BEEDRILL, true, true}, {M_BUTTERFREE, true, true}, {M_POOL3A, false, false}, {M_POOL3B, false, false}, {M_POOL4, false, false}}},
+};
+
+static int band_of(int wave)
+{
+    int b = 0;
+    while (b < 7 && wave >= BREAKPOINT[b]) b++;
+    return b;
+}
+
+/* randSeedItem: one item needs no roll */
+static int seed_item(pr_rng *r, int n) { return n == 1 ? 0 : pr_rng_integer_in_range(r, 0, n - 1); }
+
+/* onInit's randSeedShuffle(POOL_3_POKEMON.slice()), on the wave's stream: pop() takes the last item, the next pop the one before */
+static void pool3_picks(const gc_run *run, pool3_t out[2])
+{
+    pr_rng r = pr_run_seed_offset_rng((pr_run *)&run->run, run->wave, NULL);
+    pool3_t a[8];
+    memcpy(a, POOL3, sizeof a);
+    for (int i = 7; i > 0; i--) {
+        const int j = pr_rng_integer_in_range(&r, 0, i);
+        const pool3_t t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    out[0] = a[7];
+    out[1] = a[6];
+}
+
+int gc_superfan_band(int wave) { return band_of(wave); }
+void gc_superfan_pool3(const gc_run *run, int species[2], int form[2])
+{
+    pool3_t p[2];
+    pool3_picks(run, p);
+    for (int k = 0; k < 2; k++) { species[k] = p[k].species; form[k] = p[k].form; }
+}
+
+int gc_superfan_generated[5][4];   /* each member's moveset as the constructor made it, before the postProcess (for the differential) */
+
+/* one member: genPartyMember's genMon on the member's own stream: randSeedItem of the pool, addEnemyPokemon (ignoreEvolution), then the postProcess */
+static bool make_member(gc_run *run, int e, const sf_slot *slot, const pool3_t *p3, int level, gc_mon *out)
+{
+    int species;
+    switch (slot->kind) {
+    case M_BEEDRILL: species = SPECIES_ID_BEEDRILL; break;
+    case M_BUTTERFREE: species = SPECIES_ID_BUTTERFREE; break;
+    case M_POOL1: species = POOL1[seed_item(&run->run.rng, 23)]; break;
+    case M_POOL2: species = POOL2[seed_item(&run->run.rng, 23)]; break;
+    case M_POOL4: species = POOL4[seed_item(&run->run.rng, 4)]; break;
+    default: species = p3->species; break;
+    }
+    pr_enemy_gen_ctx ec;
+    gc_enemy_ctx(run, &ec);
+    ec.species = species;
+    ec.level = level;
+    ec.trainer_slot = TRAINER_SLOT_TRAINER;
+    ec.boss = false;
+    ec.shiny_lock = false;
+    pr_enemy_gen g;
+    memset(&g, 0, sizeof g);
+    g.fusion_species = -1;
+    g.friendship = -1;
+    if (pr_run_enemy_pokemon_base(&run->run, &ec, &g) < 0) return false;
+    gc_mon_new_enemy(run, out, species, level, &g, ec.trainer_slot);
+    const bool made = gc_generate_moveset(run, &run->run.rng, out);
+    if (!made) gc_port_enemy_moveset(run, out);
+    for (int k = 0; k < 4; k++) g.moveset[k] = k < out->b.n_moves ? out->b.moves[k] : 0;
+    if (e >= 0 && e < 5) for (int k = 0; k < 4; k++) gc_superfan_generated[e][k] = g.moveset[k];
+    if (pr_run_enemy_pokemon_finish(&run->run, &ec, &g) < 0) return false;
+    /* the postProcess: setBoss(true, 2); formIndex; generateAndPopulateMoveset() (the form's own moves, on the same stream) */
+    int form = 0;
+    if (slot->kind == M_POOL3A || slot->kind == M_POOL3B) form = p3->form;
+    else if (slot->form) form = 1;
+    if (slot->boss) g.boss_segments = 2;
+    if (form) {
+        g.form = (uint8_t)form;
+        if (made && gc_member_regen(run, out, species, level, ec.trainer_slot, &g, &run->run.rng) < 0) return false;
+    }
+    gc_refresh_enemy(run, out, species, level, &g, ec.trainer_slot);
+    return true;
+}
+
+static void build_template(int band, pr_party_template *t)
+{
+    memset(t, 0, sizeof *t);
+    t->size = (int8_t)BAND[band].size;
+    t->strength = PARTY_MEMBER_STRENGTH_AVERAGE;
+    for (int i = 0; i < t->size; i++) {
+        const bool strong = i >= t->size - BAND[band].n_strong;
+        t->strengths[i] = strong ? PARTY_MEMBER_STRENGTH_STRONG : PARTY_MEMBER_STRENGTH_AVERAGE;
+        t->offsets[i] = (int8_t)(strong ? t->size - BAND[band].n_strong : 0);
+    }
+}
+
+static void say_trainer_fight(gc_run *run, gc_internal *in)
+{
+    gc_event *ev = gc_ev_new(run, GC_EV_TRAINER);
+    if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
+    gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    const bool sent_out = gc_battle_setup_field(run, true);
+    gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
+    if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon_name(run, "pokemonName", 0, gc_player_active_index(run)));
+    if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
+    in->at_save_point = false;   /* the encounter's one save is the one at its start */
+    gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
+}
+
+/* option 1's onOptionPhase: the tutor's four moves, setEncounterRewards({fillRemaining: true}), initBattleWithEnemyConfig(the Superfan's team) */
+static void fight(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    const int band = band_of(run->wave);
+    pool3_t p3[2];
+    pool3_picks(run, p3);
+
+    /* onOptionPhase: the four Bug-type moves, on the option's stream */
+    pr_rng opt = gc_me_option_rng(run);
+    for (int k = 0; k < 4; k++) in->superfan.tutor[k] = TUTOR[k][pr_rng_seed_int(&opt, 5, 0)];
+    /* everything else is initBattleWithEnemyConfig, after the first await: outside the option's seed offset, on the run's own RNG */
+
+    pr_party_template tpl;
+    build_template(band, &tpl);
+    uint8_t strengths[8];
+    for (int i = 0; i < tpl.size && i < 8; i++) strengths[i] = (uint8_t)tpl.strengths[i];
+    int levels[PR_MAX_PARTY_TEMPLATE];
+    const int n = pr_run_get_party_levels(&run->run, run->wave, tpl.size, strengths, tpl.strength, false, levels);
+
+    const int trainer = TRAINER_TYPE_BUG_TYPE_SUPERFAN;
+    run->trainer_type = trainer;   /* the trainer exists before its Pokemon do (the moveset reads its class) */
+    run->battle_type = BATTLE_TYPE_TRAINER;
+    run->double_battle = false;
+    static gc_mon made[5];
+    bool ok = n == tpl.size;
+    const pr_rng saved = run->run.rng;
+    for (int e = 0; ok && e < n; e++) {
+        /* seedOffset: waveIndex + (derivedType << 10) + ((index + 1) << 8) */
+        run->run.rng = pr_run_seed_offset_rng(&run->run, run->wave + (trainer << 10) + ((e + 1) << 8), NULL);
+        const sf_slot *slot = &BAND[band].m[e];
+        ok = make_member(run, e, slot, slot->kind == M_POOL3B ? &p3[1] : &p3[0], levels[e], &made[e]);
+    }
+    run->run.rng = saved;
+    if (!ok) {   /* a species or a trainer run-core cannot make: nobody fights and the encounter ends */
+        gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        run->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
+        run->n_enemy = 0;
+        run->trainer_type = run->trainer_variant = -1;
+        gc_me_leave_with_heal_shop(run);
+        return;
+    }
+    run->battle_type = BATTLE_TYPE_TRAINER;
+    run->double_battle = false;
+    run->trainer_type = trainer;
+    run->trainer_variant = TRAINER_VARIANT_FEMALE;   /* the party config's female: true */
+    run->trainer_name = run->trainer_partner_name = -1;
+    snprintf(in->custom_trainer_name, sizeof in->custom_trainer_name, "$t(trainerNames:bugTypeSuperfan)");   /* config.name */
+    in->custom_team_on = false;
+    run->n_enemy = n;
+    for (int e = 0; e < n; e++) run->enemy[e] = made[e];
+    run->me_battle = true;
+    in->me_no_stats = false;   /* the encounter does not prevent the game stats' updates */
+    gc_enemy_finish_party_me(run);   /* no modifierConfigs: the ordinary item rolls */
+    in->me_tera_static = 0;
+
+    in->me_post.pending = true;   /* the outro, after the shop */
+    in->me_post.a = GC_ME_BUG_TYPE_SUPERFAN;
+    in->me_post.b = in->me_post.c = 0;
+    in->me_reward.active = true;   /* setEncounterRewards({fillRemaining: true}) */
+    in->me_reward.has_item = false;
+    in->me_reward.func = -1;
+    in->me_reward.fill = true;
+    in->me_reward.before = false;
+    in->me_reward.n_more = in->me_reward.n_tiers = 0;
+
+    run->me_catch_allowed = false;
+    run->mystery_type = run->mystery_tier = -1;
+    run->in_battle = true;
+    say_trainer_fight(run, in);
+}
+
+void gc_superfan_outro(gc_run *run)
+{
+    gc_ev_msg(run, "mysteryEncounters/bugTypeSuperfan:outro", 0);
+}
+
 bool gc_superfan_execute(gc_run *run, int option, int b, int c, const char **why)
 {
+    if (option == 0) { fight(run); return true; }
     if (option == 1) {
         if (gc_superfan_num_bug_types(run) <= 0) { *why = "mysteryEncounters/bugTypeSuperfan:option.2.disabledTooltip"; return false; }
         show_bug_types(run);

@@ -280,6 +280,9 @@ $(BUILD)/mystery_breeder_diff_test: tests/mystery_breeder_diff_test.c $(BUILD)/l
 all: $(BUILD)/mystery_superfan_diff_test
 $(BUILD)/mystery_superfan_diff_test: tests/mystery_superfan_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_superfan_fight_diff_test
+$(BUILD)/mystery_superfan_fight_diff_test: tests/mystery_superfan_fight_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/mystery_dance_diff_test
 $(BUILD)/mystery_dance_diff_test: tests/mystery_dance_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

@@ -288,7 +288,7 @@ static void enemy_items(gc_run *run)
     pr_enemy_items_ctx ic;
     memset(&ic, 0, sizeof ic);
     ic.wave = run->wave;
-    ic.trainer_battle = run->battle_type == BATTLE_TYPE_TRAINER;
+    ic.trainer_battle = run->battle_type == BATTLE_TYPE_TRAINER && !run->me_battle;   /* an encounter's trainer fight keeps BattleType.MYSTERY_ENCOUNTER */
     ic.double_battle = run->double_battle;
     ic.trainer_type = run->trainer_type;
     ic.n_party = run->n_enemy;
@@ -451,6 +451,13 @@ static int post_regen(void *user, void *gen, pr_rng *rng)
     }
     post_moveset_from(m, g);
     return 0;
+}
+
+/* for an encounter that builds its own team (src/gc_superfan.c): the REGEN op of a closure's postProcess */
+int gc_member_regen(gc_run *run, gc_mon *m, int species, int level, int slot, pr_enemy_gen *g, pr_rng *rng)
+{
+    post_regen_state st = {run, m, species, level, slot, true, false};
+    return post_regen(&st, g, rng);
 }
 
 static void post_apply_moves(gc_mon *m, const pr_enemy_gen *g)

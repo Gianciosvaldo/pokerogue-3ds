@@ -142,6 +142,7 @@ typedef struct {
     struct { bool pending; int8_t primary; double base; bool wave; } me_exp;   /* setEncounterExp(primary.id, base, wave) of a fight (Teleporting Hijinks), run by the rewards phase of the won fight */
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
+    struct { uint16_t tutor[4]; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
     /* a text the encounter says after its shop (PostMysteryEncounterPhase: the outro), queued ahead of the next wave by the encounter's leave */
     struct { bool pending; int a, b, c; } me_post;
@@ -470,6 +471,11 @@ int gc_superfan_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);  
 bool gc_superfan_spawnable(const gc_run *run);                     /* the encounter's primary requirement */
 bool gc_superfan_option_ok(const gc_run *run, int option);
 extern pr_rng gc_superfan_pre_rng;   /* the option select's stream after option 2's rolls (for the differential) */
+int gc_superfan_band(int wave);                                    /* getTrainerConfigForWave's band of a wave (0..7) */
+void gc_superfan_pool3(const gc_run *run, int species[2], int form[2]);   /* onInit's two Pool 3 picks (randSeedShuffle on the wave's stream, pop() twice) */
+extern int gc_superfan_generated[5][4];   /* the last fight's movesets as the constructor made them (the differential compares them) */
+void gc_superfan_outro(gc_run *run);
+int gc_member_regen(gc_run *run, gc_mon *m, int species, int level, int slot, pr_enemy_gen *g, pr_rng *rng);   /* a closure's REGEN op: generateAndPopulateMoveset() on the Pokemon as `g` now has it */
 bool gc_superfan_execute(gc_run *run, int option, int b, int c, const char **why);   /* option 1 or 2 (the screen's 2 and 3); b = the Pokemon, c = which of gc_superfan_held_items */
 
 /* Delibird-y (src/gc_delibirdy.c) */
