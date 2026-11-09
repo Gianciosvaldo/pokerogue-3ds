@@ -323,7 +323,6 @@ static const rr_frame* sprite_frame(side* sd) {
 }
 
 /* The field as battle animations see it: where each Pokemon stands and its current frame. */
-#define FOE_RAISE 36.0f
 static void mon_pos(const side* sd, bool player, float* x, float* y);
 
 static void anim_field(ba_mon out[4]) {
@@ -384,18 +383,32 @@ static bool step_doubles(float dt) {
   return tween_done(&B.tw);
 }
 
-static void mon_pos(const side* sd, bool player, float* x, float* y) {
-  *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
-  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
+/* Doubles: the whole foe side (its platform, trainers and Pokemon) stands FOE_RAISE field pixels higher than in a single battle, so it
+ * clears the player's two full-sized boxes (field y 43 and down). Raised alone the Pokemon float over a platform left behind and the
+ * tallest are cut off by the top of the screen (lorenzo, 2026-11-09), so the platform and the trainers go up with them and the field
+ * is drawn smaller in a double (FIELD_ZOOM_DOUBLES), enough for a 96 px sprite to stand under the top edge. */
+#define FOE_RAISE 54.0f
+static float foe_raise(void) { return B.setup.doubles ? FOE_RAISE : 0; }
+
+/* Where a side's Pokemon stands in its column: the field position alone, before a Substitute, a catch or the sprite's empty rows move it. */
+static void field_pos(const side* sd, bool player, float* x, float* y) {
+  *x = player ? 106 : 236 + B.enemy_slide;
+  *y = player ? PLAYER_Y : 84 - foe_raise();
   const bool right = field_of(sd) % 2 != 0;
   if (player) {
     const float k = player_split(); /* FieldPosition.LEFT is (-32, -8), RIGHT (32, 0) */
     *x += (right ? 32 : -32) * k;
     *y += right ? 0 : -8 * k;
-  } else if (B.setup.doubles) { /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
+  } else if (B.setup.doubles) {
     *x += right ? 32 : -32;
-    *y += (right ? 0 : -8) - FOE_RAISE;
+    *y += right ? 0 : -8;
   }
+}
+
+static void mon_pos(const side* sd, bool player, float* x, float* y) {
+  field_pos(sd, player, x, y);
+  *x += sd->sub_off * (player ? -30 : 30);
+  *y += sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -413,7 +426,9 @@ static void draw_sub(const side* sd, bool player, bool tint) {
   int a = (int)(alpha * 255 + 0.5f);
   o.tint = RR_RGBA(255, 255, 255, a > 255 ? 255 : a);
   if (tint) rr_set_tone(255, 255, 255);
-  rr_draw(f, player ? 106 : 236 + B.enemy_slide, player ? PLAYER_Y : 84, &o);
+  float x, y;
+  field_pos(sd, player, &x, &y);
+  rr_draw(f, x, y, &o);
   if (tint) rr_set_tone(0, 0, 0);
 }
 
@@ -650,7 +665,7 @@ static void update_field_scale(bool instant) {
  * bigger about the arena's bottom centre: at 1.25 the ground reaches the screen's side edges. 1.2 keeps a tall front sprite (96 px cells) in
  * the screen. The G-Max zoom-out (field_scale) comes on top of it. */
 #define FIELD_ZOOM 1.2f
-#define FIELD_ZOOM_DOUBLES 1.1f /* two foes and two boxes share the screen, so less */
+#define FIELD_ZOOM_DOUBLES 0.85f /* two foes and four boxes share the screen, so the field is drawn smaller than in a single battle */
 static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * (B.setup.doubles ? FIELD_ZOOM_DOUBLES : FIELD_ZOOM) : 1, 160, 132); }
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
@@ -664,7 +679,7 @@ static void draw_trainers(void) {
     if (!frame) continue;
     rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
     float x=228+B.enemy_slide+(pair?(k?28:-4):0);
-    float y=80;
+    float y=80-foe_raise();
     if (B.trainer_show_ms>0) { /* BEV_TRAINER_SHOW: in from 16 px up and right */
       float k=1-ease(EASE_CUBIC_OUT,B.trainer_show_ms/750);
       x+=16*k;y-=16*k;
@@ -711,8 +726,8 @@ static void draw_field(void) {
     rr_rect(0, 0, 320, 180, RR_RGBA(0x88, 0xc8, 0xf0, 255));
   field_zoom(true);
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
-  /* doubles: the foes stand FOE_RAISE higher (mon_pos), so their platform goes up with them */
-  const float raise = B.setup.doubles ? FOE_RAISE : 0;
+  /* doubles: the foes stand FOE_RAISE higher (field_pos), so their platform goes up with them (y grows downwards) */
+  const float raise = -foe_raise();
   if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, raise, 0, 0);
   img_draw(k, NULL, B.arena_enemy_x, raise, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
