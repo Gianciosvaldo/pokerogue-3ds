@@ -42,6 +42,10 @@ void me_flow_intro(const gc_run* run, char* out, size_t n);
  * Returns how many were written (at most max). */
 int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max);
 
+/* A Trainer's Test picks its stat trainer at run time (the screen's trainerPick): the trainer's signature Pokemon and the trainer, laid out like the
+ * other intro sprites. Returns how many were written (at most max). */
+int me_flow_trtest_sprites(const gc_run* run, float cx, float floor_y, me_intro_sprite* out, int max);
+
 /* Opens the question for the run's current encounter. on_choice is called once, from the screen's input, after the screens popped. False
  * (nothing opened) when the run is not on an encounter screen. */
 bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void* arg), void* arg);

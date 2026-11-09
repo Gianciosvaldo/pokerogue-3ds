@@ -793,6 +793,57 @@ int main(void) {
     }
   }
 
+  /* A Trainer's Test: onInit picks one of five stat trainers; the intro, the accept and the decline lines are the picked trainer's own, the sprites are its
+   * signature Pokemon and the trainer, and the outro tokens are the core's */
+  {
+    use_source_locales = true;
+    static const struct { const char* intro; const char* accept; const char* decline; const char* mon; const char* trainer; } T[5] = {
+        {"Yo, Trainer! My name’s Buck.", "Whoooo, I’m getting fired up!", "Darn, it looks like your", "images/pokemon/344", "images/trainer/buck"},
+        {"Hello, my name’s Cheryl.", "I hope you’re ready!", "I understand, it looks like your team", "images/pokemon/242", "images/trainer/cheryl"},
+        {"I’m Marley.", "… I see.", "Your Pokémon look hurt…", "images/pokemon/59", "images/trainer/marley"},
+        {"Hi! I’m Mira!", "You’ll battle Mira?", "Aww, no battle?", "images/pokemon/65", "images/trainer/mira"},
+        {"I’m Riley.", "That look you have…", "I understand, your team looks beat up.", "images/pokemon/448", "images/trainer/riley"}};
+    for (int pick = 0; pick < 5; pick++) {
+      for (int opt = 0; opt < 2; opt++) {
+        g_depth = n_got = 0;
+        gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-trtest", 818);
+        CHECK(gc_run_set_starters(&R, starters, 2, &why), "real Trainer's Test party: %s", why ? why : "");
+        R.wave = 150;
+        pr_run_reset_seed(&R.run, R.wave);
+        R.mystery_type = R.screen.mystery_type = GC_ME_A_TRAINERS_TEST;
+        R.screen.kind = GC_SCREEN_MYSTERY;
+        gc_mystery_setup_screen(&R);
+        int at = -1;
+        for (int i = 0; i < R.screen.n_me_args; i++)
+          if (!strcmp(R.screen.me_args[i].name, "trainerPick")) at = i;
+        CHECK(at >= 0 && R.screen.n_options == 2 && R.screen.option_ok[0] && R.screen.option_ok[1], "Trainer's Test: the pick and both options come with the screen");
+        R.screen.me_args[at].v = (uint32_t)pick;   /* the app words whatever the core picked: every trainer is checked */
+        char tt_intro[600];
+        me_flow_intro(&R, tt_intro, sizeof tt_intro);
+        CHECK(strstr(tt_intro, "An extremely strong Trainer approaches you") && strstr(tt_intro, T[pick].intro) && !strstr(tt_intro, "{{"),
+              "pick %d intro: %s", pick, tt_intro);
+        me_intro_sprite sp[ME_MAX_INTRO];
+        const int n_sp = me_flow_trtest_sprites(&R, 160, 164, sp, ME_MAX_INTRO);
+        CHECK(n_sp == 2 && !strcmp(sp[0].key, T[pick].mon) && !strcmp(sp[1].key, T[pick].trainer) && sp[0].x == 160 + 4 + 22 && sp[0].y == 164 - 2 &&
+                  sp[1].x == 160 + 4 - 24 && sp[1].y == 164 + 4,
+              "pick %d sprites: %d %s %s", pick, n_sp, n_sp > 0 ? sp[0].key : "", n_sp > 1 ? sp[1].key : "");
+        CHECK(me_flow_open(&R, chosen, NULL), "the Trainer's Test opens");
+        n_sil = 0;
+        draw(0);
+        CHECK(n_sil == 2 && !strcmp(g_sil_key[0], T[pick].mon) && !strcmp(g_sil_key[1], T[pick].trainer), "pick %d: the opened screen draws the two sprites: %d %s %s", pick, n_sil,
+              g_sil_key[0], g_sil_key[1]);
+        CHECK(has_text(0, "A Trainer’s Test"), "title");
+        draw(1);
+        CHECK(has_text(1, "Accept the Challenge") && has_text(1, "Refuse the Challenge"), "the two options");
+        if (opt) press(BTN_DOWN);
+        press(BTN_ACTION);
+        CHECK(n_got == 1 && got.option == opt && strstr(got.selected, opt ? T[pick].decline : T[pick].accept) && !strstr(got.selected, "{{"),
+              "pick %d option %d answers with the trainer's line: %s", pick, opt, got.selected);
+      }
+    }
+    use_source_locales = false;
+  }
+
   /* The Bug-Type Superfan: Show Your Bug-types words the page by the number of Bug types ("1 Bug-type", "3 Bug-types") and has no plain "selected"
    * page; Gift a Bug Item names the Quick Claw / Grip Claw / Bug booster in its tooltips, asks for the Pokemon and then the item (the prompt "Select an item to give."),
    * and answers with "You hand the Trainer a <item>." and the Trainer's thanks. */

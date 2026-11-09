@@ -72,6 +72,14 @@ FAULTS = [
  ('safari-shiny-ignored', UI[0], 'if (e->b.shiny) {\n    snprintf(o->key', 'if (0) {\n    snprintf(o->key'),
  ('safari-labels', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);', 'snprintf(sub, sizeof sub, "option.%d.label", i + 1);'),
  ('safari-tooltips', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.tooltip", i + 1);', 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);'),
+ ('trtest-pick-ignored', UI[0], 'return (int)s->me_args[i].v;', 'return 0;'),
+ ('trtest-intro-line', UI[0], 'trtest_sub("introDialogue", sub, sizeof sub);', 'trtest_sub("accept", sub, sizeof sub);'),
+ ('trtest-accept-decline-swapped', UI[0], 'trtest_sub(option == 0 ? "accept" : "decline"', 'trtest_sub(option == 0 ? "decline" : "accept"'),
+ ('trtest-no-answer', UI[0], 'if (fmt(sub, NULL, 0, false, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);\n    void (*tt_cb)', 'if (0) append_page(ch.selected, sizeof ch.selected, page);\n    void (*tt_cb)'),
+ ('trtest-wrong-pokemon', UI[0], 'static const int DEX[5] = {344, 242, 59, 65, 448};', 'static const int DEX[5] = {344, 242, 59, 65, 449};'),
+ ('trtest-wrong-trainer', UI[0], 'gm_trainer_sprite_key(TRAINER_TYPE_BUCK + pick, 0, 0)', 'gm_trainer_sprite_key(TRAINER_TYPE_BUCK, 0, 0)'),
+ ('trtest-sprite-offset', UI[0], 'o->x = cx + 4.0f + 22.0f;', 'o->x = cx + 4.0f - 22.0f;'),
+ ('trtest-no-sprites', UI[0], 'if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites', 'if (0) a.n_intro = me_flow_trtest_sprites'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 
