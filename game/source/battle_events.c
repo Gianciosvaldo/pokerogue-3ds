@@ -199,6 +199,27 @@ static void look_of(bv_mon* mon, const bv_mon* was, const pr_event_field* f) {
   snprintf(mon->name, sizeof mon->name, "%s", i18n_species_name(mon->species));
 }
 
+void be_group_digits(long n,char *out,size_t size){
+  char raw[32];
+  snprintf(raw,sizeof raw,"%ld",n<0?-n:n);
+  const size_t len=strlen(raw);
+  size_t o=0;
+  if(n<0&&o+1<size)out[o++]='-';
+  for(size_t i=0;i<len&&o+1<size;i++){
+    if(i>0&&(len-i)%3==0&&o+1<size)out[o++]=',';
+    if(o+1<size)out[o++]=raw[i];
+  }
+  if(size)out[o]=0;
+}
+
+const char *be_ordinal_key(long n){
+  const long m10=n%10,m100=n%100;
+  if(m10==1&&m100!=11)return "battleSpecDialogue:key_ordinal_one";
+  if(m10==2&&m100!=12)return "battleSpecDialogue:key_ordinal_two";
+  if(m10==3&&m100!=13)return "battleSpecDialogue:key_ordinal_few";
+  return "battleSpecDialogue:key_ordinal_other";
+}
+
 int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events, bool settled, be_view* view,
                       bv_event* out, int max) {
   int n = 0, nt = 0;
@@ -218,9 +239,15 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     if (n < max) out[n++] = (bv_event){__VA_ARGS__}; \
   } while (0)
 
+  bool music_pending = false;   /* the final boss's Eternamax music, played once the change's message is read */
+  int music_from = 0;
   for (int i = 0; i < n_events; i++) {
     const pr_event* ev = &events[i];
     int b = ev->battler;
+    if (music_pending && i > music_from && events[i - 1].type == PR_EV_TEXT) {
+      PUT(.type = BEV_MUSIC, .battler = -1, .a = 1);
+      music_pending = false;
+    }
     if(ev->type==PR_EV_FIELD_SWAP){
       bool already=current[0].identity_known&&ev->field[0].pokemon_id_known&&current[0].pokemon_id==ev->field[0].pokemon_id;
       if(!already){
@@ -281,7 +308,22 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             seen[k].form = mon->form;
             current[view_slot(k)] = *mon;
           } else if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
-            PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form, .c = ev->field[k].gender + 2);
+            /* initFinalBossPhaseTwo: the music fades out and the first stage's dialogue is read, then the form changes and (at the end of
+             * the change's phase) the Eternamax music starts. battle-core leaves these presentation parts to the screen */
+            const bool phase_two = k >= 2 && bt->wave_index == 200 && (bt->game_mode == GAME_MODES_CLASSIC || bt->game_mode == GAME_MODES_CHALLENGE) &&
+                seen[k].species == SPECIES_ID_ETERNATUS && seen[k].form == 0 && ev->field[k].form > 0;
+            if (phase_two && nt + 1 < TXT_MAX) {
+              pr_msg first = pr_msg0("battleSpecDialogue:firstStageWin");
+              PUT(.type = BEV_MUSIC, .battler = -1, .a = 0);
+              be_format_message(&first, g_txt[nt], sizeof g_txt[nt]);
+              snprintf(g_txt[nt + 1], sizeof g_txt[nt + 1], "%s", i18n_species_name(SPECIES_ID_ETERNATUS));
+              PUT(.type = BEV_DIALOGUE, .battler = k, .a = SPECIES_ID_ETERNATUS, .text = g_txt[nt], .name = g_txt[nt + 1]);
+              nt += 2;
+              music_pending = true;
+              music_from = i;
+            }
+            /* target 1: QuietFormChangePhase's white tween (the Eternamax change of the final boss) */
+            PUT(.type = BEV_FORM_CHANGE, .battler = k, .target = phase_two ? 1 : 0, .a = ev->field[k].species, .b = ev->field[k].form, .c = ev->field[k].gender + 2);
             seen[k].species = ev->field[k].species;
             seen[k].form = ev->field[k].form;
           }
@@ -554,6 +596,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       seen[k].form = form->form_index;
     }
   }
+  if (music_pending) PUT(.type = BEV_MUSIC, .battler = -1, .a = 1);
 #undef PUT
   for(int k=0;k<4;k++)view->present[view_slot(k)]=seen[k].present;
   return n;

@@ -179,6 +179,19 @@ int main(void) {
       CHECK(doubles >= 0 && form >= 0 && ally >= 0);
       CHECK(form < doubles && doubles < ally);
       CHECK(out[form].b == 1);   /* eternamax */
+      /* initFinalBossPhaseTwo: the music fades out, the first stage's speech is read (by the boss), then the form changes and, once the
+       * change's message is read, the Eternamax music starts: each exactly once, in that order */
+      CHECK(count(out, n, BEV_MUSIC) == 2 && count(out, n, BEV_DIALOGUE) == 1);
+      int fade = -1, talk = find(out, n, BEV_DIALOGUE, 2), start = -1;
+      for (int i = 0; i < n; i++)
+        if (out[i].type == BEV_MUSIC) {
+          if (out[i].a == 0) fade = i;
+          else start = i;
+        }
+      CHECK(fade >= 0 && talk >= 0 && start >= 0);
+      CHECK(fade < talk && talk < form && form < start);
+      CHECK(out[talk].a == SPECIES_ID_ETERNATUS && out[talk].text && out[talk].text[0] && out[talk].name && out[talk].name[0]);
+      CHECK(out[fade].a == 0 && out[start].a == 1 && out[fade].battler == -1 && out[start].battler == -1);
       CHECK(out[ally].mon && out[ally].mon->species != SPECIES_ID_GARCHOMP);   /* the second Pokemon of the party */
       summons++;
       CHECK(f.bt.field[1] && f.bt.field[1]->on_field && f.bt.field[1] == f.bt.party[0][1]);
@@ -198,6 +211,24 @@ int main(void) {
     }
   }
   CHECK(fights == 24 && phase_twos == 24 && summons == 24);
+  /* the cycle count of the boss's encounter speech: toLocaleString and the English ordinal */
+  {
+    char g[40];
+    be_group_digits(5643854, g, sizeof g); CHECK(!strcmp(g, "5,643,854"));
+    be_group_digits(0, g, sizeof g); CHECK(!strcmp(g, "0"));
+    be_group_digits(999, g, sizeof g); CHECK(!strcmp(g, "999"));
+    be_group_digits(1000, g, sizeof g); CHECK(!strcmp(g, "1,000"));
+    be_group_digits(100000, g, sizeof g); CHECK(!strcmp(g, "100,000"));
+    be_group_digits(12345678, g, sizeof g); CHECK(!strcmp(g, "12,345,678"));
+    const struct { long n; const char* key; } o[] = {
+      {1, "one"}, {2, "two"}, {3, "few"}, {4, "other"}, {10, "other"}, {11, "other"}, {12, "other"}, {13, "other"}, {21, "one"},
+      {22, "two"}, {23, "few"}, {101, "one"}, {111, "other"}, {5643854, "other"}, {5643851, "one"}, {5643853, "few"}};
+    for (unsigned i = 0; i < sizeof o / sizeof *o; i++) {
+      char want[64];
+      snprintf(want, sizeof want, "battleSpecDialogue:key_ordinal_%s", o[i].key);
+      CHECK(!strcmp(be_ordinal_key(o[i].n), want));
+    }
+  }
   CHECK(later_toggles >= 4);   /* the seeds do reach toggles of the other kind: the check above is not vacuous */
 
   /* 3: nobody to send out: the fight is a double on paper, nothing moves on the screen */
@@ -252,6 +283,7 @@ int main(void) {
         view.mon[1] = se;
         int n = be_convert_events(&f.bt, f.eng.events, f.eng.n_events, false, &view, out, PR_MAX_EVENTS * 2);
         CHECK(count(out, n, BEV_DOUBLES) == 0);
+        CHECK(count(out, n, BEV_MUSIC) == 0);   /* no phase two (190, already Eternamax, a switch): no music change (an Eternamax boss's fall speaks, that is the second stage's) */
         for (int i = 0; i < f.eng.n_events; i++) CHECK(f.eng.events[i].type != PR_EV_DOUBLE_START);
       }
       CHECK(!f.bt.double_battle);

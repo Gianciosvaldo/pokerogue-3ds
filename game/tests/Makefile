@@ -545,3 +545,10 @@ build/final_boss_dialogue_playback_test: final_boss_dialogue_playback_test.c ../
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_dialogue_playback_test.c ../source/ui_widgets.c ../source/tween.c -Wl,--gc-sections -lm -o $@
 final_boss_dialogue_playback_test: build/final_boss_dialogue_playback_test
 .PHONY: final_boss_dialogue_playback_test
+
+# the final boss' Eternamax change on the battle screen: the white tween and the field zoom that keeps the 1.5x sprite inside the screen
+build/final_boss_form_anim_test: final_boss_form_anim_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_form_anim_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
+final_boss_form_anim_test: build/final_boss_form_anim_test
+.PHONY: final_boss_form_anim_test

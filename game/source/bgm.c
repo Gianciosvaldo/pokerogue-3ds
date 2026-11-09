@@ -71,6 +71,11 @@ void bgm_on_wave(const gc_run* run, int wave, int biome, int battle_type) {
   bgm_play(track_now(run, buf));
 }
 
+void bgm_on_final_boss_phase_two(const gc_run* run) {
+  char buf[BGM_NAME_LEN];
+  bgm_play(track_now(run, buf));
+}
+
 void bgm_on_foe_sent_out(const gc_run* run) {
   if (W.battle_type != BATTLE_TYPE_TRAINER || W.started) return;
   char buf[BGM_NAME_LEN];
