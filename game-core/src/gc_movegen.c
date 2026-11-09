@@ -731,12 +731,17 @@ bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon
  * a move (Keldeo with Secret Sword) is generated as usual; its QuietFormChangePhase is not run (see gc_weird.c). */
 bool gc_generate_moveset_player(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of)
 {
-    return generate_moveset(run, rng, m, stats_of, false, true);
+    /* challenges only decline a trainer's or wild Pokemon's generator; this entry is a player's */
+    const bool had_challenges = run->run.has_challenges;
+    run->run.has_challenges = false;
+    const bool ok = generate_moveset(run, rng, m, stats_of, false, true);
+    run->run.has_challenges = had_challenges;
+    return ok;
 }
 
 static bool generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera, bool player)
 {
-    if (run->run.has_challenges && !player) return false;
+    if (run->run.has_challenges) return false;
     /* a player's Pokemon is not a battle trainer's: these guards do not apply to it (its pools are made a trainer's below, in c.trainer) */
     const bool trainer = !player && (m->b.has_trainer || m->trainer_slot || m->b.trainer_slot);
     if (trainer && plain_grunt(run->trainer_type)
