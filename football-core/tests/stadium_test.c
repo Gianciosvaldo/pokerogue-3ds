@@ -66,8 +66,8 @@ int main(void)
     CHECK(dn==count && night<day);
     CHECK(draw(60,26.67f,0,0,false)>0 && draw(60,26.67f,99,0,false)>0); /* a bad round is still a stadium */
     /* The goal posts stand on the plane the kicks are aimed at (football_goal.h), one at each end of the field, and are only drawn where they
-     * can be seen: not at midfield, and never the far one next to the near one. A post is a pole, a crossbar and two uprights, all of them
-     * above the end zone's paint and below the yard lines. */
+     * can be seen: not at midfield, and never the far one next to the near one. A post is a tall mast with the caps of its two uprights, a
+     * gooseneck bent out toward the end line and a padded base, all of them above the end zone's paint. */
     {
         const FootballCamera near_end={.x=108,.y=26.67f,.ready=true},far_end={.x=12,.y=26.67f,.ready=true},middle={.x=60,.y=26.67f,.ready=true};
         const float ends[2]={FB_GOAL_POST_INSET,120.0f-FB_GOAL_POST_INSET};
@@ -75,18 +75,19 @@ int main(void)
             const FootballCamera *cam=end?&near_end:&far_end;
             count=0;football_stadium_draw(cam,1,0,false);
             const float gx=football_camera_x(cam,ends[end]),gy=football_camera_y(cam,FB_GOAL_MIDDLE);
-            unsigned bars=0,uprights=0,poles=0;
+            unsigned masts=0,caps=0,necks=0,pads=0;
             for(unsigned i=0;i<count;++i){
                 const Rect *r=&rects[i];
-                if(r->z<.0299f || r->z>.0311f)continue;
-                if(r->w>20 && r->h<=4 && fabsf(r->x+r->w*.5f-gx)<.51f && r->y+r->h<gy){++bars;CHECK(r->w>=20 && r->w<=30);}   /* the crossbar, centred on the post */
-                else if(r->h>=25 && r->w<=4 && r->y+r->h<gy-10){++uprights;CHECK(fabsf(r->x+r->w*.5f-gx)>10 && fabsf(r->x+r->w*.5f-gx)<16);} /* an upright, either side of it */
-                else if(r->w<=4 && r->h<=18 && fabsf(r->x+r->w*.5f-gx)<.51f && fabsf(r->y+r->h-gy)<2.5f){++poles;}               /* the pole, standing on its spot */
+                if(r->z<.0299f || r->z>.0331f)continue;
+                if(r->w==5 && r->h>=70 && fabsf(r->x-gx)<.01f){++masts;CHECK(r->y<gy-55 && r->y+r->h>gy);}          /* the mast, tall, with the middle of the goal on it */
+                else if(r->w==7 && r->h>=6 && r->h<=7 && fabsf(r->x+r->w*.5f-(gx+2.5f))<.01f)++caps;                  /* a cap, wider than the mast */
+                else if(r->w==15 && r->h==5){++necks;CHECK(end?r->x>gx:r->x<gx);}                                      /* the gooseneck bends toward the end line */
+                else if(r->w==10 && r->h==30){++pads;CHECK(end?r->x>gx:r->x<gx);}                                      /* the padded base, out toward the end line too */
             }
-            CHECK(bars==1 && uprights==2 && poles==1);
+            CHECK(masts==1 && caps==2 && necks==1 && pads==1);
         }
         count=0;football_stadium_draw(&middle,1,0,false);
-        for(unsigned i=0;i<count;++i)CHECK(rects[i].z<.0299f || rects[i].z>.0311f || rects[i].w>4); /* no post at midfield (only fans are that deep, and they are wider) */
+        for(unsigned i=0;i<count;++i)CHECK(rects[i].z<.0299f || rects[i].z>.0331f || rects[i].w>10); /* no post at midfield (only fans are that deep, and they are wider) */
     }
     football_stadium_draw(NULL,1,0,false);
     const char *dir=getenv("STADIUM_PPM");
