@@ -110,7 +110,7 @@ void gc_me_say_trainer_fight(gc_run *run, gc_internal *in)
     gc_event *ev = gc_ev_new(run, GC_EV_TRAINER);
     if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
     gc_ev_trainer_dialogue(run, 0);   /* MysteryEncounterBattlePhase: the trainer's line comes before "X would like to battle!" */
-    gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    gc_ev_msg(run, run->double_battle ? "battle:trainerAppearedDouble" : "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     const bool sent_out = gc_battle_setup_field(run, true);
     gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
     if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon_name(run, "pokemonName", 0, gc_player_active_index(run)));

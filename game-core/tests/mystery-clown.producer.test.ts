@@ -1,19 +1,27 @@
-/* Clowning Around oracle, options 2 and 3 (the harness family of mystery-trtest.producer.test.ts). The real encounter is started through the game manager; per case the
+/* Clowning Around oracle, all three options (the harness family of mystery-trtest.producer.test.ts). The real encounter is started through the game manager; per case the
  * run and wave seeds, the biome, the wave (80..180) and the party (species, fusions, moves, levels, fainted members, held items of every tier and stack) are changed,
  * onInit runs as EncounterPhase runs it (in executeWithSeedOffset(.., waveIndex)), the option's onPreOptionPhase in executeWithSeedOffset(.., getSeedOffset()) and its
  * onOptionPhase in executeWithSeedOffset(.., getSeedOffset() * 500), both REALLY run: the item shuffle (Berries, Ultra and Rogue items, applyModifierTypeToPlayerPokemon)
  * and the type shuffle (customPokemonData.types of every Pokemon and its fusion half). leaveEncounterWithoutBattle and setEncounterRewards are recorded.
+ * Option 1 (the fight) REALLY runs initBattleWithEnemyConfig: the Harlequin trainer (female roll, name), the two bosses (Mr. Mime, Blacephalon with its rolled ability and types),
+ * their constructor movesets (recorded as the constructor leaves them, then replaced by the config's), segments, items, the three start-of-battle effects; then the post-option
+ * phase (the ability swap offer) with the UI answered by a script (no, or yes and a party member).
  * Per case: the party, the items before, the RNG around every step, onInit's ability and types and tokens, the Pokemon chosen for the item shuffle, the items after in
  * order, every Pokemon's custom types and the types it reports.
  * GC_CLN_N=300 GC_MYS_SEED=777 GC_MYS_OUT=/abs/mystery.txt, Node22. */
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
 import { MoveId } from "#enums/move-id";
+import { UiMode } from "#enums/ui-mode";
 import { MysteryEncounterType } from "#enums/mystery-encounter-type";
 import { PokemonMove } from "#moves/pokemon-move";
 import { AbilityId } from "#enums/ability-id";
 import { SpeciesId } from "#enums/species-id";
 import { speciesDataRegistry } from "#app/global-species-data-registry";
+import * as AnimUtils from "#utils/anim-utils";
+import { EnemyPokemon } from "#field/pokemon";
+import { Trainer } from "#field/trainer";
+import * as DialogueUtils from "#mystery-encounters/encounter-dialogue-utils";
 import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils";
 import * as MysteryEncounters from "#mystery-encounters/mystery-encounter-biomes";
 import { timedEventManager } from "#app/global-event-manager";
@@ -55,8 +63,13 @@ const argOf = (t: any): number => {
   return -1;
 };
 
+/** a Pokemon as one record: species form level boss segments ivs nature abilityIndex passive shiny variant gender friendship id hp max stats n moves */
+const dump = (e: any) => `${e.species.speciesId} ${e.formIndex} ${e.level} ${e.isBoss() ? 1 : 0} ${e.bossSegments ?? 0} ${e.ivs.join(" ")} ${e.nature} ${e.abilityIndex} ${e.passive ? 1 : 0} ${e.shiny ? 1 : 0} ${e.variant} ${e.gender} ${e.friendship} ${e.id} ${e.hp} ${e.getMaxHp()} ${e.stats.join(" ")} ${e.getMoveset().length} ${e.getMoveset().map((m: any) => m.moveId).join(" ")}`;
+/** the ball, the tera type, the ability (custom ones included), the luck, the slot, the fusion, the name */
+const extra = (e: any) => `${e.pokeball} ${e.teraType} ${e.getAbility().id} ${e.luck} ${e.trainerSlot} ${e.fusionSpecies ? e.fusionSpecies.speciesId : 0} ${e.name.replace(/\s+/g, "_")}`;
+
 const lines: string[] = [`V 1 ${N}`];
-const cover = { options: [0, 0, 0], abilities: new Set<number>(), tiers: 0, berries: 0, ultra: 0, rogue: 0, fused: 0, priority: 0, items: new Set<string>(), maxed: 0 };
+const cover = { options: [0, 0, 0], fights: 0, withItems: 0, swaps: 0, declined: 0, abilities: new Set<number>(), tiers: 0, berries: 0, ultra: 0, rogue: 0, fused: 0, priority: 0, items: new Set<string>(), maxed: 0 };
 
 it("starts on Node 22", () => {
   expect(process.versions.node.split(".")[0]).toBe("22");
@@ -94,6 +107,17 @@ for (let ci = 0; ci < configs.length; ci++) {
     const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
     const rewards = vi.spyOn(EncounterPhaseUtils, "setEncounterRewards").mockImplementation(() => {});
     vi.spyOn(EncounterPhaseUtils, "loadCustomMovesForEncounter").mockImplementation((() => {}) as any);
+    vi.spyOn(EncounterPhaseUtils, "transitionMysteryEncounterIntroVisuals").mockImplementation((async () => {}) as any);
+    vi.spyOn(AnimUtils, "playTween").mockImplementation((async () => {}) as any);
+    vi.spyOn(EnemyPokemon.prototype, "loadAssets").mockImplementation((async () => {}) as any);
+    vi.spyOn(Trainer.prototype, "loadAssets").mockImplementation((async () => {}) as any);
+    vi.spyOn(Trainer.prototype, "initSprite").mockImplementation((() => {}) as any);
+    const ctorMoves: string[] = [];
+    const generateOriginal = EnemyPokemon.prototype.generateAndPopulateMoveset;
+    vi.spyOn(EnemyPokemon.prototype, "generateAndPopulateMoveset").mockImplementation(function (this: any, ...args: any[]) {
+      (generateOriginal as any).apply(this, args);
+      ctorMoves.push(`${this.species.speciesId} ${this.getMoveset().length} ${this.getMoveset().map((m: any) => m.moveId).join(" ")}`);
+    } as any);
     const original = [...party];
     const all = speciesDataRegistry.getAllSpecies().filter((s: any) => s.speciesId < 2000);
     lines.push(`P ${party.length}`);
@@ -122,7 +146,7 @@ for (let ci = 0; ci < configs.length; ci++) {
     const list = () => scene.modifiers.map((m: any) => `${m.type.id} ${argOf(m.type)} ${holder(m)} ${m.stackCount}`);
     const pm = scene.phaseManager;
     for (let i = 0; i < share; i++) {
-      const k = 1 + (i % 2), wave = 80 + rnd(101), runSeed = word(), waveSeed = word(), biome = BIOMES[rnd(BIOMES.length)];
+      const k = i % 3, wave = 80 + rnd(101), runSeed = word(), waveSeed = word(), biome = BIOMES[rnd(BIOMES.length)];
       scene.setSeed(runSeed); scene.waveSeed = waveSeed;
       scene.currentBattle.waveIndex = wave;
       scene.currentBattle.enemyParty = [];
@@ -211,7 +235,8 @@ for (let ci = 0; ci < configs.length; ci++) {
       leave.mockClear(); rewards.mockClear();
       const rngPre = rng();
       let pre: Promise<boolean> | undefined;
-      scene.executeWithSeedOffset(() => { pre = option.onPreOptionPhase(); }, encounter.getSeedOffset());
+      ctorMoves.length = 0;
+      if (option.onPreOptionPhase) scene.executeWithSeedOffset(() => { pre = option.onPreOptionPhase(); }, encounter.getSeedOffset());
       await pre;
       const afterPre = rng();
       let done: Promise<boolean> | undefined;
@@ -225,6 +250,47 @@ for (let ci = 0; ci < configs.length; ci++) {
         `V ${list().length} ${list().join(" ")}`,
         `K ${party.map((mon: any) => `${customOf(mon.customPokemonData)} ${mon.fusionSpecies ? customOf(mon.fusionCustomPokemonData) : "-"} ${typesOf(mon)}`).join(" ; ")}`);
       cover.options[k]++;
+
+      if (k === 0) {
+        const battle = scene.currentBattle, enemies = scene.getEnemyParty(), trainer = battle.trainer;
+        const given = rewards.mock.calls.length ? (rewards.mock.calls[0][0] as any) : undefined;
+        const enemyItems = scene.enemyModifiers.map((m: any) => `${enemies.findIndex((p: any) => p.id === m.pokemonId)} ${m.type.id} ${argOf(m.type)} ${m.stackCount}`);
+        const nameIdx = (key: string | undefined) => (key ? Number(key.split(".").pop()) - 1 : -1);
+        lines.push(`RW ${rewards.mock.calls.length} ${given?.fillRemaining ? 1 : 0} ${(given?.guaranteedModifierTypeFuncs ?? []).length} ${(given?.guaranteedModifierTiers ?? []).length} ${(given?.guaranteedModifierTypeOptions ?? []).length} ${given?.rerollMultiplier ?? 0}`,
+          `D ${battle.mysteryEncounter.encounterMode} ${battle.double ? 1 : 0} ${battle.enemyLevels.length} ${battle.enemyLevels.join(" ")} ${trainer.config.trainerType} ${trainer.variant} ${trainer.partyTemplateIndex} ${nameIdx(trainer.nameKey)} ${nameIdx(trainer.partnerNameKey)} ${trainer.nameKey ?? "-"}`,
+          `F ${encounter.startOfBattleEffects.length} ${encounter.startOfBattleEffects.map((e: any) => `${e.sourceBattlerIndex} ${e.targets.join(",")} ${e.move.moveId} ${e.useMode}`).join(" ; ")}`,
+          `J ${enemyItems.length} ${enemyItems.join(" ")}`,
+          `X ${enemies.length} ${enemies.map((e: any) => dump(e)).join(" ; ")}`,
+          `X3 ${enemies.length} ${enemies.map((e: any) => extra(e)).join(" ; ")}`,
+          `N ${enemies.map((e: any) => `${e.status?.effect ?? 0} ${e.aiType}`).join(" ; ")}`,
+          `G ${ctorMoves.length} ${ctorMoves.join(" ; ")}`,
+          `B ${enemies.map((e: any) => `${e.customPokemonData.ability} ${e.customPokemonData.types && e.customPokemonData.types.length ? e.customPokemonData.types.join(",") : "-"}`).join(" ; ")}`);
+        cover.fights++;
+        cover.withItems += enemyItems.length > 0 ? 1 : 0;
+
+        /* onPostOptionPhase after the win: the ability swap offer, the UI answered by a script (no, or yes and a party member) */
+        const dialogue: string[] = [];
+        const ui = scene.ui;
+        const decision = rnd(3), pick = rnd(party.length);
+        let prompts = 0;
+        vi.spyOn(DialogueUtils, "showEncounterDialogue").mockImplementation((async (key: string) => { dialogue.push(key.split(":").pop()!); }) as any);
+        vi.spyOn(DialogueUtils, "showEncounterText").mockImplementation((async (key: string) => { dialogue.push(key.split(":").pop()!); }) as any);
+        vi.spyOn(ui, "setMode").mockImplementation((async () => true) as any);
+        vi.spyOn(ui, "setModeWithoutClear").mockImplementation(((mode: UiMode, config: any) => { prompts++; if (decision === 0) config.noHandler(); else config.yesHandler(); return Promise.resolve(true); }) as any);
+        vi.spyOn(EncounterPhaseUtils, "selectPokemonForOption").mockImplementation(((onSelected: any) => { onSelected(party[pick]); }) as any);
+        let threw = 0;
+        try { await option.onPostOptionPhase(); } catch { threw = 1; }
+        vi.mocked(DialogueUtils.showEncounterDialogue).mockRestore();
+        vi.mocked(DialogueUtils.showEncounterText).mockRestore();
+        vi.mocked(ui.setMode).mockRestore();
+        vi.mocked(ui.setModeWithoutClear).mockRestore();
+        vi.mocked(EncounterPhaseUtils.selectPokemonForOption).mockRestore();
+        const chosen = encounter.dialogueTokens.chosenPokemon;
+        lines.push(`PO ${decision} ${prompts} ${threw} ${dialogue.length} ${dialogue.join(" ")} ${chosen === undefined ? -1 : party.findIndex((mon: any) => mon.getNameToRender() === chosen)}`,
+          `PA ${party.map((mon: any) => `${mon.customPokemonData.ability} ${mon.fusionCustomPokemonData ? mon.fusionCustomPokemonData.ability : "-"}`).join(" ; ")}`);
+        cover.swaps += dialogue.some(d => d.endsWith("abilityGained")) ? 1 : 0;
+        cover.declined += decision === 0 ? 1 : 0;
+      }
       const after = list();
       cover.items.add(after.length ? "x" : "empty");
       lines.push("E");
@@ -236,6 +302,6 @@ for (let ci = 0; ci < configs.length; ci++) {
 it("writes the clowning around trace", () => {
   lines.push(`Z ${Math.floor(N / configs.length) * configs.length}`);
   fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-clown.txt", lines.join("\n") + "\n");
-  console.log(`CLOWNING AROUND ${SEED}: options=${cover.options} abilities=${cover.abilities.size}`);
-  expect(cover.options[1] > 0 && cover.options[2] > 0).toBe(true);
+  console.log(`CLOWNING AROUND ${SEED}: options=${cover.options} abilities=${cover.abilities.size} fights=${cover.fights} with items=${cover.withItems} swaps=${cover.swaps} declined=${cover.declined}`);
+  expect(cover.options.every(n => n > 0) && cover.swaps > 0 && cover.declined > 0).toBe(true);
 });

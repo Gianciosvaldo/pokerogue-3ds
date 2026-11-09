@@ -148,6 +148,7 @@ typedef struct {
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
+    struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
     struct { bool active; uint8_t pick, egg; } trtest;   /* A Trainer's Test: the fight is running (pick = the stat trainer, 0..4). Not saved, as fg */
     struct { bool active; uint8_t next; } winstrate;   /* The Winstrate Challenge: the chain of five trainer fights is running; next = the fight to make when this one is won. Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
@@ -427,6 +428,7 @@ void gc_try_reroll_hidden_ability(gc_run *run, pr_rng *r, gc_mon *out, double th
 bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out);   /* new EnemyPokemon(.., boss) on a seed-offset stream */
 int gc_me_boosted_level(gc_run *run, pr_rng *r);               /* getEncounterPokemonLevelForWave(1): the wave's level on `r` plus round(wave / 10) */
 bool gc_me_new_enemy(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, gc_mon *out);   /* the same for a Pokemon that is no boss (Fiery Fallout) */
+bool gc_me_new_enemy_slot(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, int trainer_slot, gc_mon *out);   /* addEnemyPokemon(.., trainer_slot, boss): a trainer's Pokemon (Clowning Around) */
 /* Dancing Lessons (src/gc_dance.c) */
 bool gc_dance_execute(gc_run *run, int option, int b, int c);   /* false: the pick is not one the screen allows */
 bool gc_dance_roll(gc_run *run, gc_mon *mon);                    /* onInit's Oricorio (the oracle's test reads it) */
@@ -532,7 +534,11 @@ extern int gc_winstrate_generated[5][4];                         /* the last fig
 void gc_me_say_trainer_fight(gc_run *run, gc_internal *in);      /* the trainer's lines, the send-outs and the first turn of a mystery encounter's trainer fight */
 /* Clowning Around (src/gc_clown.c) */
 void gc_clown_roll(const gc_run *run, int *ability, int *first_type, int *second_type);   /* onInit: Blacephalon's ability (AbilityId) and its two types */
-void gc_clown_execute(gc_run *run, int option);                 /* options 2 and 3: the item shuffle, the type shuffle; both leave with the heal shop */
+void gc_clown_execute(gc_run *run, int option);                 /* option 1: the fight; options 2 and 3: the item shuffle, the type shuffle (both leave with the heal shop) */
+void gc_clown_victory(gc_run *run);                             /* the fight is won: BattleEndPhase, TrainerVictoryPhase, the shop that fills itself */
+bool gc_clown_post_start(gc_run *run, const gc_rphase *p);      /* PostMysteryEncounterPhase: option 1 offers the ability (true = waits for the answer); the others say the outro */
+bool gc_clown_post_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, const char **why, bool *ok);   /* Yes + a party member, or No */
+void gc_clown_outro(gc_run *run);                               /* the outro */
 
 /* A Trainer's Test (src/gc_trtest.c) */
 const char *gc_trtest_key(int pick);                            /* the stat trainer's key ("buck"): trainerNames:buck and the dialogue's section */

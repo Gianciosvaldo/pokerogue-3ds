@@ -17,6 +17,10 @@ static void queue_battle_end(gc_run *run)
         gc_fg_battle_end(run, true);
         return;
     }
+    if (in->clown.active) {   /* Clowning Around: BattleEndPhase, TrainerVictoryPhase, then the shop that fills itself */
+        gc_clown_victory(run);
+        return;
+    }
     if (in->trtest.active) {   /* A Trainer's Test: BattleEndPhase, TrainerVictoryPhase, then the rewards it set */
         gc_trtest_victory(run);
         return;
@@ -878,6 +882,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_CATCH:
         return gc_catch_start(run, p);
     case RP_ME_POST:
+        if (p->a == GC_ME_CLOWNING_AROUND) return gc_clown_post_start(run, p);   /* the ability swap waits for its answer */
         gc_mystery_post(run, p);
         return true;
     case RP_FG_KO:
@@ -1025,6 +1030,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
     case RP_ME_BEFORE_REWARDS:
         return gc_superfan_tutor_choose(run, c, why, ok);
+    case RP_ME_POST:
+        return gc_clown_post_choose(run, p, c, why, ok);
     case RP_CATCH:
         return gc_catch_choose(run, p, c, why, ok);
     default:

@@ -724,15 +724,15 @@ bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon
         && (run->trainer_variant < TRAINER_VARIANT_DEFAULT || run->trainer_variant > TRAINER_VARIANT_DOUBLE
             || run->double_battle != (run->trainer_variant == TRAINER_VARIANT_DOUBLE))) return false;
     /* Classic trainer pools: ordinary trainers, and the egg-enabled ones (gym leaders, Elite Four, champions, evil team admins and bosses:
-     * setBoss / setEggMovesAllowed). A trainer's Pokemon is not a boss in its constructor; only a postProcess regenerating the moveset (stats_of)
-     * after setBoss(true, n) makes one. Instant Tera (the caller checks the
+     * setBoss / setEggMovesAllowed). A trainer's Pokemon is a boss in its constructor only when a mystery encounter's config says so (run->me_battle; Clowning Around's
+     * Mr. Mime and Blacephalon: addEnemyPokemon(.., TRAINER, isBoss), checked in its differential), or after a postProcess's setBoss(true, n) (stats_of). Instant Tera (the caller checks the
      * party slot), rivals (their own signature moves), challenges, fusions and post-moveset form callbacks need separate owners. */
     if (trainer && (!m->b.has_trainer || !m->trainer_slot
         || m->trainer_slot != m->b.trainer_slot || m->trainer_slot > TRAINER_SLOT_TRAINER_PARTNER
         || m->b.level < 1 || m->b.n_moves || run->battle_type != BATTLE_TYPE_TRAINER
         || (plain_egg_gym(run->trainer_type) && run->double_battle && run->trainer_type != TRAINER_TYPE_TATE
             && run->trainer_type != TRAINER_TYPE_LIZA)
-        || m->b.fusion_species || (m->b.is_boss && !stats_of) || m->b.passive_flag || m->b.terastallized
+        || m->b.fusion_species || (m->b.is_boss && !stats_of && !run->me_battle) || m->b.passive_flag || m->b.terastallized
         || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
         || run->trainer_type <= 0 || run->trainer_type >= gc_mg_trainer_egg_count
         || (run->trainer_type >= TRAINER_TYPE_RIVAL && run->trainer_type <= TRAINER_TYPE_RIVAL_6))) return false;
