@@ -10,7 +10,10 @@
  * entry (key, argument, holder, stack: what moved with the second member, what stayed behind when a stack was full, what was pruned);
  * the LearnMovePhases queued, in order, with the party place of the member that learns; whether the status coin was drawn; and that
  * the seeded RNG stayed where it was (the trace asserts that of upstream). Also game-core's own: the party storage compacted without
- * a hole, the battle's pointers into it, and that nothing was left unported.
+ * a hole, the battle's pointers into it, and that nothing was left unported. After the fusion, on a case in three, the party screen's
+ * Unsplice on one fused member (gc_fusion_unfuse against the real PlayerPokemon.unfuse()): the whole party again, member by member, with
+ * the fusion half cleared (species, form, gender, ability index, shine, luck), the ability, HP, stats and luck that follow, and nothing
+ * queued or drawn.
  * Usage: fusion_diff_test <trace>; exit 0 only with 0 mismatches. */
 #include "../src/internal.h"
 #include <stdio.h>
@@ -110,6 +113,53 @@ static int storage_of_id(long long id)
     return -1;
 }
 
+
+/* every member of the party as game-core holds it, against the trace's, member by member (see the header) */
+static int compare_party(const up_after *after, int n_after, const up_mon *m, int case_no, bool *bad_out, int cleared)
+{
+    bool bad = *bad_out;
+    int fields = 0;
+    for (int k = 0; k < n_after; k++) {
+        const up_after *a = &after[k];
+        const int storage = run.party_order[k];
+        CHECK(storage >= 0 && storage < run.n_party, "party order %d -> storage %d", k, storage);
+        if (storage < 0 || storage >= run.n_party) continue;
+        const gc_mon *gm = &run.party[storage];
+        const pr_pokemon *p = &gm->b;
+        EQ("member", (long long)p->id, m[a->orig].id);
+        EQ("species", p->species, a->species); EQ("form", p->form, a->form);
+        EQ("fusion species", p->fusion_species ? p->fusion_species : -1, a->fusion);
+        if (a->fusion >= 0) {
+            EQ("fusion form", p->fusion_form, a->fusion_form); EQ("fusion gender", p->fusion_gender, a->fusion_gender);
+            EQ("fusion ability index", p->fusion_ability_index, a->fusion_ability);
+            EQ("fusion shiny", gm->fusion_shiny, a->fusion_shiny); EQ("fusion variant", gm->fusion_variant, a->fusion_variant);
+            EQ("fusion luck", gm->fusion_luck, a->fusion_luck);
+            CHECK(p->fusion_gender_known, "fusion gender not known");
+        } else {
+            /* unfuse(): clearFusionSpecies leaves nothing of the half behind */
+            EQ("fusion form (cleared)", p->fusion_form, a->fusion_form); EQ("fusion gender (cleared)", p->fusion_gender, a->fusion_gender);
+            EQ("fusion ability index (cleared)", p->fusion_ability_index == -1 ? 0 : p->fusion_ability_index, a->fusion_ability < 0 ? 0 : a->fusion_ability);
+            EQ("fusion shiny (cleared)", gm->fusion_shiny, a->fusion_shiny); EQ("fusion variant (cleared)", gm->fusion_variant, a->fusion_variant);
+            /* a Pokemon that was never fused keeps fusionLuck = luck from its constructor, which nothing reads (getLuck adds it only
+             * for a fusion); the one that was unfused has it cleared */
+            if (k == cleared) EQ("fusion luck (cleared)", gm->fusion_luck, a->fusion_luck);
+        }
+        EQ("base ability", p->base_ability, a->ability_true); EQ("ability", p->ability, a->ability);
+        EQ("hp", p->hp, a->hp); EQ("status", p->status, a->status);
+        EQ("toxic turns", p->status_toxic_turns, a->toxic); EQ("sleep turns", p->status_sleep_turns, a->sleep);
+        EQ("freeze turns", p->status_freeze_turns, a->freeze);
+        EQ("pause evolutions", gm->pause_evolutions, a->pause);
+        for (int s = 0; s < 6; s++) EQ("stat", p->stats[s], a->stats[s]);
+        EQ("luck", gm->luck, a->luck);
+        EQ("getLuck", gm->luck + (p->fusion_species ? gm->fusion_luck : 0), a->get_luck);
+        EQ("moves", p->n_moves, a->n_moves);
+        for (int s = 0; s < a->n_moves && s < 4; s++) EQ("move", p->moves[s], a->moves[s]);
+        fields++;
+    }
+    *bad_out = bad;
+    return fields;
+}
+
 static bool install(const up_mon *m, int n, const up_item *items, int n_items, int rot, int coin, uint32_t *stub_before, int case_no)
 {
     memset(&run, 0, sizeof run);
@@ -195,7 +245,7 @@ int main(int argc, char **argv)
     tag('V');
     if (integer() != 1) { fputs("unknown trace version\n", stderr); return 2; }
     integer();
-    int cases = 0, fused = 0, refused = 0, coins = 0, no_coins = 0, items_checked = 0, learns = 0, fields = 0, skipped = 0;
+    int unfuses = 0, cases = 0, fused = 0, refused = 0, coins = 0, no_coins = 0, items_checked = 0, learns = 0, fields = 0, skipped = 0;
     for (;;) {
         char c = 0;
         if (fscanf(f, " %c", &c) != 1 || c == '#') break;
@@ -212,8 +262,8 @@ int main(int argc, char **argv)
         const int refused_up = (int)integer();
         tag('R');
         const int applied = (int)integer();
-        int draws = 0, n_after = 0, n_items_after = 0, n_learn = 0;
-        static up_after after[6];
+        int draws = 0, n_after = 0, n_items_after = 0, n_learn = 0, unfused = 0, unfuse_at = -1, n_unfused = 0;
+        static up_after after[6], unfused_after[6];
         static up_item items_after[128];
         static int learn[8][2];
         if (applied) {
@@ -227,6 +277,13 @@ int main(int argc, char **argv)
             tag('L');
             n_learn = (int)integer();
             for (int i = 0; i < n_learn && i < 8; i++) { learn[i][0] = (int)integer(); learn[i][1] = (int)integer(); }
+            tag('U');
+            unfused = (int)integer();
+            if (unfused) {
+                unfuse_at = (int)integer();
+                n_unfused = (int)integer();
+                for (int i = 0; i < n_unfused; i++) { if (i) separator(); unfused_after[i] = read_after(); }
+            }
         }
         tag('E');
         rest_of_line();
@@ -259,37 +316,7 @@ int main(int argc, char **argv)
         EQ("party size", run.n_party, n_after);
         EQ("coin drawn", gc_int(&run)->stub_rng != stub_before, draws);
         if (draws) coins++; else no_coins++;
-        if (run.n_party == n_after) {
-            for (int k = 0; k < n_after; k++) {
-                const up_after *a = &after[k];
-                const int storage = run.party_order[k];
-                CHECK(storage >= 0 && storage < run.n_party, "party order %d -> storage %d", k, storage);
-                if (storage < 0 || storage >= run.n_party) continue;
-                const gc_mon *gm = &run.party[storage];
-                const pr_pokemon *p = &gm->b;
-                EQ("member", (long long)p->id, m[a->orig].id);
-                EQ("species", p->species, a->species); EQ("form", p->form, a->form);
-                EQ("fusion species", p->fusion_species ? p->fusion_species : -1, a->fusion);
-                if (a->fusion >= 0) {
-                    EQ("fusion form", p->fusion_form, a->fusion_form); EQ("fusion gender", p->fusion_gender, a->fusion_gender);
-                    EQ("fusion ability index", p->fusion_ability_index, a->fusion_ability);
-                    EQ("fusion shiny", gm->fusion_shiny, a->fusion_shiny); EQ("fusion variant", gm->fusion_variant, a->fusion_variant);
-                    EQ("fusion luck", gm->fusion_luck, a->fusion_luck);
-                    CHECK(p->fusion_gender_known, "fusion gender not known");
-                }
-                EQ("base ability", p->base_ability, a->ability_true); EQ("ability", p->ability, a->ability);
-                EQ("hp", p->hp, a->hp); EQ("status", p->status, a->status);
-                EQ("toxic turns", p->status_toxic_turns, a->toxic); EQ("sleep turns", p->status_sleep_turns, a->sleep);
-                EQ("freeze turns", p->status_freeze_turns, a->freeze);
-                EQ("pause evolutions", gm->pause_evolutions, a->pause);
-                for (int s = 0; s < 6; s++) EQ("stat", p->stats[s], a->stats[s]);
-                EQ("luck", gm->luck, a->luck);
-                EQ("getLuck", gm->luck + (p->fusion_species ? gm->fusion_luck : 0), a->get_luck);
-                EQ("moves", p->n_moves, a->n_moves);
-                for (int s = 0; s < a->n_moves && s < 4; s++) EQ("move", p->moves[s], a->moves[s]);
-                fields++;
-            }
-        }
+        if (run.n_party == n_after) fields += compare_party(after, n_after, m, case_no, &bad, -1);
         /* the storage has no hole, and the battle's pointers follow it */
         EQ("battle party size", run.bt.n_party[0], run.n_party);
         for (int k = 0; k < run.n_party; k++) CHECK(run.bt.party[0][k] == &run.party[run.party_order[k]].b, "battle party pointer %d", k);
@@ -329,10 +356,22 @@ int main(int argc, char **argv)
         }
         CHECK(!gc_rq_next(&gc_int(&run)->rq, &ph), "an extra phase was queued (type %d)", ph.type);
         CHECK(!run.bt.n_unported, "something was left unported (%u)", (unsigned)run.bt.n_unported);
+        /* then the party screen's Unsplice on one fused member: PlayerPokemon.unfuse() */
+        if (unfused && run.n_party == n_after) {
+            const int storage = run.party_order[unfuse_at];
+            const uint32_t stub_now = gc_int(&run)->stub_rng;
+            CHECK(gc_fusion_unfuse(&run, storage), "unfuse refused a fused member");
+            CHECK(!gc_fusion_unfuse(&run, storage), "unfuse of an unfused member was taken");
+            EQ("party size after unfuse", run.n_party, n_unfused);
+            EQ("stub rng after unfuse", gc_int(&run)->stub_rng, stub_now);
+            fields += compare_party(unfused_after, n_unfused, m, case_no, &bad, unfuse_at);
+            CHECK(!gc_rq_next(&gc_int(&run)->rq, &ph), "an unfuse queued a phase");
+            unfuses++;
+        }
         if (bad) mismatches++;
     }
     printf("DNA Splicers: %d cases (%d fused, %d refused, %d not runnable), %d coin flips drawn (%d not needed), %d members compared, %d items compared, "
-           "%d learn phases. TOTAL mismatches %d (input %d)\n",
-           cases, fused, refused, skipped, coins, no_coins, fields, items_checked, learns, mismatches, bad_inputs);
+           "%d learn phases, %d Unsplices. TOTAL mismatches %d (input %d)\n",
+           cases, fused, refused, skipped, coins, no_coins, fields, items_checked, learns, unfuses, mismatches, bad_inputs);
     return mismatches || bad_inputs ? 1 : 0;
 }

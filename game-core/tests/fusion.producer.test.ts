@@ -29,11 +29,14 @@ const N = Number(process.env.GC_FUSION_N ?? 600), SEED = Number(process.env.GC_F
 const OUT = process.env.GC_FUSION_OUT ?? "/tmp/fusion-cases.txt";
 let seed = SEED;
 const rnd = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
+// the Unsplice pick has a stream of its own, so that adding it left every case above it as it was
+let useed = (SEED ^ 0x5bd1e995) >>> 0;
+const urnd = (n: number) => { useed = (Math.imul(useed, 1103515245) + 12345) >>> 0; return (useed >>> 8) % n; };
 const phaserGame = new Phaser.Game({ type: Phaser.HEADLESS });
 const lines: string[] = [`V 1 ${N}`];
 const cover = {
   fused: 0, refused: 0, coin: [0, 0], noCoin: 0, fainted: 0, bothFainted: 0, vitamins: 0, leftBehind: 0, locked: 0, tracker: 0, learn: 0,
-  fieldFirst: 0, donorFirst: 0, species: new Set<number>(), shinyDonor: 0, wonderGuard: 0, alreadyFused: 0, passive: 0, items: new Set<string>(),
+  fieldFirst: 0, donorFirst: 0, species: new Set<number>(), shinyDonor: 0, wonderGuard: 0, alreadyFused: 0, unfused: 0, passive: 0, items: new Set<string>(),
 };
 const ssbKeys = ["LIGHT_BALL", "THICK_CLUB", "METAL_POWDER", "QUICK_POWDER", "DEEP_SEA_SCALE", "DEEP_SEA_TOOTH"];
 const argOf = (t: any): number => {
@@ -254,7 +257,20 @@ for (let ci = 0; ci < chunks; ci++) {
       expect(learn.length).toBe(queued.length);
       lines.push(`R 1 ${draws}`, `S ${party.length} ${party.map((p: any) => after(p, original.indexOf(p))).join(" ; ")}`);
       const itemsAfter = scene.modifiers.map((m: any) => `${m.type.id} ${argOf(m.type)} ${m.pokemonId == null ? -1 : original.findIndex((p: any) => p.id === m.pokemonId)} ${m.stackCount}`);
-      lines.push(`J ${itemsAfter.length} ${itemsAfter.join(" ")}`, `L ${learn.length} ${learn.map(([, a]) => `${a[0]} ${a[1]}`).join(" ")}`, "E");
+      lines.push(`J ${itemsAfter.length} ${itemsAfter.join(" ")}`, `L ${learn.length} ${learn.map(([, a]) => `${a[0]} ${a[1]}`).join(" ")}`);
+      // the party screen's Unsplice afterwards, on one fused member (the primary now, or a member that was fused already): the real
+      // PlayerPokemon.unfuse() (clearFusionSpecies, then updateInfo / updateFusionPalette, which have nothing to draw here)
+      const fusedNow = party.map((p: any, k: number) => (p.fusionSpecies ? k : -1)).filter((k: number) => k >= 0);
+      if (fusedNow.length && urnd(3) !== 0) {
+        const k = fusedNow[urnd(fusedNow.length)];
+        const rngU = rng();
+        await party[k].unfuse();
+        expect(rng()).toBe(rngU);   // an unsplice draws nothing seeded
+        expect(party[k].fusionSpecies).toBeNull();
+        cover.unfused++;
+        lines.push(`U 1 ${k} ${party.length} ${party.map((p: any) => after(p, original.indexOf(p))).join(" ; ")}`);
+      } else lines.push("U 0");
+      lines.push("E");
       // coverage
       const p0 = original[primary], p1 = original[donor];
       cover.fused++;
@@ -281,8 +297,9 @@ for (let ci = 0; ci < chunks; ci++) {
 it("writes the trace", () => {
   expect(cover.fused).toBeGreaterThan(N * 0.45);
   expect(cover.refused).toBeGreaterThan(0);
+  expect(cover.unfused).toBeGreaterThan(N * 0.2);
   expect(cover.coin[0] + cover.coin[1]).toBeGreaterThan(0);
-  lines.push(`# fused ${cover.fused} refused ${cover.refused} coin ${cover.coin.join("/")} nocoin ${cover.noCoin} fainted ${cover.fainted} vitamins ${cover.vitamins} leftBehind ${cover.leftBehind} tracker ${cover.tracker} learn ${cover.learn} wonderGuard ${cover.wonderGuard} species ${cover.species.size} items ${[...cover.items].sort().join(",")}`);
+  lines.push(`# fused ${cover.fused} refused ${cover.refused} coin ${cover.coin.join("/")} nocoin ${cover.noCoin} fainted ${cover.fainted} vitamins ${cover.vitamins} leftBehind ${cover.leftBehind} tracker ${cover.tracker} learn ${cover.learn} unfused ${cover.unfused} wonderGuard ${cover.wonderGuard} species ${cover.species.size} items ${[...cover.items].sort().join(",")}`);
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
   console.log(lines[lines.length - 1]);
 });

@@ -394,6 +394,50 @@ static void luck_and_save(void)
     CHECK(why && strstr(why, "fusion halves"));
 }
 
+/* The party screen's Unsplice (GC_CH_UNFUSE): the reward screen stays as it is, the member drops its fusion half, the one that was spliced in
+ * stays gone and its items stay where they went; an unfused member is refused. unfuse() against upstream: fusion_diff_test. */
+static void unsplice(void)
+{
+    const char *why = NULL;
+    setup(3, false);
+    r.party[1].b.shiny = true;
+    r.party[1].variant = 2;
+    r.party[1].luck = 3;
+    gc_item_add(&r, "LEFTOVERS", -1, r.party[1].b.id, 1);
+    screen(splicers(-1), false);
+    CHECK(pick(0, 1, &why));
+    CHECK(r.screen.kind == GC_SCREEN_COMMAND && r.n_party == 2 && r.party[0].b.fusion_species == SPECIES_ID_CHARMANDER);
+    const uint32_t lead = r.party[0].b.id;
+    CHECK(stack_of(lead, "LEFTOVERS") == 1);
+    const int fused_hp_max = r.party[0].b.stats[STAT_HP];
+    screen(splicers(-1), false);   /* a reward screen again (as Check Team and Manage Items do) */
+    gc_choice un = {GC_CH_UNFUSE, 0, 0, 0};
+    gc_choice again = {GC_CH_UNFUSE, 1, 0, 0};
+    CHECK(gc_run_choose(&r, &again, &why) == false && why && strstr(why, "not a fusion"));   /* the second member isn't fused */
+    gc_choice outside = {GC_CH_UNFUSE, 5, 0, 0};
+    CHECK(!gc_run_choose(&r, &outside, &why));
+    CHECK(r.screen.kind == GC_SCREEN_REWARD && r.screen.n_options == 1);
+    CHECK(gc_run_choose(&r, &un, &why));
+    CHECK(r.screen.kind == GC_SCREEN_REWARD && r.screen.n_options == 1);   /* the screen stays */
+    const gc_mon *m = &r.party[0];
+    CHECK(m->b.fusion_species == 0 && m->b.fusion_form == 0 && m->b.fusion_ability_index == 0 && m->b.fusion_custom_ability == -1);
+    CHECK(!m->fusion_shiny && m->fusion_variant == 0 && m->fusion_luck == 0);
+    CHECK(m->b.species == SPECIES_ID_BULBASAUR && m->b.base_ability == pr_get_ability(&m->b, true));
+    CHECK(r.n_party == 2 && stack_of(lead, "LEFTOVERS") == 1);   /* nothing comes back */
+    CHECK(m->b.hp <= m->b.stats[STAT_HP] && m->b.stats[STAT_HP] != fused_hp_max);   /* the maximum follows the species alone again */
+    CHECK(!gc_run_choose(&r, &un, &why) && why && strstr(why, "not a fusion"));   /* now it is not fused */
+    CHECK(gc_party_luck(&r) == 0);   /* the half's shine no longer counts */
+    /* the save carries the cleared half */
+    screen(splicers(-1), false);
+    CHECK(gc_run_choose(&r, &(gc_choice){GC_CH_SKIP, 0, 0, 0}, &why));
+    while (r.screen.kind != GC_SCREEN_COMMAND) { gc_event e; if (!gc_run_next_event(&r, &e)) break; }
+    if (gc_run_can_save(&r)) {
+        const size_t n = gc_run_save(&r, buf, sizeof buf);
+        CHECK(n > 0 && gc_run_load(&loaded, buf, n, &why));
+        CHECK(loaded.party[0].b.fusion_species == 0 && !loaded.party[0].fusion_shiny);
+    }
+}
+
 int main(void)
 {
     purchase();
@@ -402,6 +446,7 @@ int main(void)
     hp_and_status();
     held_items();
     luck_and_save();
+    unsplice();
     printf("fusion host: %u checks passed\n", checks);
     return 0;
 }

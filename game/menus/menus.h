@@ -184,6 +184,7 @@ typedef struct {
   bool in_reward_phase;     /* CHECK opened from the reward screen: offers Release (and Unsplice) */
   int initial_cursor;
   bool preserve_roster;     /* host does not implement releasing/unsplicing here */
+  bool allow_unsplice;      /* ...but it does unsplice: a fused member gets the Unsplice option in SPLICE and (reward) CHECK anyway */
 } party_args;
 
 void party_open(const party_args* args, const menu_mon* party, int n, const party_events* ev);

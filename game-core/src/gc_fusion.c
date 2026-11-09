@@ -53,6 +53,28 @@ static pr_reward_ctx *fuse_in_core(gc_run *run, int k1, int k2)
     return pr_reward_apply(c, PR_ITEM_DNA_SPLICERS, -1, k1, k2, &msg) ? c : NULL;
 }
 
+/* PlayerPokemon.unfuse() -> clearFusionSpecies(): fusionSpecies null, fusionFormIndex 0, fusionAbilityIndex 0, fusionShiny false,
+ * fusionVariant 0, fusionGender 0, fusionLuck 0, fusionCustomPokemonData null, then generateName() and calculateStats() (the maximum HP
+ * follows the species' own base stats, the HP by the change of the maximum); updateInfo and updateFusionPalette are the screen's. */
+bool gc_fusion_unfuse(gc_run *run, int party)
+{
+    if (party < 0 || party >= run->n_party || !run->party[party].b.fusion_species) return false;
+    gc_mon *a = &run->party[party];
+    pr_pokemon *p = &a->b;
+    p->fusion_species = 0;
+    p->fusion_form = 0;
+    p->fusion_ability_index = 0;
+    p->fusion_gender = 0;
+    p->fusion_gender_known = false;
+    p->fusion_custom_ability = -1;
+    a->fusion_shiny = false;
+    a->fusion_variant = 0;
+    a->fusion_luck = 0;
+    pr_refresh_ability(p);   /* getAbility() reads the species' own slot again */
+    gc_mon_recalc(run, a);
+    return true;
+}
+
 static void take_status(pr_pokemon *to, const pr_pokemon *from)
 {
     to->status = from->status;

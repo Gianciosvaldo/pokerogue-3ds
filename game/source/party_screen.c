@@ -328,7 +328,15 @@ void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*
   ui_push(&g_screen);
 }
 
+/* the host's Unsplice (ps_set_unsplice); it lasts until the screen closes */
+static struct {
+  void (*cb)(int party, void* arg);
+  void* arg;
+} Un;
+
 void ps_close(void) {
+  Un.cb = NULL;
+  Un.arg = NULL;
   if (!S.open) return;
   S.open = false;
   summary_close();
@@ -438,11 +446,46 @@ static const char* filter_fuse(void* ctx, int slot) {
   return g_run && gc_fusion_pickable(g_run, storage_at(slot)) ? NULL : mui_t("partyUiHandler:anyEffect");
 }
 
+/* ---- Unsplice (processUnspliceOption): the Splice and reward Check Team screens ---- */
+
+void ps_set_unsplice(void (*on_unsplice)(int party, void* arg), void* arg) {
+  Un.cb = on_unsplice;
+  Un.arg = arg;
+}
+static void check_fill(const gc_run* run, int cursor, int* initial);
+
+/* The run's party as the open screen lists it again (an unspliced member is one species now) */
+static void unsplice_refill(void) {
+  if (S.mode == PARTY_CHECK) {
+    check_fill(g_run, -1, NULL);
+  } else {
+    set_order(g_run);
+    for (int slot = 0; slot < g_run->n_party && slot < PR_MAX_PARTY; slot++) gc_to_menu_mon(&g_run->party[order[slot]], &S.party[slot]);
+    S.n = g_run->n_party;
+  }
+  party_refresh(S.party, S.n);
+}
+
+/* yesHandler of processUnspliceOption: pokemon.unfuse(), the slots populated again, then the "was reverted" text */
+static void unsplice_pick(int slot) {
+  if (!Un.cb || !g_run || slot < 0 || slot >= S.n) return;
+  char was[sizeof S.party[0].name];
+  snprintf(was, sizeof was, "%s", S.party[slot].name);
+  Un.cb(storage_at(slot), Un.arg);
+  unsplice_refill();
+  char text[200];
+  party_show_text(mui_tf(text, sizeof text, "partyUiHandler:wasReverted", "fusionName", was, "pokemonName", S.party[slot].name, NULL), true);
+}
+
 /* PartyModifierSpliceSelectCallback(fromSlotIndex, spliceSlotIndex): the party screen gives the first pick as `slot` and the second as
  * `option`; leaving the screen is slot 6 with PO_CANCEL. Anything that isn't two different members of the party is the screen
  * being left (openFusionMenu: resetModifierSelect) */
 static void on_fuse_select(void* ctx, int slot, int option) {
   (void)ctx;
+  if (option == PO_UNSPLICE) {
+    unsplice_pick(slot);
+    return;
+  }
   if (!ItemS.on_item_pick) return;
   if (option == PO_CANCEL || slot < 0 || slot >= S.n || option < 0 || option >= S.n || slot == option) {
     ItemS.on_item_pick(6, -1, ItemS.item_arg);
@@ -472,7 +515,8 @@ void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor,
   a.battler_count = 1;
   a.in_reward_phase = true;
   a.filter = filter_fuse;
-  a.preserve_roster = true; /* unsplicing isn't ported: no Unsplice option on a fused member */
+  a.preserve_roster = true;
+  a.allow_unsplice = Un.cb != NULL;
 
   static party_events ev;
   ev = (party_events){on_fuse_select, NULL, NULL, NULL, NULL, on_summary, NULL};
@@ -559,21 +603,18 @@ static void check_pause(void* ctx, int slot, bool paused) {
   if (Check.on_pause && slot>=0 && slot<S.n) Check.on_pause(order[slot],paused,Check.arg);
 }
 static void check_select(void* ctx, int slot, int option) {
-  (void)ctx;(void)slot;
+  (void)ctx;
+  if (option == PO_UNSPLICE) {unsplice_pick(slot);return;}
   if (option == PO_CANCEL && Check.on_done) Check.on_done(Check.arg);
 }
-void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,void*),
-                   void (*on_pause)(int,bool,void*), void (*on_done)(void*), void* arg) {
-  const gc_run* run=gc_run_ptr;
-  if (!run || run->n_party<1 || run->n_party>PR_MAX_PARTY) return;
-  _Static_assert(MENU_MAX_FORM_ITEMS >= PR_MAX_MODIFIERS,"full form inventory fits menu");
-  ps_set_run(run);memset(&S,0,sizeof S);S.mode=PARTY_CHECK;S.n=run->n_party;
-  Check.on_form=on_form;Check.on_pause=on_pause;Check.on_done=on_done;Check.arg=arg;
+/* Fills S.party from the run for Check Team: the members and each one's native form-item actions (the arrays are the file's) */
+static void check_fill(const gc_run* run, int cursor, int* initial) {
+  S.n=run->n_party;
   set_order(run);
   for(int slot=0;slot<S.n;slot++)gc_to_menu_mon(&run->party[order[slot]],&S.party[slot]);
-  int count=0,initial=0;
+  int count=0;
   for(int slot=0;slot<S.n;slot++) {
-    int storage=order[slot];if(storage==cursor)initial=slot;
+    int storage=order[slot];if(initial&&storage==cursor)*initial=slot;
     const int n=gc_form_item_options(run,storage,form_indices,PR_MAX_MODIFIERS);
     if(n<0 || n>PR_MAX_MODIFIERS-count) {
       /* Invalid aliased party identities cannot expose a partial action list. */
@@ -589,10 +630,21 @@ void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,v
       form_items[count++]=(menu_form_item){label?label->name:item->arg==0?"None":item->key,index,!item->form_inactive};
     }
   }
+}
+
+void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,void*),
+                   void (*on_pause)(int,bool,void*), void (*on_done)(void*), void* arg) {
+  const gc_run* run=gc_run_ptr;
+  if (!run || run->n_party<1 || run->n_party>PR_MAX_PARTY) return;
+  _Static_assert(MENU_MAX_FORM_ITEMS >= PR_MAX_MODIFIERS,"full form inventory fits menu");
+  ps_set_run(run);memset(&S,0,sizeof S);S.mode=PARTY_CHECK;S.n=run->n_party;
+  Check.on_form=on_form;Check.on_pause=on_pause;Check.on_done=on_done;Check.arg=arg;
+  int initial=0;
+  check_fill(run,cursor,&initial);
   party_args a={0};a.mode=PARTY_CHECK;a.initial_cursor=initial;
   a.battler_count=run->double_battle?2:1;a.double_battle=run->double_battle;
   a.max_level=run->bt.max_exp_level;a.in_reward_phase=run->screen.kind==GC_SCREEN_REWARD;
-  a.preserve_roster=true;
+  a.preserve_roster=true;a.allow_unsplice=Un.cb!=NULL;
   party_events ev={0};ev.on_select=check_select;ev.on_pause_evolution=check_pause;
   ev.on_summary=on_summary;ev.on_form_item=check_form;
   party_open(&a,S.party,S.n,&ev);S.open=true;ui_push(&g_screen);

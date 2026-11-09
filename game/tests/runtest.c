@@ -1148,6 +1148,7 @@ static struct {
   void* arg;
 } FU;
 static int n_fuse_opens, n_fusions, n_fuse_back;
+void ps_set_unsplice(void (*cb)(int party, void* arg), void* arg) { (void)cb; (void)arg; }
 void ps_open_fusion(const void* run, void (*on_pick)(int keep, int donor, void* arg), void* arg) {
   (void)run;
   n_fuse_opens++;
