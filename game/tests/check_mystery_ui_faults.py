@@ -62,6 +62,16 @@ FAULTS = [
  ('tutor-wrong-move', UI[0], 'const int move = gc_superfan_tutor_move(F.run, k);', 'const int move = gc_superfan_tutor_move(F.run, 0);'),
  ('tutor-no-prompt', UI[0], 'fmt("teachMovePrompt", NULL, 0, false, a.query, sizeof a.query);', 'a.query[0] = 0;'),
  ('tutor-no-details', UI[0], '"%s  %s\\nPower %s  Accuracy %s  PP %d"', '"%s  %s%s%s%d"'),
+ ('safari-intro-again', UI[0], 'if (gc_run_screen(run)->me_stage == GC_ME_STAGE_SAFARI) return;', 'if (0) return;'),
+ ('safari-selected-text', UI[0], 'if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_SAFARI) {   /* ball, bait', 'if (0) {   /* ball, bait'),
+ ('safari-selected-off-by-one', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.selected", option + 1);', 'snprintf(sub, sizeof sub, "safari.%d.selected", option);'),
+ ('safari-actions-not-opened', UI[0], 'if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }', 'if (0) { open_safari(s->slot); return; }'),
+ ('safari-cursor-reset', UI[0], 'a.cursor = cursor >= 0 && cursor < 4 ? cursor : 0;', 'a.cursor = 0;'),
+ ('safari-no-pokemon', UI[0], 'a.n_intro = 1;\n  }\n  a.can_back = false;', 'a.n_intro = 0;\n  }\n  a.can_back = false;'),
+ ('safari-wrong-species', UI[0], 'snprintf(plain, sizeof plain, "images/pokemon/%d", (int)e->b.species);', 'snprintf(plain, sizeof plain, "images/pokemon/%d", 1);'),
+ ('safari-shiny-ignored', UI[0], 'if (e->b.shiny) {\n    snprintf(o->key', 'if (0) {\n    snprintf(o->key'),
+ ('safari-labels', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);', 'snprintf(sub, sizeof sub, "option.%d.label", i + 1);'),
+ ('safari-tooltips', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.tooltip", i + 1);', 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

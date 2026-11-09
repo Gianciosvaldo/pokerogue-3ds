@@ -265,6 +265,7 @@ static void draw_top(void)
   for (int i = 0; i < M.a.n_intro; i++) { /* the encounter's own sprites, in colour (shaded toward black where upstream tints them) */
     const me_intro_sprite* s = &M.a.intro[i];
     const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
+    if (!f && s->alt[0]) f = img_anim_frame(s->alt, 0);
     if (!f) continue;
     rr_draw_opts d = RR_DEFAULT_OPTS;
     d.origin_x = 0.5f;
