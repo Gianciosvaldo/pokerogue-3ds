@@ -511,6 +511,13 @@ build/final_boss_double_layout_test: final_boss_double_layout_test.c ../source/b
 final_boss_double_layout_test: build/final_boss_double_layout_test
 .PHONY: final_boss_double_layout_test
 
+# the foes' side of a double battle on the top screen: platform raised (up) with the foes, trainer and doll on their marks, smaller field
+build/doubles_layout_test: doubles_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections doubles_layout_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+doubles_layout_test: build/doubles_layout_test
+.PHONY: doubles_layout_test
+
 # the final boss' second phase in the battle screen's events: PR_EV_DOUBLE_START -> BEV_DOUBLES against battle-core's real wave 200
 FINAL_DOUBLE_SRCS := final_boss_double_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/final_boss_double_events_test: $(FINAL_DOUBLE_SRCS)

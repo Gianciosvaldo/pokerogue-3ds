@@ -14,6 +14,9 @@
  *   fullparty: wave 1, six in the party and a Master Ball: Ball, then the Master Ball, catches and asks which member to release.
  *   history:  not a run save: a Run History (run_history.sav) of seven finished runs, to look at the history screens: a defeat by a wild
  *             Pokemon, by a trainer, by the rival, by two wild Pokemon, by a pair of trainers, a win with a name, and a defeat that names nothing.
+ *   doubles:  a two-versus-two wild battle at wave 12 (the seed is searched), to look at the doubles layout of the top screen.
+ *   finale:   wave 200 with a party of three at level 100, Eternatus at 1 HP: the first hit starts the second phase (Eternamax, the
+ *             party in two columns); the party hits hard enough to see the whole finale in a few turns.
  *   evolve:   wave 1, Igglybuff (Lv 7, four moves, full friendship) one knockout from Lv 8: the first turn ends in the evolution prompt; Yes into
  *             Jigglypuff comes with the learn dialog for Echoed Voice (a full moveset), No stops the evolution.
  *
@@ -22,6 +25,7 @@
  * name says. Nothing here is part of the app.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -91,6 +95,10 @@ static int play_to_end(gc_run* r) {
     c.a = -1;
     c.b = -1;
     c.c = -1;
+    if (getenv("MKFIXTURE_TRACE"))
+      printf("turn %d screen %d party hp %d/%d/%d enemy %d form %d hp %d/%d\n", t, (int)s->kind, r->n_party > 0 ? r->party[0].b.hp : -1,
+             r->n_party > 1 ? r->party[1].b.hp : -1, r->n_party > 2 ? r->party[2].b.hp : -1, r->enemy[0].b.species, r->enemy[0].b.form,
+             r->enemy[0].b.hp, r->enemy[0].b.stats[STAT_HP]);
     switch (s->kind) {
       case GC_SCREEN_GAME_OVER:
       case GC_SCREEN_CLEAR:
@@ -99,6 +107,14 @@ static int play_to_end(gc_run* r) {
       case GC_SCREEN_COMMAND:
         c.kind = GC_CH_FIGHT;
         c.a = 0;
+        break;
+      case GC_SCREEN_TARGET: /* a double: the first legal single target */
+        c.kind = GC_CH_TARGET;
+        for (int i = 0; i < 4; i++)
+          if (s->target_ok[i]) {
+            c.a = (int16_t)i;
+            break;
+          }
         break;
       case GC_SCREEN_LEARN_MOVE:
         c.kind = GC_CH_FORGET;
@@ -308,11 +324,83 @@ static int make_history_fixture(void) {
   return 0;
 }
 
+/* doubles: a wild double battle at wave 12 in the plains. The seed is searched until the run's own encounter roll makes one. */
+static int make_doubles_fixture(void) {
+  mkdir("sdmc:", 0777);
+  if (!save_init()) {
+    printf("FAILED: no folder for the saves\n");
+    return 1;
+  }
+  const int team[] = {SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
+  for (int n = 0; n < 4000; n++) {
+    char seed[40];
+    snprintf(seed, sizeof seed, "fixturedoubles%010d", n);
+    if (!begin_team(seed, team, 2, 12, BIOME_ID_PLAINS)) continue;
+    if (!R.double_battle || R.n_enemy < 2) continue;
+    if (rsv_save(0, &R) != RSV_SAVED) {
+      printf("FAILED: could not save\n");
+      return 1;
+    }
+    static gc_run L;
+    char why[RSV_WHY_LEN];
+    if (rsv_load(0, &L, why) != RSV_OK) {
+      printf("FAILED: the slot does not load back: %s\n", why);
+      return 1;
+    }
+    printf("doubles fixture: seed %s, wave %d, %d enemies, loaded back: OK\n", seed, L.wave, L.n_enemy);
+    return L.double_battle && L.n_enemy == 2 ? 0 : 1;
+  }
+  printf("FAILED: no double battle in 4000 seeds\n");
+  return 1;
+}
+
+/* finale: the final boss with a party of three. Level 100, Eternatus (the first form) at 1 HP and speed 1: the first hit that lands is the
+ * one that starts the second phase. The party has stats high enough for the fight to be a few turns. */
+static int make_finale_fixture(void) {
+  mkdir("sdmc:", 0777);
+  if (!save_init()) {
+    printf("FAILED: no folder for the saves\n");
+    return 1;
+  }
+  const int team[] = {SPECIES_ID_MAGIKARP, SPECIES_ID_PIDGEY, SPECIES_ID_RATTATA};
+  const int want[] = {SPECIES_ID_GARCHOMP, SPECIES_ID_MEWTWO, SPECIES_ID_MAMOSWINE};
+  if (!begin_team("fixturefinale0000000000001", team, 3, 200, BIOME_ID_END)) {
+    printf("FAILED: the run is not at a save point\n");
+    return 1;
+  }
+  for (int i = 0; i < R.n_party; i++) {
+    R.party[i].b.level = 300;
+    R.party[i].b.species = (uint16_t)want[i]; /* a stronger look than the starters' cost allows */
+    gc_mon_recalc(&R, &R.party[i]);
+    R.party[i].b.hp = R.party[i].b.stats[STAT_HP];
+    R.party[i].b.moves[0] = i == 1 ? MOVE_ID_PSYSTRIKE : i == 2 ? MOVE_ID_ICICLE_CRASH : MOVE_ID_EARTHQUAKE;
+    R.party[i].b.moves[1] = R.party[i].b.moves[2] = R.party[i].b.moves[3] = 0;
+  }
+  R.enemy[0].b.hp = 1;
+  R.enemy[0].b.stats[STAT_SPD] = 1;
+  if (rsv_save(0, &R) != RSV_SAVED) {
+    printf("FAILED: could not save\n");
+    return 1;
+  }
+  static gc_run L;
+  char why[RSV_WHY_LEN];
+  if (rsv_load(0, &L, why) != RSV_OK) {
+    printf("FAILED: the slot does not load back: %s\n", why);
+    return 1;
+  }
+  const int end = play_to_end(&L);
+  printf("finale fixture: wave %d, party of %d, loaded back and played to screen %d: %s\n", L.wave, L.n_party, end,
+         end == GC_SCREEN_CLEAR ? "OK" : "NOT A CLEAR");
+  return end == GC_SCREEN_CLEAR ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
   if (argc == 2 && !strcmp(argv[1], "history")) return make_history_fixture();
+  if (argc == 2 && !strcmp(argv[1], "doubles")) return make_doubles_fixture();
+  if (argc == 2 && !strcmp(argv[1], "finale")) return make_finale_fixture();
   if (argc != 2 || (strcmp(argv[1], "gameover") && strcmp(argv[1], "clear") && strcmp(argv[1], "reward") && strcmp(argv[1], "catch") &&
                     strcmp(argv[1], "breakfree") && strcmp(argv[1], "fullparty") && strcmp(argv[1], "evolve"))) {
-    printf("usage: mkfixture gameover|clear|reward|catch|breakfree|fullparty|evolve|history   (writes ./sdmc:/3ds/pokerogue/save/session_0.sav, or run_history.sav)\n");
+    printf("usage: mkfixture gameover|clear|reward|catch|breakfree|fullparty|evolve|doubles|finale|history   (writes ./sdmc:/3ds/pokerogue/save/session_0.sav, or run_history.sav)\n");
     return 2;
   }
   if (!strcmp(argv[1], "evolve")) return make_evolve_fixture();

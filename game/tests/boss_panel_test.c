@@ -108,10 +108,10 @@ int main(void){
   /* a boss that is not segmented (an old caller's is_boss alone) has the box and bar, no dividers */
   foe(sd,true,0,0,max_hp,max_hp);reset();draw_enemy_info(sd);CHECK(find("images/ui/pbinfo_enemy_boss")&&nr==0);
  }
- /* ---- doubles keep their own boss shift (102 -> 150) and the slide is 246 for a boss, 150 otherwise, both ways */
+ /* ---- doubles: the foe box of the right column is offset (130, upstream setOffset), the boss keeps its 48 px shift and the slide is 246 for a boss, 150 otherwise, both ways */
  {
-  memset(&B,0,sizeof B);B.setup.doubles=true;side *sd=side_of(1);foe(sd,false,0,0,10,10);near(info_base_x(sd,false),102);near(info_slide(sd,false),150);
-  foe(sd,true,3,2,10,10);near(info_base_x(sd,false),150);near(info_slide(sd,false),246);near(info_slide(sd,true),150);
+  memset(&B,0,sizeof B);B.setup.doubles=true;side *sd=side_of(1);foe(sd,false,0,0,10,10);near(info_base_x(sd,false),field_of(sd)%2?130:140);near(info_slide(sd,false),150);
+  foe(sd,true,3,2,10,10);near(info_base_x(sd,false),(field_of(sd)%2?130:140)+48);near(info_slide(sd,false),246);near(info_slide(sd,true),150);
   B.setup.doubles=false;near(info_base_x(sd,false),188);near(info_base_x(sd,true),310);
  }
  printf("Boss info box: %d checks (mini box unchanged; boss box, bar, label, name, level, dividers for 2..7 segments, shield colours, slide)\n",checks);
