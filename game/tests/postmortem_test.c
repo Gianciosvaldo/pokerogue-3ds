@@ -70,6 +70,8 @@ bool ui_space(ui_space_id sp) {
   g_space = (int)sp;
   return top == (g_which == 0);
 }
+void field_border_draw(const char* key) { (void)key; }
+void rr_set_zoom(float z, float cx, float cy) { (void)z, (void)cx, (void)cy; }
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
 void ui_window(float x, float y, float w, float h, win_variant v) { (void)x, (void)y, (void)w, (void)h, (void)v; }
 bool img_has(const char* key) { (void)key; return false; }

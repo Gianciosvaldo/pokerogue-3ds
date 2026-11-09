@@ -665,10 +665,8 @@ static void update_field_scale(bool instant) {
   if (instant) B.field_scale = target;
 }
 
-/* The top screen is 400x240 around upstream's 320x180 field, so the field container (platforms, Pokemon, animations) is drawn FIELD_ZOOM times
- * bigger about the arena's bottom centre: at 1.25 the ground reaches the screen's side edges. 1.2 keeps a tall front sprite (96 px cells) in
- * the screen. The G-Max zoom-out (field_scale) comes on top of it. */
-#define FIELD_ZOOM 1.2f
+/* The top screen is 400x240 around upstream's 320x180 field, so the field container (platforms, Pokemon, animations) is drawn FIELD_ZOOM
+ * (field_border.h) times bigger about the arena's bottom centre. The G-Max zoom-out (field_scale) comes on top of it. */
 static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * FIELD_ZOOM : 1, 160, 132); }
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
