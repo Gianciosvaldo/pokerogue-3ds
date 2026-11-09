@@ -17,6 +17,10 @@ static void queue_battle_end(gc_run *run)
         gc_fg_battle_end(run, true);
         return;
     }
+    if (in->winstrate.active) {   /* The Winstrate Challenge: BattleEndPhase, TrainerVictoryPhase, then doContinueEncounter */
+        gc_winstrate_victory(run);
+        return;
+    }
     if (in->me_reward.active) {   /* handleMysteryEncounterVictory with setEncounterRewards in place: the shop it set */
         gc_me_win_rewards(run);
         return;
@@ -843,6 +847,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_SAFARI:
         return gc_safari_next(run, p->a);
+    case RP_WINSTRATE:
+        gc_winstrate_next(run);
+        return true;
     case RP_MYSTERY: {
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);

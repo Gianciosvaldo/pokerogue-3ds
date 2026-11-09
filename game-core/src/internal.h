@@ -46,6 +46,7 @@ enum {
     RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
     RP_ME_BEFORE_REWARDS, /* a mystery encounter's callback before the rewards (Training Session: the Pokemon comes back changed; Berries Abound: the berries) */
     RP_SAFARI,           /* the Safari Zone after a catch: the next Pokemon (and its four actions) or the way out; waits on the actions' screen */
+    RP_WINSTRATE,        /* The Winstrate Challenge's MysteryEncounterRewardsPhase: doContinueEncounter, the next trainer or the end */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -147,6 +148,7 @@ typedef struct {
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
+    struct { bool active; uint8_t next; } winstrate;   /* The Winstrate Challenge: the chain of five trainer fights is running; next = the fight to make when this one is won. Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
     /* a text the encounter says after its shop (PostMysteryEncounterPhase: the outro), queued ahead of the next wave by the encounter's leave */
     struct { bool pending; int a, b, c; } me_post;
@@ -519,6 +521,12 @@ bool gc_breed_roll(gc_run *run, gc_mon *mon, int *egg_move);   /* onInit's Pokem
 void gc_fiery_execute(gc_run *run, int option);                    /* Fiery Fallout (src/gc_fiery.c) */
 void gc_fiery_init(gc_run *run);                                   /* onInit: the weather turns Sunny */
 void gc_fiery_reward(gc_run *run);
+/* The Winstrate Challenge (src/gc_winstrate.c) */
+#define GC_WINSTRATE_FIGHTS 5
+void gc_winstrate_execute(gc_run *run, int option);              /* option 1: the first trainer's fight starts; option 2: the heal and the Rarer Candy */
+void gc_winstrate_victory(gc_run *run);                          /* a fight of the chain is won: the battle's end, the trainer's rewards, then RP_WINSTRATE */
+void gc_winstrate_next(gc_run *run);                             /* RP_WINSTRATE: the next trainer's fight, or the end of the encounter */
+extern int gc_winstrate_generated[5][4];                         /* the last fight's movesets as the constructor made them (the differential compares them) */
 /* The Expert Pokemon Breeder (src/gc_breeder.c) */
 bool gc_breeder_execute(gc_run *run, int option);
 extern int gc_breeder_generated[3][4];   /* the last fight's three movesets as the constructor made them (the differential compares them) */
