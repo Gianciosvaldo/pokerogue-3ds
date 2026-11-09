@@ -80,6 +80,14 @@ FAULTS = [
  ('trtest-wrong-trainer', UI[0], 'gm_trainer_sprite_key(TRAINER_TYPE_BUCK + pick, 0, 0)', 'gm_trainer_sprite_key(TRAINER_TYPE_BUCK, 0, 0)'),
  ('trtest-sprite-offset', UI[0], 'o->x = cx + 4.0f + 22.0f;', 'o->x = cx + 4.0f - 22.0f;'),
  ('trtest-no-sprites', UI[0], 'if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites', 'if (0) a.n_intro = me_flow_trtest_sprites'),
+ ('clown-offer-intro-again', UI[0], 'if (gc_run_screen(run)->me_stage == GC_ME_STAGE_ABILITY) return;', 'if (0) return;'),
+ ('clown-offer-not-opened', UI[0], 'if (s->me_stage == GC_ME_STAGE_ABILITY) { open_ability(cursor); return; }', 'if (0) { open_ability(cursor); return; }'),
+ ('clown-offer-selected-text', UI[0], 'if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_ABILITY) {', 'if (0) {'),
+ ('clown-offer-no-prompt', UI[0], 'fmt("option.1.abilityPrompt", NULL, 0, false, a.query, sizeof a.query);', 'a.query[0] = 0;'),
+ ('clown-offer-labels-swapped', UI[0], 'snprintf(a.options[0].label, ME_LABEL_LEN, "Yes");', 'snprintf(a.options[0].label, ME_LABEL_LEN, "No");'),
+ ('clown-sprite-mime', UI[0], '{\'P\', "122", -25, -3, 0, 0.3f}', '{\'P\', "123", -25, -3, 0, 0.3f}'),
+ ('clown-sprite-blacephalon', UI[0], '{\'P\', "806", 25, -3, 0, 0.3f}', '{\'P\', "806", 25, -3, 0, 0.0f}'),
+ ('clown-sprite-place', UI[0], '{\'P\', "806", 25, -3, 0, 0.3f}', '{\'P\', "806", -25, -3, 0, 0.3f}'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 
