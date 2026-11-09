@@ -168,6 +168,7 @@ int main(void)
             }
             if(!aimed){assert(m.event==FB_EVENT_BLOCKED);++blocked;continue;}
             assert(fabsf(to_x-(human_kicks?120.0f-FB_GOAL_POST_INSET:FB_GOAL_POST_INSET))<.001f);
+            assert(FB_GOAL_POST_INSET>0 && FB_GOAL_POST_INSET<=1.5f && (human_kicks?120.0f-to_x:to_x)<=1.5f); /* the ball ends at the post, which is at the end line, not partway into the end zone */
             const float off=fabsf(to_y-FB_GOAL_MIDDLE);
             defended+=!human_kicks;
             if(m.event==FB_EVENT_FIELD_GOAL){assert(off<FB_GOAL_HALF_WIDTH);++good;}

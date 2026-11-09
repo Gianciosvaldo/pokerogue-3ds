@@ -178,17 +178,7 @@ a touchdown or an interception), never the frame time. `tests/stadium_test.c` ch
 against night and the cheer, and `STADIUM_PPM=<dir> make stadium-test` writes four views as PPM pictures for looking at on the host. The
 reference's sky, light towers and skyline are not drawn: no camera position reaches them.
 
-**Goal posts** (lorenzo 2026-11-08, "the poles are missing from the football field"). They were there since the stadium rework, drawn on the
-end lines as a crossbar along the width of the field with an upright on each end. In this view (side and above, `FB_CAMERA_SQUASH`) height and
-width are both "up the screen", so that was one 3 px yellow line with gaps, at the very edge of the window and against the end wall: nobody
-could see it, and the ball it was meant for ends 4 yards in front of it. Now `goal_post` draws the picture everyone knows (a pole, a crossbar,
-two uprights, a Y, 26 px across and about 46 px tall) standing at the middle of the goal, and it stands where the kicks are aimed:
-`football_goal.h` holds `FB_GOAL_POST_INSET` (4 yd inside each end line, which is where `kick_goal` in `football_live_special.c` already
-sent every kick), `FB_GOAL_MIDDLE` and `FB_GOAL_HALF_WIDTH` (3.1 yd; a good kick ends within about 1.8 of the middle and a miss starts 4.2
-out), and both the engine and the stadium read them. The camera centre stops at 12 and 108, so the post at 4 or 116 is on screen whenever
-the ball is inside the 12 and during every kick toward it. `stadium_test` checks the pole, the crossbar and the two uprights at both ends and
-none at midfield; `special_test` checks that 300 kicks (a third of them the CPU's, aimed the other way) end at the posts' plane, the good ones
-between the uprights and the misses outside them on both sides.
+**Goal posts** (lorenzo 2026-11-08, "the poles are missing from the football field"; 2026-11-09, "way too small, facing the user and planted in the middle of the end zone", with a picture). The first fix drew a small yellow Y in the middle of the end zone; the picture asked for the post seen side-on, at the end line, and big. The field is seen from the side and above (`FB_CAMERA_SQUASH`), so `goal_post` in `football_stadium.c` draws a tall yellow mast (5 x 74 px, up the screen from the middle of the goal) with a cap for each upright (one at the tip, one a little below), a gooseneck bent out toward the end line and a padded blue base, the base standing outside the line like the real one. The post is mirrored for the away end. It stands where the kicks are aimed: `football_goal.h` holds `FB_GOAL_POST_INSET` (now 1 yd inside each end line, which is where `kick_goal` in `football_live_special.c` sends every kick, so the ball ends at the foot of the post, no longer 3 yd short of it), `FB_GOAL_MIDDLE` and `FB_GOAL_HALF_WIDTH` (3.1 yd; a good kick ends within about 1.8 of the middle and a miss starts 4.2 out). The camera centre stops at 12 and 108, so the post at 1 or 119 is on screen whenever the ball is inside the 12 and during every kick toward it. `stadium_test` checks the mast, the two caps, the gooseneck and the base at both ends (bent toward the end line) and none at midfield; `special_test` checks that 300 kicks (a third of them the CPU's, aimed the other way) end at the posts' plane, the good ones within `FB_GOAL_HALF_WIDTH` of the middle and the misses outside it on both sides.
 
 ## CPU play
 

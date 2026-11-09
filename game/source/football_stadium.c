@@ -138,24 +138,33 @@ static void ellipse(const FootballCamera *cam,float cx,float cy,float a,float b,
         world(cam,cx-half,y,half*2.f,2.f*b/(float)slices+.02f,z,shade(c,light_k));
     }
 }
-/* A goal post. The field is seen from the side and above (FB_CAMERA_SQUASH), where a real post is no help: the crossbar runs along the width
- * of the field and the uprights stand on its ends, so height and width are both "up the screen" and the whole thing is one vertical line
- * with gaps. So the post is drawn as the picture everyone knows, a pole with a crossbar and two uprights, standing on the ground at the
- * middle of the goal. It stands where the kicks are aimed (football_goal.h: FB_GOAL_POST_INSET yards inside each end line, the middle of
- * the field's width), so the ball flies at it and a kick that is good ends at its foot while a miss ends well to one side. */
-#define POST_STEM_H 16.f   /* pixels from the ground to the crossbar */
-#define POST_UP_H 30.f     /* and from the crossbar to the tip of an upright */
-#define POST_SPAN 26.f     /* the width between the uprights, in pixels */
+/* A goal post, drawn the way the field is seen (from the side and above, FB_CAMERA_SQUASH): "up" is up the screen, so the post is a tall
+ * yellow mast standing at the end line, side-on to the player. Its tip carries the uprights' caps (two balls, one for each upright, with the
+ * crossbar between them behind the mast), and at the foot a gooseneck bends out toward the end line to a padded blue base. The mast spans the
+ * goal on the screen, so a good kick (between the uprights) ends along it and a miss ends past one end of it; it stands where the kicks are aimed
+ * (football_goal.h: FB_GOAL_POST_INSET yards inside each end line, the middle of the field's width). */
+#define POST_MAST_W 5.f     /* the mast, in pixels */
+#define POST_MAST_UP 62.f   /* from the foot of the mast up to its tip */
+#define POST_MAST_DOWN 12.f /* and below the middle of the goal, where the gooseneck bends */
+#define POST_CAP 7.f        /* the cap of an upright */
+#define POST_PAD_W 10.f     /* the padded base: width... */
+#define POST_PAD_H 30.f     /* ...and height */
+#define POST_NECK 15.f      /* how far the gooseneck reaches out toward the end line */
 static void goal_post(const FootballCamera *cam,float x,float light_k)
 {
-    float gx=football_camera_x(cam,x),gy=football_camera_y(cam,FB_GOAL_MIDDLE);
-    if(gx<-40.f || gx>440.f || gy-POST_STEM_H-POST_UP_H>240.f || gy+4.f<44.f)return;
-    u32 yellow=shade((Rgb){255,210,63},light_k),pole=shade((Rgb){226,230,222},light_k);
-    rect(gx-7.f,gy-1.f,14.f,4.f,Z_POST-.001f,C2D_Color32(10,40,18,150));                       /* where it stands */
-    rect(gx-1.5f,gy-POST_STEM_H,3.f,POST_STEM_H+1.f,Z_POST,pole);                              /* the pole */
-    rect(gx-POST_SPAN*.5f,gy-POST_STEM_H-3.f,POST_SPAN,3.f,Z_POST+.001f,yellow);             /* the crossbar */
-    rect(gx-POST_SPAN*.5f,gy-POST_STEM_H-POST_UP_H,3.f,POST_UP_H,Z_POST+.001f,yellow);       /* the uprights */
-    rect(gx+POST_SPAN*.5f-3.f,gy-POST_STEM_H-POST_UP_H,3.f,POST_UP_H,Z_POST+.001f,yellow);
+    float gx=football_camera_x(cam,x),gy=football_camera_y(cam,FB_GOAL_MIDDLE),out=x<60.f?-1.f:1.f; /* out: toward the end line */
+    if(gx<-60.f || gx>460.f || gy-POST_MAST_UP-POST_CAP>240.f || gy+POST_MAST_DOWN+POST_PAD_H<44.f)return;
+    u32 yellow=shade((Rgb){255,210,63},light_k),cap=shade((Rgb){255,244,170},light_k),pad=shade((Rgb){40,78,176},light_k),padhi=shade((Rgb){86,128,226},light_k);
+    float top=gy-POST_MAST_UP,bottom=gy+POST_MAST_DOWN,nx=out<0?gx-POST_NECK:gx+POST_MAST_W,padx=out<0?gx-POST_NECK-1.f:gx+POST_NECK-POST_PAD_W+POST_MAST_W+1.f;
+    rect(padx+(out<0?3.f:-3.f),bottom+POST_PAD_H-5.f,POST_PAD_W,6.f,Z_POST-.001f,C2D_Color32(10,40,18,150));   /* its shadow on the grass */
+    rect(gx,top,POST_MAST_W,bottom-top,Z_POST,yellow);                                                         /* the mast */
+    rect(gx+POST_MAST_W-1.f,top,1.f,bottom-top,Z_POST+.001f,shade((Rgb){196,150,30},light_k));                /* its shaded edge */
+    rect(nx,bottom-POST_MAST_W,POST_NECK,POST_MAST_W,Z_POST+.001f,yellow);                                     /* the gooseneck, out... */
+    rect(out<0?nx:nx+POST_NECK-POST_MAST_W,bottom-POST_MAST_W,POST_MAST_W,POST_MAST_W+5.f,Z_POST+.001f,yellow);/* ...and down to the base */
+    rect(padx,bottom+3.f,POST_PAD_W,POST_PAD_H,Z_POST+.002f,pad);                                              /* the padded base */
+    rect(padx+1.f,bottom+4.f,3.f,POST_PAD_H-2.f,Z_POST+.003f,padhi);
+    rect(gx-1.f,top-1.f,POST_MAST_W+2.f,POST_CAP,Z_POST+.002f,cap);                                            /* the first upright's cap */
+    rect(gx-1.f,top+(bottom-top)*.38f,POST_MAST_W+2.f,POST_CAP-1.f,Z_POST+.002f,cap);                          /* the second */
 }
 void football_stadium_draw(const FootballCamera *cam,unsigned round,unsigned steps,bool cheering)
 {
