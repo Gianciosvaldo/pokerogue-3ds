@@ -166,6 +166,23 @@ static void append_page(char* out, size_t n, const char* page)
   snprintf(out + l, n - l, "%s%s", l ? "$" : "", page);
 }
 
+/* A Trainer's Test: onInit picks one of five stat trainers and words the intro, the accept and the decline lines from its own section ("buck.introDialogue").
+ * The core hands the pick over as the screen's trainerPick. */
+static const char* const TRTEST_KEY[5] = {"buck", "cheryl", "marley", "mira", "riley"};
+static int trtest_pick(void)
+{
+  const gc_screen* s = gc_run_screen(F.run);
+  for (int i = 0; i < s->n_me_args; i++)
+    if (s->me_args[i].name && !strcmp(s->me_args[i].name, "trainerPick") && s->me_args[i].v < 5) return (int)s->me_args[i].v;
+  return 0;
+}
+
+/* the key "<trainer>.<what>" of the picked trainer's line */
+static void trtest_sub(const char* what, char* out, size_t n)
+{
+  snprintf(out, n, "%s.%s", TRTEST_KEY[trtest_pick()], what);
+}
+
 void me_flow_intro(const gc_run* run, char* out, size_t n)
 {
   out[0] = 0;
@@ -176,6 +193,11 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
+  if (F.type == GC_ME_A_TRAINERS_TEST) {   /* onInit: the picked trainer's own introDialogue */
+    char sub[48];
+    trtest_sub("introDialogue", sub, sizeof sub);
+    if (fmt(sub, NULL, 0, false, t, sizeof t)) append_page(out, n, t);
+  }
 }
 
 /* ------------------------------------------------------------------ the intro sprites */
@@ -264,6 +286,33 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
     return n;
   }
   return 0;
+}
+
+/* A Trainer's Test's spriteConfigs (onInit): the stat trainer's signature Pokemon (x 22, y -2) and the trainer (x -24, y 4), both with their shadow */
+int me_flow_trtest_sprites(const gc_run* run, float cx, float floor_y, me_intro_sprite* out, int max)
+{
+  static const int DEX[5] = {344, 242, 59, 65, 448};   /* Claydol, Blissey, Arcanine, Alakazam, Lucario */
+  F.run = run;
+  const int pick = trtest_pick();
+  int n = 0;
+  if (n < max) {
+    me_intro_sprite* o = &out[n++];
+    memset(o, 0, sizeof *o);
+    snprintf(o->key, sizeof o->key, "images/pokemon/%d", DEX[pick]);
+    o->x = cx + 4.0f + 22.0f;
+    o->y = floor_y - 2.0f;
+    o->scale = 1.0f;
+  }
+  const char* key = gm_trainer_sprite_key(TRAINER_TYPE_BUCK + pick, 0, 0);
+  if (n < max && key && *key) {
+    me_intro_sprite* o = &out[n++];
+    memset(o, 0, sizeof *o);
+    snprintf(o->key, sizeof o->key, "images/trainer/%s", key);
+    o->x = cx + 4.0f - 24.0f;
+    o->y = floor_y + 4.0f;
+    o->scale = 1.0f;
+  }
+  return n;
 }
 
 /* ------------------------------------------------------------------ the picks */
@@ -370,6 +419,14 @@ static void finish(int option, int b, int c)
     field_correct = pr_moves[move].category == category[option];
   }
   char sub[48], page[ME_TEXT_LEN * 2];
+  if (F.type == GC_ME_A_TRAINERS_TEST) {   /* onInit replaces the options' selected dialogue with the picked trainer's accept / decline line */
+    trtest_sub(option == 0 ? "accept" : "decline", sub, sizeof sub);
+    if (fmt(sub, NULL, 0, false, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+    void (*tt_cb)(const me_choice*, void*) = F.on_choice;
+    void* tt_arg = F.arg;
+    if (tt_cb) tt_cb(&ch, tt_arg);
+    return;
+  }
   /* Berries Abound: the race the boss wins has a text of its own */
   bool lost = false;
   if (F.run) {
@@ -756,7 +813,8 @@ static void open_question(int cursor)
       const char* key = s->mc_trainer[i] >= 0 ? gm_trainer_sprite_key(s->mc_trainer[i], s->mc_variant[i], 0) : NULL;
       if (key && *key) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/%s", key);
     }
-  if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
+  if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites(F.run, 160, 164, a.intro, ME_MAX_INTRO);
+  else if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
   a.can_back = false;
   a.on_pick = on_option;
   if (!me_screen_open(&a)) finish(0, 0, 0);
