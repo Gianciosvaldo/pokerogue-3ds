@@ -1,6 +1,6 @@
 #!/bin/sh
-# Clowning Around options 2 and 3 (src/gc_clown.c) against the pinned upstream: the real encounter at waves 80..180 on six party layouts with random species, fusions, moves and
-# held items of every tier; onInit's ability and types, the item shuffle (Berries, Ultra and Rogue items made again from the pools) and the type shuffle, the run RNG around each step,
+# Clowning Around (src/gc_clown.c: the fight, the ability swap offer and its outro, the item shuffle, the type shuffle) against the pinned upstream: the real encounter at waves 80..180 on six party layouts with random species, fusions, moves and
+# held items of every tier; onInit's ability and types, the fight's trainer, party, moves, start effects and win, the swap offer, the item shuffle (Berries, Ultra and Rogue items made again from the pools) and the type shuffle, the run RNG around each step,
 # compared by tests/mystery_clown_diff_test.c.
 # usage: tools/clowndiff.sh <upstream checkout> [N=300] [seed=777]
 set -eu

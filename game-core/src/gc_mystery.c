@@ -131,6 +131,7 @@ static bool any_over_half_hp(const gc_run *r)
 bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
 {
     if (run->screen.me_stage == GC_ME_STAGE_TUTOR && type == GC_ME_BUG_TYPE_SUPERFAN) return option < 4 && idx >= 0 && idx < run->n_party;   /* the tutor: any Pokemon learns any of the four */
+    if (run->screen.me_stage == GC_ME_STAGE_ABILITY && type == GC_ME_CLOWNING_AROUND) return option == 0 && idx >= 0 && idx < run->n_party;   /* selectPokemonForOption without a filter: any Pokemon */
     if (idx < 0 || idx >= run->n_party) return false;
     const gc_mon *m = &run->party[idx];
     if (type == GC_ME_SHADY_VITAMIN_DEALER) {
@@ -1461,10 +1462,6 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_CLOWNING_AROUND:
-        if (option == 0) {
-            start_mystery_wild_battle(run, SPECIES_ID_BLACEPHALON, wave_level, true, 3, 1);
-            return true;
-        }
         gc_clown_execute(run, option);
         return true;
 

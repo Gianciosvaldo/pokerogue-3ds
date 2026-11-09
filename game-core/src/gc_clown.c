@@ -13,6 +13,14 @@
  * Option 3 (Return the Insults), onPreOptionPhase: every Pokemon of the party gets a new second type (the first slot is kept, null in customPokemonData.types):
  * a type of one of its attacking moves that it does not have yet when it has one (Set, sorted as strings - 0, 1, 10, 11 ... 17, 2, 3 ... 9 - and shuffled), else a random
  * regular type it does not have. A fused Pokemon's fusion half gets the same types. The option then leaves with the heal shop.
+ *
+ * Option 1 (Battle the Clown): setEncounterRewards({fillRemaining: true}), the three start-of-battle effects (Mr. Mime's Role Play on Blacephalon, then Taunt on both of the
+ * player's Pokemon), then `await transitionMysteryEncounterIntroVisuals()`: everything after it runs on the RUN's RNG. initBattleWithEnemyConfig with the Harlequin trainer
+ * (a double-only clone with a STRONG, STRONGER party): the female roll (drawn although a double trainer never uses it), the Trainer's name (randSeedItem of the class's names), the
+ * levels, and the two configured members, addEnemyPokemon(species, level, TRAINER, boss): Mr. Mime and Blacephalon (the rolled ability and types in customPokemonData), their
+ * constructor movesets (generated, then replaced by the config's), two boss bars each, the wild pool's items. The win is handleMysteryEncounterVictory for a trainer battle:
+ * BattleEndPhase, TrainerVictoryPhase, then the rewards: the shop that fills itself. After the shop, onPostOptionPhase offers to teach one Pokemon the rolled ability for good
+ * (a Yes/No, then a party pick that can be backed out of); the outro of all three options follows.
  */
 #include "internal.h"
 #include <stdio.h>
@@ -218,10 +226,176 @@ static void shuffle_types(gc_run *run)
     gc_ev_msg(run, "mysteryEncounters/clowningAround:option.3.selected3", 0);
 }
 
-/* options 2 and 3 (the fight, option 1, is gc_mystery.c's stand-in until it is ported) */
+static void set_moves(gc_mon *m, const int *mv)
+{
+    memset(m->b.moves, 0, sizeof m->b.moves);
+    memset(m->b.pp_used, 0, sizeof m->b.pp_used);
+    memset(m->b.pp_up, 0, sizeof m->b.pp_up);
+    m->b.n_moves = 0;
+    for (int k = 0; k < 4; k++) { m->b.max_pp_override[k] = -1; gc_mon_set_move(m, k, mv[k]); }
+}
+
+/* option 1: initBattleWithEnemyConfig (false: a species or a trainer run-core cannot make) */
+static bool build_fight(gc_run *run, int ability, int first, int second)
+{
+    gc_internal *in = gc_int(run);
+    const int t = TRAINER_TYPE_HARLEQUIN;
+    const pr_trainer_info *info = gc_trainer_info_of(t);
+    if (!info) return false;
+    (void)pr_rng_seed_int(&run->run.rng, 2, 0);   /* partyConfig.female == null: !!randSeedInt(2), although a double-only trainer is never female */
+    run->me_battle = true;   /* the encounter's battle: its bosses are made as bosses by the constructor */
+    run->trainer_type = t;   /* the trainer exists before its Pokemon do (the moveset reads its class) */
+    run->battle_type = BATTLE_TYPE_TRAINER;
+    run->double_battle = true;   /* trainerConfig.doubleOnly */
+    run->trainer_variant = TRAINER_VARIANT_DOUBLE;
+    /* new Trainer(..): getRandomLocaleEntry("trainersCommon:harlequin"); a double-only trainer splits "A & B" for its partner, and these names have no " & " */
+    run->trainer_name = run->trainer_partner_name = -1;
+    in->custom_trainer_name[0] = 0;
+    in->custom_team_on = false;
+    if (info->names > 0) run->trainer_name = info->names > 1 ? pr_rng_seed_int(&run->run.rng, info->names, 0) : 0;
+
+    /* getPartyLevels: TrainerPartyCompoundTemplate(TrainerPartyTemplate(1, STRONG), TrainerPartyTemplate(1, STRONGER)); levelAdditiveModifier is unset: no additive */
+    static const uint8_t strengths[2] = {4, 5};   /* STRONG, STRONGER */
+    int levels[PR_MAX_PARTY_TEMPLATE];
+    if (pr_run_get_party_levels(&run->run, run->wave, 2, strengths, 4, true, levels) != 2) return false;
+
+    static gc_mon made[2];
+    pr_rng r = run->run.rng;
+    for (int e = 0; e < 2; e++) {
+        const int species = e ? SPECIES_ID_BLACEPHALON : SPECIES_ID_MR_MIME;
+        if (!gc_me_new_enemy_slot(run, &r, species, levels[e], true, true, TRAINER_SLOT_TRAINER, &made[e])) return false;
+        for (int k = 0; k < 4; k++) in->ctor_moves[e][k] = k < made[e].b.n_moves ? made[e].b.moves[k] : 0;
+    }
+    run->run.rng = r;
+
+    /* the configs, after each Pokemon is made: full HP, no status, no passive, the boss bars, the custom data, the moves */
+    static const int mime[4] = {MOVE_ID_TEETER_DANCE, MOVE_ID_ALLY_SWITCH, MOVE_ID_DAZZLING_GLEAM, MOVE_ID_PSYCHIC};
+    static const int blacephalon[4] = {MOVE_ID_TRICK, MOVE_ID_HYPNOSIS, MOVE_ID_SHADOW_BALL, MOVE_ID_MIND_BLOWN};
+    for (int e = 0; e < 2; e++) {
+        gc_mon *m = &made[e];
+        m->b.hp = m->b.stats[STAT_HP];
+        m->b.status = STATUS_EFFECT_NONE;
+        m->b.passive_flag = false;
+        if (e) {
+            m->b.custom_ability = (int16_t)ability;
+            m->b.ability = m->b.base_ability = (uint16_t)ability;
+            m->b.custom_types[0] = (uint8_t)(first + 1);
+            m->b.custom_types[1] = (uint8_t)(second + 1);
+        }
+        set_moves(m, e ? blacephalon : mime);
+    }
+    run->n_enemy = 2;
+    run->enemy[0] = made[0];
+    run->enemy[1] = made[1];
+    return true;
+}
+
+static void fight(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    int ability, first, second;
+    gc_clown_roll(run, &ability, &first, &second);
+    in->me_post.pending = true;   /* the outro and the ability swap, after the shop */
+    in->me_post.a = GC_ME_CLOWNING_AROUND;
+    in->me_post.b = 0;
+    in->me_post.c = ability;
+    /* setEncounterRewards({fillRemaining: true}) and the start-of-battle effects come before the await */
+    gc_me_add_start_effect(run, 2, 3, MOVE_ID_ROLE_PLAY);   /* ENEMY -> ENEMY_2 */
+    gc_me_add_start_effect(run, 3, 0, MOVE_ID_TAUNT);       /* ENEMY_2 -> PLAYER */
+    gc_me_add_start_effect(run, 3, 1, MOVE_ID_TAUNT);       /* ENEMY_2 -> PLAYER_2 */
+    if (!build_fight(run, ability, first, second)) {   /* nobody fights: the encounter ends as a refusal would */
+        gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        run->me_battle = false;
+        run->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
+        run->double_battle = false;
+        run->n_enemy = 0;
+        run->trainer_type = run->trainer_variant = -1;
+        in->n_me_start = 0;
+        gc_me_leave_with_heal_shop(run);
+        return;
+    }
+    run->me_battle = true;
+    gc_enemy_finish_party_me(run);   /* no modifierConfigs: the ordinary item rolls (the wild pool: the encounter's battle keeps BattleType.MYSTERY_ENCOUNTER) */
+    run->me_catch_allowed = false;
+    in->me_reward.active = false;
+    in->me_no_stats = false;
+    run->mystery_type = run->mystery_tier = -1;
+    run->in_battle = true;
+    in->clown.active = true;
+    gc_me_say_trainer_fight(run, in);
+}
+
+/* handleMysteryEncounterVictory (trainer battle): BattleEndPhase, TrainerVictoryPhase, then setEncounterRewards({fillRemaining: true})'s shop */
+void gc_clown_victory(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    in->clown.active = false;
+    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
+    gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
+    pr_reward_custom *c = &in->reward.me_custom;
+    memset(c, 0, sizeof *c);
+    c->fill_remaining = true;
+    c->reroll_multiplier = NAN;
+    c->allow_luck_upgrades = true;
+    gc_me_end_with_shop(run);
+}
+
+/* options 2 and 3 leave with the heal shop; option 1 is the fight */
 void gc_clown_execute(gc_run *run, int option)
 {
+    gc_internal *in = gc_int(run);
+    if (option == 0) { fight(run); return; }
+    in->me_post.pending = true;   /* the outro */
+    in->me_post.a = GC_ME_CLOWNING_AROUND;
+    in->me_post.b = option;
+    in->me_post.c = 0;
     if (option == 1) shuffle_items(run);
     else shuffle_types(run);
     gc_me_leave_with_heal_shop(run);   /* leaveEncounterWithoutBattle(true) */
+}
+
+/* PostMysteryEncounterPhase: option 1's onPostOptionPhase first offers the ability (handleSwapAbility); true when it is waiting for the answer */
+bool gc_clown_post_start(gc_run *run, const gc_rphase *p)
+{
+    if (p->b != 0) { gc_clown_outro(run); return true; }
+    gc_ev_msg(run, "mysteryEncounters/clowningAround:option.1.applyAbilityDialogue", 0);
+    gc_ev_msg(run, "mysteryEncounters/clowningAround:option.1.applyAbilityMessage", 1, pr_arg_ability("ability", p->c));
+    gc_ev_msg(run, "mysteryEncounters/clowningAround:option.1.abilityPrompt", 1, pr_arg_ability("ability", p->c));
+    gc_screen *s = &run->screen;
+    memset(s, 0, sizeof *s);
+    s->kind = GC_SCREEN_MYSTERY;
+    s->mystery_type = GC_ME_CLOWNING_AROUND;
+    s->mystery_tier = 0;
+    s->me_stage = GC_ME_STAGE_ABILITY;
+    s->n_options = 2;
+    s->option_ok[0] = s->option_ok[1] = true;
+    s->option_pick[0] = GC_PICK_MEMBER;   /* Yes: the party screen (any Pokemon, fainted or not; backing out asks again) */
+    s->me_args[s->n_me_args++] = pr_arg_ability("ability", p->c);
+    s->me_args[s->n_me_args++] = pr_arg_key("blacephalonName", "pokemon:blacephalon");
+    return false;
+}
+
+/* a = 0 (Yes) with b = the party member, or 1 (No) */
+bool gc_clown_post_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, const char **why, bool *ok)
+{
+    if (c->kind != GC_CH_MYSTERY) { *why = "choose yes or no"; return false; }
+    if (c->a != 0 && c->a != 1) { *why = "no such option"; return false; }
+    if (c->a == 0 && (c->b < 0 || c->b >= run->n_party)) { *why = "no such Pokemon"; return false; }
+    *ok = true;
+    memset(&run->screen, 0, sizeof run->screen);
+    if (c->a == 0) {
+        /* applyAbilityOverrideToPokemon: a fusion's ability is its fusion data's */
+        gc_mon *m = &run->party[c->b];
+        if (m->b.fusion_species > 0) m->b.fusion_custom_ability = (int16_t)p->c;
+        else m->b.custom_ability = (int16_t)p->c;
+        pr_refresh_ability(&m->b);
+        gc_ev_msg(run, "mysteryEncounters/clowningAround:option.1.abilityGained", 2, pr_arg_pokemon_name(&run->bt, "chosenPokemon", &m->b), pr_arg_ability("ability", p->c));
+    }
+    gc_clown_outro(run);
+    return true;
+}
+
+void gc_clown_outro(gc_run *run)
+{
+    gc_ev_msg(run, "mysteryEncounters/clowningAround:outro", 0);
 }
