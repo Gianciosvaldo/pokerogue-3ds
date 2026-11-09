@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "battle_anim.h"
+#include "fused_name.h"
 #include "i18n.h"
 #include "pak.h"
 #include "pr/events.h"
@@ -88,7 +89,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   m->shiny = p->shiny;
   m->variant = p->variant;
   m->sprite_scale = (float)pr_get_sprite_scale(p);
-  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(form->species));
+  /* a fusion is named as both halves (upstream getNameToRender); a disguise shows the disguise's halves */
+  fused_mon_name(m->name, sizeof m->name, form->species, look ? p->illusion.fusion_species : p->fusion_species);
   m->level = p->level;
   m->hp = p->hp;
   m->max_hp = p->stats[STAT_HP];
