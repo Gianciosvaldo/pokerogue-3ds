@@ -377,6 +377,23 @@ static bool settled_after(int i) {
   return true;
 }
 
+/* be_mon asks which variant a fused Pokemon's other half is: the run keeps it beside the Pokemon (gc_mon), not in battle-core's */
+static bool fusion_shine_of(uint32_t id, bool* shiny, int* variant) {
+  for (int i = 0; i < G.run.n_party; i++)
+    if (G.run.party[i].b.id == id) {
+      *shiny = G.run.party[i].fusion_shiny;
+      *variant = G.run.party[i].fusion_variant;
+      return true;
+    }
+  for (int i = 0; i < G.run.n_enemy; i++)
+    if (G.run.enemy[i].b.id == id) {
+      *shiny = G.run.enemy[i].fusion_shiny;
+      *variant = G.run.enemy[i].fusion_variant;
+      return true;
+    }
+  return false;
+}
+
 static bv_mon make_mon(const gc_mon* m, bool player) {
   bv_mon out;
   be_mon(&G.run.bt, &m->b, &out);
@@ -1905,12 +1922,14 @@ static bool new_run(bool from_black) {
 }
 
 bool rs_start(const rs_config* cfg) {
+  be_set_fusion_shine(fusion_shine_of);
   memset(&G.st, 0, sizeof G.st);
   G.cfg = *cfg;
   return new_run(false);
 }
 
 rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
+  be_set_fusion_shine(fusion_shine_of);
   G.cfg = *cfg; /* the stats go on counting: a resume is not a new session */
   reset_driver();
   G.have_defeat = false;

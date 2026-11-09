@@ -29,6 +29,8 @@ void be_format_message(const pr_msg *msg,char *out,size_t size);
 
 /* A battle-core Pokemon as the screen shows it. */
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* out);
+/* The run keeps whether a fusion half is shiny (and which variant) outside pr_pokemon: the app gives be_mon a way to ask by Pokemon id */
+void be_set_fusion_shine(bool (*lookup)(uint32_t pokemon_id, bool* shiny, int* variant));
 
 /* What the screen shows of both sides before some events: the Pokemon as bv_mon_of gives them, and
  * whether each is on the field. be_convert_events leaves the presence as the events made it. */
