@@ -79,20 +79,30 @@ unsigned football_career_flush_candy(FootballCareer *c)
     }
     return given;
 }
+int football_career_round_voucher(unsigned round)
+{
+    const FootballOpponent *o=football_opponent(round);
+    return !o?-1:o->role==FB_OPPONENT_GYM_LEADER?GC_VOUCHER_REGULAR:o->role==FB_OPPONENT_ELITE_FOUR?GC_VOUCHER_PLUS:GC_VOUCHER_PREMIUM;
+}
+const char *football_voucher_name(int voucher){return voucher==GC_VOUCHER_REGULAR?"Egg Voucher":voucher==GC_VOUCHER_PLUS?"Egg Voucher Plus":voucher==GC_VOUCHER_PREMIUM?"Egg Voucher Premium":"";}
 /* The vouchers of the match just won. A career with no profile earns nothing. */
 static void earn_vouchers(FootballCareer *c)
 {
     if(!c->profile)return;
-    c->vouchers_regular+=FB_VOUCHER_REGULAR_PER_WIN;
-    if(c->wins==FB_PLAYOFF_ROUNDS)c->vouchers_premium+=FB_VOUCHER_PREMIUM_FOR_TITLE;
+    switch(football_career_round_voucher(c->round)){
+    case GC_VOUCHER_REGULAR:c->vouchers_regular+=FB_VOUCHER_PER_WIN;break;
+    case GC_VOUCHER_PLUS:c->vouchers_plus+=FB_VOUCHER_PER_WIN;break;
+    case GC_VOUCHER_PREMIUM:c->vouchers_premium+=FB_VOUCHER_PER_WIN;break;
+    default:break;
+    }
 }
-/* The match just won, for the football achievements: a title is the seventh round's win. */
+/* The match just won, for the football achievements: a title is the last round's win (the Champion's). */
 static void earn_achievements(FootballCareer *c)
 {
     if(!c->profile)return;
     const unsigned home=c->live.rules.score[FB_HOME],away=c->live.rules.score[FB_AWAY];
     ++c->achv_wins;
-    if(c->wins==FB_PLAYOFF_ROUNDS)++c->achv_titles;
+    if(c->wins==FB_CAREER_ROUNDS)++c->achv_titles;
     if(away==0)++c->achv_shutouts;
     if(home>=away+GC_FB_BLOWOUT_MARGIN)++c->achv_blowouts;
 }
@@ -109,11 +119,12 @@ unsigned football_career_flush_achievements(FootballCareer *c)
 unsigned football_career_flush_vouchers(FootballCareer *c)
 {
     if(!c || !c->profile)return 0;
-    const unsigned regular=c->vouchers_regular,premium=c->vouchers_premium;
-    c->vouchers_regular=c->vouchers_premium=0;
+    const unsigned regular=c->vouchers_regular,plus=c->vouchers_plus,premium=c->vouchers_premium;
+    c->vouchers_regular=c->vouchers_plus=c->vouchers_premium=0;
     gc_system_add_voucher_count(c->profile,GC_VOUCHER_REGULAR,(int)regular);
+    gc_system_add_voucher_count(c->profile,GC_VOUCHER_PLUS,(int)plus);
     gc_system_add_voucher_count(c->profile,GC_VOUCHER_PREMIUM,(int)premium);
-    return regular+premium;
+    return regular+plus+premium;
 }
 /* The dead ball has just made its credits: the player behind each of the human team's plays is paid at once. */
 static void pay_credits(FootballCareer *c)
@@ -270,7 +281,7 @@ bool football_career_continue(FootballCareer *c)
         ++c->wins;earn_vouchers(c);earn_achievements(c);c->wallet+=FB_CAREER_WIN_PAY(c->round);c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }
-    if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==FB_PLAYOFF_ROUNDS)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
+    if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==FB_CAREER_ROUNDS)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
     return false;
 }
 bool football_career_evolve(FootballCareer *c,int pick)

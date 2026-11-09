@@ -102,7 +102,8 @@ int main(void)
             assert(m.event!=FB_EVENT_FUMBLE || fresh(FB_FX_FUMBLE)==1);
             assert(fresh(FB_FX_SACK)+fresh(FB_FX_TACKLE)<=1); /* one tackle at most ends a play */
             /* Every incomplete pass drops the ball with a moment at the spot it came down, for the receiver it was meant for. */
-            assert(fresh(FB_FX_INCOMPLETE)==(m.result.kind==FB_RESULT_INCOMPLETE && m.event==FB_EVENT_NONE?1u:0u));
+            /* (a dropped pass on a try for two is an incomplete pass too: the play ends with the failed-conversion event, and the ball still drops) */
+            assert(fresh(FB_FX_INCOMPLETE)==(m.result.kind==FB_RESULT_INCOMPLETE && (m.event==FB_EVENT_NONE || m.event==FB_EVENT_TWO_POINT_FAILED)?1u:0u));
             {const FootballFx *d=newest(FB_FX_INCOMPLETE);
              if(fresh(FB_FX_INCOMPLETE)){assert(d && d->actor<22 && fabsf(d->x-m.ball_x)<.01f && fabsf(d->y-m.ball_y)<.01f && d->step==m.steps);++drops;}}
             tackles+=fresh(FB_FX_TACKLE);touchdowns+=td;sacks+=sack;interceptions+=intc;fumbles+=fresh(FB_FX_FUMBLE);

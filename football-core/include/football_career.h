@@ -8,11 +8,14 @@ typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,
 #define FB_SHOP_EVO_MAX 8
 #define FB_SHOP_FIXED 4
 #define FB_SHOP_STONES 2 /* mega stones on offer each round: offers 2 and 3 */
-/* The playoff is seven rounds. Every match won pays one Regular Egg Voucher into the profile, and winning the seventh (the title) pays one
- * Premium Egg Voucher on top. They are due the moment the win is counted and reach the profile with the next checkpoint, like the candy. */
-#define FB_PLAYOFF_ROUNDS 7
-#define FB_VOUCHER_REGULAR_PER_WIN 1u
-#define FB_VOUCHER_PREMIUM_FOR_TITLE 1u
+/* The playoff is FB_CAREER_ROUNDS (13) matches, one against each Kanto Gym Leader, Elite Four member and the Champion (football_opponent.h).
+ * Beating a trainer pays one Egg Voucher into the profile, of the kind that trainer's rank pays (lorenzo 2026-11-09): a Regular one for each
+ * Gym Leader, a Plus one for each Elite Four member and a Premium one for the Champion. It is due the moment the win is counted and reaches
+ * the profile with the next checkpoint, like the candy. */
+#define FB_VOUCHER_PER_WIN 1u
+/* The kind of voucher the round's win pays: GC_VOUCHER_REGULAR, GC_VOUCHER_PLUS or GC_VOUCHER_PREMIUM (-1 outside the playoff), and its name. */
+int football_career_round_voucher(unsigned round);
+const char *football_voucher_name(int voucher);
 /* Cash for a won round, and the price of a Carbos or Protein in the shop after it. */
 #define FB_CAREER_WIN_PAY(round) (500u+125u*(round))
 #define FB_CAREER_VITAMIN_PRICE(round) (80u+15u*(round))
@@ -34,7 +37,7 @@ typedef struct {
     unsigned candy_plays,candy_team,seen_snaps,candy_pending[22],candy_plays_milli,candy_team_milli;
     /* Egg vouchers due for the profile (not serialized): a win adds them, football_career_flush_vouchers moves them over. A resumed career
      * starts at zero, because the checkpoint it resumes from is older than the win that earned them or newer than their payment. */
-    unsigned vouchers_regular,vouchers_premium;
+    unsigned vouchers_regular,vouchers_plus,vouchers_premium;
     /* Football achievements due for the profile (not serialized, like the vouchers): the matches won, titles, shutouts and blowouts that
      * football_career_flush_achievements counts into the profile and evaluates. achv_new keeps what that unlocked, for the screen to tell
      * (achv_told is how many of them it has told). */

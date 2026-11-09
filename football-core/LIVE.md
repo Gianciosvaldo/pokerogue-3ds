@@ -133,8 +133,8 @@ catches/interceptions. Passing beyond the line of scrimmage is disabled. Contact
 sidelines, scoring and a 25-second play bound end downs under the shared rules.
 CPU offense chooses independently of the selected Man/Zone/Blitz scheme (see "CPU play" below).
 The clock display advances during live play; the shared rules commit its elapsed
-time and runoff once at the dead ball. The seven-round playoff, shop and EXP loop
-remains. This is arcade football: punts, field goals, kickoffs, the try after a touchdown and both kinds of return exist (see "Special teams" and "Touchdowns, tries and kickoffs"), but no opening kickoff, onside kicks, penalties
+time and runoff once at the dead ball. The thirteen-round playoff, shop and EXP loop
+remains (see "The thirteen opponents"). This is arcade football: punts, field goals, kickoffs, the try after a touchdown and both kinds of return exist (see "Special teams" and "Touchdowns, tries and kickoffs"), but no opening kickoff, onside kicks, penalties
 or interception return phase are added here. A fumble uses a nearest-actor recovery
 contest at its contact spot, without a bouncing-ball phase.
 
@@ -395,23 +395,41 @@ written to `football_live.sav`, and that checkpoint loaded straight back onto th
   for abandoning a run on purpose. `live_screen_test` covers every way out of the end screen, a failed end write, a stale end
   checkpoint and a resumed unfinished one.
 
+## The thirteen opponents
+
+lorenzo 2026-11-09: the playoff is 8 + 4 + 1 = 13 matches (his "12 games" was a miscount; the coordinator told him it would be 13), one against each trainer of
+the Kanto line-up in the classic game's order (`football_opponent.h`, the table in `football_live.c`): Brock (Rock), Misty (Water), Lt. Surge
+(Electric), Erika (Grass), Janine (Poison), Sabrina (Psychic), Blaine (Fire), Giovanni (Ground), then Lorelei (Ice), Bruno (Fighting), Agatha
+(Ghost), Lance (Dragon), and the Champion Blue. The type of each is the classic game's own specialty type (`pr_trainer_specialty`, checked by
+`opponent_test`). `football_live_begin` lists the Pokedex forms that fit the round's opponent (`football_opponent_form_fits`: a form of the
+type, or for the Champion, who has no type, a form with a base stat total of `FB_CHAMPION_MIN_BST` = 580 or more, about one form in six: a
+stacked team) and each of the 22 opposing players takes one by a single random draw, as before. Every round still scales the opposing
+attributes by 1 + 0.0625 per round after the first (round 13: x1.75, capped at 99), so team strength climbs from about 37 per attribute
+(Brock) through 56 (round 7) to 83 (Blue). Those two numbers are the tuning knobs (`FB_CHAMPION_MIN_BST` and the 0.0625 in
+`football_live_begin`). Before each match the top screen shows an opponent card (`opponent_card` in `football_live_screen.c`): the trainer's
+portrait from the pack (`images/trainer/...`; nothing is drawn when the pack lacks it), the role, the name, the type of their team and the
+round. Levels cap at 100 by round 10 (`GC_FOOTBALL_LEVELS_PER_WIN` is still 10 a win) and `gc_football_award_*` accept rounds up to 13. A
+saved playoff keeps its round and wins, so one saved before this change resumes where it was and plays on to round 13; the older six-player
+season is still seven matches.
+
 ## Egg vouchers
 
-lorenzo 2026-11-08: every match won pays an egg voucher, and winning the seventh match (the title) pays a Premium one. The Regular
-voucher (`GC_VOUCHER_REGULAR`, "Egg Voucher") is the per-win one and `GC_VOUCHER_PREMIUM` ("Egg Voucher Premium") the title one, my
-reading of "a voucher for every game and a premium after winning 7": a title run is 7 Regular and 1 Premium, a run knocked out
-after three wins is 3 Regular. `FB_VOUCHER_REGULAR_PER_WIN` and `FB_VOUCHER_PREMIUM_FOR_TITLE` (both 1) are the knobs.
+lorenzo 2026-11-09 (it was one Regular per win and a Premium at the seventh while the playoff was seven matches long): the playoff is thirteen
+matches, and beating a Gym Leader (rounds 1-8) pays one Regular voucher (`GC_VOUCHER_REGULAR`, "Egg Voucher"), an Elite Four member (9-12) one
+Plus voucher (`GC_VOUCHER_PLUS`, "Egg Voucher Plus") and the Champion (13) one Premium voucher (`GC_VOUCHER_PREMIUM`): a title run is 8 Regular,
+4 Plus and 1 Premium, a run knocked out after three wins is 3 Regular. `football_career_round_voucher` maps a round to its kind and
+`FB_VOUCHER_PER_WIN` (1) is the knob.
 
-- A win is counted in `football_career_continue` (`++wins`), which adds the vouchers to `vouchers_regular` and
-  `vouchers_premium` (due, not serialized). `football_career_flush_vouchers` moves them to the profile (`voucher_counts`, the
+- A win is counted in `football_career_continue` (`++wins`), which adds the voucher to `vouchers_regular`,
+  `vouchers_plus` or `vouchers_premium` (due, not serialized). `football_career_flush_vouchers` moves them to the profile (`voucher_counts`, the
   counters the Capsule machine spends) and the screen calls it right after it writes a checkpoint, next to
   `football_career_flush_candy` and before it saves the profile. The shop checkpoint after a win is the first one that records
   it, so a voucher is never in the profile for a win no checkpoint knows about: quit between the win and the shop and the
   match is replayed and paid once. A career with no profile earns nothing; a loss pays nothing.
-- The result screen of a win says `+1 Egg Voucher` (and `+1 Egg Voucher Premium for the title` after the seventh); the end
+- The result screen of a win says which one it pays (`+1 Egg Voucher`, `+1 Egg Voucher Plus` or `+1 Egg Voucher Premium`); the end
   screen of a champion says the Premium voucher was earned. A career that was already running when this arrived is not paid back
   for its earlier wins.
-`tests/voucher_test.c` covers a title run, a run knocked out in round 4, checkpoint and resume (once per win), and a career
+`tests/voucher_test.c` covers a title run (8 Regular, 4 Plus, 1 Premium), a run knocked out in round 4, checkpoint and resume (once per win), and a career
 with no profile; `live_screen_test` checks the texts and that a failed checkpoint write leaves the vouchers due.
 
 ## Motion

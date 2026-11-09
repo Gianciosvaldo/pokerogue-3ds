@@ -43,21 +43,21 @@ int main(void)
     assert(career.achv_new.n==3 && career.achv_new.id[1]==99 && career.achv_new.id[2]==98);
     assert(profile.achv.fb_wins==4 && profile.achv.fb_shutouts==1 && profile.achv.fb_blowouts==1);
     assert(football_career_continue(&career));
-    for(unsigned r=5;r<=FB_PLAYOFF_ROUNDS;++r){
+    for(unsigned r=5;r<=FB_CAREER_ROUNDS;++r){
         assert(career.round==r);
         win(10,7);
-        assert(career.achv_titles==(r==FB_PLAYOFF_ROUNDS?1u:0u));
+        assert(career.achv_titles==(r==FB_CAREER_ROUNDS?1u:0u));
         football_career_flush_achievements(&career);
-        assert(gc_achv_unlocked(&profile,95)==(r==FB_PLAYOFF_ROUNDS));
+        assert(gc_achv_unlocked(&profile,95)==(r==FB_CAREER_ROUNDS));
         assert(football_career_continue(&career));
     }
-    assert(profile.achv.fb_wins==7 && profile.achv.fb_titles==1 && !gc_achv_unlocked(&profile,96));
+    assert(profile.achv.fb_wins==FB_CAREER_ROUNDS && profile.achv.fb_titles==1 && !gc_achv_unlocked(&profile,96));
 
     /* ---- a loss counts nothing ---- */
     fb_career_of(&career,&scratch,&profile,4);
     career.live.rules.score[FB_HOME]=3;career.live.rules.score[FB_AWAY]=30;career.live.rules.winner=FB_AWAY;career.phase=FB_CAREER_RESULT;
     assert(football_career_continue(&career) && career.achv_wins==0 && career.achv_shutouts==0 && career.achv_blowouts==0);
-    assert(football_career_flush_achievements(&career)==0 && profile.achv.fb_wins==7);
+    assert(football_career_flush_achievements(&career)==0 && profile.achv.fb_wins==FB_CAREER_ROUNDS);
 
     /* ---- the counts: 10, 50, 200 wins; 3 and 10 titles; the thresholds are exactly these ---- */
     memset(&profile.achv,0,sizeof profile.achv);memset(profile.achievement_flags,0,sizeof profile.achievement_flags);

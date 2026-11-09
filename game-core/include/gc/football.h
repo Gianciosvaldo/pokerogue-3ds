@@ -13,8 +13,9 @@
 #define GC_FOOTBALL_FRIENDSHIP_PER_WIN 15
 #endif
 
-/* Levels every member gains for a won round in the live career (gc_football_award_levels): seven rounds take a member from 5 to 75,
- * past the highest level evolution (Zweilous to Hydreigon at 64) whatever its growth rate. */
+/* Levels every member gains for a won round in the live career (gc_football_award_levels): a member goes from 5 to 75 in seven rounds,
+ * past the highest level evolution (Zweilous to Hydreigon at 64) whatever its growth rate, and the thirteen rounds of the playoff reach 100
+ * in the tenth (the level is capped there). */
 #ifndef GC_FOOTBALL_LEVELS_PER_WIN
 #define GC_FOOTBALL_LEVELS_PER_WIN 10
 #endif

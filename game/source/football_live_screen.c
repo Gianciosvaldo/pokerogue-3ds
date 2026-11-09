@@ -8,6 +8,7 @@
 #include "mui.h"
 #include "gc/data.h"
 #include "save.h"
+#include "trainer_art.h"
 #include "ui.h"
 #include "ui_widgets.h"
 #include <3ds.h>
@@ -542,7 +543,7 @@ static void bottom_menu(void)
         football_menu_head(L.editing?"Pick a member for this slot":"Lineup",L.editing?"Left/Right: swap":"A: edit    B: ready");list_menu(22);
         buttons(L.editing?"Previous":"Auto-assign",L.editing?"Next":"Ready",true);break;
     case FB_CAREER_READY:
-        snprintf(right,sizeof right,"Round %u / 7",c->round);football_menu_head("Playoffs",right);
+        snprintf(right,sizeof right,"Round %u / %u",c->round,FB_CAREER_ROUNDS);football_menu_head("Playoffs",right);
         football_menu_panel(4,32,312,92);
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,41,288,"11 offense + 11 defense");
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,63,288,"Circle Pad: move     A: snap / tackle");
@@ -566,8 +567,7 @@ static void bottom_menu(void)
         { const unsigned team=football_career_team_candy_milli(c,won);snprintf(left,sizeof left,"+%u.%02u more for the team",team/1000,team%1000/10);football_menu_text(TS_WINDOW,FM_PX_BODY,16,110,288,left); }
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,129,288,"Each candy bar is longer for rarer Pokemon.");
         if(won){ /* the vouchers this win pays (they reach the profile with the next checkpoint) */
-            snprintf(left,sizeof left,"+%u Egg Voucher",FB_VOUCHER_REGULAR_PER_WIN);football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,147,288,left);
-            if(c->round==FB_PLAYOFF_ROUNDS){snprintf(left,sizeof left,"+%u Egg Voucher Premium for the title",FB_VOUCHER_PREMIUM_FOR_TITLE);football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,165,288,left);}
+            snprintf(left,sizeof left,"+%u %s",FB_VOUCHER_PER_WIN,football_voucher_name(football_career_round_voucher(c->round)));football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,147,288,left);
         }
         football_menu_foot("A or tap: team progression");break;}
     case FB_CAREER_EXP:
@@ -590,10 +590,11 @@ static void bottom_menu(void)
         else {snprintf(left,sizeof left,"Target %u: %.16s    Left/Right: change    A: buy",L.member+1,name(c->roster.mon[L.member].b.species));football_menu_foot(left);}
         break;
     case FB_CAREER_END:
-        snprintf(left,sizeof left,"Playoff complete: %u / 7 wins",c->wins);football_menu_head(left,NULL);
-        football_menu_panel(4,32,312,c->wins==FB_PLAYOFF_ROUNDS?112:76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
+        snprintf(left,sizeof left,"Playoff complete: %u / %u wins",c->wins,FB_CAREER_ROUNDS);football_menu_head(left,NULL);
+        football_menu_panel(4,32,312,c->wins==FB_CAREER_ROUNDS?112:76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
         { const unsigned total=c->candy_plays_milli+c->candy_team_milli;snprintf(left,sizeof left,"+%u.%02u",total/1000,total%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left); }
-        if(c->wins==FB_PLAYOFF_ROUNDS){football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,90,288,"Playoff champion");football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,110,288,"Egg Voucher Premium earned");}
+        if(c->wins==FB_CAREER_ROUNDS)football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,90,288,"Playoff champion");
+        if(c->wins==FB_CAREER_ROUNDS)football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,110,288,"Egg Voucher Premium earned");
         football_menu_foot("A or tap: return to title");break;
     case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:
@@ -601,6 +602,31 @@ static void bottom_menu(void)
     }
     achv_toast(false);
     if(L.save_failed)save_failed_notice();
+}
+/* The card that introduces the round's opponent before the match (football_opponent.h): the trainer's portrait when the pack has it, the role
+ * and the name, the type of the team they bring, and how far along the playoff is. The Champion's team has no type, only the strongest forms. */
+static void opponent_card(void)
+{
+    const FootballCareer *c=&L.career;const FootballOpponent *o=football_opponent(c->round);
+    if(!o)return;
+    char line[96],atlas[96];
+    football_menu_panel(10,40,150,150);
+    const char *key=gm_trainer_sprite_key(o->trainer_type,0,0);
+    const rr_frame *f=NULL;
+    if(key && *key){snprintf(atlas,sizeof atlas,"images/trainer/%s",key);f=img_anim_frame(atlas,0);}
+    if(f && f->src_w && f->src_h)football_render_draw_sprite(f,85,115,fminf(120.0f/f->src_w,120.0f/f->src_h),false);
+    football_menu_panel(168,40,222,150);
+    football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,184,49,190,football_opponent_role_name((FootballOpponentRole)o->role));
+    football_menu_text(TS_WINDOW,FM_PX_BODY,184,73,190,o->name);
+    if(o->type>=0){snprintf(line,sizeof line,"%s-type team",football_type_name(o->type));football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,103,190,line);}
+    else football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,103,190,"Stacked team");
+    football_menu_text(TS_WINDOW,FM_PX_SMALL,184,127,190,o->type>=0?"Every player on their side is":"Only the strongest Pokemon");
+    football_menu_text(TS_WINDOW,FM_PX_SMALL,184,145,190,o->type>=0?"a Pokemon of that type.":"play for them.");
+    snprintf(line,sizeof line,"Round %u of %u",c->round,FB_CAREER_ROUNDS);football_menu_text(TS_MONEY,FM_PX_SMALL,184,168,190,line);
+    football_menu_panel(10,196,380,32);
+    if(c->round==FB_CAREER_ROUNDS)snprintf(line,sizeof line,"The last match: win it and the title is yours.");
+    else snprintf(line,sizeof line,"%u more %s after %s.",FB_CAREER_ROUNDS-c->round,FB_CAREER_ROUNDS-c->round==1?"trainer":"trainers",o->name);
+    football_menu_text_center(TS_WINDOW,FM_PX_SMALL,200,196+FM_TEXT_PAD+1,356,line);
 }
 /* The member and species the top screen's info panel shows. */
 static unsigned top_member(void)
@@ -629,7 +655,7 @@ static void top_menu(void)
     football_menu_top_bg(c->round);
     football_menu_panel(10,6,380,28);football_menu_text(TS_WINDOW,FM_PX_BODY,24,13,170,"Pokemon Playoff");
     if(c->phase==FB_CAREER_DRAFT)snprintf(right,sizeof right,"%s  %u/22   %.2f / 55 pt",football_slot_names[draft_slot()],c->roster.count,c->roster.cost);
-    else snprintf(right,sizeof right,"Round %u / 7",c->round);
+    else snprintf(right,sizeof right,"Round %u / %u",c->round,FB_CAREER_ROUNDS);
     football_menu_text_right(TS_MONEY,FM_PX_BODY,376,13,190,right);
     if(c->phase==FB_CAREER_DRAFT && !L.catalog_count){
         football_menu_panel(10,40,380,150);
@@ -643,6 +669,7 @@ static void top_menu(void)
         football_menu_wrap(TS_WINDOW,FM_PX_BODY,26,86,348,4,c->message);
         return;
     }
+    if(c->phase==FB_CAREER_READY){opponent_card();return;}
     unsigned id=top_species(),member=top_member(),after=top_after();
     football_menu_panel(10,40,150,150);
     const rr_frame *f=football_render_front_frame(&L.renderer,0,L.ms);
@@ -694,7 +721,7 @@ static void top_menu(void)
             "For %.24s. Select Mega before the next match.":"Mega Stones require a compatible holder.",holder>=0?name(c->roster.mon[holder].b.species):"");}
     }
     if(c->phase==FB_CAREER_DRAFT)snprintf(shop_tip,sizeof shop_tip,"Choose who plays %s. Its stats are on the right.",football_slot_titles[draft_slot()]);
-    const char *tip=(c->phase==FB_CAREER_SHOP || c->phase==FB_CAREER_DRAFT) && shop_tip[0]?shop_tip:c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Seven rounds stand between you and the title.";
+    const char *tip=(c->phase==FB_CAREER_SHOP || c->phase==FB_CAREER_DRAFT) && shop_tip[0]?shop_tip:c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Thirteen trainers stand between you and the title.";
     football_menu_text_center(TS_WINDOW,FM_PX_SMALL,200,196+FM_TEXT_PAD+1,356,tip);
 }
 static void draw(ui_screen *s,rr_screen which)

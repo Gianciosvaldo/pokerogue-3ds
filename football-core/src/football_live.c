@@ -58,9 +58,35 @@ static void arrange(FootballLive *m)
     memset(m->fx,0,sizeof m->fx);m->fx_next=0;
     if(m->special)football_live_special_arrange(m);
 }
+static const FootballOpponent opponents[FB_CAREER_ROUNDS]={
+    {"Brock",TRAINER_TYPE_BROCK,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_ROCK},{"Misty",TRAINER_TYPE_MISTY,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_WATER},
+    {"Lt. Surge",TRAINER_TYPE_LT_SURGE,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_ELECTRIC},{"Erika",TRAINER_TYPE_ERIKA,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_GRASS},
+    {"Janine",TRAINER_TYPE_JANINE,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_POISON},{"Sabrina",TRAINER_TYPE_SABRINA,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_PSYCHIC},
+    {"Blaine",TRAINER_TYPE_BLAINE,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_FIRE},{"Giovanni",TRAINER_TYPE_GIOVANNI,FB_OPPONENT_GYM_LEADER,POKEMON_TYPE_GROUND},
+    {"Lorelei",TRAINER_TYPE_LORELEI,FB_OPPONENT_ELITE_FOUR,POKEMON_TYPE_ICE},{"Bruno",TRAINER_TYPE_BRUNO,FB_OPPONENT_ELITE_FOUR,POKEMON_TYPE_FIGHTING},
+    {"Agatha",TRAINER_TYPE_AGATHA,FB_OPPONENT_ELITE_FOUR,POKEMON_TYPE_GHOST},{"Lance",TRAINER_TYPE_LANCE,FB_OPPONENT_ELITE_FOUR,POKEMON_TYPE_DRAGON},
+    {"Blue",TRAINER_TYPE_BLUE,FB_OPPONENT_CHAMPION,-1}
+};
+const FootballOpponent *football_opponent(unsigned round){return round>=1 && round<=FB_CAREER_ROUNDS?&opponents[round-1]:NULL;}
+const char *football_opponent_role_name(FootballOpponentRole role){return role==FB_OPPONENT_GYM_LEADER?"Gym Leader":role==FB_OPPONENT_ELITE_FOUR?"Elite Four":"Champion";}
+const char *football_type_name(int type)
+{
+    static const char *const names[18]={"Normal","Fighting","Flying","Poison","Ground","Rock","Bug","Ghost","Steel","Fire","Water","Grass","Electric","Psychic","Ice","Dragon","Dark","Fairy"};
+    return type>=0 && type<18?names[type]:"Any";
+}
+bool football_opponent_form_fits(const FootballOpponent *o,const pr_form *f)
+{
+    if(!o || !f)return false;
+    return o->type>=0?(f->type1==o->type || f->type2==o->type):f->base_total>=FB_CHAMPION_MIN_BST;
+}
 bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,unsigned round)
 {
-    if(!m || !r || r->count!=22 || round<1 || round>7)return false;
+    if(!m || !r || r->count!=22 || round<1 || round>FB_CAREER_ROUNDS)return false;
+    /* The forms the opponent's team is made of, listed once; one random draw per player picks from them. */
+    static uint16_t pool[PR_FORM_COUNT];unsigned pool_size=0;
+    const FootballOpponent *leader=football_opponent(round);
+    for(unsigned f=0;f<PR_FORM_COUNT;++f)if(football_opponent_form_fits(leader,&pr_forms[f]))pool[pool_size++]=(uint16_t)f;
+    if(!pool_size)for(unsigned f=0;f<PR_FORM_COUNT;++f)pool[pool_size++]=(uint16_t)f;
     unsigned seen=0;
     for(unsigned i=0;i<22;++i){unsigned member=r->lineup[i];if(member>=22 || (seen&(1u<<member)))return false;seen|=1u<<member;}
     memset(m,0,sizeof *m);m->rng=seed?seed:1;
@@ -70,7 +96,7 @@ bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,u
         m->lineup[s][i]=s? (uint8_t)i:r->lineup[i];
         m->units[s][i]=r->player[i].attributes;
         if(s){
-            const pr_form *form=&pr_forms[random32(m)%PR_FORM_COUNT];FootballPlayer opponent;
+            const pr_form *form=&pr_forms[pool[random32(m)%pool_size]];FootballPlayer opponent;
             if(!football_stats_generate(&opponent,i,form,&r->maxima))return false;
             m->away_species[i]=form->species;m->away_form[i]=form->form_index;m->units[s][i]=opponent.attributes;
             uint8_t *a=(uint8_t *)&m->units[s][i];
