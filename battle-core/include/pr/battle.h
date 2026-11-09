@@ -276,6 +276,9 @@ typedef struct pr_pokemon {
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
     int16_t custom_passive;    /* customPokemonData.passive, -1 = none */
     int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
+    /* customPokemonData.types and fusionCustomPokemonData.types: a slot is 0 when null/absent (the form's own type shows
+     * through, getBaseTypes' `??`), else PokemonType + 1. Only the regular types 0..17 can be stored. */
+    uint8_t custom_types[2], fusion_custom_types[2];
     bool is_player;
     int32_t stats[6];
     double summon_stats[6];    /* summonData.stats: 0 = no override (Gorilla Tactics' 1.5x can leave a fraction) */

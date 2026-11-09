@@ -82,6 +82,9 @@ static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fu
 /* The slot a trainer's genAI picked to Terastallize (gc_mon.tera_instant), enemies only: a section of its own, so a save from before it loads with
  * nobody picked and counts nothing as dropped */
 static const sfield enemy_tera_fields[]={SF(gc_mon,tera_instant)};
+/* customPokemonData.types and fusionCustomPokemonData.types of the party (pr_pokemon's custom_types, fusion_custom_types): a section of its own,
+ * so a save from before it loads with no custom types and counts nothing as dropped */
+static const sfield custom_type_fields[]={SF(pr_pokemon,custom_types),SF(pr_pokemon,fusion_custom_types)};
 static const sfield fusion_fields[]={SF(gc_mon,fusion_shiny),SF(gc_mon,fusion_variant),SF(gc_mon,fusion_luck)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
@@ -624,6 +627,9 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     s=section_start(&w,"fusion");
     put_block(&w,fusion_fields,NF(fusion_fields),run->party,sizeof(gc_mon),run->n_party);
     section_end(&w,s);
+    s=section_start(&w,"custom_types");
+    put_block(&w,custom_type_fields,NF(custom_type_fields),&run->party[0].b,sizeof(gc_mon),run->n_party);
+    section_end(&w,s);
     s=section_start(&w,"enemy_tera");
     put_block(&w,enemy_tera_fields,NF(enemy_tera_fields),run->enemy,sizeof(gc_mon),run->n_enemy);
     section_end(&w,s);
@@ -770,6 +776,17 @@ static bool fusion_schema_ok(reader r){
     for(int i=0;i<n;i++){
         uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
         for(int k=0;k<NF(fusion_fields);k++)if(name==hash(fusion_fields[k].name)&&size==fusion_fields[k].size)found=k;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    return !r.bad;
+}
+
+static bool custom_types_schema_ok(reader r){
+    int n=take16(&r);unsigned seen=0;if(r.bad||n!=NF(custom_type_fields))return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
+        for(int k=0;k<NF(custom_type_fields);k++)if(name==hash(custom_type_fields[k].name)&&size==custom_type_fields[k].size)found=k;
         if(found<0||(seen&(1u<<found)))return false;
         seen|=1u<<found;
     }
@@ -1258,6 +1275,15 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             ||fusion.bad||fusion.pos!=fusion.n){*why="the stored fusion halves are damaged";return false;}
         for(int k=0;k<run->n_party;k++)
             if(!fusion_half_ok(&run->party[k])){*why="a stored fusion half is damaged";return false;}
+    }
+
+    /* Older saves have no custom types either: nobody has any then */
+    reader custom_types=section(&body,"custom_types");
+    if(!custom_types.bad){
+        if(!custom_types_schema_ok(custom_types)||get_block(&custom_types,custom_type_fields,NF(custom_type_fields),&run->party[0].b,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||custom_types.bad||custom_types.pos!=custom_types.n){*why="the stored custom types are damaged";return false;}
+        for(int k=0;k<run->n_party;k++)for(int i=0;i<2;i++)
+            if(run->party[k].b.custom_types[i]>POKEMON_TYPE_FAIRY+1||run->party[k].b.fusion_custom_types[i]>POKEMON_TYPE_FAIRY+1){*why="a stored custom type is damaged";return false;}
     }
 
     /* Older saves have no trainer Tera pick either: nobody is picked then */

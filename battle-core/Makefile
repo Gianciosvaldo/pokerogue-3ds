@@ -853,3 +853,7 @@ $(BUILD)/final-boss-faint-test: tests/final-boss-faint-test.c $(BUILD)/libprcore
 all: $(BUILD)/final-boss-dialogue-test
 $(BUILD)/final-boss-dialogue-test: tests/final-boss-dialogue-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/custom-types-test
+$(BUILD)/custom-types-test: tests/custom-types-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

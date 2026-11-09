@@ -67,6 +67,7 @@ bool gc_fusion_unfuse(gc_run *run, int party)
     p->fusion_gender = 0;
     p->fusion_gender_known = false;
     p->fusion_custom_ability = -1;
+    p->fusion_custom_types[0] = p->fusion_custom_types[1] = 0;
     a->fusion_shiny = false;
     a->fusion_variant = 0;
     a->fusion_luck = 0;
@@ -119,6 +120,7 @@ int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor
     p->fusion_gender_known = true;
     p->fusion_ability_index = r->fusion_ability_index;
     p->fusion_custom_ability = q->custom_ability;   /* fusionCustomPokemonData = pokemon.customPokemonData */
+    memcpy(p->fusion_custom_types, q->custom_types, sizeof p->fusion_custom_types);
     a->fusion_shiny = r->fusion_shiny;
     a->fusion_variant = r->fusion_variant;
     a->fusion_luck = r->fusion_luck;

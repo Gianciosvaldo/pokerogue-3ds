@@ -346,9 +346,14 @@ static void luck_and_save(void)
     r.party[1].b.shiny = true;
     r.party[1].variant = 2;
     r.party[1].luck = 3;
+    /* customPokemonData.types: the primary's own are kept, and the donor's become fusionCustomPokemonData.types */
+    r.party[0].b.custom_types[0] = POKEMON_TYPE_FIRE + 1;
+    r.party[1].b.custom_types[0] = POKEMON_TYPE_WATER + 1; r.party[1].b.custom_types[1] = POKEMON_TYPE_NORMAL + 1;
     const int before = gc_party_luck(&r);
     screen(splicers(-1), false);
     CHECK(pick(0, 1, &why));
+    CHECK(r.party[0].b.custom_types[0] == POKEMON_TYPE_FIRE + 1 && r.party[0].b.custom_types[1] == 0);
+    CHECK(r.party[0].b.fusion_custom_types[0] == POKEMON_TYPE_WATER + 1 && r.party[0].b.fusion_custom_types[1] == POKEMON_TYPE_NORMAL + 1);
     CHECK(r.party[0].fusion_shiny && r.party[0].fusion_variant == 2 && r.party[0].fusion_luck == 3);
     CHECK(r.party[0].luck + r.party[0].fusion_luck == 3 && !r.party[0].b.shiny);
     CHECK(before == 3 && gc_party_luck(&r) == before);   /* the second member's shine now counts through the fusion half */
@@ -361,6 +366,18 @@ static void luck_and_save(void)
     CHECK(loaded.party[0].b.fusion_species == SPECIES_ID_CHARMANDER);
     CHECK(loaded.party[0].fusion_shiny && loaded.party[0].fusion_variant == 2 && loaded.party[0].fusion_luck == 3);
     CHECK(!loaded.party[1].fusion_shiny && !loaded.party[1].fusion_variant && !loaded.party[1].fusion_luck);
+    CHECK(!memcmp(loaded.party[0].b.custom_types, r.party[0].b.custom_types, 2)
+          && !memcmp(loaded.party[0].b.fusion_custom_types, r.party[0].b.fusion_custom_types, 2));   /* the custom types survive a save */
+    CHECK(loaded.party[1].b.custom_types[0] == 0 && loaded.party[1].b.fusion_custom_types[0] == 0);
+    {   /* a type that is not one of the 18 regular types is refused, in either half */
+        for (int half = 0; half < 2; half++) {
+            const uint8_t keep = r.party[0].b.custom_types[1];
+            (half ? r.party[0].b.fusion_custom_types : r.party[0].b.custom_types)[1] = POKEMON_TYPE_STELLAR + 1;
+            const size_t bad_n = gc_run_save(&r, mutated, sizeof mutated);
+            CHECK(bad_n > 0 && !gc_run_load(&loaded, mutated, bad_n, &why));
+            (half ? r.party[0].b.fusion_custom_types : r.party[0].b.custom_types)[1] = half ? POKEMON_TYPE_NORMAL + 1 : keep;
+        }
+    }
 
     /* a save from before the section: it loads whole, the fusion half is the species alone, and nothing is counted as lost */
     memcpy(mutated, buf, n);
@@ -372,6 +389,16 @@ static void luck_and_save(void)
     CHECK(gc_run_load(&loaded, mutated, n, &why));
     CHECK(loaded.load_dropped == 0 && loaded.party[0].b.fusion_species == SPECIES_ID_CHARMANDER);
     CHECK(!loaded.party[0].fusion_shiny && !loaded.party[0].fusion_variant && !loaded.party[0].fusion_luck);
+
+    /* a save from before custom types: it loads whole, nobody has any, and nothing is counted as lost */
+    memcpy(mutated, buf, n);
+    const size_t ct = section_at(mutated, n, "custom_types");
+    CHECK(ct != 0);
+    memcpy(mutated + ct, &hidden, 4);
+    refresh_crc(n);
+    CHECK(gc_run_load(&loaded, mutated, n, &why));
+    CHECK(loaded.load_dropped == 0 && loaded.party[0].b.fusion_species == SPECIES_ID_CHARMANDER);
+    CHECK(!loaded.party[0].b.custom_types[0] && !loaded.party[0].b.fusion_custom_types[0] && !loaded.party[0].b.fusion_custom_types[1]);
 
     /* damaged halves are refused: a luck no shine makes, a variant that doesn't exist, a half on a Pokemon that is not fused */
     const size_t data = at + 8 + 2 + 3 * 6 + 2;   /* the header, the block's field list and its count */
@@ -404,9 +431,11 @@ static void unsplice(void)
     r.party[1].variant = 2;
     r.party[1].luck = 3;
     gc_item_add(&r, "LEFTOVERS", -1, r.party[1].b.id, 1);
+    r.party[1].b.custom_types[1] = POKEMON_TYPE_GHOST + 1;
     screen(splicers(-1), false);
     CHECK(pick(0, 1, &why));
     CHECK(r.screen.kind == GC_SCREEN_COMMAND && r.n_party == 2 && r.party[0].b.fusion_species == SPECIES_ID_CHARMANDER);
+    CHECK(r.party[0].b.fusion_custom_types[1] == POKEMON_TYPE_GHOST + 1);
     const uint32_t lead = r.party[0].b.id;
     CHECK(stack_of(lead, "LEFTOVERS") == 1);
     const int fused_hp_max = r.party[0].b.stats[STAT_HP];
@@ -422,6 +451,7 @@ static void unsplice(void)
     const gc_mon *m = &r.party[0];
     CHECK(m->b.fusion_species == 0 && m->b.fusion_form == 0 && m->b.fusion_ability_index == 0 && m->b.fusion_custom_ability == -1);
     CHECK(!m->fusion_shiny && m->fusion_variant == 0 && m->fusion_luck == 0);
+    CHECK(!m->b.fusion_custom_types[0] && !m->b.fusion_custom_types[1]);   /* fusionCustomPokemonData = null */
     CHECK(m->b.species == SPECIES_ID_BULBASAUR && m->b.base_ability == pr_get_ability(&m->b, true));
     CHECK(r.n_party == 2 && stack_of(lead, "LEFTOVERS") == 1);   /* nothing comes back */
     CHECK(m->b.hp <= m->b.stats[STAT_HP] && m->b.stats[STAT_HP] != fused_hp_max);   /* the maximum follows the species alone again */
