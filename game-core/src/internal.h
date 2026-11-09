@@ -45,6 +45,7 @@ enum {
     RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
     RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
     RP_ME_BEFORE_REWARDS, /* a mystery encounter's callback before the rewards (Training Session: the Pokemon comes back changed; Berries Abound: the berries) */
+    RP_SAFARI,           /* the Safari Zone after a catch: the next Pokemon (and its four actions) or the way out; waits on the actions' screen */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -139,6 +140,8 @@ typedef struct {
     /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
     struct { bool pending; } avarice;   /* Absolute Avarice: the Reviver Seeds the fight's win gives */
+    /* the Safari Zone (gc_safari.c): the minigame is running (encounter.misc and continuousEncounter). Not saved, for the same reason as fg */
+    struct { bool active; int8_t remaining, catch_stage, flee_stage, token_remaining; int32_t last_twitch; uint8_t n_trace; int32_t trace_max[12], trace_val[12]; } safari;   /* last_twitch and trace: the ball's twitch rate and the run-RNG rolls of the step, for the differential */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
     struct { bool pending; int8_t primary; double base; bool wave; } me_exp;   /* setEncounterExp(primary.id, base, wave) of a fight (Teleporting Hijinks), run by the rewards phase of the won fight */
     /* The Expert Pokemon Breeder: the party is the chosen Pokemon alone for the fight (removePokemonFromPartyAndStoreHeldItems), the others and their
@@ -412,6 +415,12 @@ bool gc_fg_wobbuffet_moveset(gc_run *run, gc_mon *m);           /* generateMoves
 void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n);   /* gc_enemy_finish_party with the first Pokemon's items given (no item rolls) */
 void gc_me_begin_battle(gc_run *run, int type);                /* the encounter's battle starts: the field, the first turn (an EnemyPartyConfig's enemy party is in place) */
 void gc_dark_deal_execute(gc_run *run, int option);
+/* getRandomSpeciesByStarterCost on a seed-offset stream (src/gc_darkdeal.c); `excluded` are SpeciesIds */
+int gc_species_by_starter_cost(pr_rng *r, int min, int max, const uint16_t *excluded, int n_excluded, const int8_t *types, int n_types,
+                               bool allow_sub_legendary, bool allow_legendary, bool allow_mythical);
+/* Pokemon.trySetShinySeed / tryRerollHiddenAbilitySeed (src/gc_gts.c) */
+void gc_try_set_shiny_seed(gc_run *run, pr_rng *r, gc_mon *out, double threshold, double max_threshold);
+void gc_try_reroll_hidden_ability(gc_run *run, pr_rng *r, gc_mon *out, double threshold);
 bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out);   /* new EnemyPokemon(.., boss) on a seed-offset stream */
 int gc_me_boosted_level(gc_run *run, pr_rng *r);               /* getEncounterPokemonLevelForWave(1): the wave's level on `r` plus round(wave / 10) */
 bool gc_me_new_enemy(gc_run *run, pr_rng *r, int species, int level, bool boss, bool second_iv, gc_mon *out);   /* the same for a Pokemon that is no boss (Fiery Fallout) */
@@ -443,6 +452,10 @@ void gc_avarice_execute(gc_run *run, int option);                 /* Absolute Av
 void gc_avarice_reward(gc_run *run);
 bool gc_avarice_spawnable(const gc_run *run);                     /* six BerryModifier stacks */
 void gc_avarice_tokens(gc_run *run, pr_msg_arg *name);
+/* The Safari Zone (src/gc_safari.c) */
+bool gc_safari_execute(gc_run *run, int option);                    /* the first screen's two options and the minigame's four; true = the phase is done */
+bool gc_safari_next(gc_run *run, int cursor);                       /* RP_SAFARI: the next Pokemon with the cursor on `cursor`, or the way out (true) */
+double gc_safari_cost(const gc_run *run);                           /* MoneyRequirement(0, 2).requiredMoney */
 void gc_berries_execute(gc_run *run, int option);                  /* Berries Abound (src/gc_berries.c) */
 void gc_berries_reward(gc_run *run);
 bool gc_berries_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *fastest_name, int *grab);

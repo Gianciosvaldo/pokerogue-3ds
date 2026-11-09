@@ -168,6 +168,9 @@ bool gc_catch_start(gc_run *run, gc_rphase *p)
      * text, showCatchObtainMessage false, Uncommon Breed's) shows
      * battle:pokemonObtained after the IVs and before the dex */
     if (p->c == 1) gc_ev_msg(run, "battle:pokemonObtained", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
+    /* c = 3: a Pokemon caught with the encounter's own throw (the Safari Zone's trainerThrowPokeball): catchPokemon(.., showCatchObtainMessage true) says
+     * battle:pokemonCaught here, where a ball thrown in a battle had AttemptCapturePhase say it before the catch */
+    if (p->c == 3) gc_ev_msg(run, "battle:pokemonCaught", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
     if (run->sys) {
         gc_caught_report rep;
         gc_system_set_pokemon_caught_ex(run->sys, e, true, false, true, run->run.mode == GAME_MODES_DAILY, &rep);

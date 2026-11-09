@@ -37,17 +37,18 @@ static const uint16_t excluded_bosses[] = {
     SPECIES_ID_ETERNAL_FLOETTE, SPECIES_ID_BLOODMOON_URSALUNA, SPECIES_ID_BATTLE_BOND_GRENINJA,
 };
 
-static bool is_excluded(int id)
+static bool is_excluded(const uint16_t *list, int n, int id)
 {
-    for (size_t i = 0; i < sizeof excluded_bosses / sizeof excluded_bosses[0]; i++) if (excluded_bosses[i] == id) return true;
+    for (int i = 0; i < n; i++) if (list[i] == id) return true;
     return false;
 }
 
-/* getRandomSpeciesByStarterCost([min, max], excluded, types): the starters in id order (getAllStarters(true)), those sharing a type
- * with `types` when it has any, the tier range widened while it holds none (min down to 0, then max up to 10), randSeedInt(length)
- * for the index, then Phaser.Math.RND.shuffle (frac() * (i + 1) from the end) and the species at that index; Bulbasaur if nothing
- * is left at all */
-static int species_by_starter_cost(pr_rng *r, int min, int max, const int8_t *types, int n_types)
+/* getRandomSpeciesByStarterCost([min, max], excluded, types, allowSubLegendary, allowLegendary, allowMythical): the starters in id order
+ * (getAllStarters(true)) that are not in `excluded` and not of a kind not allowed, those sharing a type with `types` when it has any, the
+ * tier range widened while it holds none (min down to 0, then max up to 10), randSeedInt(length) for the index, then
+ * Phaser.Math.RND.shuffle (frac() * (i + 1) from the end) and the species at that index; Bulbasaur if nothing is left at all */
+int gc_species_by_starter_cost(pr_rng *r, int min, int max, const uint16_t *excluded, int n_excluded, const int8_t *types, int n_types,
+                               bool allow_sub_legendary, bool allow_legendary, bool allow_mythical)
 {
     static uint16_t pool[GC_MAX_SPECIES_ID + 1], list[GC_MAX_SPECIES_ID + 1];
     static uint8_t cost[GC_MAX_SPECIES_ID + 1];
@@ -55,7 +56,8 @@ static int species_by_starter_cost(pr_rng *r, int min, int max, const int8_t *ty
     for (int i = 0; i < gc_starter_cost_count && n <= GC_MAX_SPECIES_ID; i++) {
         const int id = gc_starter_costs[i].id;
         const pr_species_gen *sg = gc_species_gen(id);
-        if (!sg || is_excluded(id)) continue;
+        if (!sg || is_excluded(excluded, n_excluded, id)) continue;
+        if ((!allow_sub_legendary && sg->sub_legendary) || (!allow_legendary && sg->legendary) || (!allow_mythical && sg->mythical)) continue;
         if (n_types > 0) {
             const pr_form_gen *fg = &pr_form_gens[sg->form_start];
             bool shares = false;
@@ -164,7 +166,8 @@ void gc_dark_deal_execute(gc_run *run, int option)
     const int roll = pr_rng_seed_int(&r, 100, 0);
     const int lo = roll >= 65 ? 6 : roll >= 15 ? 7 : roll >= 5 ? 8 : 9;
     const int hi = roll >= 5 ? lo : 10;
-    const int species = species_by_starter_cost(&r, lo, hi, types, n_types > 0 ? n_types : 0);
+    const int species = gc_species_by_starter_cost(&r, lo, hi, excluded_bosses, (int)(sizeof excluded_bosses / sizeof excluded_bosses[0]), types,
+                                                   n_types > 0 ? n_types : 0, true, true, true);
     /* initBattleWithEnemyConfig: battle.enemyLevels = [getLevelForWave()], rolled on the same stream */
     const int level = pr_run_get_level_for_wave(&run->run, &r, run->wave);
     gc_mon *boss = &run->enemy[0];

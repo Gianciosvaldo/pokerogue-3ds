@@ -115,9 +115,10 @@ static void test_part_timer_and_games(void)
     }
     assert(run.screen.n_me_args == 0);
 
-    /* an encounter without ported texts carries no tokens and asks for no pick, and the arguments do not pile up between screens */
-    start(GC_ME_SAFARI_ZONE, 45, "tx-safari", sp, mv, 2, 1000);
-    assert(run.screen.n_me_args == 0);
+    /* the Safari Zone carries the number of Pokemon and the entry fee and asks for no pick, and the arguments do not pile up between screens */
+    start(GC_ME_SAFARI_ZONE, 45, "tx-safari", sp, mv, 2, 1e6);
+    assert(run.screen.n_me_args == 2 && arg("numEncounters") && arg("numEncounters")->v == 3);
+    assert(money_of(arg("money")) == pr_run_get_wave_money_amount(45, 2.0));
     for (int o = 0; o < 8; o++) assert(run.screen.option_pick[o] == GC_PICK_NONE);
 
     /* Slumbering Snorlax carries its dialogue token and, for the steal, the Pokemon and move (option 3) */
