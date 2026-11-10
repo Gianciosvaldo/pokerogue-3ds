@@ -13,6 +13,9 @@
  * on (default 1, never a multiple of 10) that encounter, once per run, whatever its own wave window or rarity, so a Rogue-tier one can be played
  * without waiting for the draw; its party rules still apply (Weird Dream needs three Pokemon). The name is the locale namespace (me_flow.c).
  * Classic runs only; Custom runs ignore it. Debug only: the line is absent on a normal install.
+ * PLAYTEST DEFAULT (remove before a build goes to anyone else): with no such line, every Classic run gets Weird Dream on its first plain wave from
+ * wave 15 on (PLAYTEST_MYSTERY_WAVE), so it can be tried without the debug file. "mystery=off" (any unknown name) turns that off, and any
+ * other "mystery=" line replaces it.
  *
  * START + SELECT quits.
  */
@@ -41,9 +44,13 @@ u32 __stacksize__ = POKEROGUE_MAIN_STACK_BYTES;
 
 /* ------------------------------------------------------------------ boot */
 
+/* The playtest default of the "mystery=" hook (see the header comment): Weird Dream from this wave on. Set it back to off (-1 type) to ship. */
+#define PLAYTEST_MYSTERY_WAVE 15
+
 /* sdmc:/3ds/pokerogue/rundriver.txt (see the header comment) */
 static void read_driver_file(rs_config* cfg) {
   app_debug_capsule(0);
+  gc_debug_force_mystery(GC_ME_WEIRD_DREAM, PLAYTEST_MYSTERY_WAVE); /* before the file: a "mystery=" line there replaces or turns it off */
   static char seed[160];
   FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
   if (!f) return;
