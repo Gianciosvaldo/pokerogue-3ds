@@ -45,4 +45,5 @@ static void portrait_dialogue(void)
  assert(!step_dialogue(&e,125));assert(step_dialogue(&e,125));assert(fabsf(B.overlay)<.001f);
 }
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){dialogue("…Magnificent.",1);dialogue("A first page.$The final page.",2);portrait_dialogue();assert(selects==5);puts("Final boss dialogue playback: typing, A per page, persistent speaker/sprite no auto-dismiss and retained portrait transitions passed");}

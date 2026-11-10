@@ -27,6 +27,7 @@ void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){
 }
 static void near(float a,float b){assert(fabsf(a-b)<.001f);}
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(int argc,char **argv){
  assert(argc==2);FILE *fp=fopen(argv[1],"r");assert(fp);char tag[30];int version,total;
  assert(fscanf(fp,"%29s%d%d",tag,&version,&total)==3&&!strcmp(tag,"BATTLE_STATS")&&version==1&&total==3);

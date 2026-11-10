@@ -48,6 +48,7 @@ static bv_mon mon(int gender,bool tera,int type,const char* name){
     bv_mon m;memset(&m,0,sizeof m);m.species=6;m.level=50;m.gender=gender;m.terastallized=tera;m.tera_type=type;snprintf(m.name,sizeof m.name,"%s",name);return m;
 }
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
     icon.src_w=12;icon.src_h=15;
     /* not Terastallized: no icon, however it is typed */

@@ -11,6 +11,7 @@ void rr_rect(float x,float y,float w,float h,rr_color color){rects++;}
 text_opts text_defaults(void){return (text_opts){0};}
 float text_draw(text_style style,float x,float y,const char *text,const text_opts *o){if(!strcmp(text,"Key items")||!strcmp(text,"Foe items"))snprintf(title,sizeof title,"%s",text);return 0;}
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
  bv_item foe={"foe",2,"Enemy item",""},key={"key",1,"Key item",""};
  memset(&B,0,sizeof B);bv_set_item_bars(&foe,1,&key,1,7);draw_top_bar();assert(!rects&&!icons);

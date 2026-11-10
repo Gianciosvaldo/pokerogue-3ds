@@ -388,6 +388,27 @@ static struct {
   float seq, low;
 } A;
 
+/* What the last animation found, for the battle screen's debug row (ba_debug_text): the file asked for and the one used, whether its
+ * background and graphic images were there when drawn, and how many of its sounds played. A move that shows nothing on the console can be
+ * read off this. */
+static struct {
+  char asked[64], used[64];
+  bool has_bg, bg_seen, bg_miss;
+  bool has_gfx, gfx_seen, gfx_miss;
+  int snd_events, snd_played;
+} Dbg;
+
+void ba_debug_text(char* out, size_t n) {
+  if (!Dbg.asked[0]) {
+    snprintf(out, n, "anim: none yet");
+    return;
+  }
+  char used[80] = "";
+  if (strcmp(Dbg.asked, Dbg.used)) snprintf(used, sizeof used, " (played %s)", Dbg.used[0] ? Dbg.used : "nothing");
+  snprintf(out, n, "anim %s%s  bg %s  gfx %s  snd %d/%d", Dbg.asked, used, !Dbg.has_bg ? "-" : Dbg.bg_miss ? "MISS" : Dbg.bg_seen ? "ok" : "?",
+           !Dbg.has_gfx ? "-" : Dbg.gfx_miss ? "MISS" : Dbg.gfx_seen ? "ok" : "?", Dbg.snd_played, Dbg.snd_events);
+}
+
 static bool g_hidden_after[4];
 
 bool ba_active(void) { return A.active; }
@@ -498,7 +519,8 @@ static int run_event(const anim_event* e, const ba_mon* field) {
       if (!e->res[0]) return cry_frames(A.this_user, field, vol, rate);
       char k[128];
       sound_key(e->res, k, sizeof k);
-      snd_sfx_play_ex(k, vol, rate);
+      Dbg.snd_events++;
+      if (snd_sfx_play_ex(k, vol, rate)) Dbg.snd_played++;
       float s = snd_sfx_seconds(k);
       return s > 0 ? (int)ceilf(s * 1000.0f / 33.33f) : 0;
     }
@@ -632,6 +654,14 @@ bool ba_play(ba_kind kind, int id, int user, int target, const ba_mon field[4]) 
   if (target < 0 || target > 3) target = user;
   if (!field[target].on_field) return false;
   anim_file* f = kind_file(kind, id);
+  memset(&Dbg, 0, sizeof Dbg);
+  {
+    const char* name = gm_enum_name(kind == BA_MOVE ? GM_E_MOVE_ID : kind == BA_COMMON ? GM_E_COMMON_ANIM : GM_E_CHARGE_ANIM, id);
+    char asked[64];
+    kebab(name ? name : "?", asked, sizeof asked);
+    snprintf(Dbg.asked, sizeof Dbg.asked, "%s", asked);
+    snprintf(Dbg.used, sizeof Dbg.used, "%s", f ? f->file : "");
+  }
   bool player = user < 2;
   /* MoveAnim / MoveChargeAnim: a list holds [player's, enemy's]; isOppAnim when the enemy uses
    * a list animation. CommonBattleAnim: never. */
@@ -702,7 +732,12 @@ static void draw_bg(void) {
   }
   const rr_frame* f = img_frame(A.bg_key, "__BASE");
   if (!f) f = img_frame(A.bg_key, NULL);
-  if (!f || f->src_w <= 0 || f->src_h <= 0) return;
+  Dbg.has_bg = true;
+  if (!f || f->src_w <= 0 || f->src_h <= 0) {
+    Dbg.bg_miss = true;
+    return;
+  }
+  Dbg.bg_seen = true;
   /* a 896x576 tile sprite at scale 1.25: the image repeats every 1.25 x its size */
   float tw = f->src_w * 1.25f, th = f->src_h * 1.25f;
   rr_draw_opts o = RR_DEFAULT_OPTS;
@@ -759,7 +794,13 @@ void ba_draw(ba_layer layer, const ba_mon field[4]) {
       case 1: {
         char name[8];
         snprintf(name, sizeof name, "%d", s->graphic_frame);
-        draw_spr(s, A.gkey[0] ? img_frame(A.gkey, name) : NULL);
+        const rr_frame* gf = A.gkey[0] ? img_frame(A.gkey, name) : NULL;
+        if (A.gkey[0]) {
+          Dbg.has_gfx = true;
+          if (gf) Dbg.gfx_seen = true;
+          else Dbg.gfx_miss = true;
+        }
+        draw_spr(s, gf);
         break;
       }
       case 2:

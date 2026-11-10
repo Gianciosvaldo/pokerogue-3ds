@@ -73,6 +73,7 @@ static rr_color want_tint(int r,int g,int b,int a){
 }
 
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
     body.src_w=64;body.src_h=48;body.w=64;body.h=48;button.src_w=20;button.src_h=18;
     alpha_at=255;
