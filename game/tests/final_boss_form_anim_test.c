@@ -76,6 +76,7 @@ static void put(side *sd,int species,float scale){
 static bool at(const bv_event *e,side *sd,float t){B.t=t;return step_quiet_form(e,sd,false);}
 static float zoom_now(void){cur_zoom=1;field_zoom(true);return cur_zoom;}
 
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
  /* ---- 1: the Eternamax change of the boss */
  memset(&B,0,sizeof B);B.field_scale=1;

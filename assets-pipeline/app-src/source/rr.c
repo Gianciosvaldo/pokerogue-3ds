@@ -5,6 +5,7 @@
 #include <citro2d.h>
 #include <citro3d.h>
 #include <jansson.h>
+#include <malloc.h>
 #include <math.h>
 #include <png.h>
 #include <stdio.h>
@@ -1040,6 +1041,11 @@ rr_stats rr_get_stats(void) {
   }
   s.linear_free = linearSpaceFree();
   s.vram_free = vramSpaceFree();
+  {
+    extern u32 __ctru_heap_size;
+    const size_t used = (size_t)mallinfo().uordblks;
+    s.heap_free = __ctru_heap_size > used ? __ctru_heap_size - used : 0;
+  }
   s.cpu_ms = g_cpu_ms;
   s.gpu_ms = g_gpu_ms;
   return s;

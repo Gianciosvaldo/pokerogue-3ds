@@ -71,6 +71,7 @@ static void put(side *sd,int species){
 static float zoomed_y(float y,float zoom){return 132+(y-132)*zoom;}
 static float field_zoom_now(void){reset();field_zoom(true);return cur_zoom;}
 
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
  frame96.src_w=frame96.w=96;frame96.src_h=frame96.h=96;
  /* ---- 1: a single battle is what it was */

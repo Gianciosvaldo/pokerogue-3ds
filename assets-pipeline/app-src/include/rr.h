@@ -168,6 +168,7 @@ typedef struct {
   int tex_count;
   size_t linear_free;     /* linear heap (GPU-visible) left */
   size_t vram_free;
+  size_t heap_free;       /* the ordinary heap (malloc) left, about: its size less what is in use */
   float cpu_ms;           /* last frame: CPU time spent building draw lists */
   float gpu_ms;           /* last frame: GPU time */
 } rr_stats;

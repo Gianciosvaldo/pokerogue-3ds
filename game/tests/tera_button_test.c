@@ -51,6 +51,7 @@ static void fresh(bool tera,bool struggle){
     memset(&got,0,sizeof got);answers=0;
 }
 static void in(int b){bv_input(NULL,b);}
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
     /* reaching the button: LEFT from FIGHT and from POKEMON, RIGHT back to FIGHT, UP and DOWN stay on it */
     fresh(true,false);

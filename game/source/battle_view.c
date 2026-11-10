@@ -255,6 +255,10 @@ static void sprite_key(const bv_mon* m, bool back, char* out, int n) {
   }
 }
 
+/* Sprite sheets that did not load even after everything idle was freed (the stand-in box shows): how many, and the last one, for the debug line */
+static int g_sprite_fails, g_sprite_fail_species;
+static bool g_sprite_fail_back;
+
 static void load_mon_sprite(side* sd, bool player) {
   const bv_mon* m = &sd->mon;
   menu_sprite_free(&sd->sprite);
@@ -275,6 +279,12 @@ static void load_mon_sprite(side* sd, bool player) {
   /* A sheet can be 1 to 3 MB in one piece, and texture memory may hold the idle animation images: free them (they load again when a
    * move plays) and try once more before showing the stand-in box. */
   if(ba_release_graphics()&&menu_sprite_load(&sd->sprite,&visual,player))return;
+  /* Then the menus' idle Pokemon icon sheets (the party screen, the shop, the starter select leave up to a dozen MB of them loaded; they
+   * load again the next time a screen draws an icon), and once more. */
+  if(mui_reclaim_images()>0&&menu_sprite_load(&sd->sprite,&visual,player))return;
+  g_sprite_fails++;
+  g_sprite_fail_species = m->species;
+  g_sprite_fail_back = player;
   sprite_key(m,player,sd->sprite_key,sizeof sd->sprite_key);
 }
 
@@ -1357,6 +1367,12 @@ static void draw_debug(void) {
   snprintf(d, sizeof d, "%.0f fps  cpu %.1f  gpu %.1f ms  tex %.1f  free %.1f MB", B.fps, st.cpu_ms, st.gpu_ms,
            st.tex_bytes / 1048576.0, st.linear_free / 1048576.0);
   rr_text_sys(2, 2, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
+  snprintf(d, sizeof d, "heap free %.1f MB  sprite fails %d", st.heap_free / 1048576.0, g_sprite_fails);
+  if (g_sprite_fails) {
+    const size_t n = strlen(d);
+    snprintf(d + n, sizeof d - n, " (last #%d %s)", g_sprite_fail_species, g_sprite_fail_back ? "back" : "front");
+  }
+  rr_text_sys(2, 12, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
 }
 
 /* ------------------------------------------------------------------ events */

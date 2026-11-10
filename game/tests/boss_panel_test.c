@@ -60,6 +60,7 @@ static void foe(side *sd,bool boss,int segments,int index,int hp,int max_hp){
 /* upstream's divider position for segment s, in canvas px from the bar's left edge (86 wide): round(maxHp / segments * s) / maxHp * 86 */
 static double up_divider(int max_hp,int segments,int s){return floor(max_hp/(double)segments*s+0.5)/max_hp*86;}
 
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
  /* ---- the mini box, unchanged: pbinfo_enemy_mini, name at -124, bar at (-71, 4.5), label at (-72, 1.5), no dividers */
  {
