@@ -160,11 +160,78 @@ static void test_refusal(void)
     puts("ok");
 }
 
+/* the fight on the command screen is won: the foes are weakened so that one hit knocks them out and none can hurt the lead */
+static void play_the_fight(void)
+{
+    const char *why;
+    for (int e = 0; e < run.n_enemy; e++) {
+        run.enemy[e].b.hp = 1;
+        run.enemy[e].b.stats[1] = run.enemy[e].b.stats[3] = 1;
+    }
+    gc_choice fight = {GC_CH_FIGHT, 0, -1, 0};
+    for (int guard = 0; guard < 200 && run.screen.kind == GC_SCREEN_COMMAND; guard++) {
+        assert(gc_run_choose(&run, &fight, &why));
+        log_events();
+        if (run.screen.kind == GC_SCREEN_LEARN_MOVE) {
+            gc_choice forget = {GC_CH_FORGET, -1, 0, 0};
+            assert(gc_run_choose(&run, &forget, &why));
+            gc_run_until_screen(&run);
+            log_events();
+        }
+    }
+}
+
+static void test_fight(void)
+{
+    puts("test_weird_fight...");
+    n_log = 0;
+    start("wd-fight", 100, 4);
+    int planned[4];
+    for (int k = 0; k < 4; k++) planned[k] = gc_weird_species(&run, k);
+    int passives_before = 0;
+    for (int k = 0; k < 4; k++) passives_before += run.party[run.party_order[k]].b.passive_flag;
+    const char *why;
+    gc_choice ch = {GC_CH_MYSTERY, 1, 0, 0};
+    assert(gc_run_choose(&run, &ch, &why));
+    log_events();
+    /* the trainer fight against the team the dream would have made; the player's own party is untouched */
+    assert(run.screen.kind == GC_SCREEN_COMMAND && gc_int(&run)->weird.fight);
+    assert(run.battle_type == BATTLE_TYPE_TRAINER && run.trainer_type == TRAINER_TYPE_PLAYER_M_ALTERNATE && !run.double_battle && run.me_battle);
+    assert(run.n_enemy == 4 && !run.screen.can_run && !run.screen.can_ball && !run.me_catch_allowed);
+    assert(logged_at("mysteryEncounters/weirdDream:option.2.selected2") >= 0 && logged_at("mysteryEncounters/weirdDream:option.1.cutscene") < 0);
+    for (int k = 0; k < 4; k++) {
+        const gc_mon *e = &run.enemy[k];
+        assert(e->b.species == planned[k] && e->trainer_slot == TRAINER_SLOT_TRAINER && !e->b.passive_flag && e->b.hp == e->b.stats[0] && !e->b.is_player);
+        assert(e->b.custom_types[1] != 0);                                      /* the second type the dream gave */
+        assert(e->b.is_boss == (gc_form(e->b.species, e->b.form)->base_total > 570));
+        assert(run.party[k].b.species != planned[k] && run.party[k].b.custom_types[1] == 0);
+        int held = 0;
+        for (int i = 0; i < run.n_enemy_items; i++) if (run.enemy_items[i].pokemon_id == e->b.id) { held++; assert(run.enemy_items[i].non_transferable); }
+        assert(held >= (gc_form(e->b.species, e->b.form)->base_total < 570));   /* an Old Gateau at least for a Pokemon under 570 */
+    }
+    assert(sys.dex[run.enemy[0].b.species].seen_attr != 0);                      /* the foes count as seen */
+    play_the_fight();
+    /* the win: the shop of six tiers (no fill), the passive of one more Pokemon, then the next wave */
+    assert(run.screen.kind == GC_SCREEN_REWARD && !gc_int(&run)->weird.fight);
+    int passives_after = 0;
+    for (int k = 0; k < 4; k++) passives_after += run.party[run.party_order[k]].b.passive_flag;
+    assert(passives_after == passives_before + 1);
+    assert(run.screen.n_options == 6);
+    static const int tiers[6] = {MODIFIER_TIER_ROGUE, MODIFIER_TIER_ROGUE, MODIFIER_TIER_ULTRA, MODIFIER_TIER_ULTRA, MODIFIER_TIER_GREAT, MODIFIER_TIER_GREAT};
+    for (int k = 0; k < 6; k++) assert(run.screen.options[k].tier == tiers[k]);
+    assert(logged_at("battle:trainerDefeated") >= 0);
+    const int wave = run.wave;
+    leave_shop();
+    assert(run.wave == wave + 1 && run.screen.kind == GC_SCREEN_COMMAND);
+    puts("ok");
+}
+
 int main(void)
 {
     test_plan_is_stable();
     test_transformation();
     test_refusal();
+    test_fight();
     puts("all weird dream host tests passed");
     return 0;
 }

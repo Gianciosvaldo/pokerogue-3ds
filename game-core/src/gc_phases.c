@@ -21,6 +21,10 @@ static void queue_battle_end(gc_run *run)
         gc_clown_victory(run);
         return;
     }
+    if (in->weird.fight) {   /* Weird Dream: BattleEndPhase, TrainerVictoryPhase, then the rewards it set */
+        gc_weird_victory(run);
+        return;
+    }
     if (in->trtest.active) {   /* A Trainer's Test: BattleEndPhase, TrainerVictoryPhase, then the rewards it set */
         gc_trtest_victory(run);
         return;
@@ -851,7 +855,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_ME_BEFORE_REWARDS:
         if (gc_superfan_tutor_start(run)) return false;   /* the Bug-type move tutor waits for the player's pick */
         if (gc_int(run)->training.away) gc_training_return(run);
-        else { gc_berries_reward(run); gc_avarice_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); gc_breeder_reward(run); gc_trtest_reward(run); }
+        else { gc_berries_reward(run); gc_avarice_reward(run); gc_fiery_reward(run); gc_teleport_reward(run); gc_breeder_reward(run); gc_trtest_reward(run); gc_weird_reward(run); }
         return true;
     case RP_SAFARI:
         return gc_safari_next(run, p->a);

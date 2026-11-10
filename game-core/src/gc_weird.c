@@ -282,8 +282,12 @@ static bool unlocks_new_starter(const gc_run *run, int species)
 }
 
 /* postProcessTransformedPokemon (forBattle false): the Pokemon `m` the party member `prev` becomes */
-static bool post_process(gc_run *run, const gc_mon *prev, gc_mon *m, bool for_battle)
+static bool post_process(gc_run *run, const gc_mon *prev, gc_mon *m, bool for_battle, bool option_stream)
 {
+    /* the first member's postProcess runs in the option's seed offset up to its first await (the one on addEggMoveToNewPokemonMoveset): its rolls up to and with the egg move are drawn
+     * from the option's stream, which restarts from its seed; everything after is on the run's RNG, as is every later member's */
+    const pr_rng run_rng = run->run.rng;
+    if (option_stream) run->run.rng = gc_me_option_rng(run);
     bool is_new_starter = false;
     pr_pokemon *p = &m->b;
     const int root = gc_root_species(p->species);
@@ -349,6 +353,7 @@ static bool post_process(gc_run *run, const gc_mon *prev, gc_mon *m, bool for_ba
     memcpy(p->pp_up, prev->b.pp_up, sizeof p->pp_up);
     memcpy(p->max_pp_override, prev->b.max_pp_override, sizeof p->max_pp_override);
     const int egg_index = add_egg_move(run, m, root, for_battle);
+    if (option_stream) run->run.rng = run_rng;
     add_favored_move(run, m, &generated, egg_index);
 
     /* a random second type */
@@ -392,6 +397,23 @@ static bool is_comatose(gc_run *run, const gc_mon *m)
         || (pr_has_passive(&run->bt, &m->b) && pr_get_passive_ability(&m->b) == ABILITY_ID_COMATOSE);
 }
 
+/* onInit's heldItems: getHeldItems() without the form change items, in list order (olds[k] = the party member at position k) */
+static int collect_held(gc_run *run, gc_mon *olds, int n, gc_item *held, int *held_start, int *held_n)
+{
+    int total = 0;
+    for (int k = 0; k < n; k++) {
+        olds[k] = run->party[run->party_order[k]];
+        held_start[k] = total;
+        for (int i = 0; i < run->n_items; i++) {
+            const gc_item *it = &run->items[i];
+            if (it->pokemon_id != olds[k].b.id || it->detached || gc_item_key_form_change(it->key)) continue;
+            held[total++] = *it;
+        }
+        held_n[k] = total - held_start[k];
+    }
+    return total;
+}
+
 static void transform(gc_run *run)
 {
     static gc_mon news[WD_PARTY], olds[WD_PARTY];
@@ -404,17 +426,7 @@ static void transform(gc_run *run)
         gc_me_leave_with_heal_shop(run);
         return;
     }
-    /* onInit's heldItems: getHeldItems() without the form change items, in list order */
-    for (int k = 0; k < n; k++) {
-        olds[k] = run->party[run->party_order[k]];
-        held_start[k] = total;
-        for (int i = 0; i < run->n_items; i++) {
-            const gc_item *it = &run->items[i];
-            if (it->pokemon_id != olds[k].b.id || it->detached || gc_item_key_form_change(it->key)) continue;
-            held[total++] = *it;
-        }
-        held_n[k] = total - held_start[k];
-    }
+    total = collect_held(run, olds, n, held, held_start, held_n);
 
     /* onPreOptionPhase: out goes the old, in comes the new, one at a time */
     for (int k = 0; k < n; k++) {
@@ -442,7 +454,7 @@ static void transform(gc_run *run)
         const gc_mon *prev = &olds[k];
         gc_mon *m = &run->party[find_by_id(run, news[k].b.id)];
         const double old_ratio = (double)prev->b.hp / (double)prev->b.stats[0];
-        post_process(run, prev, m, false);
+        post_process(run, prev, m, false, false);
         for (int i = 0; i < held_n[k]; i++) add_held(run, m, held[held_start[k] + i]);
         if (gc_form(m->b.species, m->b.form)->base_total < NON_LEGENDARY_BST) {
             gc_item gateau = {.key = "MYSTERY_ENCOUNTER_OLD_GATEAU", .arg = 0, .stack = 1, .non_transferable = true};
@@ -498,8 +510,139 @@ static void lose_levels(gc_run *run)
     gc_me_leave_with_heal_shop(run);
 }
 
+/* addEnemyModifier of a held item for `e` (not transferable): an equal item the holder already has stacks when the stack fits (incrementStack), else it is dropped */
+static void add_given(gc_run *run, gc_item *given, int *n_given, const gc_mon *e, const gc_item *src)
+{
+    gc_item it = *src;
+    it.pokemon_id = e->b.id;
+    it.virtual_stack = 0;
+    it.non_transferable = true;
+    /* the updateModifiers that ends generateEnemyModifiers drops a held item that names a species (the Gimmighoul evolution tracker) its holder is not */
+    if (!strcmp(it.key, "EVOLUTION_TRACKER_GIMMIGHOUL") && e->b.species != SPECIES_ID_GIMMIGHOUL && e->b.fusion_species != SPECIES_ID_GIMMIGHOUL) return;
+    for (int i = 0; i < *n_given; i++) {
+        gc_item *have = &given[i];
+        if (!strcmp(have->key, it.key) && have->arg == it.arg && have->pokemon_id == it.pokemon_id) {
+            if (have->stack + it.stack <= gc_item_max_held(run, it.key, it.arg, e)) have->stack += it.stack;
+            return;
+        }
+    }
+    if (*n_given < GC_MAX_ITEMS) given[(*n_given)++] = it;
+}
+
+/* the fight's first turn (the trainer's lines, the send-outs, the lead's abilities and the held items they use up): tests hold it back to compare the party and the enemy as the option left them */
+static bool hold_start;
+void gc_weird_hold_start(bool hold) { hold_start = hold; }
+void gc_weird_begin_fight(gc_run *run) { gc_me_say_trainer_fight(run, gc_int(run)); }
+
+/* option 2: the party this one would have become fights as the "alternate" player trainer */
+static void fight(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    static gc_mon news[WD_PARTY], olds[WD_PARTY];
+    static gc_item held[GC_MAX_ITEMS], given[GC_MAX_ITEMS];
+    int held_start[WD_PARTY], held_n[WD_PARTY];
+    const int n = run->n_party;
+    if (!build_all(run, news)) {   /* a species the data does not cover: nobody fights and the dream ends as if it were refused */
+        gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        gc_me_leave_with_heal_shop(run);
+        return;
+    }
+    collect_held(run, olds, n, held, held_start, held_n);
+
+    /* onOptionPhase: for each transformation postProcessTransformedPokemon(.., forBattle) (the first one's start on the option's stream) */
+    for (int k = 0; k < n; k++) post_process(run, &olds[k], &news[k], true, k == 0);
+
+    /* setEncounterRewards: six tiers (no fill), the callback that gives one Pokemon its passive */
+    pr_reward_custom *c = &in->reward.me_custom;
+    memset(c, 0, sizeof *c);
+    static const int8_t tiers[6] = {MODIFIER_TIER_ROGUE, MODIFIER_TIER_ROGUE, MODIFIER_TIER_ULTRA, MODIFIER_TIER_ULTRA, MODIFIER_TIER_GREAT, MODIFIER_TIER_GREAT};
+    for (int k = 0; k < 6; k++) c->tiers[c->n_tiers++] = tiers[k];
+    c->fill_remaining = false;
+    c->reroll_multiplier = NAN;
+    c->allow_luck_upgrades = true;
+    gc_ev_msg(run, "mysteryEncounters/weirdDream:option.2.selected2", 0);
+
+    /* initBattleWithEnemyConfig: the alternate trainer (the player's gender is not kept: always the male one), its Pokemon made from the new ones as data sources */
+    run->trainer_type = TRAINER_TYPE_PLAYER_M_ALTERNATE;
+    run->battle_type = BATTLE_TYPE_TRAINER;
+    run->double_battle = false;
+    run->trainer_variant = TRAINER_VARIANT_DEFAULT;
+    run->trainer_name = run->trainer_partner_name = -1;
+    in->custom_trainer_name[0] = 0;
+    in->custom_team_on = false;
+    int n_given = 0;
+    for (int k = 0; k < n; k++) {
+        gc_mon *e = &run->enemy[k];
+        *e = news[k];
+        pr_reset_summon_data(&e->b);
+        e->b.is_player = false;
+        e->b.on_field = false;
+        e->b.has_trainer = true;
+        e->b.trainer_slot = TRAINER_SLOT_TRAINER;
+        e->trainer_slot = TRAINER_SLOT_TRAINER;
+        e->b.status = STATUS_EFFECT_NONE;
+        e->b.passive_flag = false;
+        const bool boss = gc_form(e->b.species, e->b.form)->base_total > NON_LEGENDARY_BST;
+        const int segments = boss ? pr_run_get_encounter_boss_segments(&run->run, run->wave, olds[k].b.level, e->b.species, true) : 0;
+        e->b.is_boss = boss;
+        e->b.boss_segments = (uint8_t)segments;
+        e->b.boss_segment_index = (uint8_t)(segments > 0 ? segments - 1 : 0);
+        e->b.hp = e->b.stats[STAT_HP];
+        /* a data source: its id is rolled again */
+        e->b.id = (uint32_t)floor(pr_rng_real_in_range(&run->run.rng, 0, 4294967296.0));
+    }
+    run->n_enemy = n;
+    /* modifierConfigs: clones of the old Pokemon's items (not transferable, stacks as they are) and an Old Gateau for a Pokemon below 570 */
+    memset(given, 0, sizeof given);
+    for (int k = 0; k < n; k++) {
+        const gc_mon *e = &run->enemy[k];
+        for (int i = 0; i < held_n[k]; i++) add_given(run, given, &n_given, e, &held[held_start[k] + i]);
+        if (gc_form(e->b.species, e->b.form)->base_total < NON_LEGENDARY_BST) {
+            gc_item gateau = {.key = "MYSTERY_ENCOUNTER_OLD_GATEAU", .arg = 0, .stack = 1};
+            add_given(run, given, &n_given, e, &gateau);
+        }
+    }
+    run->me_battle = true;
+    in->me_no_stats = false;
+    gc_enemy_finish_party_holders(run, given, n_given);
+    in->me_reward.active = false;
+    run->me_catch_allowed = false;
+    run->mystery_type = run->mystery_tier = -1;
+    run->in_battle = true;
+    in->weird.fight = true;
+    if (!hold_start) gc_weird_begin_fight(run);
+}
+
+/* handleMysteryEncounterVictory (trainer battle): BattleEndPhase, TrainerVictoryPhase, then MysteryEncounterRewardsPhase: the callback (the passive) and the shop */
+void gc_weird_victory(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    in->weird.fight = false;
+    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
+    gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
+    gc_rq_push(run, gc_rp(RP_ME_BEFORE_REWARDS, 0, 0, 0));
+    gc_me_end_with_shop(run);
+    in->weird.reward = true;
+}
+
+/* onBeforeRewards (the rewards phase runs it in executeWithSeedOffset(.., wave * 1000)): one random Pokemon without a passive gets it for the run */
+void gc_weird_reward(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (!in->weird.reward) return;
+    in->weird.reward = false;
+    int without[WD_PARTY], n_without = 0;
+    for (int k = 0; k < run->n_party; k++) if (!run->party[run->party_order[k]].b.passive_flag) without[n_without++] = run->party_order[k];
+    if (n_without == 0) return;
+    pr_rng r = pr_run_seed_offset_rng(&run->run, run->wave * 1000, NULL);
+    gc_mon *m = &run->party[without[pr_rng_seed_int(&r, n_without, 0)]];
+    m->b.passive_flag = true;
+    pr_update_passive(&run->bt, &m->b);
+}
+
 void gc_weird_execute(gc_run *run, int option)
 {
     if (option == 0) transform(run);
+    else if (option == 1) fight(run);
     else lose_levels(run);
 }

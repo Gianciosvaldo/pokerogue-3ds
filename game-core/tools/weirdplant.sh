@@ -9,7 +9,9 @@
 # Not planted (equivalent or out of the oracle's reach): the 200-pass guard of the species loop and its return 0 (upstream would loop for ever), the stub paths for a species the
 # data does not cover, the Item-limit note (engine limit), the on_field / switch_out_status flags of the new Pokemon (no battle follows), the fusion branch of the luck sum (the party has no
 # fusions), and the Keldeo branch of the player moveset generator (Keldeo cannot be made by the dream).
+# Not planted, equivalent: the enemy's hp = max in fight() (pr_calculate_stats, which finish_party runs next, sets a fresh Pokemon's HP to its maximum, as getMaxHp() did upstream).
 # build-gimmighoul is caught only by seeds 2024, 31337 and 9 (a Gimmighoul is not drawn in the seed 777 trace): run it on those traces too.
+# The fight plants (fight-*) need a trace with option 2 cases; the ones named after the draws that a trace may not reach (a Pokemon at exactly 570, a held Old Gateau) are caught by the 400-case traces.
 # Usage: tools/weirdplant.sh <trace>   (WEIRD_PLANT_FROM=<name> starts at that plant, WEIRD_PLANT_ONLY="a b" runs those)
 set -e
 TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
@@ -58,6 +60,10 @@ POST='/^static bool post_process/,/^}/'
 HELD='/^static void add_held/,/^}/'
 XFORM='/^static void transform/,/^}/'
 LOSE='/^static void lose_levels/,/^}/'
+FIGHT='/^static void fight/,/^}/'
+GIVEN='/^static void add_given/,/^}/'
+VICT='/^void gc_weird_victory/,/^}/'
+REWARD='/^void gc_weird_reward/,/^}/'
 
 plant range-high "$TRANS"'s#original_bst + rng_range\[1\];#original_bst + rng_range[1] - 1;#'
 plant range-edge-low "$TRANS"'s#bst >= min \&\& bst <= cap#bst > min \&\& bst <= cap#'
@@ -133,6 +139,32 @@ plant lose-floor "$LOSE"'s#ceil(((100 - 10) / 100.0) \* m->b.level)#floor(((100 
 plant lose-min "$LOSE"'s#(level > 1 ? level : 1)#(level > 2 ? level : 2)#'
 plant lose-exp "$LOSE"'s#m->exp = gc_level_total_exp(m->b.level, sp ? sp->growth_rate : 0);#(void)0;#'
 plant lose-recalc "$LOSE"'s#gc_mon_recalc(run, m);#(void)0;#'
+
+plant fight-stream-first "$FIGHT"'s#true, k == 0);#true, false);#'
+plant fight-stream-all "$FIGHT"'s#true, k == 0);#true, true);#'
+plant fight-stream-restore "$POST"'s#if (option_stream) run->run.rng = run_rng;#(void)0;#'
+plant fight-tiers "$FIGHT"'s#MODIFIER_TIER_GREAT, MODIFIER_TIER_GREAT}#MODIFIER_TIER_GREAT, MODIFIER_TIER_ULTRA}#'
+plant fight-fill "$FIGHT"'s#c->fill_remaining = false;#c->fill_remaining = true;#'
+plant fight-message "$FIGHT"'s#weirdDream:option.2.selected2#weirdDream:option.2.selected#'
+plant fight-trainer "$FIGHT"'s#TRAINER_TYPE_PLAYER_M_ALTERNATE#TRAINER_TYPE_PLAYER_F_ALTERNATE#'
+plant fight-variant "$FIGHT"'s#TRAINER_VARIANT_DEFAULT#TRAINER_VARIANT_FEMALE#'
+plant fight-boss-bst "$FIGHT"'s#base_total > NON_LEGENDARY_BST;#base_total > SUPER_LEGENDARY_BST;#'
+plant fight-boss-flag "$FIGHT"'s#e->b.is_boss = boss;#e->b.is_boss = false;#'
+plant fight-segments "$FIGHT"'s#olds\[k\].b.level, e->b.species, true)#olds[k].b.level + 100, e->b.species, true)#'
+plant fight-id "$FIGHT"'s#pr_rng_real_in_range(\&run->run.rng, 0, 4294967296.0)#pr_rng_real_in_range(\&run->run.rng, 0, 4294967295.0)#'
+plant fight-passive "$FIGHT"'s#e->b.passive_flag = false;#e->b.passive_flag = news[k].b.passive_flag;#'
+plant fight-slot "$FIGHT"'s#e->b.trainer_slot = TRAINER_SLOT_TRAINER;#e->b.trainer_slot = 0;#'
+plant fight-gateau-bst "$FIGHT"'s#base_total < NON_LEGENDARY_BST) {#base_total <= NON_LEGENDARY_BST) {#'
+plant fight-gateau-drop "$FIGHT"'s#add_given(run, given, \&n_given, e, \&gateau);#(void)gateau;#'
+plant fight-held-order "$FIGHT"'s#for (int i = 0; i < held_n\[k\]; i++) add_given#for (int i = held_n[k] - 1; i >= 0; i--) add_given#'
+plant fight-locked "$GIVEN"'s#it.non_transferable = true;#it.non_transferable = false;#'
+plant fight-holder "$GIVEN"'s#it.pokemon_id = e->b.id;#it.pokemon_id = run->enemy[0].b.id;#'
+plant fight-merge "$GIVEN"'s#<= gc_item_max_held(run, it.key, it.arg, e)#<= 99#'
+plant fight-victory "$VICT"'s#gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));#(void)0;#'
+plant fight-pick "$REWARD"'s#pr_rng_seed_int(\&r, n_without, 0)#pr_rng_seed_int(\&r, n_without > 1 ? n_without - 1 : 1, 0)#'
+plant fight-offset "$REWARD"'s#run->wave \* 1000, NULL#run->wave * 1000 + 1, NULL#'
+plant fight-passive-set "$REWARD"'s#m->b.passive_flag = true;#m->b.passive_flag = m->b.passive_flag;#'
+plant fight-passive-pool "$REWARD"'s#if (!run->party\[run->party_order\[k\]\].b.passive_flag) without#if (run->party[run->party_order[k]].b.passive_flag || k == 0) without#'
 
 echo "$total planted, $fails not caught"
 [ "$fails" = 0 ]
