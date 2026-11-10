@@ -169,9 +169,9 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     char score[72],situation[72];unsigned seconds=m->rules.seconds_left;
     if(m->phase==FB_LIVE_PLAY && m->rules.quarter<5)seconds=seconds>(unsigned)m->elapsed?seconds-(unsigned)m->elapsed:0;
     snprintf(score,sizeof score,"HOME %02u   AWAY %02u     Q%u  %u:%02u",m->rules.score[0],m->rules.score[1],m->rules.quarter,seconds/60,seconds%60);
-    if(m->special)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,football_live_art_special_name(m->special));
-    else if(m->conversion)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,m->conversion==1?"TRY AFTER TOUCHDOWN":"TWO-POINT TRY");
-    else snprintf(situation,sizeof situation,"ROUND %u/7   %s  DOWN %u / %u YD",c->round,dir>0?">>>":"<<<",m->rules.down,football_rules_distance(&m->rules));
+    if(m->special)snprintf(situation,sizeof situation,"ROUND %u/%u   %s",c->round,(unsigned)FB_CAREER_ROUNDS,football_live_art_special_name(m->special));
+    else if(m->conversion)snprintf(situation,sizeof situation,"ROUND %u/%u   %s",c->round,(unsigned)FB_CAREER_ROUNDS,m->conversion==1?"TRY AFTER TOUCHDOWN":"TWO-POINT TRY");
+    else snprintf(situation,sizeof situation,"ROUND %u/%u   %s  DOWN %u / %u YD",c->round,(unsigned)FB_CAREER_ROUNDS,dir>0?">>>":"<<<",m->rules.down,football_rules_distance(&m->rules));
     label(r,score,12,2,.53f,white);label(r,situation,12,23,.40f,gold);
 }
 /* The cards of the playcall are classic windows with the emerald font: the window is the card, a yellow frame marks the one chosen, and
