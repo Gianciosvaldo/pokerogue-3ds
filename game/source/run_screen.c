@@ -887,9 +887,18 @@ static void write_save(void);
 
 static bool submit(const gc_choice* c) {
   const char* why = NULL;
-  /* the first turn ends the save point: a save postponed until now is written before the answer goes in */
-  if (G.save_due && gc_run_can_save(&G.run)) write_save();
-  G.save_due = false;
+  /* the first turn ends the save point: a save postponed until now is written before the answer goes in. Only the answer to a COMMAND
+   * screen ends it: the questions before the first command ("Will you switch?" at a wild battle, and the party screen a Yes opens) are
+   * answered with the save still due, and the command screen that follows writes it (save_point). Dropping it at those answers lost
+   * the save of every wild battle once the SWITCH battle style was on (a run loaded 3-5 waves back, at the last trainer's battle). */
+  if (G.save_due) {
+    if (gc_run_can_save(&G.run)) {
+      write_save();
+      G.save_due = false;
+    } else if (G.run.screen.kind == GC_SCREEN_COMMAND) {
+      G.save_due = false;
+    }
+  }
   if (gc_run_choose(&G.run, c, &why)) {
     G.refused_in_row = 0;
     if (c->kind == GC_CH_BALL) ach_on_ball();

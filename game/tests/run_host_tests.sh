@@ -56,6 +56,13 @@ echo "== runtest (system data, saves) 300"
 RUNTEST_SYS=1 RUNTEST_SAVE=1 build/runtest 300 0 || failed="$failed runtest-sys-save"
 echo "== runtest (Save and Quit from the in-run menu, continued from the slot) 300"
 RUNTEST_SYS=1 RUNTEST_SAVE=quit build/runtest 300 0 || failed="$failed runtest-quit"
+# The app always runs with the SWITCH battle style (app_flow.c: ask_switch). The save lines above run without it, which let a wild battle's
+# "Will you switch?" answer drop the pending save (a run loaded 3-5 waves back): these lines save with the question on, every save point must
+# be written, and a run resumed from its slot must be the saved one.
+echo "== runtest (Will you switch? with saves: every save point written, resumed from the slot) 300"
+RUNTEST_ASK_SWITCH=1 RUNTEST_SYS=1 RUNTEST_SAVE=resume build/runtest 300 0 || failed="$failed runtest-ask-switch-save"
+echo "== runtest (Will you switch? with Save and Quit from the in-run menu, continued from the slot) 500"
+RUNTEST_ASK_SWITCH=1 RUNTEST_SYS=1 RUNTEST_SAVE=quit build/runtest 500 0 || failed="$failed runtest-ask-switch-quit"
 echo "== runtest (custom runs: the rematch offers, wins and vouchers through run_screen) 200"
 RUNTEST_CUSTOM=strong build/runtest 200 0 || failed="$failed runtest-custom"
 echo "== runtest (custom runs dropped and continued from the custom slot) 100"
