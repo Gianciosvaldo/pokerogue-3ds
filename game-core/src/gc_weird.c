@@ -448,6 +448,14 @@ static void transform(gc_run *run)
 
     /* onOptionPhase: the cutscene's text, the transformations, then the dream's end */
     gc_ev_msg(run, "mysteryEncounters/weirdDream:option.1.cutscene", 0);
+    for (int k = 0; k < n; k++) {
+        gc_event *ev = gc_ev_new(run, GC_EV_DREAM);
+        if (!ev) continue;
+        ev->a = find_by_id(run, news[k].b.id);
+        ev->b = olds[k].b.species;
+        ev->c = olds[k].b.form;
+        ev->hp = (pr_get_gender(&olds[k].b) == 1 ? 1 : 0) | (olds[k].b.shiny ? 2 : 0) | ((olds[k].b.variant & 3) << 2);
+    }
     gc_ev_msg(run, "mysteryEncounters/weirdDream:option.1.dreamComplete", 0);
 
     for (int k = 0; k < n; k++) {

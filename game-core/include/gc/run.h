@@ -72,6 +72,9 @@ typedef enum {
                           * after it), read from the event and not from gc_run.trainer_names: a win on a wave with no reward screen
                           * (every tenth) goes straight on to the next wave in the same batch of events, and by the time the app
                           * plays the line the run holds the next battle's names. The text stays valid for the next two trainer battles */
+    GC_EV_DREAM,         /* Weird Dream's transformation of one party member (doPokemonTransformationSequence), in party order between the cutscene
+                          * text and the dream's end: a = the storage index in gc_run.party of the new Pokemon, b = the old Pokemon's species,
+                          * c = its form, hp = its looks (bit 0 female, bit 1 shiny, bits 2 and 3 the variant). Presentation only */
     GC_EV_COUNT,
 } gc_event_kind;
 
