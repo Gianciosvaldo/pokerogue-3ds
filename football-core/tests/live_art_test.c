@@ -17,8 +17,8 @@ static unsigned priced;
 unsigned football_live_art_candy_milli(const FootballCareer *c,unsigned member,unsigned points){(void)c;++priced;return member<22?points*100u:0u;}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
 /* The yard numbers are painted on the turf: every all-digit text is drawn behind the banner's window (z .85), and nothing but them is. */
-static char parsed[64];static unsigned field_numbers,numbers_over_banner,words_under_banner;
-void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);snprintf(parsed,sizeof parsed,"%s",s);}
+static char parsed[64],round_text[64];static unsigned field_numbers,numbers_over_banner,words_under_banner;
+void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);snprintf(parsed,sizeof parsed,"%s",s);if(!strncmp(s,"ROUND ",6))snprintf(round_text,sizeof round_text,"%s",s);}
 void C2D_TextOptimize(C2D_Text *t){(void)t;}
 void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color)
 {
@@ -70,8 +70,10 @@ int main(void)
     /* The headline names every kick, and the try is labelled before and during its play. */
     assert(!strcmp(football_live_art_special_name(FB_SPECIAL_KICKOFF),"KICKOFF") && !strcmp(football_live_art_special_name(FB_SPECIAL_EXTRA_POINT),"EXTRA POINT") && !strcmp(football_live_art_special_name(FB_SPECIAL_NONE),"GO FOR TWO"));
     m->special=FB_SPECIAL_NONE;m->phase=FB_LIVE_CALL;m->event=FB_EVENT_NONE;
-    for(unsigned conversion=1;conversion<=2;++conversion){drawn=0;m->conversion=(uint8_t)conversion;football_live_art_top(&renderer,&career,&camera,0);}
-    m->conversion=0;
+    career.round=3;
+    for(unsigned conversion=1;conversion<=2;++conversion){drawn=0;m->conversion=(uint8_t)conversion;round_text[0]=0;football_live_art_top(&renderer,&career,&camera,0);assert(!strncmp(round_text,"ROUND 3/13   ",13));}
+    m->conversion=0;round_text[0]=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(!strncmp(round_text,"ROUND 3/13   ",13)); /* the playoff is 13 matches, not the old 7 */
+    m->special=FB_SPECIAL_PUNT;round_text[0]=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(!strncmp(round_text,"ROUND 3/13   ",13));m->special=FB_SPECIAL_NONE;
     /* A credited play adds the species line under the banner; a credit for the other side or none adds nothing. */
     m->phase=FB_LIVE_DEAD;m->event=FB_EVENT_INTERCEPTION;named=0;drawn=0;m->credit_count=0;football_live_art_top(&renderer,&career,&camera,0);assert(!named);
     m->credit_count=1;m->credits[0]=(FootballCredit){FB_AWAY,3,FB_CREDIT_INTERCEPTION};drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(!named);
