@@ -28,6 +28,7 @@ const rr_frame *rr_atlas_frame(const rr_atlas *a,int i){(void)a;(void)i;return N
 
 static rr_frame frame96;
 const rr_frame *img_frame(const char *key,const char *name){(void)key;(void)name;return &frame96;}
+const rr_frame *mui_frame(const char *key,const char *frame){(void)key;(void)frame;return &frame96;}
 const rr_frame *img_anim_frame(const char *key,int frame){(void)key;(void)frame;return &frame96;}
 bool img_has(const char *key){(void)key;return true;}
 typedef struct{char key[96];float x,y,zoom;}img_call;

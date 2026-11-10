@@ -88,6 +88,9 @@ FAULTS = [
  ('clown-sprite-mime', UI[0], '{\'P\', "122", -25, -3, 0, 0.3f}', '{\'P\', "123", -25, -3, 0, 0.3f}'),
  ('clown-sprite-blacephalon', UI[0], '{\'P\', "806", 25, -3, 0, 0.3f}', '{\'P\', "806", 25, -3, 0, 0.0f}'),
  ('clown-sprite-place', UI[0], '{\'P\', "806", 25, -3, 0, 0.3f}', '{\'P\', "806", -25, -3, 0, 0.3f}'),
+ ('top-window-description-narrow', UI[1], '#define TOP_W 372', '#define TOP_W 280'),
+ ('top-window-sprites-not-zoomed', UI[1], 'float z = SPRITE_ZOOM_MAX;', 'float z = 1.0f;'),
+ ('top-window-sprites-off-floor', UI[1], 'rr_draw(f, 200 + (s->x - 160) * zoom, TOP_FLOOR + (s->y - 164) * zoom, &d);', 'rr_draw(f, 200 + (s->x - 160) * zoom, TOP_FLOOR + (s->y - 164), &d);'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

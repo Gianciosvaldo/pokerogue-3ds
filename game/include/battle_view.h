@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "me_screen.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -214,6 +216,10 @@ enum { BV_BALL_EMPTY, BV_BALL_ALIVE, BV_BALL_FAINTED };
 void bv_set_info(const char* name, const char* desc);
 
 void bv_begin(const bv_setup* setup);
+
+/* A mystery encounter's intro sprites (upstream's MysteryEncounterIntroVisuals), standing on the enemy platform and sliding in with it; places as
+ * me_flow_intro_sprites gives them (a 320 wide field, feet at y 164). Call after bv_begin, which clears them. The next bv_begin removes them. */
+void bv_me_intro(const me_intro_sprite* sprites, int n);
 /* Queues events (copied; text is copied too) and plays them; on_done runs after the last one. */
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 /* where BEV_MUSIC goes (the app's music is not the view's): a is the event's a */

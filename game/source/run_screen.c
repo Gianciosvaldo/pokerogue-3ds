@@ -503,6 +503,10 @@ static void wave_black(void* arg) {
   if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
+  if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) {   /* the encounter's own sprites on the platform */
+    static me_intro_sprite me_sp[ME_MAX_INTRO];
+    bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
+  }
   /* after the Pokemon's sprites, which need texture memory in big pieces: the preload is only a guess at what will play */
   preload_moves();
   refresh_item_bars();
