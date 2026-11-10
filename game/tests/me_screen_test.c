@@ -1217,6 +1217,14 @@ int main(void) {
   CHECK(!me_flow_open(&R, chosen, NULL), "only on an encounter screen");
   CHECK(me_flow_ns(GC_ME_LOST_AT_SEA) && !strcmp(me_flow_ns(GC_ME_LOST_AT_SEA), "lostAtSea") && !me_flow_ns(GC_ME_COUNT),
         "namespace table");
+  /* rundriver.txt "mystery=": the name (any letter case) or the number, nothing else */
+  CHECK(me_flow_type_from_name("weirdDream") == GC_ME_WEIRD_DREAM && me_flow_type_from_name("WEIRDdream") == GC_ME_WEIRD_DREAM, "mystery= by name");
+  CHECK(me_flow_type_from_name("lostAtSea") == GC_ME_LOST_AT_SEA, "mystery= by name, another encounter");
+  { char num[16]; snprintf(num, sizeof num, "%d", GC_ME_WEIRD_DREAM); CHECK(me_flow_type_from_name(num) == GC_ME_WEIRD_DREAM, "mystery= by number"); }
+  CHECK(me_flow_type_from_name("-1") == -1 && me_flow_type_from_name("9999") == -1 && me_flow_type_from_name("weird") == -1
+            && me_flow_type_from_name("") == -1 && me_flow_type_from_name(NULL) == -1,
+        "mystery= rejects anything else");
+  for (int t = 0; t < GC_ME_COUNT; t++) CHECK(me_flow_type_from_name(me_flow_ns(t)) == t || !me_flow_ns(t), "every namespace maps back to its own type");
 
   /* every encounter's namespace names a real upstream locale file (the 31 files of locales 270ed0a; Pillar Men have none, their text is in the app) */
   {

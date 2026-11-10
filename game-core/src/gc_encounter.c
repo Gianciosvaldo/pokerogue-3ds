@@ -818,6 +818,10 @@ void gc_new_battle(gc_run *run)
         nb.n_levels = 1;
         nb.levels[0] = pr_run_get_level_for_wave(&run->run, &br, wave);
     }
+    if (!in->custom && nb.battle_type == BATTLE_TYPE_WILD && gc_debug_mystery_pending(run, wave)) {   /* rundriver.txt "mystery=": this wave is the encounter */
+        nb.battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
+        nb.double_battle = false;
+    }
     run->double_battle=nb.double_battle;
     run->battle_type = nb.battle_type;
     run->trainer_type = nb.trainer_type;

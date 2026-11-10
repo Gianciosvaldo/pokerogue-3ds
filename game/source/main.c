@@ -9,6 +9,10 @@
  * Debug file: sdmc:/3ds/pokerogue/rundriver.txt, optional. Lines "seed=<24 characters>" and
  * "starters=<species id>,<species id>..." fix the first New Game of a session (for repeatable test runs). A line "capsule=<1..25>" opens
  * the capsule-machine preview (a debug view with fixed results, capsule_screen.h) before the title.
+ * A line "mystery=<name or number>[,<wave>]" (for example "mystery=weirdDream" or "mystery=weirdDream,30") makes the first plain wave from <wave>
+ * on (default 1, never a multiple of 10) that encounter, once per run, whatever its own wave window or rarity, so a Rogue-tier one can be played
+ * without waiting for the draw; its party rules still apply (Weird Dream needs three Pokemon). The name is the locale namespace (me_flow.c).
+ * Classic runs only; Custom runs ignore it. Debug only: the line is absent on a normal install.
  *
  * START + SELECT quits.
  */
@@ -20,6 +24,7 @@
 #include "app_flow.h"
 #include "battle_event_store.h"
 #include "i18n.h"
+#include "me_flow.h"
 #include "mui.h"
 #include "pak.h"
 #include "rr.h"
@@ -54,6 +59,14 @@ static void read_driver_file(rs_config* cfg) {
       unsigned fr = 0;
       int tx = 0, ty = 0;
       if (sscanf(line + 6, "%u:%d,%d", &fr, &tx, &ty) == 3) ui_debug_touch(fr, (float)tx, (float)ty);
+    } else if (!strncmp(line, "mystery=", 8)) {
+      int min_wave = 1;
+      char* comma = strchr(line + 8, ',');
+      if (comma) {
+        *comma = 0;
+        min_wave = atoi(comma + 1);
+      }
+      gc_debug_force_mystery(me_flow_type_from_name(line + 8), min_wave); /* an unknown name turns it off */
     } else if (!strncmp(line, "starters=", 9)) {
       cfg->n_starters = 0;
       for (char* t = strtok(line + 9, ", "); t && cfg->n_starters < 6; t = strtok(NULL, ", "))

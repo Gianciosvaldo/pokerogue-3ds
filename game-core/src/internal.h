@@ -347,6 +347,7 @@ void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scen
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
 bool gc_mystery_select(gc_run *run, int *type, int *tier);
+bool gc_debug_mystery_pending(const gc_run *run, int wave);   /* the developer hook below: this wave becomes the forced encounter */
 bool gc_mystery_in_biome(int biome, int type);   /* mysteryEncountersByBiome */
 bool gc_mystery_rule(int type, int *tier, int *min_wave, int *max_wave, int *max_seen, int *min_party, int *challenges, double *money, int *mod_mask);
 void gc_mystery_record(gc_run *run, int type, int tier);
