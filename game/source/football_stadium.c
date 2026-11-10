@@ -144,7 +144,6 @@ static void ellipse(const FootballCamera *cam,float cx,float cy,float a,float b,
  * goal on the screen, so a good kick (between the uprights) ends along it and a miss ends past one end of it; it stands where the kicks are aimed
  * (football_goal.h: FB_GOAL_POST_INSET yards inside each end line, the middle of the field's width). */
 #define POST_MAST_W 5.f     /* the mast, in pixels */
-#define POST_MAST_UP 62.f   /* from the foot of the mast up to its tip */
 #define POST_MAST_DOWN 12.f /* and below the middle of the goal, where the gooseneck bends */
 #define POST_CAP 7.f        /* the cap of an upright */
 #define POST_PAD_W 10.f     /* the padded base: width... */
@@ -153,9 +152,12 @@ static void ellipse(const FootballCamera *cam,float cx,float cy,float a,float b,
 static void goal_post(const FootballCamera *cam,float x,float light_k)
 {
     float gx=football_camera_x(cam,x),gy=football_camera_y(cam,FB_GOAL_MIDDLE),out=x<60.f?-1.f:1.f; /* out: toward the end line */
-    if(gx<-60.f || gx>460.f || gy-POST_MAST_UP-POST_CAP>240.f || gy+POST_MAST_DOWN+POST_PAD_H<44.f)return;
+    /* Where a kick passes the posts: FB_GOAL_CROSS_Z up, and an upright's yards either side of the middle of the goal (football_goal.h). */
+    float pass=gy-FB_GOAL_CROSS_Z*FB_BALL_LIFT_PX,reach=FB_GOAL_HALF_WIDTH*FB_CAMERA_SCALE*FB_CAMERA_SQUASH;
+    float cap1=pass-reach-POST_CAP*.5f,cap2=pass+reach-(POST_CAP-1.f)*.5f,mast_up=gy-(cap1+1.f);
+    if(gx<-60.f || gx>460.f || cap1>240.f || gy+POST_MAST_DOWN+POST_PAD_H<44.f)return;
     u32 yellow=shade((Rgb){255,210,63},light_k),cap=shade((Rgb){255,244,170},light_k),pad=shade((Rgb){40,78,176},light_k),padhi=shade((Rgb){86,128,226},light_k);
-    float top=gy-POST_MAST_UP,bottom=gy+POST_MAST_DOWN,nx=out<0?gx-POST_NECK:gx+POST_MAST_W,padx=out<0?gx-POST_NECK-1.f:gx+POST_NECK-POST_PAD_W+POST_MAST_W+1.f;
+    float top=gy-mast_up,bottom=gy+POST_MAST_DOWN,nx=out<0?gx-POST_NECK:gx+POST_MAST_W,padx=out<0?gx-POST_NECK-1.f:gx+POST_NECK-POST_PAD_W+POST_MAST_W+1.f;
     rect(padx+(out<0?3.f:-3.f),bottom+POST_PAD_H-5.f,POST_PAD_W,6.f,Z_POST-.001f,C2D_Color32(10,40,18,150));   /* its shadow on the grass */
     rect(gx,top,POST_MAST_W,bottom-top,Z_POST,yellow);                                                         /* the mast */
     rect(gx+POST_MAST_W-1.f,top,1.f,bottom-top,Z_POST+.001f,shade((Rgb){196,150,30},light_k));                /* its shaded edge */
@@ -163,8 +165,8 @@ static void goal_post(const FootballCamera *cam,float x,float light_k)
     rect(out<0?nx:nx+POST_NECK-POST_MAST_W,bottom-POST_MAST_W,POST_MAST_W,POST_MAST_W+5.f,Z_POST+.001f,yellow);/* ...and down to the base */
     rect(padx,bottom+3.f,POST_PAD_W,POST_PAD_H,Z_POST+.002f,pad);                                              /* the padded base */
     rect(padx+1.f,bottom+4.f,3.f,POST_PAD_H-2.f,Z_POST+.003f,padhi);
-    rect(gx-1.f,top-1.f,POST_MAST_W+2.f,POST_CAP,Z_POST+.002f,cap);                                            /* the first upright's cap */
-    rect(gx-1.f,top+(bottom-top)*.38f,POST_MAST_W+2.f,POST_CAP-1.f,Z_POST+.002f,cap);                          /* the second */
+    rect(gx-1.f,cap1,POST_MAST_W+2.f,POST_CAP,Z_POST+.002f,cap);                                            /* the first upright's cap */
+    rect(gx-1.f,cap2,POST_MAST_W+2.f,POST_CAP-1.f,Z_POST+.002f,cap);                          /* the second */
 }
 void football_stadium_draw(const FootballCamera *cam,unsigned round,unsigned steps,bool cheering)
 {

@@ -166,7 +166,7 @@ static void kick_goal(FootballLive *m)
     float spread=jitter(m);
     m->from_x=k->x;m->from_y=k->y;m->to_x=d>0?120.0f-FB_GOAL_POST_INSET:FB_GOAL_POST_INSET;
     /* Good kicks split the posts (the half width between the uprights is FB_GOAL_HALF_WIDTH); a miss goes wide, left or right. */
-    m->to_y=FB_GOAL_MIDDLE+(m->kick_good?spread*1.8f:(spread>=0?1:-1)*(4.2f+fabsf(spread)*3));
+    m->to_y=FB_GOAL_MIDDLE+(m->kick_good?spread*1.8f:(spread>=0?1:-1)*(FB_GOAL_MISS_MIN+fabsf(spread)*2.4f));
     m->flight=0;m->flight_time=1.1f+football_live_fg_distance(m)*.012f;m->flying=true;m->stage=FB_STAGE_FLIGHT;
     m->kick_yards=(int16_t)football_live_fg_distance(m);
 }
@@ -338,7 +338,7 @@ void football_live_special_step(FootballLive *m,FootballLiveInput input)
     if(m->stage==FB_STAGE_FLIGHT){
         m->flight+=FB_LIVE_STEP;float t=limit(m->flight/m->flight_time,0,1);
         m->ball_x=m->from_x+(m->to_x-m->from_x)*t;m->ball_y=m->from_y+(m->to_y-m->from_y)*t;
-        m->ball_z=4*t*(1-t)*(off?14.0f:punt?11.0f:6.0f);
+        m->ball_z=goal?football_goal_ball_z(t):4*t*(1-t)*(off?14.0f:punt?11.0f:6.0f);
         if(t>=1){if(punt)punt_lands(m);else if(off)kickoff_lands(m);else kick_lands(m);}
         return;
     }

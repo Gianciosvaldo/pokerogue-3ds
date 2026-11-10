@@ -80,7 +80,11 @@ int main(void)
                 const Rect *r=&rects[i];
                 if(r->z<.0299f || r->z>.0331f)continue;
                 if(r->w==5 && r->h>=70 && fabsf(r->x-gx)<.01f){++masts;CHECK(r->y<gy-55 && r->y+r->h>gy);}          /* the mast, tall, with the middle of the goal on it */
-                else if(r->w==7 && r->h>=6 && r->h<=7 && fabsf(r->x+r->w*.5f-(gx+2.5f))<.01f)++caps;                  /* a cap, wider than the mast */
+                else if(r->w==7 && r->h>=6 && r->h<=7 && fabsf(r->x+r->w*.5f-(gx+2.5f))<.01f){
+                    /* a cap, wider than the mast, where a ball passing the posts FB_GOAL_HALF_WIDTH yards either side of the middle would be */
+                    const float pass=gy-FB_GOAL_CROSS_Z*FB_BALL_LIFT_PX,reach=FB_GOAL_HALF_WIDTH*FB_CAMERA_SCALE*FB_CAMERA_SQUASH,centre=r->y+r->h*.5f;
+                    CHECK(fabsf(centre-(pass-reach))<.51f || fabsf(centre-(pass+reach))<.51f);++caps;
+                }
                 else if(r->w==15 && r->h==5){++necks;CHECK(end?r->x>gx:r->x<gx);}                                      /* the gooseneck bends toward the end line */
                 else if(r->w==10 && r->h==30){++pads;CHECK(end?r->x>gx:r->x<gx);}                                      /* the padded base, out toward the end line too */
             }

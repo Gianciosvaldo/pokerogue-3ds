@@ -1,6 +1,7 @@
 #include "football_live_art.h"
 #include "football_live_fx.h"
 #include "football_stadium.h"
+#include "football_goal.h"
 #include "football_menu.h"
 #include "football_live_systems.h"
 #include <math.h>
@@ -141,7 +142,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     if(m->rules.offense==FB_HOME && !m->caught && !m->special && m->phase!=FB_LIVE_DEAD && m->phase!=FB_LIVE_END){static const unsigned targets[5]={2,3,4,5,1};
         for(unsigned i=0;i<5;++i){const FootballLiveActor *a=&m->actors[targets[i]];float x=bound(football_camera_x(cam,a->x),12,382),y=bound(football_camera_y(cam,a->y)-34,50,217);char n[3];snprintf(n,sizeof n,"%u",i+1);rect(x-7,y,18,19,.7f,navy);label(r,n,x-3,y,.5f,gold);}
     }
-    float bx=football_camera_x(cam,m->ball_x),by=football_camera_y(cam,m->ball_y)-m->ball_z*5-football_live_fx_ball_lift(m);
+    float bx=football_camera_x(cam,m->ball_x),by=football_camera_y(cam,m->ball_y)-m->ball_z*FB_BALL_LIFT_PX-football_live_fx_ball_lift(m);
     rect(bx-4,by-4,9,5,.6f,C2D_Color32(154,85,36,255));rect(bx-1,by-3,3,2,.61f,white);
     if((m->special==FB_SPECIAL_PUNT || m->special==FB_SPECIAL_KICKOFF) && m->stage==FB_STAGE_FLIGHT){
         /* Where the kick comes down, for the returner and for the coverage. */

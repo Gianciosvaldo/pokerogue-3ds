@@ -1,5 +1,6 @@
 #include "football_live_systems.h"
 #include "football_goal.h"
+#include "football_camera.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -158,19 +159,28 @@ int main(void)
             const bool human_kicks=seed%3!=0; /* every third kick is the CPU's, aimed at the other end */
             if(human_kicks){begin(seed,FB_HOME,90,10,4);assert(football_live_special(&m,FB_SPECIAL_FIELD_GOAL));}
             else{begin(seed,FB_AWAY,88,10,4);assert(football_live_defend(&m,FB_DEF_MAN) && m.special==FB_SPECIAL_FIELD_GOAL);}
-            float to_x=0,to_y=0;bool aimed=false;unsigned guard=0;
+            float to_x=0,to_y=0,last_z=0,last_y=0;bool aimed=false;unsigned guard=0;
             while(m.phase!=FB_LIVE_DEAD && m.phase!=FB_LIVE_END){
                 assert(++guard<4000);
                 FootballLiveInput in={.receiver=-1};
                 if(m.phase==FB_LIVE_SET && human_kicks)in.pressed=FB_LIVE_ACTION;
                 football_live_tick(&m,16,in);
                 if(!aimed && m.special==FB_SPECIAL_FIELD_GOAL && m.flying){aimed=true;to_x=m.to_x;to_y=m.to_y;}
+                if(m.special==FB_SPECIAL_FIELD_GOAL && m.flying){last_z=m.ball_z;last_y=m.ball_y;}
             }
             if(!aimed){assert(m.event==FB_EVENT_BLOCKED);++blocked;continue;}
             assert(fabsf(to_x-(human_kicks?120.0f-FB_GOAL_POST_INSET:FB_GOAL_POST_INSET))<.001f);
             assert(FB_GOAL_POST_INSET>0 && FB_GOAL_POST_INSET<=1.5f && (human_kicks?120.0f-to_x:to_x)<=1.5f); /* the ball ends at the post, which is at the end line, not partway into the end zone */
             const float off=fabsf(to_y-FB_GOAL_MIDDLE);
             defended+=!human_kicks;
+            /* As the camera shows it: the ball comes up to the posts at FB_GOAL_CROSS_Z, and its screen height there (its spot along the width, less
+             * its lift) is between the two upright caps for a good kick and outside both for a wide one, with room for the ball's own size. */
+            {
+                const float scale=FB_CAMERA_SCALE*FB_CAMERA_SQUASH,reach=FB_GOAL_HALF_WIDTH*scale;
+                const float rel=(last_y-FB_GOAL_MIDDLE)*scale-last_z*FB_BALL_LIFT_PX,from_caps=fabsf(rel+FB_GOAL_CROSS_Z*FB_BALL_LIFT_PX);
+                assert(fabsf(last_z-FB_GOAL_CROSS_Z)<.6f);
+                if(m.event==FB_EVENT_FIELD_GOAL)assert(from_caps<reach-5.0f);else assert(from_caps>reach+8.0f);
+            }
             if(m.event==FB_EVENT_FIELD_GOAL){assert(off<FB_GOAL_HALF_WIDTH);++good;}
             else{assert(m.event==FB_EVENT_FIELD_GOAL_MISSED && off>FB_GOAL_HALF_WIDTH);++wide;above|=to_y>FB_GOAL_MIDDLE;below|=to_y<FB_GOAL_MIDDLE;}
         }
