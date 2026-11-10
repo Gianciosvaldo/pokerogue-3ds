@@ -28,7 +28,11 @@ void bgm_play(const char* name);
 void bgm_stop(void);
 /* AudioManager.fadeOutBgm: the volume falls to 0 over `ms`, then the track is dropped */
 void bgm_fade_out(float ms);
-void bgm_tick(float dt_ms);    /* once per frame (ui_tick): runs the fade */
+void bgm_tick(float dt_ms);    /* once per frame (ui_tick): runs the fade and a delayed start */
+/* AudioManager.playBgm(name, true): nothing when it is the track playing (or already coming). With a track playing, it fades out over `fade_ms`
+ * and the new one starts `delay_ms` after this call (upstream: fadeDuration 500 and fadeDuration + 250); with none, it starts at once. Any other
+ * bgm_play, bgm_stop or fade cancels the wait. */
+void bgm_play_faded(const char* name, float fade_ms, float delay_ms);
 const char* bgm_current(void); /* the track playing ("" = none) */
 
 /* ---- the scenes (bgm.c): each is called where upstream starts or changes the music ---- */
@@ -53,6 +57,9 @@ void bgm_on_trainer_defeated(int trainer_type);
 /* Football Playoffs: a match begins (the kickoff screen comes up) with an upbeat battle track, a different one each round; the title music
  * returns when the match is over (bgm_on_title). */
 void bgm_on_football_match(unsigned seed, unsigned round);
+/* A mystery encounter's visuals begin (withOnVisualsStart): Weird Dream, Delibirdy-y, Fun and Games and the Global Trade System start their own
+ * track, 500 ms fade over the old one. Nothing for the other encounters. */
+void bgm_on_mystery(int type);
 /* GameOverPhase.handleGameOver: the music fades out, over 10 s after a win and 5 s after a loss */
 void bgm_on_run_end(bool clear);
 

@@ -121,7 +121,8 @@ typedef enum {
                     * stage's dialogue), 1 = playBgm() for what the field now shows (QuietFormChangePhase.end of the final boss: the
                     * Eternamax music). Does nothing without a hook; the queue does not wait */
   BEV_DREAM_ADD,   /* Weird Dream: one party member's transformation, to be played by BEV_DREAM_PLAY. mon = the new Pokemon; a = the old species,
-                    * b = its form, c = female (bit 0) | shiny (bit 1) | variant << 2. Takes no time */
+                    * b = its form, c = its looks as GC_EV_DREAM's hp (female, shiny, variant, then a fusion half's species, form, gender, shiny, variant).
+                    * Takes no time */
   BEV_DREAM_PLAY,  /* the dream background and the transformations of every BEV_DREAM_ADD since the last play (doPokemonTransformationSequence,
                     * three centred back to back or three side by side), until all have finished; the background then fades away while the next
                     * events go on */

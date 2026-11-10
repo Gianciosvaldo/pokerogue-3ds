@@ -45,6 +45,11 @@ static const char* track_now(const gc_run* r, char buf[BGM_NAME_LEN]) {
   return bgm_scene_track(&s, buf);
 }
 
+void bgm_on_mystery(int type) {
+  const char* track = bgm_mystery_track(type, true); /* all_gens: the default music preference */
+  if (track) bgm_play_faded(track, 500, 750);
+}
+
 void bgm_on_title(void) {
   time_t t = time(NULL);
   struct tm tm;

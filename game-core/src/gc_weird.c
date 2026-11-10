@@ -455,6 +455,9 @@ static void transform(gc_run *run)
         ev->b = olds[k].b.species;
         ev->c = olds[k].b.form;
         ev->hp = (pr_get_gender(&olds[k].b) == 1 ? 1 : 0) | (olds[k].b.shiny ? 2 : 0) | ((olds[k].b.variant & 3) << 2);
+        if (olds[k].b.fusion_species && olds[k].b.fusion_species < (1 << 14) && olds[k].b.fusion_form < 64)
+            ev->hp |= (int32_t)olds[k].b.fusion_species << 4 | (int32_t)olds[k].b.fusion_form << 18 | (((olds[k].b.fusion_gender + 1) & 3) << 24)
+                      | (olds[k].fusion_shiny ? 1 << 26 : 0) | ((olds[k].fusion_variant & 3) << 27);
     }
     gc_ev_msg(run, "mysteryEncounters/weirdDream:option.1.dreamComplete", 0);
 

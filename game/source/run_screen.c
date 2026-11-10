@@ -287,6 +287,9 @@ static void put_final_boss_encounter(void) {
   if (e) *e = (bv_event){.type = BEV_DIALOGUE, .battler = -1, .text = text, .name = name};
 }
 
+/* Weird Dream's cutscene text, held back for the play event of the dream that follows it (empty = none) */
+static char dream_text[TXT_LEN];
+
 static bool put_gc_msg(const pr_msg* m) {
   if (!m->key) return false; /* text not ported in battle-core: nothing to show */
   char* t = txt_new();
@@ -641,6 +644,12 @@ static bool handle_event(int i) {
       egg_hatch_open(e,pump,NULL);
       return true;
     case GC_EV_MESSAGE:
+      if (msg_is(e, "mysteryEncounters/weirdDream:option.1.cutscene") && i + 1 < G.nq && G.q[i + 1].kind == GC_EV_DREAM) {
+        /* the text starts with the transformations and waits for a button while they go on (showEncounterText is not awaited until they end):
+         * the dream's play event carries it */
+        be_format_message(&e->msg, dream_text, sizeof dream_text);
+        break;
+      }
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
@@ -824,8 +833,13 @@ static bool handle_event(int i) {
       if (e->a < 0 || e->a >= G.run.n_party) break;
       bv_mon* nm = &dream_mons[dream_n++ % DA_MAX];
       be_mon(&G.run.bt, &G.run.party[e->a].b, nm);
-      *ev_new() = (bv_event){.type = BEV_DREAM_ADD, .battler = -1, .a = e->b, .b = e->c, .c = e->hp & 15, .mon = nm};
-      if (i + 1 >= G.nq || G.q[i + 1].kind != GC_EV_DREAM) *ev_new() = (bv_event){.type = BEV_DREAM_PLAY, .battler = -1};
+      *ev_new() = (bv_event){.type = BEV_DREAM_ADD, .battler = -1, .a = e->b, .b = e->c, .c = e->hp, .mon = nm};
+      if (i + 1 >= G.nq || G.q[i + 1].kind != GC_EV_DREAM) {
+        char* t = txt_new();
+        snprintf(t, TXT_LEN, "%s", dream_text);
+        dream_text[0] = 0;
+        *ev_new() = (bv_event){.type = BEV_DREAM_PLAY, .battler = -1, .text = t[0] ? t : NULL, .prompt = true};
+      }
       break;
     }
 
@@ -1634,6 +1648,7 @@ static void mystery_screen(void) {
   }
   if (G.me_stage == 0) {
     static char intro[2 * 1200];
+    bgm_on_mystery(G.run.mystery_type);   /* withOnVisualsStart: the encounter's own track, where it has one */
     me_flow_intro(&G.run, intro, sizeof intro);
     G.me_stage = 1;
     if (intro[0]) {

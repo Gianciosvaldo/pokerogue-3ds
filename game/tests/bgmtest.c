@@ -300,6 +300,72 @@ int main(int argc, char** argv) {
     CHECK(!strcmp(bgm_current(), "b") && SND.key[0], "the old fade cut the new track");
     bgm_fade_out(0);
     CHECK(!SND.key[0] && !bgm_current()[0], "a fade of 0 ms did not stop the music");
+    /* bgm_play_faded (AudioManager.playBgm(name, true) with fadeDuration 500): the old track fades, the new one starts 750 ms after the call */
+    {
+      snd_fake_reset();
+      bgm_stop();
+      bgm_play("a");
+      const int starts = SND.starts;
+      bgm_play_faded("b", 500, 750);
+      CHECK(!strcmp(bgm_current(), "a") && SND.starts == starts, "faded play: the new track started at once");
+      bgm_tick(250);
+      CHECK(!strcmp(bgm_current(), "a") && SND.volume > 0.49f && SND.volume < 0.51f, "faded play: half way the volume is %f", SND.volume);
+      bgm_tick(300);
+      CHECK(!SND.key[0] && !bgm_current()[0], "faded play: the old track is not gone after 550 ms (%s)", SND.key);
+      bgm_tick(150);
+      CHECK(!SND.key[0], "faded play: the new track started at 700 ms (%s)", SND.key);
+      bgm_tick(100);
+      CHECK(!strcmp(SND.key, "audio/bgm/b") && !strcmp(bgm_current(), "b") && SND.volume == 1.0f && SND.starts == starts + 1,
+            "faded play: after 800 ms %s, volume %f, %d starts", SND.key, SND.volume, SND.starts);
+      /* the track playing: nothing, however often it is asked */
+      bgm_play_faded("b", 500, 750);
+      bgm_tick(2000);
+      CHECK(!strcmp(bgm_current(), "b") && SND.volume == 1.0f && SND.starts == starts + 1, "faded play of the playing track restarted it");
+      /* silence: it starts at once (previous?.isPlaying is false) */
+      bgm_stop();
+      bgm_play_faded("c", 500, 750);
+      CHECK(!strcmp(bgm_current(), "c"), "faded play from silence did not start at once");
+      /* asked twice during the wait: the fade is not started over */
+      bgm_play_faded("d", 500, 750);
+      bgm_tick(300);
+      bgm_play_faded("d", 500, 750);
+      bgm_tick(260);
+      CHECK(!SND.key[0], "faded play asked twice: the fade began again (%s)", SND.key);
+      bgm_tick(300);
+      CHECK(!strcmp(bgm_current(), "d"), "faded play asked twice: never arrived");
+      /* another scene's music during the wait wins, and a fade of its own drops the waiting track */
+      bgm_play_faded("e", 500, 750);
+      bgm_tick(100);
+      bgm_play("f");
+      bgm_tick(2000);
+      CHECK(!strcmp(bgm_current(), "f"), "faded play: the waiting track overrode the scene's (%s)", bgm_current());
+      bgm_play_faded("g", 500, 750);
+      bgm_tick(100);
+      bgm_fade_out(100);
+      bgm_tick(2000);
+      CHECK(!bgm_current()[0] && !SND.key[0], "faded play: the waiting track started after a fade of its own (%s)", bgm_current());
+    }
+    /* the encounters that start a track when their visuals begin (the four upstream files), 500 ms fade, 750 ms wait */
+    CHECK(!strcmp(bgm_mystery_track(GC_ME_WEIRD_DREAM, true), "mystery_encounter_weird_dream"), "Weird Dream's track");
+    CHECK(!strcmp(bgm_mystery_track(GC_ME_DELIBIRDY, true), "mystery_encounter_delibirdy"), "Delibirdy-y's track");
+    CHECK(!strcmp(bgm_mystery_track(GC_ME_FUN_AND_GAMES, true), "mystery_encounter_fun_and_games"), "Fun and Games' track");
+    CHECK(!strcmp(bgm_mystery_track(GC_ME_GLOBAL_TRADE_SYSTEM, true), "mystery_encounter_gen_6_gts"), "the GTS track with every generation");
+    CHECK(!strcmp(bgm_mystery_track(GC_ME_GLOBAL_TRADE_SYSTEM, false), "mystery_encounter_gen_5_gts"), "the GTS track of generation 5");
+    for (int t = 0; t < GC_ME_COUNT; t++)
+      if (t != GC_ME_WEIRD_DREAM && t != GC_ME_DELIBIRDY && t != GC_ME_FUN_AND_GAMES && t != GC_ME_GLOBAL_TRADE_SYSTEM)
+        CHECK(bgm_mystery_track(t, true) == NULL, "encounter %d starts a track upstream does not", t);
+    CHECK(bgm_mystery_track(-1, true) == NULL && bgm_mystery_track(GC_ME_COUNT, true) == NULL, "out of range types");
+    {
+      snd_fake_reset();
+      bgm_stop();
+      bgm_play("plains");
+      bgm_on_mystery(GC_ME_SHADY_VITAMIN_DEALER);
+      bgm_tick(2000);
+      CHECK(!strcmp(bgm_current(), "plains"), "an encounter with no track changed the music (%s)", bgm_current());
+      bgm_on_mystery(GC_ME_WEIRD_DREAM);
+      bgm_tick(800);
+      CHECK(!strcmp(bgm_current(), "mystery_encounter_weird_dream"), "Weird Dream's music after its fade (%s)", bgm_current());
+    }
     /* a track the pack lacks: silence (the old track is gone too), and the next track that exists plays */
     snd_fake_reset();
     {

@@ -1,5 +1,6 @@
 /* bgm_choose: which music upstream plays where (see bgm_choose.h). */
 #include "bgm_choose.h"
+#include "gc/run.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -295,4 +296,18 @@ const char *bgm_football_track_at(unsigned i) { return i < FOOTBALL_TRACKS ? foo
 const char *bgm_football_track(unsigned seed, unsigned round) {
   unsigned h = seed * 2654435761u;
   return football_tracks[((h >> 16) + round * 11u) % FOOTBALL_TRACKS];
+}
+
+/* delibirdy-encounter.ts, fun-and-games-encounter.ts, global-trade-system-encounter.ts and weird-dream-encounter.ts at 8555c08 are the only encounters
+ * whose onVisualsStart plays a track (Teleporting Hijinks and the Expert Pokemon Breeder put the arena's music back at their end, which the app's
+ * next wave does) */
+const char *bgm_mystery_track(int type, bool all_gens)
+{
+  switch (type) {
+    case GC_ME_DELIBIRDY: return "mystery_encounter_delibirdy";
+    case GC_ME_FUN_AND_GAMES: return "mystery_encounter_fun_and_games";
+    case GC_ME_GLOBAL_TRADE_SYSTEM: return all_gens ? "mystery_encounter_gen_6_gts" : "mystery_encounter_gen_5_gts";
+    case GC_ME_WEIRD_DREAM: return "mystery_encounter_weird_dream";
+    default: return NULL;
+  }
 }
