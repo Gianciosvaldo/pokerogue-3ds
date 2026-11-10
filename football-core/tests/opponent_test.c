@@ -73,6 +73,18 @@ int main(void)
     for(unsigned seed=1;seed<=30;++seed){first+=team_strength(1,seed);middle+=team_strength(7,seed);last+=team_strength(FB_CAREER_ROUNDS,seed);}
     first/=30;middle/=30;last/=30;
     assert(middle>first && last>middle && last>first*1.35);
+    /* ---- a Gym Leader's or Elite Four member's team is as strong as its round says, whatever its type (lorenzo 2026-11-10: Lt. Surge's, with the
+     * Electric pool's Mega and legendary forms, came out about 10% above its neighbours): every team of rounds 1..12 is within 3% of the curve, so the
+     * strength rises from one round to the next, and the Champion is far above the last Elite Four member ---- */
+    {
+        double previous=0;
+        for(unsigned round=1;round<FB_CAREER_ROUNDS;++round){
+            const double target=FB_LEADER_ATTRIBUTE_BASE*(1+(round-1)*.0625)*sizeof(FootballAttributes);double sum=0;
+            for(unsigned seed=1;seed<=20;++seed){const double t=team_strength(round,seed);assert(t>target*.97 && t<target*1.03);sum+=t;}
+            assert(sum/20>previous);previous=sum/20;
+        }
+        assert(last>previous*1.3);
+    }
     printf("football opponents: 13 trainers, %u team members of the right type, team strength %.1f (Brock), %.1f (round 7), %.1f (Blue) passed\n",players,first,middle,last);
     puts("football opponent tests passed");
     return 0;
