@@ -64,6 +64,10 @@ typedef struct {
  * open the next one. False (nothing opened) for n < 1 or n > ME_MAX_OPTIONS. */
 bool me_screen_open(const me_args* a);
 
+/* The zoom the encounter's intro sprites were last drawn at (their places come from me_flow_intro_sprites for a 320 wide field with the feet at y 164;
+ * the top window is the whole 400x240 screen, so they are drawn about (200, 226) times this); 0 while only silhouettes were drawn. For the host tests. */
+float me_screen_intro_zoom(void);
+
 /* ---- BBCode, exposed for the host tests ---- */
 enum { ME_K_NORMAL = 0, ME_K_TITLE, ME_K_MONEY, ME_K_GREEN, ME_K_BLUE };
 /* `src` without its @[STYLE]{...} wrappers into `plain`, with the colour of every byte of it in `kinds` (same length as plain, both n

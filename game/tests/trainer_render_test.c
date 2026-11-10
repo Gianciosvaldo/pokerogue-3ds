@@ -11,6 +11,7 @@ static char atlas[80], pose[20];
 static int frame_index, draws;
 static float px,py;
 static rr_draw_opts opts;
+const rr_frame* mui_frame(const char* key,const char* name) {(void)key;(void)name;return &frame;}
 const rr_frame* img_anim_frame(const char* key,int n) {
   snprintf(atlas,sizeof atlas,"%s",key);frame_index=n;return &frame;
 }
@@ -58,6 +59,18 @@ int main(void) {
   B.trainer_show_ms=375;draw_trainers();near(px,228+16*(1-ease(EASE_CUBIC_OUT,.5f)));near(py,80-16*(1-ease(EASE_CUBIC_OUT,.5f)));
   B.trainer_show_ms=0;draw_trainers();near(px,228);near(py,80);
   B.trainer_visible=false;before=draws;draw_trainers();assert(draws==before);
+  /* a mystery encounter's intro sprites: me_flow's places (320 wide field, feet at y 164, container x 160) land on the platform at (228, 76) and slide in with it */
+  {
+    me_intro_sprite sp[2];
+    memset(sp,0,sizeof sp);
+    strcpy(sp[0].key,"images/mystery-encounters/weird_dream_woman");sp[0].x=164;sp[0].y=175;sp[0].scale=1;
+    strcpy(sp[1].key,"images/mystery-encounters/x");sp[1].x=120;sp[1].y=170;sp[1].scale=1.5f;sp[1].dark=.4f;
+    bv_me_intro(sp,2);
+    B.enemy_slide=0;before=draws;draw_me_intro();assert(draws==before+2);
+    near(px,228+(120-160));near(py,76+6);near(opts.scale_x,1.5f);assert(opts.tint==RR_RGBA(153,153,153,255));
+    B.me_n=1;B.enemy_slide=-100;draw_me_intro();near(px,228-100+4);near(py,87);near(opts.scale_y,1);
+    bv_me_intro(sp,0);before=draws;draw_me_intro();assert(draws==before);
+  }
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;
 }

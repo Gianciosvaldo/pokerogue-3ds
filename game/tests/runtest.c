@@ -173,6 +173,8 @@ static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_b
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
 static int n_dreams, n_dream_pairs, dream_pending;   /* Weird Dream: dreams played, pairs in them, pairs handed over and not played yet */
 static int n_mystery_trainer_scenes;
+static int n_me_scenes, n_me_intro_calls;   /* the encounter waves' scenes, and the intro sprites they were given (bv_me_intro) */
+static bool me_scene_open;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
@@ -452,7 +454,17 @@ static bool side_ok(int battler, const char* what) {
   return true;
 }
 
+void bv_me_intro(const me_intro_sprite* sprites, int n) {
+  if (!me_scene_open) BAD("intro sprites given with no encounter scene waiting for them");
+  me_scene_open = false;
+  n_me_intro_calls++;
+  for (int i = 0; i < n; i++) if (!sprites[i].key[0] || sprites[i].scale <= 0) BAD("an intro sprite with no key or no size");
+}
+
 void bv_begin(const bv_setup* setup) {
+  if (me_scene_open) BAD("an encounter scene got no call for its intro sprites");
+  me_scene_open = rs_run()->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !rs_run()->me_battle;
+  n_me_scenes += me_scene_open;
   if (setup->trainer) {
     const gc_run* r=rs_run();
     if(r->me_battle){
@@ -2303,6 +2315,8 @@ int main(int argc, char** argv) {
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);
   if (M.scenes != st->waves+st->mystery_trainers) BAD("%d scenes set up, the driver counted %d waves and %d same-wave mystery trainer scenes", M.scenes, st->waves,st->mystery_trainers);
   if(n_mystery_trainer_scenes<st->mystery_trainers)BAD("a mystery trainer scene was not rebuilt with trainer art");
+  if (n_me_intro_calls != n_me_scenes - (me_scene_open ? 1 : 0)) BAD("%d encounter scenes, %d intro sprite calls", n_me_scenes, n_me_intro_calls);
+  printf("encounter scenes: %d, each given its intro sprites on the platform\n", n_me_intro_calls);
   if(custom_strong&&runs>=200&&!st->mystery_trainers)BAD("no same-wave mystery trainer scene was exercised");
   printf("mystery trainers: %d same-wave scenes rebuilt with trainer art and encounter music\n",n_mystery_trainer_scenes);
   printf("victory music: %d trainer slide-backs checked against the beaten trainer's own track\n", M.slide_backs);

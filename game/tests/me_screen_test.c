@@ -77,10 +77,11 @@ const rr_frame* mui_frame(const char* key, const char* frame) {
 void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o) {
   (void)f;
   if (n_sil < N_REC) {
+    const float z = me_screen_intro_zoom();   /* the intro sprites are drawn zoomed about (200, 226): record them where me_flow placed them (160 wide, feet at 164) */
     g_sil_tint[n_sil] = (unsigned)o->tint;
-    g_sil_x[n_sil] = x;
-    g_sil_y[n_sil] = y;
-    g_sil_scale[n_sil] = o->scale_x;
+    g_sil_x[n_sil] = z > 0 ? 160 + (x - 200) / z : x;
+    g_sil_y[n_sil] = z > 0 ? 164 + (y - 226) / z : y;
+    g_sil_scale[n_sil] = z > 0 ? o->scale_x / z : o->scale_x;
   }
   n_sil++;
 }
@@ -127,9 +128,26 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
   return 6.0f * (float)strlen(s);
 }
 /* lines of at most 40 characters, broken at a space */
+/* greedy word wrap at wrap_w pixels, the text's own newlines kept. The characters are 4.4 px wide on average here (the real font, not the 6 px
+ * text_line_width counts): at that width the old 280 px window wrapped Weird Dream's question to 6 lines, the sixth being the lone "too?" lorenzo
+ * saw on a second page, and the new 372 px window holds it in 5. */
 void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int n) {
-  (void)st, (void)o;
-  snprintf(out, (size_t)n, "%s", s);
+  (void)st;
+  const int max = o && o->wrap_w > 0 ? (int)(o->wrap_w / 4.4f) : 100000;
+  int w = 0, k = 0;
+  for (const char* p = s; *p && k + 2 < n;) {
+    const char* e = p;
+    while (*e && *e != ' ' && *e != '\n') e++;
+    const int len = (int)(e - p);
+    if (w > 0 && w + 1 + len > max) { out[k++] = '\n'; w = 0; }
+    else if (w > 0) { out[k++] = ' '; w++; }
+    for (int i = 0; i < len && k + 2 < n; i++) out[k++] = p[i];
+    w += len;
+    p = e;
+    if (*p == ' ') p++;
+    else if (*p == '\n') { out[k++] = '\n'; w = 0; p++; }
+  }
+  out[k] = 0;
 }
 
 const char* i18n_species_name(int id) { return id == 25 ? "Pikachu" : id == 131 ? "Lapras" : "Mon"; }
@@ -400,6 +418,16 @@ int main(void) {
   press(BTN_DOWN);
   press(BTN_ACTION);
   CHECK(n_got == 1 && got.option == 0 && got.b == 0 && got.c == 1, "the second move: %d %d %d", got.option, got.b, got.c);
+
+  /* ---- Weird Dream: the whole question (the woman's words end "...do you see them too?") is on the first page of the top window, not one word on a second */
+  use_source_locales = true;
+  run_at(GC_ME_WEIRD_DREAM, 3);
+  CHECK(me_flow_open(&R, chosen, NULL), "weird dream opens");
+  draw(0);
+  CHECK(has_text(0, "too"), "weird dream: the last words of the description show on the first page");
+  draw(1);
+  CHECK(!has_text(1, "Details"), "weird dream: one page, no Details hint");
+  press(BTN_CANCEL);
 
   /* ---- Dancing Lessons: the third option lists the dance moves only, and its text names the move shown */
   use_source_locales = true;
@@ -715,7 +743,7 @@ int main(void) {
   static me_args long_text;
   memset(&long_text, 0, sizeof long_text);
   snprintf(long_text.title, sizeof long_text.title, "Details");
-  snprintf(long_text.description, sizeof long_text.description, "@[TOOLTIP_TITLE]{First}\nSecond\nThird\nFourth\nFifth\nLast description");
+  snprintf(long_text.description, sizeof long_text.description, "@[TOOLTIP_TITLE]{First}\nSecond\nThird\nFourth\nFifth\nSixth\nLast description");
   snprintf(long_text.query, sizeof long_text.query, "What will you do?");
   snprintf(long_text.options[0].label, ME_LABEL_LEN, "Read");
   snprintf(long_text.options[0].tooltip, ME_TOOLTIP_LEN, "Tip1\nTip2\nTip3\nTip4\nTip5\nLast tip");
@@ -729,7 +757,13 @@ int main(void) {
   g_depth = 0;
   CHECK(me_screen_open(&long_text), "long text opens");
   draw(0);
-  CHECK(n_sil == 1 && g_sil_y[0] - g_sil_scale[0] * 96 >= 122, "art fits below description and query");
+  {
+    /* the sprite (96 high at the zoom it was drawn at) stands on the window's floor, under the question, inside the 400x240 top screen */
+    const drawn_t* q = find_text(0, "What will you do?");
+    const float sprite_top = 226 - me_screen_intro_zoom() * g_sil_scale[0] * 96 - (164 - g_sil_y[0]) * me_screen_intro_zoom();
+    CHECK(me_screen_intro_zoom() > 1.0f, "the sprite is drawn bigger than native where the window has the room: %g", me_screen_intro_zoom());
+    CHECK(n_sil == 1 && q && me_screen_intro_zoom() > 0 && sprite_top >= q->y, "art fits below description and query (top %g, question %g)", sprite_top, q ? q->y : -1.0f);
+  }
   CHECK(has_text(0, "First") && !has_text(0, "@[") && !has_text(0, "Last description"), "first description page, no raw markup");
   draw(1);
   CHECK(has_text(1, "Tip1") && !has_text(1, "Last tip") && has_text(1, "Details 1/2"), "tooltip is paged");

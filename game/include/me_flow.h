@@ -42,6 +42,9 @@ void me_flow_intro(const gc_run* run, char* out, size_t n);
  * Returns how many were written (at most max). */
 int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max);
 
+/* the sprites the encounter of the run stands on the field with while its intro plays (what the window of its question also shows) */
+int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max);
+
 /* A Trainer's Test picks its stat trainer at run time (the screen's trainerPick): the trainer's signature Pokemon and the trainer, laid out like the
  * other intro sprites. Returns how many were written (at most max). */
 int me_flow_trtest_sprites(const gc_run* run, float cx, float floor_y, me_intro_sprite* out, int max);

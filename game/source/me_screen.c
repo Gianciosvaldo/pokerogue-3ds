@@ -15,7 +15,10 @@
 #define HINT_X 10
 #define HINT_Y 226
 #define TIP_W 296
-#define TOP_LINES 5
+#define TOP_LINES 6
+#define TOP_W 372      /* the description's and the question's wrap width in the top window (the window is the whole 400x240 top screen less a 5 px black frame) */
+#define TOP_FLOOR 226  /* where the sprites stand: the window's floor */
+#define SPRITE_ZOOM_MAX 3.0f
 #define TIP_LINES 5
 
 static const char* const HINTS[2] = {"A: choose", "B: back"};
@@ -143,7 +146,7 @@ static int marked_lines(text_style st, const char* src, float width)
 
 static void reset_details(void)
 {
-  const int top = (marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, 280) + TOP_LINES - 1) / TOP_LINES;
+  const int top = (marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, TOP_W) + TOP_LINES - 1) / TOP_LINES;
   const int tip = (marked_lines(TS_MOVE_LABEL, M.a.options[M.a.cursor].tooltip, TIP_W) + TIP_LINES - 1) / TIP_LINES;
   M.detail_page = 0;
   M.detail_pages = top > tip ? top : tip;
@@ -228,27 +231,54 @@ static bool ms_touch(ui_screen* s, float x, float y)
   return false;
 }
 
+/* the intro sprites are laid out for a 320 wide field with the feet at y 164 (me_flow_intro_sprites): here they are drawn on the whole top screen,
+ * all zoomed by the same factor about the bottom centre so they keep their places, as big as the room under the texts allows */
+static float sprite_zoom(const rr_frame* const* fr, const me_intro_sprite* sp, int n, float art_top)
+{
+  float z = SPRITE_ZOOM_MAX;
+  for (int i = 0; i < n; i++) {
+    if (!fr[i]) continue;
+    const float h = (float)fr[i]->src_h * sp[i].scale, w = (float)fr[i]->src_w * sp[i].scale;
+    const float up = (164.0f - sp[i].y) + h;   /* from the feet line to the sprite's top, at zoom 1 */
+    if (up > 0 && (TOP_FLOOR - art_top) / up < z) z = (TOP_FLOOR - art_top) / up;
+    const float side = (sp[i].x > 160 ? sp[i].x - 160 : 160 - sp[i].x) + w / 2;
+    if (side > 0 && 186.0f / side < z) z = 186.0f / side;
+  }
+  return z < 0.25f ? 0.25f : z;
+}
+
+static float g_zoom;   /* the zoom the intro sprites were last drawn at (me_screen_intro_zoom, for the host tests) */
+float me_screen_intro_zoom(void) { return g_zoom; }
+
+static const rr_frame* intro_frame(const me_intro_sprite* s)
+{
+  const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
+  if (!f && s->alt[0]) f = img_anim_frame(s->alt, 0);
+  return f;
+}
+
 static void draw_top(void)
 {
-  if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-  if (!ui_space(UI_FIELD)) return;
-  ui_window(8, 8, 304, 164, WIN_NORMAL);
+  if (!ui_space(UI_PHYS_TOP)) return;
+  rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255)); /* the black frame */
+  ui_window(5, 5, 390, 230, WIN_NORMAL);
   text_opts t = text_defaults();
   t.color = text_color(TS_TOOLTIP_TITLE, false);
   t.shadow = text_color(TS_TOOLTIP_TITLE, true);
-  text_draw(TS_WINDOW, 20, 16, M.a.title, &t);
+  text_draw(TS_WINDOW, 16, 12, M.a.title, &t);
   text_opts o = text_defaults();
-  o.wrap_w = 280;
-  const int desc_lines = marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, 280);
+  o.wrap_w = TOP_W;
+  const int desc_lines = marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, TOP_W);
   const int desc_pages = (desc_lines + TOP_LINES - 1) / TOP_LINES;
   const int desc_page = M.detail_page < desc_pages ? M.detail_page : (desc_pages > 0 ? desc_pages - 1 : 0);
   const int first = desc_page * TOP_LINES;
-  draw_marked(TS_INSTRUCTIONS_TEXT, 20, 40, M.a.description, 280, first, TOP_LINES);
+  draw_marked(TS_INSTRUCTIONS_TEXT, 16, 34, M.a.description, TOP_W, first, TOP_LINES);
   const int shown = desc_lines - first < TOP_LINES ? desc_lines - first : TOP_LINES;
-  const float below = 40 + shown * text_line_pitch(TS_INSTRUCTIONS_TEXT, &o) + 6;
-  const int query_lines = draw_marked(TS_WINDOW, 20, below, M.a.query, 280, 0, 3);
+  const float below = 34 + shown * text_line_pitch(TS_INSTRUCTIONS_TEXT, &o) + 6;
+  const int query_lines = draw_marked(TS_WINDOW, 16, below, M.a.query, TOP_W, 0, 3);
   const float art_top = below + query_lines * text_line_pitch(TS_WINDOW, &o) + 4;
   int n_sprites = 0;
+  g_zoom = 0;
   while (n_sprites < ME_MAX_SPRITES && M.a.sprites[n_sprites][0]) n_sprites++;
   for (int i = 0; i < n_sprites; i++) { /* black silhouettes standing on the window's floor, evenly spread */
     const rr_frame* f = img_anim_frame(M.a.sprites[i], 0);
@@ -256,27 +286,27 @@ static void draw_top(void)
     rr_draw_opts d = RR_DEFAULT_OPTS;
     d.origin_x = 0.5f;
     d.origin_y = 1;
-    const float room = 166 - art_top;
+    const float room = TOP_FLOOR - art_top;
     if (room <= 0) continue;
-    if (f->src_h > room) d.scale_x = d.scale_y = room / f->src_h;
+    d.scale_x = d.scale_y = room / f->src_h < 2.0f ? room / f->src_h : 2.0f;
     d.tint = RR_RGBA(0, 0, 0, 255);
-    rr_draw(f, 8 + 304 * (2 * i + 1) / (2 * n_sprites), 166, &d);
+    rr_draw(f, 5 + 390 * (2 * i + 1) / (2 * n_sprites), TOP_FLOOR, &d);
   }
-  for (int i = 0; i < M.a.n_intro; i++) { /* the encounter's own sprites, in colour (shaded toward black where upstream tints them) */
+  const rr_frame* fr[ME_MAX_INTRO] = {0};
+  for (int i = 0; i < M.a.n_intro && i < ME_MAX_INTRO; i++) fr[i] = intro_frame(&M.a.intro[i]);
+  const float zoom = sprite_zoom(fr, M.a.intro, M.a.n_intro < ME_MAX_INTRO ? M.a.n_intro : ME_MAX_INTRO, art_top);
+  g_zoom = zoom;
+  for (int i = 0; i < M.a.n_intro && i < ME_MAX_INTRO; i++) { /* the encounter's own sprites, in colour (shaded toward black where upstream tints them) */
     const me_intro_sprite* s = &M.a.intro[i];
-    const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
-    if (!f && s->alt[0]) f = img_anim_frame(s->alt, 0);
+    const rr_frame* f = intro_frame(s);
     if (!f) continue;
     rr_draw_opts d = RR_DEFAULT_OPTS;
     d.origin_x = 0.5f;
     d.origin_y = 1;
-    const float room = s->y - art_top;
-    if (room <= 0) continue;
-    d.scale_x = d.scale_y = s->scale;
-    if (f->src_h > 0 && f->src_h * s->scale > room) d.scale_x = d.scale_y = room / f->src_h;
+    d.scale_x = d.scale_y = s->scale * zoom;
     const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
     d.tint = RR_RGBA(v, v, v, 255);
-    rr_draw(f, s->x, s->y, &d);
+    rr_draw(f, 200 + (s->x - 160) * zoom, TOP_FLOOR + (s->y - 164) * zoom, &d);
   }
 }
 

@@ -1,6 +1,7 @@
 /* me_flow for the run driver's host tests: the question is answered at once, as the driver's old stand-in did (the first option the
  * run allows, with the first Pokemon that option's party list accepts; the first move), so the long seeded runs go through every
  * encounter. The real question, lists and texts are tested by me_screen_test. */
+#include <stdio.h>
 #include <string.h>
 
 #include "me_flow.h"
@@ -40,4 +41,15 @@ bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void*
 const char* me_flow_ns(int type) {
   (void)type;
   return NULL;
+}
+
+/* the intro sprites on the field: one stand-in sprite for every encounter but the Pillar Men (whose silhouettes stay in the window) */
+int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max) {
+  if (run->mystery_type == GC_ME_PILLAR_MEN || max < 1) return 0;
+  memset(out, 0, sizeof *out);
+  snprintf(out->key, sizeof out->key, "images/mystery-encounters/fake");
+  out->x = 164;
+  out->y = 164;
+  out->scale = 1;
+  return 1;
 }

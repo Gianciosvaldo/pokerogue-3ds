@@ -154,6 +154,8 @@ static struct {
   bool info_on;
   char info_name[64], info_desc[512];
   bool trainer_visible;
+  me_intro_sprite me_sp[ME_MAX_INTRO];   /* bv_me_intro */
+  int me_n;
   float trainer_show_ms; /* BEV_TRAINER_SHOW: ms into the defeated trainer's slide back in, 0 = not sliding */
   bool player_trainer_visible, opening_summon;
   /* BEV_DIALOGUE: the talk's copies of its strings (one per event of a chunk), the darkening of the field behind the portrait
@@ -713,6 +715,29 @@ static void draw_trainers(void) {
   }
 }
 
+/* The encounter's intro sprites: the container is at (228, 76) once it has slid in with the enemy platform (+300 from -72, EncounterPhase), the sprites
+ * at their own offsets from it. me_flow places them for a 320 wide field with the feet at y 164 and the container's x at 160 (its +4 origin included). */
+static void draw_me_intro(void) {
+  for (int i = 0; i < B.me_n; i++) {
+    const me_intro_sprite* s = &B.me_sp[i];
+    const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
+    if (!f && s->alt[0]) f = img_anim_frame(s->alt, 0);
+    if (!f) continue;
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.origin_x = 0.5f;
+    o.origin_y = 1;
+    o.scale_x = o.scale_y = s->scale > 0 ? s->scale : 1;
+    const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
+    o.tint = RR_RGBA(v, v, v, 255);
+    rr_draw(f, 228 + B.enemy_slide + (s->x - 160), 76 + (s->y - 164), &o);
+  }
+}
+
+void bv_me_intro(const me_intro_sprite* sprites, int n) {
+  B.me_n = n < 0 ? 0 : n > ME_MAX_INTRO ? ME_MAX_INTRO : n;
+  if (B.me_n) memcpy(B.me_sp, sprites, sizeof B.me_sp[0] * (size_t)B.me_n);
+}
+
 /* EncounterPhase's player back sprite, then SummonPhase's three throw poses.
  * Keep this separate from the capture ball and ordinary switch summons. */
 static void draw_player_trainer(void) {
@@ -766,6 +791,7 @@ static void draw_field(void) {
   side *en = &B.s[1], *pl = &B.s[0];
   if (B.ball.behind) draw_ball();
   draw_trainers();
+  draw_me_intro();
   for(int i=0;i<2;i++){
     side *foe=&B.s[1+2*i];draw_sprite(foe,false);draw_sparkle(foe,false);
     if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
@@ -1868,21 +1894,22 @@ static void dream_sprite(const menu_sprite* sp, bool loaded, float cx, float cy,
   if (silhouette) rr_set_tone(0, 0, 0);
 }
 
-/* the stand-in for evo_bg: a dark violet gradient and stars rising through it */
+/* the stand-in for evo_bg: a dark violet gradient and stars rising through it, over the whole 400x240 top screen (the field space starts at -40, -30) */
 static void dream_background(float ca) {
   static const uint8_t TOP[3] = {4, 6, 22}, BOTTOM[3] = {40, 14, 66};
-  enum { BANDS = 9, STARS = 36 };
+  enum { BANDS = 9, STARS = 48 };
   for (int b = 0; b < BANDS; b++) {
     const float k = (float)b / (BANDS - 1);
     const int r = (int)(TOP[0] + (BOTTOM[0] - TOP[0]) * k), g = (int)(TOP[1] + (BOTTOM[1] - TOP[1]) * k), bl = (int)(TOP[2] + (BOTTOM[2] - TOP[2]) * k);
-    const float y0 = 180.0f * b / BANDS, y1 = 180.0f * (b + 1) / BANDS;
-    rr_rect(0, y0, 320, y1 - y0 + 0.5f, RR_RGBA(r, g, bl, (int)(255 * ca + 0.5f)));
+    const float y0 = -30.0f + 240.0f * b / BANDS, y1 = -30.0f + 240.0f * (b + 1) / BANDS;
+    rr_rect(-40, y0, 400, y1 - y0 + 0.5f, RR_RGBA(r, g, bl, (int)(255 * ca + 0.5f)));
   }
   for (int i = 0; i < STARS; i++) {
     const uint32_t h = (uint32_t)(i + 1) * 2654435761u;
-    const float x = (float)((h >> 8) % 320), speed = 8 + (float)((h >> 4) % 24);   /* px per second */
-    float y = fmodf((float)((h >> 12) % 180) - D.t * speed / 1000.0f, 180.0f);
-    if (y < 0) y += 180;
+    const float x = (float)((h >> 8) % 400) - 40, speed = 8 + (float)((h >> 4) % 24);   /* px per second */
+    float y = fmodf((float)((h >> 12) % 240) - D.t * speed / 1000.0f, 240.0f);
+    if (y < 0) y += 240;
+    y -= 30;
     const float tw = 0.55f + 0.45f * sinf(D.t / 400.0f + (float)i);
     const int size = (h & 3) == 0 ? 2 : 1;
     rr_rect(x, y, size, size, RR_RGBA(190 + (h & 0x3f), 200 + ((h >> 3) & 0x2f), 255, (int)(255 * ca * tw + 0.5f)));
@@ -1893,7 +1920,7 @@ static void dream_draw(void) {
   if (!D.on) return;
   const float ca = da_container_alpha(D.t, D.t_hide);
   if (ca <= 0) return;
-  rr_rect(0, 0, 320, 180, RR_RGBA(0, 0, 0, (int)(255 * ca + 0.5f)));
+  rr_rect(-40, -30, 400, 240, RR_RGBA(0, 0, 0, (int)(255 * ca + 0.5f)));   /* the whole top screen, bands included */
   dream_background(ca);
   const bool have_spark = img_has("images/effects/evo_sparkle");
   for (int i = 0; i < D.n; i++) {
