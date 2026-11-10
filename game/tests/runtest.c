@@ -778,6 +778,9 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 bool bv_playing(void) { return W.playing; }
 
 void bv_set_item_bars(const bv_item *foe,int nf,const bv_item *keys,int nk,int luck){(void)foe;(void)nf;(void)keys;(void)nk;(void)luck;}
+static bool cfg_ask_switch;
+static int n_switch_yes, n_switch_no, n_switch_second;
+
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   n_ask++;
   music_command();
@@ -899,6 +902,8 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       return;
     }
   }
+  /* the first command is asked only once every "Will you switch?" of the start (one per Pokemon in a double battle) is answered */
+  if (rs_run()->eng.awaiting_confirm) BAD("a command was asked with a Will you switch? still waiting");
   W.opts = *opts;
   W.on_command = on_command;
   W.command_arg = arg;
@@ -960,9 +965,6 @@ void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
     EVO.choice = -1;
   }
 }
-
-static bool cfg_ask_switch;
-static int n_switch_yes, n_switch_no;
 
 static void evo_check(void) {
   if (!EVO.armed || EVO.choice == -1) return;
@@ -1739,6 +1741,7 @@ static bool step(void) {
         if (cs->battle_type == BATTLE_TYPE_TRAINER) BAD("Will you switch? asked at a trainer's battle");
         if (!cfg_ask_switch) BAD("Will you switch? asked with the SET battle style");
         if (yes) n_switch_yes++; else n_switch_no++;
+        if (cs->double_battle && cs->bt.engine == NULL && cs->eng.pick_phase >= 0 && cs->eng.pool[cs->eng.pick_phase].sw_field_index == 1) n_switch_second++;
       }
     }
     const gc_run* scan_run = rs_run();
@@ -2386,7 +2389,7 @@ int main(int argc, char** argv) {
   if (violations) printf("first violation: %s\n", first_violation);
   if (deadlock) printf("DEADLOCK: nothing was pending after %ld steps (run %d, wave %d)\n", steps, st->runs, rs_run()->wave);
   if (no_progress) printf("NO PROGRESS: no new wave in 20000 steps (wave %d)\n", rs_run()->wave);
-  if(cfg_ask_switch){printf("will-you-switch answers: yes %d no %d\n",n_switch_yes,n_switch_no);if(!n_switch_yes||!n_switch_no)BAD("the Will you switch? question was not answered both ways");}
+  if(cfg_ask_switch){printf("will-you-switch answers: yes %d no %d, second Pokemon of a double battle %d\n",n_switch_yes,n_switch_no,n_switch_second);if(!n_switch_second)BAD("no double battle asked the second Pokemon");if(!n_switch_yes||!n_switch_no)BAD("the Will you switch? question was not answered both ways");}
   if(getenv("RUNTEST_EVENT_STORE")){printf("external event storage promotions %d\n",event_store_promotions);if(!event_store_promotions)BAD("external event storage was not exercised");}
   const bool fail = violations || st->not_found || st->shown_mismatch || st->stuck || deadlock || no_progress || ended < runs;
   printf(fail ? "FAILED\n" : "OK\n");

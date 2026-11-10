@@ -111,6 +111,11 @@ static void after_stop(gc_run *run, int stop)
     case PH_REVIVAL_BLESSING:
         if (run->eng.awaiting_pick) gc_rq_unshift(run, gc_rp(RP_SWITCH, 0, 0, 0));
         break;
+    case PH_CHECK_SWITCH:
+        /* the start's next CheckSwitchPhase asked its question (a double battle has one per Pokemon, the second after the
+         * first one's answer or after the party screen a Yes opened) */
+        if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
+        break;
     case PH_VICTORY: {
         /* an enemy fainted (or was caught): its VictoryPhase, with the experience, then the rest of the turn.
          * A trainer's next Pokemon is battle-core's: FaintPhase pushed its SwitchSummonPhase, which pr_continue
