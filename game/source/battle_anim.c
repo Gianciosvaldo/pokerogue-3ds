@@ -63,8 +63,13 @@ typedef struct {
   anim_config* cfg[2];
 } anim_file;
 
-#define FILES_MAX 64
-static anim_file g_files[FILES_MAX];
+/* Every animation file played or preloaded this wave, and the common animations for good. Upstream has fewer than a thousand files
+ * (922 at the pinned assets, 7.9 MB parsed, the biggest 66 KB), so the table is sized for all of them: when it held 64, a trainer's
+ * six Pokemon plus ours plus the common animations kept from earlier waves filled it, and every move after that silently played
+ * Tackle's animation and sound instead of its own. Each file is its own allocation, so a pointer to one stays valid while others come
+ * and go. */
+#define FILES_MAX 1024
+static anim_file* g_files[FILES_MAX];
 static int g_nfiles;
 
 static double num(json_t* o, const char* k, double def) {
@@ -183,10 +188,11 @@ static void kebab(const char* name, char* out, int n) {
 
 static anim_file* file_get(const char* file, bool keep) {
   for (int i = 0; i < g_nfiles; i++)
-    if (!strcmp(g_files[i].file, file)) return &g_files[i];
+    if (!strcmp(g_files[i]->file, file)) return g_files[i];
   if (g_nfiles == FILES_MAX) return NULL;
-  anim_file* f = &g_files[g_nfiles++];
-  memset(f, 0, sizeof *f);
+  anim_file* f = calloc(1, sizeof *f);
+  if (!f) return NULL;
+  g_files[g_nfiles++] = f;
   snprintf(f->file, sizeof f->file, "%s", file);
   f->keep = keep;
   char key[96];
@@ -276,12 +282,13 @@ void ba_preload_move(int move) {
 void ba_drop_moves(void) {
   int k = 0;
   for (int i = 0; i < g_nfiles; i++) {
-    anim_file* f = &g_files[i];
+    anim_file* f = g_files[i];
     if (f->keep) {
-      g_files[k++] = *f;
+      g_files[k++] = f;
       continue;
     }
     for (int j = 0; j < f->n; j++) config_free(f->cfg[j]);
+    free(f);
   }
   g_nfiles = k;
   img_drop_prefix("images/battle_anims/");

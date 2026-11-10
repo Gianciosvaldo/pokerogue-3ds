@@ -21,6 +21,7 @@ void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o) {
   assert(f==&frame);draws++;px=x;py=y;opts=*o;
 }
 static void near(float x,float y) { assert(fabsf(x-y)<0.001f); }
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void) {
   memset(&B,0,sizeof B);
   B.player_trainer_visible=true;B.player_throw_ms=-1;

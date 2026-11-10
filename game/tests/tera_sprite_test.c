@@ -72,6 +72,7 @@ static rr_color want_tint(int r,int g,int b,int a){
     return RR_RGBA(c[0],c[1],c[2],a);
 }
 
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
     body.src_w=64;body.src_h=48;body.w=64;body.h=48;button.src_w=20;button.src_h=18;
     alpha_at=255;

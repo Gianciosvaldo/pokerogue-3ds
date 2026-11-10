@@ -153,6 +153,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run game/ host tests
         run: game/tests/run_host_tests.sh
+      - name: Animation player host test (needs libjansson; every move's animation file loads, not Tackle's)
+        run: |
+          sd-builder/tests/apt_install.sh libjansson-dev
+          make -C game/tests anim_details_test
+          game/tests/build/anim_details_test
       - name: Check final-boss dialogue converter and playback failure controls
         run: python3 game/tests/check_final_boss_dialogue.py
       - name: Check controller event storage failure controls

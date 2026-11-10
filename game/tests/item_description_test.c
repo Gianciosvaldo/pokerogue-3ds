@@ -28,6 +28,7 @@ const char* i18n_stat_name(int stat){return "Stat";}
 const char* gm_enum_lower(gm_enum e,int value,char* out,int n){return "normal";}
 const char* gm_enum_camel(gm_enum e,int value,char* out,int n){return "normal";}
 static void reset_draws(void){commands=trays=messages=names=descriptions=0;}
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
     for(int mode=0;mode<2;mode++)for(int top=0;top<2;top++){
         memset(&B,0,sizeof B);B.mode=mode?M_COMMAND:M_IDLE;B.hold_cmd=true;B.has_balls=true;B.bar_sel=-1;

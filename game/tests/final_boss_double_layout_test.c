@@ -57,6 +57,7 @@ static void put(side *sd,int species,bool boss){
 /* one frame's drawn position of a player's info box: the first pbinfo_player the call draws */
 static bool player_box(side *sd,float *x,float *y){reset();draw_player_info(sd);const img_call *c=find("images/ui/pbinfo_player");if(!c)c=find("images/ui/pbinfo_player_mini");if(!c)return false;*x=c->x;*y=c->y;return true;}
 
+int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 int main(void){
  /* ---- 1: the single fight, as it was: the lead and the one boss */
  memset(&B,0,sizeof B);

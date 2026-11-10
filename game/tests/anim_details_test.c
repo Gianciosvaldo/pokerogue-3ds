@@ -127,10 +127,34 @@ static void test_preload_leaves_room(void) {
   printf("test_preload_leaves_room PASSED\n");
 }
 
+/* A wave holds a trainer's six Pokemon's moves, ours, and the common animations kept from earlier waves: far more than 64 files. The table
+ * used to stop at 64 and every move after that played Tackle's animation and sound instead of its own. Every one of 200 moves must load
+ * its own file (the stub serves one animation with one sound per file, so one sound is preloaded per file). */
+static void test_many_files_each_load(void) {
+  g_serve_anim = true;
+  g_linear_free = (size_t)1 << 30;
+  g_img_gets = g_sfx_preloads = 0;
+  for (int m = 1; m <= 200; m++) ba_preload_move(m);
+  assert(g_sfx_preloads == 200);
+
+  /* and a move played late in the list is its own animation, found again without reading the file a second time */
+  ba_mon field[4] = {{0}};
+  field[0] = (ba_mon){true, true, 106, 148, 30, &g_frame, 257};
+  field[2] = (ba_mon){true, false, 236, 84, 25, &g_frame, 445};
+  assert(ba_play(BA_MOVE, 200, 0, 2, field));
+  for (int i = 0; i < 200 && ba_active(); i++) ba_update(50.0f, field);
+  assert(!ba_active());
+
+  ba_drop_moves();
+  g_serve_anim = false;
+  printf("test_many_files_each_load PASSED\n");
+}
+
 int main(void) {
   test_anim_get_target_is_substitute();
   test_anim_apply_tone_gray();
   test_preload_leaves_room();
+  test_many_files_each_load();
   printf("All animation detail tests passed successfully.\n");
   return 0;
 }
