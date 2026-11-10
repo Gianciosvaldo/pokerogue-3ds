@@ -171,6 +171,7 @@ static int n_teras_shown, n_teras_cleared;   /* Tera icons the screen was told t
 static int n_boss_foes, n_boss_shields;   /* boss enemies the screen was shown (a wave's own, or a trainer's sent out) and the shield breaks it was told */
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
+static int n_dreams, n_dream_pairs, dream_pending;   /* Weird Dream: dreams played, pairs in them, pairs handed over and not played yet */
 static int n_mystery_trainer_scenes;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
@@ -731,6 +732,19 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
             BAD("Illusion changed permanent HP, level or shiny identity");
           W.mon[s] = *e->mon;
         }
+        break;
+      case BEV_DREAM_ADD:
+        /* Weird Dream: one pair (the new Pokemon is the payload, the old one's species is a); each game-core event plays alone, so the pairs and the play
+         * arrive in separate batches: the pending count carries over */
+        if (!e->mon || e->mon->species <= 0 || e->a <= 0 || e->b < 0) BAD("a dream pair with no new or no old Pokemon");
+        if (e->mon && e->a == e->mon->species && e->b == e->mon->form) BAD("a dream pair whose two halves are the same species and form");
+        if (++dream_pending > 6) BAD("a dream of more than six pairs");
+        n_dream_pairs++;
+        break;
+      case BEV_DREAM_PLAY:
+        if (dream_pending <= 0) BAD("a dream played with no pairs");
+        dream_pending = 0;
+        n_dreams++;
         break;
       case BEV_WAIT:
         break;
@@ -2243,6 +2257,8 @@ int main(int argc, char** argv) {
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("boss foes shown: %d, shield breaks shown: %d\n", n_boss_foes, n_boss_shields);
   printf("Tera icons shown: %d, taken away: %d\n", n_teras_shown, n_teras_cleared);
+  if (n_dreams || n_dream_pairs) printf("Weird Dream: %d dreams played, %d pairs\n", n_dreams, n_dream_pairs);
+  if (dream_pending) BAD("%d dream pairs handed over and never played", dream_pending);
   if (!n_boss_foes && n_scenes > 50) BAD("no boss was shown");
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls, %d in a party order that differs from storage)\n", n_key_bars,

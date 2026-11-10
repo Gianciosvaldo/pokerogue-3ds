@@ -16,6 +16,7 @@
 #include "battle_events.h"
 #include "battle_event_store.h"
 #include "battle_view.h"
+#include "dream_anim.h"
 #include "combat_observer.h"
 #include "custom_run.h"
 #include "achv_hooks.h"
@@ -812,6 +813,19 @@ static bool handle_event(int i) {
         else if (m.hp < sh->hp)
           *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = field, .a = m.hp, .b = HIT_RESULT_INDIRECT};
       }
+      break;
+    }
+
+    case GC_EV_DREAM: {
+      /* Weird Dream: the pairs of one dream arrive together; the last one starts the show. The new Pokemon's data are read from the run's
+       * party, which is already past the whole batch. The bv_mon storage outlives the event (bv_play copies it): a dream has at most six */
+      static bv_mon dream_mons[DA_MAX];
+      static int dream_n;
+      if (e->a < 0 || e->a >= G.run.n_party) break;
+      bv_mon* nm = &dream_mons[dream_n++ % DA_MAX];
+      be_mon(&G.run.bt, &G.run.party[e->a].b, nm);
+      *ev_new() = (bv_event){.type = BEV_DREAM_ADD, .battler = -1, .a = e->b, .b = e->c, .c = e->hp & 15, .mon = nm};
+      if (i + 1 >= G.nq || G.q[i + 1].kind != GC_EV_DREAM) *ev_new() = (bv_event){.type = BEV_DREAM_PLAY, .battler = -1};
       break;
     }
 

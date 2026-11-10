@@ -498,6 +498,13 @@ build/event_store_test: $(EVENT_STORE_OWN) $(BC)/tests/trace-capacity-test.c $(B
 event_store_test: build/event_store_test
 .PHONY: event_store_test
 
+# Weird Dream's transformation timeline (source/dream_anim.c) against upstream's particle loops (fixtures/dream-anim.txt)
+build/dream_anim_test: dream_anim_test.c ../include/dream_anim.h ../source/tween.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -I../include dream_anim_test.c ../source/tween.c -lm -o $@
+dream_anim_test: build/dream_anim_test
+.PHONY: dream_anim_test
+
 build/boss_panel_test: boss_panel_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections boss_panel_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@

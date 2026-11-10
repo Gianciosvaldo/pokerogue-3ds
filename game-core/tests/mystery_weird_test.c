@@ -45,10 +45,17 @@ static void start(const char *seed, int wave, int n)
 
 static char log_keys[40][96];
 static int n_log;
+/* the GC_EV_DREAM events: a, b, c, hp, and how many messages came before each */
+static struct { int a, b, c, hp, msgs_before; } dream[8];
+static int n_dream;
 static void log_events(void)
 {
     gc_event e;
     while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_DREAM && n_dream < 8) {
+            dream[n_dream].a = e.a; dream[n_dream].b = e.b; dream[n_dream].c = e.c; dream[n_dream].hp = e.hp; dream[n_dream].msgs_before = n_log;
+            n_dream++;
+        }
         if (e.kind != GC_EV_MESSAGE || !e.msg.key) continue;
         if (n_log < 40) snprintf(log_keys[n_log++], sizeof log_keys[0], "%s", e.msg.key);
     }
@@ -90,9 +97,14 @@ static void test_transformation(void)
     puts("test_weird_transformation...");
     for (int n = 1; n <= 6; n += 5) {
         n_log = 0;
+        n_dream = 0;
         start("wd-dream", 90, n);
-        int planned[6], old[6];
-        for (int k = 0; k < n; k++) { planned[k] = gc_weird_species(&run, k); old[k] = run.party[k].b.species; }
+        int planned[6], old[6], old_form[6], old_looks[6];
+        run.party[0].b.shiny = true; run.party[0].b.variant = 2;   /* looks that must travel with the event */
+        for (int k = 0; k < n; k++) {
+            planned[k] = gc_weird_species(&run, k); old[k] = run.party[k].b.species; old_form[k] = run.party[k].b.form;
+            old_looks[k] = (pr_get_gender(&run.party[k].b) == 1 ? 1 : 0) | (run.party[k].b.shiny ? 2 : 0) | ((run.party[k].b.variant & 3) << 2);
+        }
         const char *why;
         gc_choice ch = {GC_CH_MYSTERY, 0, 0, 0};
         assert(gc_run_choose(&run, &ch, &why));
@@ -115,6 +127,15 @@ static void test_transformation(void)
         assert(gateaus == small);   /* one Old Gateau for each new Pokemon under 570 base stat total */
         const int cut = logged_at("mysteryEncounters/weirdDream:option.1.cutscene"), done = logged_at("mysteryEncounters/weirdDream:option.1.dreamComplete");
         assert(cut >= 0 && done > cut);
+        /* one GC_EV_DREAM per Pokemon, in party order, between the cutscene text and the dream's end: the new Pokemon's storage index, the old
+         * one's species, form and looks (gender, shiny, variant) */
+        assert(n_dream == n);
+        for (int k = 0; k < n; k++) {
+            assert(dream[k].msgs_before == cut + 1 && done == cut + 1);
+            assert(dream[k].a >= 0 && dream[k].a < run.n_party && run.party[dream[k].a].b.species == planned[k]);
+            assert(dream[k].b == old[k] && dream[k].c == old_form[k] && dream[k].hp == old_looks[k]);
+            assert(run.party[dream[k].a].b.species == planned[k]);
+        }
         assert(run.screen.kind == GC_SCREEN_REWARD);                 /* the shop: Memory Mushroom, Rogue Ball, four Mints */
         const int wave = run.wave;
         leave_shop();

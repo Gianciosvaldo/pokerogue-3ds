@@ -1,6 +1,7 @@
 /* The battle screen (see battle_view.h). Positions are upstream's: the field container for the
  * arena and sprites, fieldUI for the info boxes, the ui container for the bottom strip. */
 #include "battle_view.h"
+#include "dream_anim.h"
 #include "luck_meter.h"
 
 #include <math.h>
@@ -1774,6 +1775,158 @@ static bool step_dialogue(const bv_event *e, float dt) {
   return false;
 }
 
+
+/* ------------------------------------------------------------------ Weird Dream's transformation */
+/* doShowDreamBackground / doPokemonTransformationSequence / doHideDreamBackground (weird-dream-encounter.ts, encounter-transformation-sequence.ts):
+ * a container over the whole canvas fades in, each party member's old Pokemon fades up in its middle, goes white, cycles with the new one's
+ * silhouette and turns into it; the container fades away. BEV_DREAM_ADD hands over one pair, BEV_DREAM_PLAY plays them all (dream_anim.h has
+ * the timeline). The background video (evo_bg.mp4) is not in the packs: a dark gradient with drifting stars stands in for it. Each pair's
+ * sprite sheets are loaded only while they show, so a party of six does not hold twelve of them. */
+typedef struct {
+  bv_mon old_m, new_m;
+  menu_sprite old_s, new_s;
+  bool old_on, new_on;       /* the sheet is loaded */
+  bool old_done, new_done;   /* it was loaded and freed again, or it failed: do not try again */
+} dream_mon;
+
+static struct {
+  bool on;                   /* the container exists */
+  int n;                     /* pairs handed over */
+  dream_mon m[DA_MAX];
+  float start[DA_MAX];       /* when each sequence begins (ms into the dream) */
+  int pos[DA_MAX];
+  float all_done;            /* every sequence has resolved */
+  float t, t_hide;           /* ms since the dream began; since the fade-out began (< 0 = not yet) */
+} D;
+
+static void dream_load(menu_sprite* sp, const bv_mon* m, bool* ok) {
+  menu_mon visual = {.species = m->species, .form = m->form, .gender = m->gender, .shiny = m->shiny, .variant = m->variant};
+  *ok = menu_sprite_load(sp, &visual, false);   /* upstream's getSpriteKey(true): the front sprite */
+  if (!*ok && ba_release_graphics()) *ok = menu_sprite_load(sp, &visual, false);
+}
+
+static void dream_reset(void) {
+  for (int i = 0; i < D.n && i < DA_MAX; i++) {
+    menu_sprite_free(&D.m[i].old_s);
+    menu_sprite_free(&D.m[i].new_s);
+  }
+  memset(&D, 0, sizeof D);
+  D.t_hide = -1;
+}
+
+static void dream_update(float dt) {
+  if (!D.on) return;
+  D.t += dt;
+  if (D.t_hide >= 0 && D.t >= D.t_hide + DA_FADE_MS) {   /* the container is removed */
+    dream_reset();
+    return;
+  }
+  for (int i = 0; i < D.n; i++) {
+    dream_mon* d = &D.m[i];
+    const float local = D.t - D.start[i];
+    if (local < 0) continue;
+    if (local < da_old_free_ms()) {
+      if (!d->old_on && !d->old_done) {
+        dream_load(&d->old_s, &d->old_m, &d->old_on);
+        d->old_done = !d->old_on;
+      }
+    } else if (d->old_on) {
+      menu_sprite_free(&d->old_s);
+      d->old_on = false;
+      d->old_done = true;
+    }
+    if (local >= da_new_load_ms() && local < da_end_ms()) {
+      if (!d->new_on && !d->new_done) {
+        dream_load(&d->new_s, &d->new_m, &d->new_on);
+        d->new_done = !d->new_on;
+      }
+    } else if (local >= da_end_ms() && d->new_on) {
+      menu_sprite_free(&d->new_s);
+      d->new_on = false;
+      d->new_done = true;
+    }
+  }
+}
+
+/* One of the four sprites of a sequence; silhouette = filled white, whatever its colours. A sheet that did not load draws nothing. */
+static void dream_sprite(const menu_sprite* sp, bool loaded, float cx, float cy, float scale, float alpha, bool silhouette) {
+  if (!loaded || alpha <= 0 || scale <= 0) return;
+  const rr_frame* f = menu_sprite_frame(sp, ui_now());
+  if (!f) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = o.origin_y = 0.5f;
+  o.scale_x = o.scale_y = scale;
+  const int a = (int)(alpha * 255 + 0.5f);
+  if (silhouette) {
+    o.tint = RR_RGBA(0, 0, 0, a);
+    rr_set_tone(255, 255, 255);
+  } else {
+    o.tint = RR_RGBA(255, 255, 255, a);
+  }
+  rr_draw(f, cx, cy, &o);
+  if (silhouette) rr_set_tone(0, 0, 0);
+}
+
+/* the stand-in for evo_bg: a dark violet gradient and stars rising through it */
+static void dream_background(float ca) {
+  static const uint8_t TOP[3] = {4, 6, 22}, BOTTOM[3] = {40, 14, 66};
+  enum { BANDS = 9, STARS = 36 };
+  for (int b = 0; b < BANDS; b++) {
+    const float k = (float)b / (BANDS - 1);
+    const int r = (int)(TOP[0] + (BOTTOM[0] - TOP[0]) * k), g = (int)(TOP[1] + (BOTTOM[1] - TOP[1]) * k), bl = (int)(TOP[2] + (BOTTOM[2] - TOP[2]) * k);
+    const float y0 = 180.0f * b / BANDS, y1 = 180.0f * (b + 1) / BANDS;
+    rr_rect(0, y0, 320, y1 - y0 + 0.5f, RR_RGBA(r, g, bl, (int)(255 * ca + 0.5f)));
+  }
+  for (int i = 0; i < STARS; i++) {
+    const uint32_t h = (uint32_t)(i + 1) * 2654435761u;
+    const float x = (float)((h >> 8) % 320), speed = 8 + (float)((h >> 4) % 24);   /* px per second */
+    float y = fmodf((float)((h >> 12) % 180) - D.t * speed / 1000.0f, 180.0f);
+    if (y < 0) y += 180;
+    const float tw = 0.55f + 0.45f * sinf(D.t / 400.0f + (float)i);
+    const int size = (h & 3) == 0 ? 2 : 1;
+    rr_rect(x, y, size, size, RR_RGBA(190 + (h & 0x3f), 200 + ((h >> 3) & 0x2f), 255, (int)(255 * ca * tw + 0.5f)));
+  }
+}
+
+static void dream_draw(void) {
+  if (!D.on) return;
+  const float ca = da_container_alpha(D.t, D.t_hide);
+  if (ca <= 0) return;
+  rr_rect(0, 0, 320, 180, RR_RGBA(0, 0, 0, (int)(255 * ca + 0.5f)));
+  dream_background(ca);
+  const bool have_spark = img_has("images/effects/evo_sparkle");
+  for (int i = 0; i < D.n; i++) {
+    const dream_mon* d = &D.m[i];
+    const float local = D.t - D.start[i];
+    if (local < 0) continue;
+    float xo, yo;
+    da_offset(D.pos[i], &xo, &yo);
+    const float cx = 160 + xo, cy = 90 + yo;
+    da_state st;
+    da_state_at(local, &st);
+    if (st.old_vis) dream_sprite(&d->old_s, d->old_on, cx, cy, 1, st.old_alpha * ca, false);
+    if (st.otint_vis) dream_sprite(&d->old_s, d->old_on, cx, cy, st.otint_scale, st.otint_alpha * ca, true);
+    if (st.new_vis) dream_sprite(&d->new_s, d->new_on, cx, cy, 1, st.new_alpha * ca, false);
+    if (st.ntint_vis) dream_sprite(&d->new_s, d->new_on, cx, cy, st.ntint_scale, st.ntint_alpha * ca, true);
+    static da_particle ps[DA_MAX_PARTICLES];
+    const int n = da_particles(local, D.pos[i], ps, DA_MAX_PARTICLES);
+    for (int k = 0; k < n; k++) {
+      if (have_spark) {
+        const rr_frame* f = img_frame("images/effects/evo_sparkle", NULL);
+        if (!f) break;
+        rr_draw_opts o = RR_DEFAULT_OPTS;
+        o.origin_x = o.origin_y = 0.5f;
+        o.scale_x = o.scale_y = ps[k].scale;
+        o.tint = RR_RGBA(255, 255, 255, (int)(255 * ca + 0.5f));
+        rr_draw(f, ps[k].x, ps[k].y, &o);
+      } else {
+        const float sz = 5 * ps[k].scale;
+        rr_rect(ps[k].x - sz / 2, ps[k].y - sz / 2, sz, sz, RR_RGBA(255, 255, 255, (int)(255 * ca + 0.5f)));
+      }
+    }
+  }
+}
+
 static void run_event(float dt) {
   bv_event* e = &B.ev[B.cur];
   side* sd = side_of(e->battler);
@@ -1797,6 +1950,46 @@ static void run_event(float dt) {
 
     case BEV_DIALOGUE:
       if (step_dialogue(e, dt)) finish_event();
+      break;
+
+    case BEV_DREAM_ADD:
+      /* one pair: the new Pokemon is `mon`, the old one is a = species, b = form, c = female | shiny << 1 | variant << 2 */
+      if (e->mon && D.n < DA_MAX) {
+        if (D.on) dream_reset();   /* a dream that was still fading: the next one begins anew */
+        dream_mon* d = &D.m[D.n++];
+        memset(d, 0, sizeof *d);
+        d->new_m = *e->mon;
+        d->old_m = *e->mon;
+        d->old_m.species = e->a;
+        d->old_m.form = e->b;
+        d->old_m.female = e->c & 1;
+        d->old_m.gender = d->old_m.female ? 1 : 0;
+        d->old_m.shiny = (e->c & 2) != 0;
+        d->old_m.variant = (e->c >> 2) & 3;
+        d->old_m.fusion_species = d->old_m.fusion_form = d->old_m.fusion_gender = d->old_m.fusion_variant = 0;
+        d->old_m.fusion_shiny = false;
+        D.t_hide = -1;
+      }
+      finish_event();
+      break;
+
+    case BEV_DREAM_PLAY:
+      if (B.step == 0) {
+        if (D.n == 0) {
+          finish_event();
+          break;
+        }
+        D.on = true;
+        D.t = 0;
+        D.t_hide = -1;
+        D.all_done = da_schedule(D.n, D.start, D.pos);
+        B.step = 1;
+      }
+      /* Promise.all of the sequences: then the background starts to fade (the next text comes with it) */
+      if (D.t >= D.all_done) {
+        D.t_hide = D.t;
+        finish_event();
+      }
       break;
 
     case BEV_MUSIC:
@@ -2474,6 +2667,7 @@ static void bv_update(ui_screen* s, float dt) {
   }
   update_sparkles(dt);
   update_tera(dt);
+  dream_update(dt);
   for (int k = 0; k < 4; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
@@ -2549,6 +2743,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     }
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
     /* the strip and the item bar run across the border (the whole screen's width), so they come after it */
+    if (ui_space(UI_TOP_CANVAS)) dream_draw();   /* Weird Dream: over the field and its boxes, under the message strip */
     if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     if (ui_space(UI_PHYS_TOP)) draw_top_bar();
   } else {
@@ -2597,6 +2792,7 @@ static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update,
 
 void bv_begin(const bv_setup* setup) {
   for(int i=0;i<4;i++)menu_sprite_free(&B.s[i].sprite);
+  dream_reset();
   int selected_bar=B.bar;
   memset(&B, 0, sizeof B);
   B.bar=selected_bar;B.bar_sel=-1;
