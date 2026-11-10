@@ -403,7 +403,7 @@ the Kanto line-up in the classic game's order (`football_opponent.h`, the table 
 (Ghost), Lance (Dragon), and the Champion Blue. The type of each is the classic game's own specialty type (`pr_trainer_specialty`, checked by
 `opponent_test`). `football_live_begin` lists the Pokedex forms that fit the round's opponent (`football_opponent_form_fits`: a form of the
 type, or for the Champion, who has no type, a form with a base stat total of `FB_CHAMPION_MIN_BST` = 580 or more, about one form in six: a
-stacked team) and each of the 22 opposing players takes one by a single random draw, as before. Every round still scales the opposing
+stacked team) and each of the 22 opposing players takes one by a single random draw, as before, except that no species plays twice for a team (lorenzo 2026-11-10: the draw picks where to look in the list, and the first form of a species the team does not have yet from there is taken). Every round still scales the opposing
 attributes by 1 + 0.0625 per round after the first (round 13: x1.75, capped at 99), so team strength climbs from about 37 per attribute
 (Brock) through 56 (round 7) to 83 (Blue). Those two numbers are the tuning knobs (`FB_CHAMPION_MIN_BST` and the 0.0625 in
 `football_live_begin`). Before each match the top screen shows an opponent card (`opponent_card` in `football_live_screen.c`): the trainer's

@@ -96,7 +96,16 @@ bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,u
         m->lineup[s][i]=s? (uint8_t)i:r->lineup[i];
         m->units[s][i]=r->player[i].attributes;
         if(s){
-            const pr_form *form=&pr_forms[pool[random32(m)%pool_size]];FootballPlayer opponent;
+            /* One random draw picks where to look in the pool; no species plays twice for the team (lorenzo 2026-11-10), so from there the
+             * first form of a species the team does not have yet is taken. (The pool holds far more than 22 species, so it never runs out; if
+             * it ever did, the drawn form is taken as it is.) */
+            const unsigned start=random32(m)%pool_size;unsigned pick=start;
+            for(unsigned step=0;step<pool_size;++step){
+                const unsigned candidate=(start+step)%pool_size;bool taken=false;
+                for(unsigned k=0;k<i;++k)taken|=m->away_species[k]==pr_forms[pool[candidate]].species;
+                if(!taken){pick=candidate;break;}
+            }
+            const pr_form *form=&pr_forms[pool[pick]];FootballPlayer opponent;
             if(!football_stats_generate(&opponent,i,form,&r->maxima))return false;
             m->away_species[i]=form->species;m->away_form[i]=form->form_index;m->units[s][i]=opponent.attributes;
             uint8_t *a=(uint8_t *)&m->units[s][i];

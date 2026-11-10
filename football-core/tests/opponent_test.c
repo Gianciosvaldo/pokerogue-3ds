@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 /* The playoff is thirteen matches against the Kanto line-up (lorenzo 2026-11-09): eight Gym Leaders, the Elite Four, the Champion. Every Gym
- * Leader's and Elite Four member's team is made of forms of their type; the Champion's is stacked; and the teams get stronger every round. */
+ * Leader's and Elite Four member's team is made of forms of their type, with no Pokemon twice on a team; the Champion's is stacked; and the
+ * teams get stronger every round. */
 static gc_run scratch;
 static gc_system profile;
 static FootballCareer career;
@@ -53,6 +54,7 @@ int main(void)
             const pr_form *f=form_of(live.away_species[i],live.away_form[i]);
             assert(f && football_opponent_form_fits(o,f));
             if(o->type>=0)assert(f->type1==o->type || f->type2==o->type);else assert(f->base_total>=FB_CHAMPION_MIN_BST);
+            for(unsigned k=0;k<i;++k)assert(live.away_species[k]!=live.away_species[i]); /* no Pokemon twice on one team (lorenzo 2026-11-10) */
             ++players;
         }
     }
