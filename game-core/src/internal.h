@@ -151,7 +151,7 @@ typedef struct {
     struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
     /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
      * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
-    struct { bool valid; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;
+    struct { bool valid, fight, reward; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;
     struct { bool active; uint8_t pick, egg; } trtest;   /* A Trainer's Test: the fight is running (pick = the stat trainer, 0..4). Not saved, as fg */
     struct { bool active; uint8_t next; } winstrate;   /* The Winstrate Challenge: the chain of five trainer fights is running; next = the fight to make when this one is won. Not saved, as fg */
     struct { bool away, failed; uint32_t chosen_id; uint8_t n_rest, n_kept, commons, rares; gc_mon rest[5]; gc_item kept[160]; } breeder;
@@ -560,7 +560,11 @@ void gc_weird_start(gc_run *run);          /* an encounter begins: its plan is c
 bool gc_weird_plan(gc_run *run);           /* onInit: false when a party Pokemon cannot be transformed (a species the data does not cover) */
 int gc_weird_species(gc_run *run, int position);   /* the species the party member at `position` (party order) becomes, 0 = none */
 bool gc_weird_new_pokemon(gc_run *run, int position, gc_mon *out);   /* the transformation's new Pokemon as onInit made it (constructor rolls, Tera type) */
-void gc_weird_execute(gc_run *run, int option);   /* option 0: the transformation, 1: the fight (still the stand-in), 2: lose 10% of every level */
+void gc_weird_execute(gc_run *run, int option);   /* option 0: the transformation, 1: the fight against the alternate team, 2: lose 10% of every level */
+void gc_weird_hold_start(bool hold);       /* tests: the fight is made but its first turn is not started until gc_weird_begin_fight */
+void gc_weird_begin_fight(gc_run *run);    /* the fight's first turn (the trainer's lines, the send-outs) */
+void gc_weird_victory(gc_run *run);        /* the fight is won: the battle's end, the trainer's victory, the passive pick, the shop of six tiers */
+void gc_weird_reward(gc_run *run);         /* RP_ME_BEFORE_REWARDS: one Pokemon without a passive gets it */
 void gc_weird_reset_ranges(void);          /* tests: the BST ranges back to their initial values (a new page load upstream) */
 void gc_weird_set_ranges(int high, int standard);   /* tests: widened by that many steps of 10 each way */
 void gc_weird_get_ranges(int *high, int *standard);

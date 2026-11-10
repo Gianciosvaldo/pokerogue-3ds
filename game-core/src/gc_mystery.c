@@ -1397,7 +1397,6 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
     }
     *ok = true;
     const int type = run->mystery_type >= 0 ? run->mystery_type : run->screen.mystery_type;
-    const int wave_level = (int)pr_run_get_max_exp_level(&run->run, run->wave, false);
 
     switch (type) {
     case GC_ME_PILLAR_MEN:
@@ -1502,11 +1501,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_WEIRD_DREAM:
-        /* the transformation (option 0) and refusing it (option 2): src/gc_weird.c; the fight against the alternate team (option 1) is still a stand-in */
-        if (option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_DARKRAI, wave_level, true, 4, 1);
-            return true;
-        }
+        /* the transformation (option 0), the fight against the alternate team (option 1) and refusing it (option 2): src/gc_weird.c */
         gc_weird_execute(run, option);
         return true;
 

@@ -15,7 +15,9 @@ import { PokemonMove } from "#moves/pokemon-move";
 import { AbilityId } from "#enums/ability-id";
 import { SpeciesId } from "#enums/species-id";
 import { speciesDataRegistry } from "#app/global-species-data-registry";
-import { PlayerPokemon } from "#field/pokemon";
+import { EnemyPokemon, PlayerPokemon } from "#field/pokemon";
+import { Trainer } from "#field/trainer";
+import * as AnimUtils from "#utils/anim-utils";
 import * as DialogueUtils from "#mystery-encounters/encounter-dialogue-utils";
 import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils";
 import * as TransformationSequence from "#mystery-encounters/encounter-transformation-sequence";
@@ -103,6 +105,10 @@ for (let ci = 0; ci < configs.length; ci++) {
     expect(encounter.options.length).toBe(3);
     /* the dream background (1000 ms) is skipped, the side-by-side transformations (0, 4000, 8000) run at once */
     scene.time.delayedCall = ((delay: number, cb: () => void) => { if (delay !== 1000) cb(); return {}; }) as any;
+    vi.spyOn(AnimUtils, "playTween").mockImplementation((async () => {}) as any);
+    vi.spyOn(EnemyPokemon.prototype, "loadAssets").mockImplementation((async () => {}) as any);
+    vi.spyOn(Trainer.prototype, "loadAssets").mockImplementation((async () => {}) as any);
+    vi.spyOn(Trainer.prototype, "initSprite").mockImplementation((() => {}) as any);
     const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
     const rewards = vi.spyOn(EncounterPhaseUtils, "setEncounterRewards").mockImplementation(() => {});
     vi.spyOn(TransformationSequence, "doPokemonTransformationSequence").mockImplementation((async () => {}) as any);
@@ -155,7 +161,7 @@ for (let ci = 0; ci < configs.length; ci++) {
     };
     const list = () => scene.modifiers.map((m: any) => `${m.type.id} ${argOf(m.type)} ${holder(m)} ${m.stackCount} ${m.virtualStackCount ?? 0}`);
     for (let i = 0; i < share; i++) {
-      const k = (i % 2) * 2, wave = 30 + rnd(111), runSeed = word(), waveSeed = word(), biome = BIOMES[rnd(BIOMES.length)];
+      const k = i % 3, wave = 30 + rnd(111), runSeed = word(), waveSeed = word(), biome = BIOMES[rnd(BIOMES.length)];
       scene.setSeed(runSeed); scene.waveSeed = waveSeed;
       scene.currentBattle.waveIndex = wave;
       scene.currentBattle.enemyParty = [];
@@ -298,6 +304,23 @@ for (let ci = 0; ci < configs.length; ci++) {
         `DA ${ids2.length} ${ids2.map(id => dexLine(scene, id)).join(" ")}`,
         `AC ${Object.keys(gameData.achvUnlocks).sort().filter(a => !achvBefore.includes(a)).join(" ") || "-"}`);
       cover.options[k]++;
+      if (k === 1) {
+        const battle = scene.currentBattle, enemies = scene.getEnemyParty(), trainer = battle.trainer;
+        const call = rewards.mock.calls.length ? rewards.mock.calls[0] : undefined;
+        const given = call ? (call[0] as any) : undefined;
+        const enemyItems = scene.enemyModifiers.map((m: any) => `${enemies.findIndex((p: any) => p.id === m.pokemonId)} ${m.type.id} ${argOf(m.type)} ${m.stackCount} ${m.isTransferable ? 1 : 0}`);
+        const edump = (e: any) => `${e.isBoss() ? 1 : 0} ${e.bossSegments ?? 0} ${e.id} ${e.trainerSlot} ${e.aiType} ${e.isPopulatedFromDataSource ? 1 : 0} ${e.pokerus ? 1 : 0} ${e.luck} ${e.customPokemonData.ability} | ${dump(e)}`;
+        lines.push(`RW ${rewards.mock.calls.length} ${given?.fillRemaining ? 1 : 0} ${(given?.guaranteedModifierTiers ?? []).join(",") || "-"} ${(given?.guaranteedModifierTypeFuncs ?? []).length} ${call && call[2] ? 1 : 0}`,
+          `D ${battle.mysteryEncounter.encounterMode} ${battle.double ? 1 : 0} ${battle.enemyLevels.length} ${battle.enemyLevels.join(" ")} ${trainer.config.trainerType} ${trainer.variant} ${trainer.nameKey ?? "-"}`,
+          `J ${enemyItems.length} ${enemyItems.join(" ")}`,
+          `X ${enemies.length} ${enemies.map((e: any) => edump(e)).join(" ; ")}`,
+          `X3 ${enemies.length} ${enemies.map((e: any) => `${e.pokeball} ${e.teraType} ${e.getAbility().id} ${e.name.replace(/\s+/g, "_")}`).join(" ; ")}`,
+          `TG ${transformations.length} ${transformations.map((t: any) => dump(t.newPokemon)).join(" ; ")}`);
+        /* the win: the callback setEncounterRewards was given runs in the rewards phase's seed offset (wave * 1000) */
+        const rBefore = rng();
+        if (call && call[2]) scene.executeWithSeedOffset(() => (call[2] as any)(), wave * 1000);
+        lines.push(`BR ${rBefore} ${rng()} ${party.map((mon: any) => (mon.passive ? 1 : 0)).join(" ")}`);
+      }
       if (k === 0) {
         cover.passives += current.filter((mon: any) => mon.passive).length;
         cover.starters += dialogue.filter(d => d === "addedAsAStarter").length;

@@ -190,6 +190,7 @@ static void check_dex(const char *what, const dex_row *rows, int n)
         snprintf(nm, sizeof nm, "%s dex %d nature attr", what, id); EQ(nm, (long long)d->nature_attr, rows[k].nature);
         snprintf(nm, sizeof nm, "%s dex %d caught count", what, id); EQ(nm, (long long)d->caught_count, rows[k].caught_count);
         snprintf(nm, sizeof nm, "%s dex %d hatched count", what, id); EQ(nm, (long long)d->hatched_count, rows[k].hatched);
+        snprintf(nm, sizeof nm, "%s dex %d seen attr", what, id); EQ(nm, (long long)d->seen_attr, rows[k].seen);
         for (int i = 0; i < 6; i++) { snprintf(nm, sizeof nm, "%s dex %d iv %d", what, id, i); EQ(nm, d->ivs[i], rows[k].ivs[i]); }
         if (rows[k].candy != -1) {
             const gc_starter_entry *s = &sys.starters[id];
@@ -317,9 +318,65 @@ int main(int argc, char **argv)
         const int n_dex_after = read_dex(dex_after);
         tag("AC");
         { char a[160]; word(a, sizeof a); while (1) { int c = fgetc(f); if (c == '\n' || c == EOF) break; } }
+        /* option 2 (the fight): the rewards given, the trainer, the enemy items, the enemy party, their extras, the data sources, and the win's passive callback */
+        int fr_n = 0, fr_fill = 0, fr_funcs = 0, fr_cb = 0, fr_tiers[8] = {0}, fr_n_tiers = 0;
+        int fd_mode = 0, fd_double = 0, fd_levels = 0, fd_trainer = 0, fd_variant = 0;
+        char fd_name[64] = "";
+        int fj_n = 0;
+        static struct { int holder, arg, stack, transferable; char key[48]; } fj[160];
+        int fx_n = 0;
+        static struct { int boss, segments; long long id; int slot, ai, populated, pokerus, luck, custom_ability; } fx[6];
+        static dump_row fxd[6], ftg[6];
+        int fx3_n = 0;
+        static struct { int pokeball, tera, ability; char name[40]; } fx3[6];
+        int ftg_n = 0;
+        pr_rng br_before = {0}, br_after = {0};
+        int br_passives[6] = {0};
+        if (option == 1) {
+            tag("RW");
+            fr_n = (int)integer(); fr_fill = (int)integer();
+            { char t[40]; word(t, sizeof t); fr_n_tiers = csv(t, fr_tiers); }
+            fr_funcs = (int)integer(); fr_cb = (int)integer();
+            tag("D");
+            fd_mode = (int)integer(); fd_double = (int)integer(); fd_levels = (int)integer();
+            for (int k = 0; k < fd_levels; k++) integer();
+            fd_trainer = (int)integer(); fd_variant = (int)integer();
+            word(fd_name, sizeof fd_name);
+            tag("J");
+            fj_n = (int)integer();
+            if (fj_n < 0 || fj_n > 160) { fputs("enemy item count\n", stderr); return 2; }
+            for (int k = 0; k < fj_n; k++) {
+                fj[k].holder = (int)integer();
+                word(fj[k].key, sizeof fj[k].key);
+                fj[k].arg = (int)integer(); fj[k].stack = (int)integer(); fj[k].transferable = (int)integer();
+            }
+            tag("X");
+            fx_n = (int)integer();
+            for (int k = 0; k < fx_n && k < 6; k++) {
+                if (k) semicolon();
+                fx[k].boss = (int)integer(); fx[k].segments = (int)integer(); fx[k].id = integer(); fx[k].slot = (int)integer(); fx[k].ai = (int)integer();
+                fx[k].populated = (int)integer(); fx[k].pokerus = (int)integer(); fx[k].luck = (int)integer(); fx[k].custom_ability = (int)integer();
+                bar();
+                read_dump(&fxd[k]);
+            }
+            tag("X3");
+            fx3_n = (int)integer();
+            for (int k = 0; k < fx3_n && k < 6; k++) {
+                if (k) semicolon();
+                fx3[k].pokeball = (int)integer(); fx3[k].tera = (int)integer(); fx3[k].ability = (int)integer();
+                word(fx3[k].name, sizeof fx3[k].name);
+            }
+            tag("TG");
+            ftg_n = (int)integer();
+            for (int k = 0; k < ftg_n && k < 6; k++) { if (k) semicolon(); read_dump(&ftg[k]); }
+            tag("BR");
+            br_before = rng_vals(); br_after = rng_vals();
+            for (int k = 0; k < n_mons; k++) br_passives[k] = (int)integer();
+        }
         tag("E");
         (void)n_dex_after;
 
+        bool win = false;
         /* the storage order is rotated, so that party order and storage order differ */
         int st[6];
         for (int m = 0; m < n_mons; m++) st[m] = (m + case_no % n_mons) % n_mons;
@@ -492,6 +549,7 @@ int main(int argc, char **argv)
         /* the option */
         bool ok = false;
         const char *w2 = "";
+        gc_weird_hold_start(option == 1);   /* the first turn of the fight would switch the lead in and use up held items: compared after */
         gc_mystery_execute(&run, option, 0, 0, &w2, &ok);
         CHECK(ok, "option refused: %s", w2);
         CHECK(same_rng(&run.run.rng, &after_option), "the run RNG after the option differs (c %.0f, upstream %.0f)", run.run.rng.c, after_option.c);
@@ -529,6 +587,53 @@ int main(int argc, char **argv)
             EQ("the texts said", said, n_dialogue);
             EQ("the texts in order", order_ok, 1);
             starters_said += starters;
+        } else if (option == 1) {
+            EQ("setEncounterRewards once", n_rewards, 1);
+            EQ("leaveEncounterWithoutBattle never", leave_calls, 0);
+            EQ("setEncounterRewards once (fight)", fr_n, 1);
+            EQ("the shop does not fill", fr_fill, 0);
+            EQ("no reward functions", fr_funcs, 0);
+            EQ("a callback before the rewards", fr_cb, 1);
+            EQ("six reward tiers", fr_n_tiers, 6);
+            EQ("nothing queued", n_queued, 0);
+            EQ("the dialogue is the fight's line", n_dialogue, 1);
+            CHECK(n_dialogue == 1 && !strcmp(dialogue[0], "option.2.selected2"), "dialogue %s", dialogue[0]);
+            EQ("a trainer battle", fd_mode, 1);
+            EQ("a single battle", fd_double, 0);
+            EQ("trainer type", run.trainer_type, fd_trainer);
+            EQ("trainer variant", run.trainer_variant, fd_variant);
+            EQ("the trainer has no name", fd_name[0] == '-', 1);
+            EQ("a trainer battle (C)", run.battle_type, BATTLE_TYPE_TRAINER);
+            EQ("single (C)", run.double_battle, 0);
+            EQ("enemy count", run.n_enemy, fx_n);
+            EQ("data source count", ftg_n, fx_n);
+            for (int k = 0; k < run.n_enemy && k < fx_n; k++) {
+                char nm[40];
+                const gc_mon *e = &run.enemy[k];
+                snprintf(nm, sizeof nm, "enemy %d", k);
+                compare_mon(nm, e, &fxd[k]);
+                snprintf(nm, sizeof nm, "enemy %d boss", k); EQ(nm, e->b.is_boss, fx[k].boss);
+                snprintf(nm, sizeof nm, "enemy %d boss segments", k); EQ(nm, e->b.boss_segments, fx[k].segments);
+                snprintf(nm, sizeof nm, "enemy %d id", k); EQ(nm, (long long)e->b.id, fx[k].id);
+                snprintf(nm, sizeof nm, "enemy %d trainer slot", k); EQ(nm, e->trainer_slot, fx[k].slot);
+                snprintf(nm, sizeof nm, "enemy %d b trainer slot", k); EQ(nm, e->b.trainer_slot, fx[k].slot);
+                snprintf(nm, sizeof nm, "enemy %d pokerus", k); EQ(nm, e->pokerus, fx[k].pokerus);
+                snprintf(nm, sizeof nm, "enemy %d luck", k); EQ(nm, e->luck, fx[k].luck);
+                snprintf(nm, sizeof nm, "enemy %d pokeball", k); EQ(nm, e->pokeball, fx3[k].pokeball);
+                snprintf(nm, sizeof nm, "enemy %d tera", k); EQ(nm, e->b.tera_type, fx3[k].tera);
+                snprintf(nm, sizeof nm, "enemy %d ability", k); EQ(nm, pr_get_ability(&e->b, false), fx3[k].ability);
+            }
+            EQ("enemy item count", run.n_enemy_items, fj_n);
+            for (int k = 0; k < run.n_enemy_items && k < fj_n; k++) {
+                const gc_item *it = &run.enemy_items[k];
+                int holder = -2;
+                for (int e = 0; e < run.n_enemy; e++) if (run.enemy[e].b.id == it->pokemon_id) holder = e;
+                CHECK(!strcmp(it->key, fj[k].key) && it->arg == fj[k].arg && holder == fj[k].holder && it->stack == fj[k].stack && (it->non_transferable ? 0 : 1) == fj[k].transferable,
+                      "enemy item %d is %s/%d holder %d x%d %s, upstream %s/%d holder %d x%d %s", k, it->key, it->arg, holder, it->stack, it->non_transferable ? "locked" : "free",
+                      fj[k].key, fj[k].arg, fj[k].holder, fj[k].stack, fj[k].transferable ? "free" : "locked");
+                items_checked++;
+            }
+            win = true;
         } else {
             EQ("no rewards", n_rewards, 0);
             EQ("leaveEncounterWithoutBattle once", leave_calls, 1);
@@ -548,12 +653,29 @@ int main(int argc, char **argv)
         items_checked += n_after;
         check_dex("after", dex_after, n_dex);
         dex_checked += n_dex;
+        if (win) {
+            /* the win: the six tiers and the shop, the passive callback in the rewards phase's seed offset */
+            gc_weird_victory(&run);
+            const pr_reward_custom *c = &gc_int(&run)->reward.me_custom;
+            EQ("reward tiers (C)", c->n_tiers, fr_n_tiers);
+            for (int k = 0; k < c->n_tiers && k < fr_n_tiers; k++) { char nm[40]; snprintf(nm, sizeof nm, "reward tier %d", k); EQ(nm, c->tiers[k], fr_tiers[k]); }
+            EQ("reward functions (C)", c->n_funcs, 0);
+            EQ("shop does not fill (C)", c->fill_remaining, 0);
+            EQ("a shop follows", gc_rq_has(&run, RP_SELECT_MODIFIER), 1);
+            EQ("a trainer victory follows", gc_rq_has(&run, RP_TRAINER_VICTORY), 1);
+            gc_weird_reward(&run);
+            CHECK(same_rng(&run.run.rng, &br_after), "the run RNG after the passive callback differs (c %.0f, upstream %.0f)", run.run.rng.c, br_after.c);
+            (void)br_before;
+            for (int k = 0; k < run.n_party && k < n_mons; k++) { char nm[40]; snprintf(nm, sizeof nm, "passive of Pokemon %d after the win", k); EQ(nm, run.party[run.party_order[k]].b.passive_flag, br_passives[k]); }
+            gc_weird_begin_fight(&run);
+            EQ("the first turn is queued", gc_rq_has(&run, RP_TURN_INIT), 1);
+        }
         if (bad) mismatches++;
         cases++; by_option[option]++;
         (void)new_species_seen;
     }
-    printf("Mystery encounter Weird Dream (%d range histories searched): %d cases run (transformation %d, refusal %d), %d transformations (%d species, %d above 600 BST, %d new starters said), %d registry species checked, "
+    printf("Mystery encounter Weird Dream (%d range histories searched): %d cases run (transformation %d, fight %d, refusal %d), %d transformations (%d species, %d above 600 BST, %d new starters said), %d registry species checked, "
            "%d items and %d dex entries compared, %d fields. TOTAL mismatches %d\n",
-           searched, cases, by_option[0], by_option[2], transformations, new_species_seen, over600, starters_said, listed, items_checked, dex_checked, fields_checked, mismatches);
+           searched, cases, by_option[0], by_option[1], by_option[2], transformations, new_species_seen, over600, starters_said, listed, items_checked, dex_checked, fields_checked, mismatches);
     return mismatches ? 1 : 0;
 }
