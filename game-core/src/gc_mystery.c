@@ -176,17 +176,18 @@ static bool any_pick_ok(const gc_run *run, int type, int option)
     return false;
 }
 
-static bool available(const gc_run *r, int type, int tier)
+/* `force` is the developer hook: the biome, the wave window, the wave modulus and the money rule are waived, every rule about the party and the run stays */
+static bool available_ex(const gc_run *r, int type, int tier, bool force)
 {
-    if (type < 0 || type >= GC_ME_COUNT || !biome_has(r, type)) return false;
+    if (type < 0 || type >= GC_ME_COUNT || (!force && !biome_has(r, type))) return false;
     const me_rule *q = &me_rules[type];
-    if (q->tier != tier || r->wave < q->min_wave || r->wave > q->max_wave) return false;
+    if (q->tier != tier || (!force && (r->wave < q->min_wave || r->wave > q->max_wave))) return false;
     if (r->n_mystery_history && r->mystery_history[r->n_mystery_history - 1].type == type) return false;
     if (q->max_seen && seen_count(r, type) >= q->max_seen) return false;
     if (q->min_party && legal_party(r) < q->min_party) return false;
     if (q->disallowed_challenges && (r->run.challenge_flags & q->disallowed_challenges)) return false;
-    if (q->wave_mod_mask && !(q->wave_mod_mask & (1u << (r->wave % 10)))) return false;
-    if (q->money_mult > 0 && r->money < pr_run_get_wave_money_amount(r->wave, q->money_mult)) return false;
+    if (!force && q->wave_mod_mask && !(q->wave_mod_mask & (1u << (r->wave % 10)))) return false;
+    if (!force && q->money_mult > 0 && r->money < pr_run_get_wave_money_amount(r->wave, q->money_mult)) return false;
 
     /* Encounter-level requirements whose state already exists in game-core. */
     if (type == GC_ME_PILLAR_MEN && !gc_pillar_offered(r)) return false;
@@ -203,8 +204,30 @@ static bool available(const gc_run *r, int type, int tier)
     return true;
 }
 
+static bool available(const gc_run *r, int type, int tier) { return available_ex(r, type, tier, false); }
+
+/* Developer hook (sdmc:/3ds/pokerogue/rundriver.txt "mystery="): the first plain wave from `min_wave` on, once per run, becomes this encounter, so a Rogue-tier one can be played
+ * without waiting for the draw. Off (type -1) unless the app sets it; custom runs never use it. */
+static int force_type = -1, force_min_wave = 1;
+void gc_debug_force_mystery(int type, int min_wave)
+{
+    force_type = type >= 0 && type < GC_ME_COUNT ? type : -1;
+    force_min_wave = min_wave > 1 ? min_wave : 1;
+}
+bool gc_debug_mystery_pending(const gc_run *run, int wave)
+{
+    if (force_type < 0 || wave < force_min_wave || wave % 10 == 0) return false;
+    for (int i = 0; i < run->n_mystery_history; i++) if (run->mystery_history[i].type == force_type) return false;
+    return available_ex(run, force_type, me_rules[force_type].tier, true);
+}
+
 bool gc_mystery_select(gc_run *run, int *out_type, int *out_tier)
 {
+    if (gc_debug_mystery_pending(run, run->wave)) {
+        *out_type = force_type;
+        *out_tier = me_rules[force_type].tier;
+        return true;
+    }
     int weights[4] = {66, 40, 19, 3};
     for (int i = 0; i < run->n_mystery_history; i++) {
         if (run->mystery_history[i].tier == GC_ME_COMMON) weights[0] -= 6;

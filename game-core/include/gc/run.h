@@ -547,4 +547,8 @@ const gc_mon *gc_field_mon(const gc_run *run, int side);   /* the Pokemon on the
 double gc_exp_to_next_level(const gc_mon *m);             /* for the EXP bar: exp still needed, 0 at the cap */
 double gc_exp_level_fraction(const gc_mon *m);            /* 0..1 of the way through the current level */
 
+/* Developer hook: from wave `min_wave` on, the first plain wave of each run (not a multiple of 10, no earlier encounter of that kind in the run) is mystery encounter
+ * `type` (a gc_mystery_type), whatever its own wave window; -1 turns it off (the default). The app sets it from rundriver.txt. Custom runs ignore it. */
+void gc_debug_force_mystery(int type, int min_wave);
+
 #endif

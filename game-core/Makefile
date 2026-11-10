@@ -1803,6 +1803,13 @@ test: weird-host-test
 weird-host-test: $(BUILD)/mystery_weird_test
 	$(BUILD)/mystery_weird_test
 .PHONY: weird-host-test
+all: $(BUILD)/debug_force_mystery_test
+$(BUILD)/debug_force_mystery_test: tests/debug_force_mystery_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: debug-force-mystery-test
+debug-force-mystery-test: $(BUILD)/debug_force_mystery_test
+	$(BUILD)/debug_force_mystery_test
+.PHONY: debug-force-mystery-test
 all: $(BUILD)/mystery_clown_test
 $(BUILD)/mystery_clown_test: tests/mystery_clown_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

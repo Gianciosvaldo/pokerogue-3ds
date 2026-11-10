@@ -3,7 +3,9 @@
 #include "trainer_art.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "battle_events.h"
 #include "i18n.h"
@@ -78,6 +80,17 @@ static bool pillar_text(const char* sub, char* out, size_t n)
 const char* me_flow_ns(int type)
 {
   return type >= 0 && type < GC_ME_COUNT ? NS[type] : NULL;
+}
+
+int me_flow_type_from_name(const char* name)
+{
+  if (!name || !*name) return -1;
+  char* end;
+  long id = strtol(name, &end, 10);
+  if (!*end) return id >= 0 && id < GC_ME_COUNT ? (int)id : -1;
+  for (int t = 0; t < GC_ME_COUNT; t++)
+    if (NS[t] && !strcasecmp(NS[t], name)) return t;
+  return -1;
 }
 
 #define MAX_EXTRA 4

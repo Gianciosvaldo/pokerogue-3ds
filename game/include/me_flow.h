@@ -53,6 +53,9 @@ bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void*
 /* The locale namespace of an encounter ("mysteryEncounters/lostAtSea"), NULL for an unknown type. Exposed for the host tests. */
 const char* me_flow_ns(int type);
 
+/* A type from its locale namespace ("weirdDream", any letter case) or its number, -1 for anything else. For the rundriver.txt "mystery=" line. */
+int me_flow_type_from_name(const char* name);
+
 #ifdef __cplusplus
 }
 #endif
