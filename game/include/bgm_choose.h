@@ -81,6 +81,11 @@ const char *bgm_football_track(unsigned seed, unsigned round);
 unsigned bgm_football_track_count(void);
 const char *bgm_football_track_at(unsigned i);
 
+/* The track a mystery encounter starts when its visuals begin (withOnVisualsStart -> audioManager.playBgm(key, true)), NULL for an encounter that
+ * starts none. `type` is a gc_mystery_type. The Global Trade System keeps its key in its onInit: the gen 6 one with settings.musicPreferenceAllGens,
+ * else the gen 5 one. */
+const char *bgm_mystery_track(int type, bool all_gens);
+
 #ifdef __cplusplus
 }
 #endif

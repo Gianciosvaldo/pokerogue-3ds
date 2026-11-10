@@ -101,10 +101,15 @@ static void test_transformation(void)
         start("wd-dream", 90, n);
         int planned[6], old[6], old_form[6], old_looks[6];
         run.party[0].b.shiny = true; run.party[0].b.variant = 2;   /* looks that must travel with the event */
+        if (n > 1) {   /* a fused old Pokemon: its other half travels too */
+            run.party[1].b.fusion_species = SPECIES_ID_EEVEE; run.party[1].b.fusion_form = 0; run.party[1].b.fusion_gender = 1;
+            run.party[1].fusion_shiny = true; run.party[1].fusion_variant = 2;
+        }
         for (int k = 0; k < n; k++) {
             planned[k] = gc_weird_species(&run, k); old[k] = run.party[k].b.species; old_form[k] = run.party[k].b.form;
             old_looks[k] = (pr_get_gender(&run.party[k].b) == 1 ? 1 : 0) | (run.party[k].b.shiny ? 2 : 0) | ((run.party[k].b.variant & 3) << 2);
         }
+        if (n > 1) old_looks[1] |= SPECIES_ID_EEVEE << 4 | 0 << 18 | (1 + 1) << 24 | 1 << 26 | 2 << 27;   /* spelt out here, not taken from the code under test */
         const char *why;
         gc_choice ch = {GC_CH_MYSTERY, 0, 0, 0};
         assert(gc_run_choose(&run, &ch, &why));

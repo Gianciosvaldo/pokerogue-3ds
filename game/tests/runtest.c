@@ -396,22 +396,40 @@ static void music_scene(int scene_biome) {
   music_seen(first);
 }
 
+/* the track a mystery encounter of the run starts when its visuals begin (Weird Dream, Delibirdy-y, Fun and Games, the GTS), which then plays through any
+ * fight it holds; NULL for the others. The player has had the 750 ms upstream's fade takes by the time a command is asked or a reward screen opens
+ * (the host has no clock): settle the fade before looking */
+static int me_seen_type = -1; /* the type of the encounter the screen last showed (the run forgets it when the fight starts) */
+void __real_bgm_on_mystery(int type);
+void __wrap_bgm_on_mystery(int type) { me_seen_type = type; __real_bgm_on_mystery(type); }
+static const char* me_music_now(const gc_run* r) {
+  if (r->battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER && !r->me_battle) return NULL;
+  const char* t = bgm_mystery_track(r->mystery_type >= 0 ? r->mystery_type : me_seen_type, true);
+  if (t) bgm_tick(1000);
+  return t;
+}
+
 /* a command is asked: the battle is on, with the music it plays from here on */
 static void music_command(void) {
   if (!M.have) return;
   M.commands++;
+  const char* want = me_music_now(rs_run());
+  if (!want) want = M.battle;
   char key[BGM_NAME_LEN + 16];
-  snprintf(key, sizeof key, "audio/bgm/%s", M.battle);
-  if (strcmp(bgm_current(), M.battle)) BAD("a command was asked with the music \"%s\", the battle plays \"%s\"", bgm_current(), M.battle);
+  snprintf(key, sizeof key, "audio/bgm/%s", want);
+  if (strcmp(bgm_current(), want)) BAD("a command was asked with the music \"%s\", the battle plays \"%s\"", bgm_current(), want);
   if (strcmp(SND.key, key) || SND.volume != 1.0f) BAD("a command was asked with the DSP on \"%s\" at volume %.2f, want \"%s\"", SND.key, SND.volume, key);
-  music_seen(M.battle);
+  music_seen(want);
 }
 
 /* the reward screen: a won trainer battle has its victory music, a won wild battle the music it had */
 static void music_reward(void) {
   if (!M.have) return;
   const gc_run* r = rs_run();
-  if (r->battle_type == BATTLE_TYPE_TRAINER && !r->me_battle) { /* an encounter's trainer fight has no TrainerVictoryPhase (handleMysteryEncounterVictory) */
+  const char* me = me_music_now(r);
+  if (me) {
+    if (strcmp(bgm_current(), me)) BAD("the reward screen after an encounter that starts \"%s\" plays \"%s\"", me, bgm_current());
+  } else if (r->battle_type == BATTLE_TYPE_TRAINER && !r->me_battle) { /* an encounter's trainer fight has no TrainerVictoryPhase (handleMysteryEncounterVictory) */
     const char* v = bgm_trainer_victory(r->trainer_type);
     if (strcmp(bgm_current(), v)) BAD("the reward screen after trainer %d plays \"%s\", its victory music is \"%s\"", r->trainer_type, bgm_current(), v);
     M.victories++;

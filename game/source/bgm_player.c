@@ -10,18 +10,26 @@ static struct {
   char name[BGM_NAME_LEN]; /* the track started ("" = none) */
   bool fading;
   float fade_t, fade_ms;
+  char pending[BGM_NAME_LEN]; /* bgm_play_faded: the track that starts when pend_ms has run ("" = none) */
+  float pend_ms;
 } P;
 
 const char* bgm_current(void) { return P.name; }
 
-void bgm_stop(void) {
+static void stop_player(void) {
   P.fading = false;
   P.name[0] = 0;
   snd_bgm_stop();
   snd_bgm_volume(1.0f);
 }
 
+void bgm_stop(void) {
+  P.pending[0] = 0;
+  stop_player();
+}
+
 void bgm_play(const char* name) {
+  P.pending[0] = 0;
   if (!name || !*name) {
     bgm_stop();
     return;
@@ -46,6 +54,7 @@ void bgm_play(const char* name) {
 }
 
 void bgm_fade_out(float ms) {
+  P.pending[0] = 0;   /* a fade of its own: any track that was to follow another fade is off */
   if (!P.name[0]) return;
   if (ms <= 0) {
     bgm_stop();
@@ -56,11 +65,32 @@ void bgm_fade_out(float ms) {
   P.fade_ms = ms;
 }
 
+void bgm_play_faded(const char* name, float fade_ms, float delay_ms) {
+  if (!name || !*name) return;
+  if (!strcmp(P.pending, name)) return;                    /* already on its way */
+  if (!strcmp(P.name, name) && !P.fading) return;          /* playing */
+  if (!P.name[0] || !snd_ready()) {                        /* nothing to fade: previous?.isPlaying is false */
+    bgm_play(name);
+    return;
+  }
+  bgm_fade_out(fade_ms);
+  snprintf(P.pending, sizeof P.pending, "%s", name);
+  P.pend_ms = delay_ms;
+}
+
 void bgm_tick(float dt_ms) {
+  if (P.pending[0]) {
+    P.pend_ms -= dt_ms;
+    if (P.pend_ms <= 0) {
+      char name[BGM_NAME_LEN];
+      snprintf(name, sizeof name, "%s", P.pending);
+      bgm_play(name); /* clears the wait */
+    }
+  }
   if (!P.fading) return;
   P.fade_t += dt_ms;
   if (P.fade_t >= P.fade_ms) {
-    bgm_stop();
+    stop_player();   /* a track waiting behind this fade (bgm_play_faded) still starts */
     return;
   }
   snd_bgm_volume(1.0f - P.fade_t / P.fade_ms);

@@ -74,7 +74,8 @@ typedef enum {
                           * plays the line the run holds the next battle's names. The text stays valid for the next two trainer battles */
     GC_EV_DREAM,         /* Weird Dream's transformation of one party member (doPokemonTransformationSequence), in party order between the cutscene
                           * text and the dream's end: a = the storage index in gc_run.party of the new Pokemon, b = the old Pokemon's species,
-                          * c = its form, hp = its looks (bit 0 female, bit 1 shiny, bits 2 and 3 the variant). Presentation only */
+                          * c = its form, hp = its looks: bit 0 female, bit 1 shiny, bits 2 and 3 the variant; when it was a fusion also bits 4..17 the
+                          * fusion species, 18..23 its form, 24..25 its gender + 1, bit 26 its shiny, bits 27 and 28 its variant. Presentation only */
     GC_EV_COUNT,
 } gc_event_kind;
 

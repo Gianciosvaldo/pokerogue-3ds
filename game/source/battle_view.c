@@ -1797,6 +1797,7 @@ static struct {
   int pos[DA_MAX];
   float all_done;            /* every sequence has resolved */
   float t, t_hide;           /* ms since the dream began; since the fade-out began (< 0 = not yet) */
+  bool text;                 /* the cutscene text is up and the play waits for it to be dismissed */
 } D;
 
 static void dream_load(menu_sprite* sp, const bv_mon* m, bool* ok) {
@@ -1966,8 +1967,12 @@ static void run_event(float dt) {
         d->old_m.gender = d->old_m.female ? 1 : 0;
         d->old_m.shiny = (e->c & 2) != 0;
         d->old_m.variant = (e->c >> 2) & 3;
-        d->old_m.fusion_species = d->old_m.fusion_form = d->old_m.fusion_gender = d->old_m.fusion_variant = 0;
-        d->old_m.fusion_shiny = false;
+        d->old_m.fusion_species = (e->c >> 4) & 0x3fff;   /* a fused old Pokemon is shown fused */
+        d->old_m.fusion_form = (e->c >> 18) & 63;
+        d->old_m.fusion_gender = ((e->c >> 24) & 3) - 1;
+        d->old_m.fusion_shiny = (e->c >> 26) & 1;
+        d->old_m.fusion_variant = (e->c >> 27) & 3;
+        if (!d->old_m.fusion_species) d->old_m.fusion_gender = 0;
         D.t_hide = -1;
       }
       finish_event();
@@ -1983,11 +1988,18 @@ static void run_event(float dt) {
         D.t = 0;
         D.t_hide = -1;
         D.all_done = da_schedule(D.n, D.start, D.pos);
+        /* showEncounterText(cutscene) is started and not awaited: it types out and waits for a button while the sequences play */
+        if (e->text && *e->text) {
+          msgbox_show(&B.msg, e->text, -1, e->prompt);
+          B.msg.wait_ms = 0;
+          D.text = true;
+        }
         B.step = 1;
       }
-      /* Promise.all of the sequences: then the background starts to fade (the next text comes with it) */
-      if (D.t >= D.all_done) {
+      /* then Promise.all of the sequences and `await cutsceneDialoguePromise`: the background starts to fade (the next text comes with it) */
+      if (D.t >= D.all_done && (!D.text || msgbox_done(&B.msg))) {
         D.t_hide = D.t;
+        D.text = false;
         finish_event();
       }
       break;
