@@ -61,6 +61,7 @@ static void foe(side *sd,bool boss,int segments,int index,int hp,int max_hp){
 static double up_divider(int max_hp,int segments,int s){return floor(max_hp/(double)segments*s+0.5)/max_hp*86;}
 
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
  /* ---- the mini box, unchanged: pbinfo_enemy_mini, name at -124, bar at (-71, 4.5), label at (-72, 1.5), no dividers */
  {

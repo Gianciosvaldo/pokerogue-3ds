@@ -1399,6 +1399,8 @@ static void draw_debug(void) {
     snprintf(d + n, sizeof d - n, " (last #%d %s)", g_sprite_fail_species, g_sprite_fail_back ? "back" : "front");
   }
   rr_text_sys(2, 12, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
+  ba_debug_text(d, sizeof d);
+  rr_text_sys(2, 22, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
 }
 
 /* ------------------------------------------------------------------ events */

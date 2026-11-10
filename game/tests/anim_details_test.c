@@ -150,11 +150,33 @@ static void test_many_files_each_load(void) {
   printf("test_many_files_each_load PASSED\n");
 }
 
+/* The debug row says what the last animation found: the file, whether the background was there when drawn, and how many sounds played. */
+static void test_debug_text(void) {
+  char t[200];
+  g_serve_anim = true;
+  g_linear_free = (size_t)1 << 30;
+  ba_mon field[4] = {{0}};
+  field[0] = (ba_mon){true, true, 106, 148, 30, &g_frame, 257};
+  field[2] = (ba_mon){true, false, 236, 84, 25, &g_frame, 445};
+  assert(ba_play(BA_MOVE, MOVE_ID_SLUDGE_WAVE, 0, 2, field));
+  for (int i = 0; i < 200 && ba_active(); i++) {
+    ba_update(50.0f, field);
+    for (int l = 0; l < 3; l++) ba_draw((ba_layer)l, field);
+  }
+  ba_debug_text(t, sizeof t);
+  assert(strstr(t, "anim sludge-wave") && strstr(t, "bg ok") && strstr(t, "snd 1/1"));
+  assert(!strstr(t, "played")); /* its own file was used, not a fallback */
+  ba_drop_moves();
+  g_serve_anim = false;
+  printf("test_debug_text PASSED\n");
+}
+
 int main(void) {
   test_anim_get_target_is_substitute();
   test_anim_apply_tone_gray();
   test_preload_leaves_room();
   test_many_files_each_load();
+  test_debug_text();
   printf("All animation detail tests passed successfully.\n");
   return 0;
 }

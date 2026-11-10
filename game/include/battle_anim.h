@@ -49,6 +49,8 @@ void ba_drop_moves(void);
 /* Frees the animation images that nothing is playing, for texture memory a Pokemon's sprite needs. They load again when a move
  * plays. Does nothing, and returns false, while an animation plays. */
 bool ba_release_graphics(void);
+/* One line about the last animation played (the file used, whether its images were found, how many sounds played), for the debug row. */
+void ba_debug_text(char* out, size_t n);
 
 /* Starts an animation: kind and id (MoveId, CommonAnim or ChargeAnim), the user's and the
  * target's battler index (target < 0: the user), the field. Returns false when nothing plays

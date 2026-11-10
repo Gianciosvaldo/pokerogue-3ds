@@ -58,6 +58,7 @@ static void put(side *sd,int species,bool boss){
 static bool player_box(side *sd,float *x,float *y){reset();draw_player_info(sd);const img_call *c=find("images/ui/pbinfo_player");if(!c)c=find("images/ui/pbinfo_player_mini");if(!c)return false;*x=c->x;*y=c->y;return true;}
 
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
  /* ---- 1: the single fight, as it was: the lead and the one boss */
  memset(&B,0,sizeof B);

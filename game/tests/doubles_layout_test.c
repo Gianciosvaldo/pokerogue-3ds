@@ -73,6 +73,7 @@ static float zoomed_y(float y,float zoom){return 132+(y-132)*zoom;}
 static float field_zoom_now(void){reset();field_zoom(true);return cur_zoom;}
 
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
  frame96.src_w=frame96.w=96;frame96.src_h=frame96.h=96;
  /* ---- 1: a single battle is what it was */

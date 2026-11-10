@@ -42,6 +42,7 @@ static void sparkle_lifetime(void){
 static int cancelled;
 static void command(bv_command c,void *arg){assert(c.command==4&&arg==&cancelled);cancelled++;}
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
+void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
  B.mode=M_COMMAND;B.opts.can_undo=false;B.on_command=command;B.command_arg=&cancelled;
  assert(!undo_command(BTN_CANCEL)&&cancelled==0);
