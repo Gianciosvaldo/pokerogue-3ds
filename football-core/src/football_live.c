@@ -109,8 +109,17 @@ bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,u
             if(!football_stats_generate(&opponent,i,form,&r->maxima))return false;
             m->away_species[i]=form->species;m->away_form[i]=form->form_index;m->units[s][i]=opponent.attributes;
             uint8_t *a=(uint8_t *)&m->units[s][i];
-            for(unsigned k=0;k<sizeof(FootballAttributes);++k)a[k]=(uint8_t)limit(a[k]*(1+(round-1)*.0625f),1,99);
+            if(leader->role==FB_OPPONENT_CHAMPION)for(unsigned k=0;k<sizeof(FootballAttributes);++k)a[k]=(uint8_t)limit(a[k]*(1+(round-1)*.0625f),1,99);
         }
+    }
+    /* A Gym Leader's or Elite Four member's team is brought to the strength its round calls for, whatever its type: some pools are far stronger than
+     * others (Electric, with its Mega and legendary forms, came out about 10% above the gyms around it), and a trainer's place in the line-up
+     * should say how hard it is, not its type. The Champion's stacked team keeps what its pool gives. */
+    if(leader->role!=FB_OPPONENT_CHAMPION){
+        double sum=0;
+        for(unsigned i=0;i<22;++i){const uint8_t *a=(const uint8_t *)&m->units[FB_AWAY][i];for(unsigned k=0;k<sizeof(FootballAttributes);++k)sum+=a[k];}
+        const double mean=sum/(22.0*sizeof(FootballAttributes)),factor=mean>0?FB_LEADER_ATTRIBUTE_BASE*(1+(round-1)*.0625)/mean:1;
+        for(unsigned i=0;i<22;++i){uint8_t *a=(uint8_t *)&m->units[FB_AWAY][i];for(unsigned k=0;k<sizeof(FootballAttributes);++k)a[k]=(uint8_t)limit((float)(a[k]*factor),1,99);}
     }
     m->pending_receiver=-1;m->phase=FB_LIVE_CALL;m->play=FB_PASS_SLANTS;arrange(m);return true;
 }
