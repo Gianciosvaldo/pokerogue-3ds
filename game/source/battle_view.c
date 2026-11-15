@@ -2105,7 +2105,8 @@ static void run_event(float dt) {
     case BEV_INTRO_WILD: {
       /* a = 1: a trainer battle, nobody on the enemy side yet and `text` is the message
        * b = 1: (trainer) the slide only. b = 2: (the Classic final boss) the slide, then `text` with a button, the boss still a silhouette;
-       * b = 3: the boss shows itself (untint, cry, its box) once the speech that follows the message has been read */
+       * b = 3: the boss shows itself (untint, cry, its box) once the speech that follows the message has been read;
+       * b = 4: (a = 0) a custom rematch's offer: the Nemesis shows itself as a wild Pokemon does, and `text` is the message */
       const bool trainer = e->a == 1;
       if (e->b == 3) {
         side* en = &B.s[1];
@@ -2166,7 +2167,8 @@ static void run_event(float dt) {
             en->info_on = true;
             en->info_dx = -info_slide(en, false);
             tween_start(&B.tw2, en->info_dx, 0, 1000, EASE_CUBIC_OUT);
-            if(B.s[3].present&&en->present)i18n_t(s,sizeof s,"battle:doubleWildAppeared","pokemonName1",en->mon.name,"pokemonName2",B.s[3].mon.name,NULL);
+            if (e->b == 4) snprintf(s, sizeof s, "%s", e->text ? e->text : "");   /* a rematch's offer: its own line instead of "A wild X appeared!" */
+            else if(B.s[3].present&&en->present)i18n_t(s,sizeof s,"battle:doubleWildAppeared","pokemonName1",en->mon.name,"pokemonName2",B.s[3].mon.name,NULL);
             else i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->present?en->mon.name:B.s[3].mon.name, NULL);
           }
           msgbox_show(&B.msg, s, -1, false);

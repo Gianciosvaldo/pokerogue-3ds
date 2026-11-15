@@ -70,7 +70,8 @@ typedef enum {
                     * Pokemon is on the field): the enemy untints, cries, its info box slides in, and the
                     * message is "a wild X appeared". Trainer (a = 1): nobody on the enemy side yet, and the
                     * message is `text` ("X would like to battle!"); with b = 1 it ends with the slide and shows
-                    * no message (the trainer's dialogue and then the message follow as events of their own) */
+                    * no message (the trainer's dialogue and then the message follow as events of their own).
+                    * Wild with b = 4: a custom rematch's offer; the enemy comes in as above and the message is `text` */
   BEV_SUMMON,      /* battler sent out (mon = its data); player: text, or "Go! X!" when NULL */
   BEV_WITHDRAW,    /* battler returns to its ball */
   BEV_MOVE_ANIM,   /* an animation (battle_anim.h): b = ba_kind (move, common, charge), a = its id

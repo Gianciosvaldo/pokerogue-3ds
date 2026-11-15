@@ -107,6 +107,9 @@ bool cr_clear(int slot);
 void cr_on_screen(const gc_run* run, int screen_kind);
 /* The offer on screen: the species the player is asked about (0 when none) and the answer. */
 int cr_offer_species(void);
+/* The identity the offer on screen would give the wave's enemy if it is accepted (the record's own species, form, gender, shininess and
+ * ability: what game-core builds). The intro shows it before the answer. False when nothing is on offer. */
+bool cr_offer_enemy(gc_custom_enemy* spec);
 /* The driver has a message for the player (the voucher), once; NULL when none. */
 const char* cr_take_message(void);
 
