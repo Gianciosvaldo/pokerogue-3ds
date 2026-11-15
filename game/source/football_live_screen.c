@@ -550,7 +550,8 @@ static void bottom_menu(void)
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,81,288,"X / Y / L / R / Select: receivers 1-5");
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,99,288,"B: juke     L / R: switch defender");
         football_menu_panel(4,128,312,60);
-        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,137,130,"Mega evolution");
+        /* Kyurem and Calyrex take their form items the same way (lorenzo 2026-11-15): the line says so once one of them is picked. */
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,137,130,c->mega>=0 && gc_football_is_form_item(c->roster.mega_item[c->mega])?"Form change":"Mega evolution");
         football_menu_text_right(TS_MONEY,FM_PX_BODY,304,137,160,c->mega<0?"None":name(c->roster.mon[c->mega].b.species));
         football_menu_text(TS_WINDOW,FM_PX_SMALL,16,163,288,"Left/Right or tap: choose who mega evolves");
         buttons("B: Lineup","A: Kick off",true);break;
@@ -717,8 +718,9 @@ static void top_menu(void)
         else if(evo_cursor()>=0){const FootballEvoOffer *o=&c->evo[evo_cursor()];
             snprintf(shop_tip,sizeof shop_tip,o->state==FB_EVO_OFFER?"%.20s evolves into %.20s.%s":"%.20s: %.20s.%s",name(id),o->state==FB_EVO_OFFER?name(o->species):evo_item_name(o->item),o->item>50 && o->state==FB_EVO_OFFER?" A rare item.":"");}
         else if(L.cursor>=2 && L.cursor<FB_SHOP_FIXED){const int holder=football_career_stone_target(c,L.cursor);
-            snprintf(shop_tip,sizeof shop_tip,holder>=0?
-            "For %.24s. Select Mega before the next match.":"Mega Stones require a compatible holder.",holder>=0?name(c->roster.mon[holder].b.species):"");}
+            snprintf(shop_tip,sizeof shop_tip,holder<0?"Mega Stones require a compatible holder.":
+            gc_football_is_form_item(football_career_stone_item(c,L.cursor))?"For %.24s: another form for one match. Select it before the next match.":
+            "For %.24s. Select Mega before the next match.",holder>=0?name(c->roster.mon[holder].b.species):"");}
     }
     if(c->phase==FB_CAREER_DRAFT)snprintf(shop_tip,sizeof shop_tip,"Choose who plays %s. Its stats are on the right.",football_slot_titles[draft_slot()]);
     const char *tip=(c->phase==FB_CAREER_SHOP || c->phase==FB_CAREER_DRAFT) && shop_tip[0]?shop_tip:c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Thirteen trainers stand between you and the title.";

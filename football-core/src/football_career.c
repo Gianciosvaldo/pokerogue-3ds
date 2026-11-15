@@ -186,20 +186,33 @@ static int pick_stone(const FootballCareer *c,unsigned member,const int *list,in
     return list[h%(unsigned)count];
 }
 /* Two mega stones are on offer each round, for two different members who have none and can use one. When more than two can, the pair moves
- * on by two every round, so every member comes up in turn. */
+ * on by two every round, so every member comes up in turn.
+ * Kyurem and Calyrex (lorenzo 2026-11-15): their form items (Dark or Light Stone, Icy or Shadow Reins of Unity) sell in the same two slots at the
+ * same price, and a member who can use one comes first, every round, so it is always there to buy. One such member takes the first slot and the
+ * Mega Stones go on rotating through the second; two take both (the Mega Stones come back when one is bought); with more than two the pair of
+ * them moves on like the Mega Stones. A species with two form items (both Zekrom and Reshiram caught) is offered one a round, like a species
+ * with two stones. */
 static void shop(FootballCareer *c)
 {
     pay_match(c,true);
     c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[1]=c->prices[0];c->prices[2]=c->prices[3]=1000;
     c->stone_target=c->stone2_target=-1;c->stone_item=c->stone2_item=0;c->message[0]=0;
-    unsigned able[22],items[22],n=0;
+    unsigned able[22],items[22],n=0,form_able[22],form_items[22],nf=0;
     for(unsigned i=0;i<22;++i){
         if(c->roster.mega_item[i])continue;
         int list[GC_FOOTBALL_MAX_MEGA_ITEMS];prepare(c,i);
+        const int form_count=gc_football_form_items(c->scratch,0,list,GC_FOOTBALL_MAX_MEGA_ITEMS);
+        if(form_count>0){form_able[nf]=i;form_items[nf]=(unsigned)pick_stone(c,i,list,form_count);++nf;continue;}
         const int count=gc_football_mega_items(c->scratch,0,list,GC_FOOTBALL_MAX_MEGA_ITEMS);
         if(count>0){able[n]=i;items[n]=(unsigned)pick_stone(c,i,list,count);++n;}
     }
-    if(n){
+    if(nf){
+        const unsigned first=(c->seed%nf+(c->round-1)*FB_SHOP_STONES)%nf;
+        c->stone_target=(int)form_able[first];c->stone_item=(int)form_items[first];
+        if(nf>1){const unsigned second=(first+1)%nf;c->stone2_target=(int)form_able[second];c->stone2_item=(int)form_items[second];}
+        else if(n){const unsigned pick=(c->seed%n+(c->round-1))%n;c->stone2_target=(int)able[pick];c->stone2_item=(int)items[pick];}
+    }
+    else if(n){
         const unsigned first=(c->seed%n+(c->round-1)*FB_SHOP_STONES)%n;
         c->stone_target=(int)able[first];c->stone_item=(int)items[first];
         if(n>1){const unsigned second=(first+1)%n;c->stone2_target=(int)able[second];c->stone2_item=(int)items[second];}
