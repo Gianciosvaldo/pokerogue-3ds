@@ -60,6 +60,8 @@ static struct {
   bool skip[GC_MAX_EVENTS];
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
+  char switch_question[TXT_LEN];   /* the last "Will you switch?" the events carried (empty: none) */
+  bool question_last;           /* ... and it is the last text the screen wrote: the Yes / No opens under it */
   bool return_to_check;
   int check_cursor;
   bool release_drop;            /* the next drain follows a release picked on the party screen, which said goodbye itself */
@@ -120,6 +122,8 @@ static void reset_driver(void) {
   G.nq = G.qi = 0;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   G.swap_prompt = G.learn_drop = G.swap_replaced = G.release_drop = false;
+  G.switch_question[0] = 0;
+  G.question_last = false;
   G.return_to_check = false;
   G.ball = -1;
   G.refused_in_row = 0;
@@ -314,6 +318,12 @@ static void play_chunk(void) {
   const int pos = G.ev_pos;
   G.ev_pos += n;
   G.st.bev += (uint32_t)n;
+  /* the text box holds the last text written: is it the "Will you switch?" the Yes / No is about to open under? */
+  for (int k = pos; k < pos + n; k++) {
+    const bv_event* w = &G.ev[k];
+    if (w->text && (w->type == BEV_MESSAGE || w->type == BEV_SUMMON || w->type == BEV_INTRO_WILD || w->type == BEV_DIALOGUE))
+      G.question_last = G.switch_question[0] && w->type == BEV_MESSAGE && !strcmp(w->text, G.switch_question);
+  }
   bv_play(&G.ev[pos], n, pump, NULL);
 }
 
@@ -720,6 +730,15 @@ static bool handle_event(int i) {
       }
       G.ball = -1;
       G.n_ev += be_convert_events(&G.run.bt, &gc_run_battle_event_data(&G.run)[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
+      /* CheckSwitchPhase's question: kept, so the Yes / No can be opened under it even when later text (the biome's weather) was written
+       * after it (lorenzo, 2026-11-15: "it started to snow   Yes / No") */
+      for (int k = 0; k < e->b; k++) {
+        const pr_event* be = &gc_run_battle_event_data(&G.run)[e->a + k];
+        if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, "battle:switchQuestion")) {
+          be_format_message(&be->msg, G.switch_question, sizeof G.switch_question);
+          G.question_last = false;
+        }
+      }
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
       G.present[2]=v.present[2];G.present[3]=v.present[3];
@@ -1888,6 +1907,14 @@ static void screen_step(void) {
       say(ach);
       return;
     }
+  }
+  if (s->kind == GC_SCREEN_CHECK_SWITCH && G.switch_question[0] && !G.question_last) {
+    /* other text (the weather the biome set) came after the question: say it again, so the Yes / No is not under another line */
+    G.n_ev = G.ev_pos = G.n_txt = 0;
+    put_msg(G.switch_question, false);
+    if (G.n_ev) G.ev[G.n_ev - 1].a = 1;   /* callbackDelay 1 ms: the Yes / No comes up at once, as after upstream's showText */
+    play_chunk();
+    return;
   }
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {

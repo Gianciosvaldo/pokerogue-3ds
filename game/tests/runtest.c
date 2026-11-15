@@ -129,6 +129,7 @@ static struct {
   int menu_asks;          /* commands and reward screens that could have opened it */
   bool menu_try;          /* press START at the next step */
   bool quit_now;          /* Save and Quit was answered Yes: the main loop drops the run and continues it from its slot */
+  char last_text[160];    /* the last text the screen wrote (message, send-out, intro, talk): what the Yes / No of a CheckSwitchPhase opens under */
   bool centred;           /* the player's side stands in the centre column of a double (bv_setup.player_centred, BEV_PLAYER_CENTRE) */
   bool doubles;           /* the scene is a double (bv_setup.doubles, or the final boss' second phase: BEV_DOUBLES) */
 } W;
@@ -537,6 +538,8 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   for (int i = 0; i < n; i++) {
     const bv_event* e = &ev[i];
     const int s = screen_slot(e->battler);
+    if (e->text && (e->type == BEV_MESSAGE || e->type == BEV_SUMMON || e->type == BEV_INTRO_WILD || e->type == BEV_DIALOGUE))
+      snprintf(W.last_text, sizeof W.last_text, "%s", e->type == BEV_MESSAGE ? e->text : "");
     if (!(e->type == BEV_MESSAGE && e->text && !strncmp(e->text, "modifierSelectUiHandler", 23)))
       trail_add("bev %d b=%d a=%d b=%d%s%s", e->type, e->battler, e->a, e->b, e->text ? " t=" : "", e->text ? e->text : "");
     switch (e->type) {
@@ -976,6 +979,10 @@ void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*o
 void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
   W.confirm_done = on_done;
   W.confirm_arg = arg;
+  /* CheckSwitchPhase: the question is the text the Yes / No opens under, not another line written after it (lorenzo, 2026-11-15: the biome's
+   * weather text stood there: "it started to snow   Yes / No") */
+  if (gc_run_screen(rs_run())->kind == GC_SCREEN_CHECK_SWITCH && !strstr(W.last_text, "switchQuestion"))
+    BAD("the Yes / No of a Will you switch? opens under \"%s\"", W.last_text);
   /* On a switch screen the only yes / no is the full-party question: the party and the Pokemon about to be caught are noted now */
   const gc_run* r = rs_run();
   const gc_screen* sc = gc_run_screen(r);
