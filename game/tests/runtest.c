@@ -179,6 +179,11 @@ static int n_mystery_trainer_scenes;
 static int n_me_scenes, n_me_intro_calls;   /* the encounter waves' scenes, and the intro sprites they were given (bv_me_intro) */
 static bool me_scene_open;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
+/* RUNTEST_CUSTOM: the rematch offer's intro shows the Nemesis asking (the screen's enemy is its species), and after the answer the screen shows
+ * the run's enemy: the Nemesis stayed (accepted and built) or it went back and the wave's own came out (declined or refused) */
+static int n_offer_intros, n_offer_kept, n_offer_swapped;
+static int offer_shown;          /* the species the offer's intro put on the enemy side until the first command after the answer (0 = none) */
+static bool offer_withdrawn;     /* ... and whether it went back to its ball in between */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
 /* A full-party catch: the party as the question "release one?" found it, and the Pokemon about to be caught */
@@ -613,6 +618,14 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         }
         break;
       case BEV_INTRO_WILD:
+        if (custom_on && rs_run()->screen.kind == GC_SCREEN_CUSTOM_OFFER) {
+          /* the offer: the Nemesis that is asking shows itself like a wild Pokemon, with the line that says so */
+          if (e->a != 0 || e->b != 4 || !e->text || !*e->text) BAD("the rematch offer's intro is a=%d b=%d text \"%s\", not the Nemesis showing itself", e->a, e->b, e->text ? e->text : "");
+          else if (W.mon[1].species != cr_offer_species()) BAD("the rematch offer's intro shows species %d, the Nemesis asking is %d", W.mon[1].species, cr_offer_species());
+          offer_shown = W.mon[1].species;
+          offer_withdrawn = false;
+          n_offer_intros++;
+        } else if (e->b == 4) BAD("a rematch intro with no offer on screen");
         if (custom_on && e->a == 1 && e->text && !strcmp(e->text, "A Bizarre Foe appears!")) {
           n_jojo_intro++;
           if (i + 1 >= n || ev[i + 1].type != BEV_DIALOGUE) BAD("a Bizarre Foe intro with no iconic line after it");
@@ -641,6 +654,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         break;
       case BEV_WITHDRAW:
         if (side_ok(e->battler, "withdraw")) W.present[s] = false;
+        if (offer_shown && e->battler == 2) offer_withdrawn = true;
         break;
       case BEV_DAMAGE:
         if (side_ok(e->battler, "damage")) {
@@ -908,6 +922,22 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       BAD("field%d screen boss %d %d/%d, run %d %d/%d",field,a->boss,a->boss_segment_index,a->boss_segments,p->is_boss,p->boss_segment_index,p->boss_segments);
   }
   if(!enemy)BAD("asked command with no enemy");
+  if (offer_shown) {
+    /* the first command after a rematch offer: if the run's enemy is the Nemesis the intro showed, it never left; if not, the Nemesis went back
+     * and the wave's own enemy came out (the identity check above says the screen's enemy is the run's) */
+    cr_view v;
+    cr_view_get(&v);
+    if (v.rematch_enemy) {
+      if (offer_withdrawn) BAD("the Nemesis of an accepted rematch went back to its ball");
+      if (r->enemy[0].b.species != offer_shown) BAD("the rematch enemy is species %d, the intro showed %d", r->enemy[0].b.species, offer_shown);
+      n_offer_kept++;
+    } else {
+      if (!offer_withdrawn && r->enemy[0].b.species != offer_shown) BAD("an offer that was not taken left the Nemesis (species %d) on screen over the wave's own enemy (%d)", offer_shown, r->enemy[0].b.species);
+      n_offer_swapped++;
+    }
+    offer_shown = 0;
+    offer_withdrawn = false;
+  }
   if(me){
     const bv_mon *a=&W.mon[screen_slot(r->screen.slot)];
     if(a->n_moves!=PR_N_MOVES(&me->b))BAD("fight menu move count differs for actor%d",r->screen.slot);
@@ -2415,9 +2445,12 @@ int main(int argc, char** argv) {
     if (cs->degraded) BAD("%u runs lost their rematch to a card that refused a write", cs->degraded);
     if (m && cc_meta_validate(m) != CC_OK) BAD("the remembered enemies do not validate");
     if (ptx_pending()) BAD("a transaction is left pending");
+    printf("custom: %d offer intros showed the Nemesis; after the answer %d stayed (accepted) and %d went back for the wave's own enemy\n", n_offer_intros, n_offer_kept, n_offer_swapped);
+    if ((unsigned)n_offer_intros != cs->offers) BAD("%u offers, %d intros that showed the Nemesis", cs->offers, n_offer_intros);
     if (custom_strong && runs >= 100) {
       if (!cs->offers) BAD("no rematch was offered");
       if (!cs->wins) BAD("no rematch was won");
+      if (!n_offer_kept || !n_offer_swapped) BAD("the offer was not both taken (%d) and refused (%d) with the Nemesis on screen", n_offer_kept, n_offer_swapped);
     }
   }
   if (sys_on) {
