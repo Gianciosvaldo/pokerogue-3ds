@@ -409,3 +409,10 @@ opponent-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/opponent_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/opponent_test
 	$(BUILD)/opponent_test
 test: opponent-test
+
+.PHONY: vitamin-test
+vitamin-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/vitamin_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/vitamin_test
+	$(BUILD)/vitamin_test
+test: vitamin-test

@@ -81,6 +81,8 @@ static void draw_both(void)
 /* What the last frame showed on each screen (fake_saw remembers everything ever drawn). */
 static bool on_top(const char *prefix){for(unsigned i=0;i<top_text_count;++i)if(!strncmp(top_texts[i],prefix,strlen(prefix)))return true;return false;}
 /* A stat cell that shows a change ("52>67"): a digit, '>', a digit. */
+static unsigned total(const uint8_t *boost){unsigned sum=0;for(unsigned i=0;i<22;++i)sum+=boost[i];return sum;}
+static bool on_top_has(const char *part){for(unsigned i=0;i<top_text_count;++i)if(strstr(top_texts[i],part))return true;return false;}
 static bool on_top_change(void){for(unsigned i=0;i<top_text_count;++i){const char *t=top_texts[i];for(;t[0] && t[1] && t[2];++t)if(t[0]>='0' && t[0]<='9' && t[1]=='>' && t[2]>='0' && t[2]<='9')return true;}return false;}
 static bool bottom_is(const char *text){for(unsigned i=0;i<fake.text_count;++i)if(!strcmp(fake.texts[i].text,text))return true;return false;}
 static bool on_bottom(const char *prefix){for(unsigned i=0;i<fake.text_count;++i)if(!strncmp(fake.texts[i].text,prefix,strlen(prefix)))return true;return false;}
@@ -274,11 +276,16 @@ int main(void)
         w->evo[2]=(FootballEvoOffer){.member=1,.item=7,.state=FB_EVO_OFFER,.species=135,.price=450};
         w->evo[3]=(FootballEvoOffer){.member=2,.item=51,.state=FB_EVO_OFFER,.species=900,.price=1025};
         for(unsigned i=0;i<4;++i)assert(football_career_evo_valid(w,&w->evo[i]));
-        unsigned icons=icon_loads;w->phase=FB_CAREER_SHOP;tick();assert(icon_loads==icons+4); /* one icon for each evolution item */
-        for(unsigned i=0;i<9;++i){assert(w->evo_count==4);tick();press(BTN_DOWN);} /* every row (four fixed, four evolutions, Continue), and round to the first again */
-        tick();assert(on_bottom("Carbos") && on_bottom("Growlithe: Fire Stone") && on_bottom("Eevee: Water Stone") && on_bottom("Eevee: Thunder Stone") && on_bottom("Scyther: Black Augurite") && on_bottom("Continue to next round"));
-        assert(on_bottom("450") && on_bottom("1025") && !on_top("Growlithe >")); /* on Carbos: no evolution preview */
-        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick(); /* on the first evolution offer */
+        unsigned icons=icon_loads;w->phase=FB_CAREER_SHOP;tick();assert(icon_loads==icons+4+6); /* one icon for each evolution item and one for each of the six vitamins */
+        for(unsigned i=0;i<13;++i){assert(w->evo_count==4);tick();press(BTN_DOWN);} /* every row (eight fixed, four evolutions, Continue), and round to the first again */
+        tick();assert(on_bottom("Carbos") && on_bottom("Protein") && on_bottom("HP Up") && on_bottom("Iron") && on_bottom("Calcium") && on_bottom("Zinc") && on_bottom("Growlithe: Fire Stone")); /* the first page of nine rows */
+        assert(!on_bottom("Eevee: Water Stone") && !on_bottom("Continue to next round"));
+        for(unsigned i=0;i<9;++i){press(BTN_DOWN);}tick(); /* the second page: the rest of the evolutions and Continue */
+        assert(on_bottom("Eevee: Water Stone") && on_bottom("Eevee: Thunder Stone") && on_bottom("Scyther: Black Augurite") && on_bottom("Continue to next round") && on_bottom("1025") && !on_bottom("Carbos"));
+        for(unsigned i=0;i<4;++i){press(BTN_DOWN);}tick(); /* round to the first again */
+        assert(on_bottom("Carbos"));
+        assert(on_bottom("450") && !on_top("Growlithe >")); /* on Carbos: no evolution preview */
+        for(unsigned i=0;i<8;++i){press(BTN_DOWN);}tick(); /* on the first evolution offer */
         assert(on_top("Growlithe > Arcanine") && on_top_change() && on_top("Growlithe evolves into Arcanine.") && on_bottom("A: buy for 450    Up/Down: choose") && !on_bottom("A: buy for 450    Up/Down: choose    Not"));
         press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick();assert(on_top("Scyther > Kleavor") && on_top("Scyther evolves into Kleavor. A rare item.") && on_bottom("A: buy for 1025"));
         w->wallet=1000;tick();assert(on_bottom("A: buy for 1025    Up/Down: choose    Not enough cash"));w->wallet=2000;
@@ -290,12 +297,33 @@ int main(void)
         press(BTN_DOWN);tick();assert(on_bottom("Vaporeon: Thunder Stone") && on_bottom("Evolved") && on_bottom("This Pokemon evolved another way.") && !on_top("Vaporeon >"));
         press(BTN_ACTION);tick();assert(w->wallet==2000-450-450); /* nothing bought */
         press(BTN_UP);press(BTN_UP);tick();assert(on_bottom("Sold") && on_bottom("Bought: this Pokemon has evolved.")); /* back on the Growlithe row */
-        /* A tap on a row is the cursor and A: the Scyther row is the eighth, and the rare stone is bought. */
-        w->wallet=1100;game_screen->touch(game_screen,100,FM_LIST_Y+FM_LIST_PAD+7*FM_ROW_PITCH+8);tick();
+        /* A tap on a row is the cursor and A: the Scyther row is the third of the second page, and the rare stone is bought. */
+        press(BTN_DOWN);tick(); /* onto the second page */
+        w->wallet=1100;game_screen->touch(game_screen,100,FM_LIST_Y+FM_LIST_PAD+2*FM_ROW_PITCH+8);tick();
         assert(w->roster.mon[2].b.species==900 && w->wallet==75 && w->evo[3].state==FB_EVO_SOLD && on_bottom("Scyther evolved into Kleavor!"));
         /* The continue row leaves the shop and clears the shelf. */
         press(BTN_DOWN);tick();assert(!w->message[0] && on_bottom("Target ")); /* the cursor moved on from the Scyther row to Continue */
         press(BTN_ACTION);tick();assert(w->phase==FB_CAREER_READY && w->evo_count==0);
+    }
+    /* The six vitamins: a row each, three sales a round, and how many are left. */
+    {
+        FootballCareer *w=(FootballCareer *)career();
+        w->evo_count=0;memset(w->evo,0,sizeof w->evo);memset(w->sold,0,sizeof w->sold);memset(w->bought,0,sizeof w->bought);w->message[0]=0;
+        w->stone_target=-1;w->stone2_target=-1;w->round=3;w->wins=3;w->wallet=2000;
+        for(unsigned k=0;k<FB_SHOP_FIXED;++k)w->prices[k]=90+k;
+        memset(w->roster.stamina,0,sizeof w->roster.stamina);memset(w->roster.tackling,0,sizeof w->roster.tackling);
+        w->phase=FB_CAREER_READY;tick();w->phase=FB_CAREER_SHOP;tick();
+        assert(on_bottom("Carbos") && on_bottom("Protein") && on_bottom("HP Up") && on_bottom("Iron") && on_bottom("Calcium") && on_bottom("Zinc") && !on_bottom("(2 left)"));
+        for(unsigned i=0;i<4;++i){press(BTN_DOWN);}tick(); /* on HP Up, the fifth row */
+        assert(on_top("HP Up: +2 Stamina for") && on_top_has("(0 of 20). 3 left this round."));
+        press(BTN_ACTION);tick();
+        assert(w->bought[4]==1 && total(w->roster.stamina)==2 && w->wallet==2000-94 && on_bottom("HP Up (2 left)") && !on_bottom("Sold"));
+        press(BTN_ACTION);tick();press(BTN_ACTION);tick();
+        assert(w->bought[4]==3 && w->sold[4] && total(w->roster.stamina)==6 && w->wallet==2000-3*94 && on_bottom("Sold") && !on_bottom("(2 left)"));
+        press(BTN_ACTION);tick();assert(w->bought[4]==3 && w->wallet==2000-3*94); /* a fourth is not sold */
+        press(BTN_DOWN);tick();press(BTN_ACTION);tick(); /* the next row, Iron, is a vitamin of its own */
+        assert(w->bought[5]==1 && total(w->roster.tackling)==2 && on_bottom("Iron (2 left)"));
+        w->round=3;w->message[0]=0;
     }
     /* A Mega Stone has a fixed holder: changing the vitamin target must not mislabel it. */
     {

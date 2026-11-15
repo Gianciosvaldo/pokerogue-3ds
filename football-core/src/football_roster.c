@@ -29,9 +29,40 @@ bool football_roster_refresh(FootballRoster *r,unsigned i)
     const pr_form *f=NULL;
     for(unsigned j=0;j<PR_FORM_COUNT;++j)if(pr_forms[j].species==r->mon[i].b.species && pr_forms[j].form_index==r->mon[i].b.form){f=&pr_forms[j];break;}
     if(!f || !football_stats_generate(&r->player[i],r->mon[i].b.id,f,&r->maxima))return false;
-    unsigned a=r->player[i].attributes.spd+r->speed[i],b=r->player[i].attributes.str+r->strength[i];
-    r->player[i].attributes.spd=(uint8_t)(a>99?99:a);r->player[i].attributes.str=(uint8_t)(b>99?99:b);
+    football_roster_apply_boosts(r,i,&r->player[i].attributes);
     return true;
+}
+uint8_t *football_roster_boost(FootballRoster *r,FootballBoost kind,unsigned i)
+{
+    if(!r || i>=FB_ROSTER_SIZE)return NULL;
+    switch(kind){
+    case FB_BOOST_SPD:return &r->speed[i];case FB_BOOST_STR:return &r->strength[i];case FB_BOOST_STA:return &r->stamina[i];
+    case FB_BOOST_TAK:return &r->tackling[i];case FB_BOOST_THA:return &r->accuracy[i];case FB_BOOST_CTH:return &r->catching[i];
+    default:return NULL;
+    }
+}
+uint8_t *football_attribute_of(FootballAttributes *a,FootballBoost kind)
+{
+    if(!a)return NULL;
+    switch(kind){
+    case FB_BOOST_SPD:return &a->spd;case FB_BOOST_STR:return &a->str;case FB_BOOST_STA:return &a->sta;
+    case FB_BOOST_TAK:return &a->tak;case FB_BOOST_THA:return &a->tha;case FB_BOOST_CTH:return &a->cth;
+    default:return NULL;
+    }
+}
+void football_roster_apply_boosts(const FootballRoster *r,unsigned i,FootballAttributes *a)
+{
+    if(!r || !a || i>=FB_ROSTER_SIZE)return;
+    for(unsigned k=0;k<FB_BOOST_COUNT;++k){
+        uint8_t *attribute=football_attribute_of(a,(FootballBoost)k);
+        const uint8_t *boost=football_roster_boost((FootballRoster *)r,(FootballBoost)k,i);
+        const unsigned value=*attribute+*boost;*attribute=(uint8_t)(value>99?99:value);
+    }
+}
+const char *football_boost_name(FootballBoost kind)
+{
+    static const char *const names[FB_BOOST_COUNT]={"Speed","Strength","Stamina","Tackling","Throw accuracy","Catching"};
+    return (unsigned)kind<FB_BOOST_COUNT?names[kind]:"";
 }
 bool football_roster_starter(const gc_system *profile,unsigned species,gc_starter *out)
 {

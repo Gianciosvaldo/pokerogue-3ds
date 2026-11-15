@@ -577,3 +577,5 @@ and coverage/physics/art tests are included
 in sanitizer CI. The old balance audit describes the legacy snap engine; it is
 not a win-rate claim for this new live engine. Visual and on-device performance
 testing remain deferred to the next Windows build as requested.
+
+The live shop sells six vitamins, each up to `FB_VITAMIN_LIMIT` (3) times a round for one member or several (lorenzo 2026-11-15): Carbos (Speed), Protein (Strength), HP Up (Stamina), Iron (Tackling), Calcium (Throw accuracy) and Zinc (Catching), each +2 of its attribute up to a boost of 20 for a member (`FootballBoost`, `football_roster_boost`). Zinc's attribute is my pick: Special Defense feeds only Stamina. A checkpoint of version 4 carries the new boosts and the counts; older ones load with the Carbos and Protein they sold counted once. `tests/vitamin_test.c`.
