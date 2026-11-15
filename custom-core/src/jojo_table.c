@@ -196,7 +196,7 @@ const cc_jojo_char cc_jojo_chars[] = {
         {132, 0, 2, 1, 0, {144, 0, 0, 0}, 0, {{0}}}, /* Ditto; Transform */
         {571, 0, 0, 0, 0, {399, 53, 188, 417}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Zoroark; Dark Pulse, Flamethrower, Sludge Bomb, Nasty Plot */
     }},
-    {"weather", "Weather Report", "The kind of evil that doesn't realize it's evil is the worst one there is...", 30 /* Slum */, -1, 5, {
+    {"weather", "Weather Report", "You... The kind of evil that doesn't realize that it's evil... is the worst one there is...", 30 /* Slum */, -1, 5, {
         {351, 0, 0, 0, 0, {311, 126, 56, 59}, 0, {{0}}}, /* Castform; Weather Ball, Fire Blast, Hydro Pump, Blizzard */
         {186, 0, 2, 0, 0, {503, 92, 182, 156}, 1, {{"ATTACK_TYPE_BOOSTER", 10, 1}}}, /* Politoed; Scald, Toxic, Protect, Rest */
         {6706, 0, 0, 0, 0, {406, 188, 330, 151}, 1, {{"ATTACK_TYPE_BOOSTER", 3, 1}}}, /* Goodra; Dragon Pulse, Sludge Bomb, Muddy Water, Acid Armor */
@@ -215,7 +215,7 @@ const cc_jojo_char cc_jojo_chars[] = {
         {85, 0, 0, 0, 0, {413, 65, 26, 14}, 0, {{0}}}, /* Dodrio; Brave Bird, Drill Peck, Jump Kick, Swords Dance */
         {330, 0, 0, 0, 0, {89, 337, 369, 349}, 2, {{"ATTACK_TYPE_BOOSTER", 4, 1}, {"ATTACK_TYPE_BOOSTER", 15, 1}}}, /* Flygon; Earthquake, Dragon Claw, U-turn, Dragon Dance */
     }},
-    {"diego", "Diego Brando", "Scary Monsters!", 27 /* Jungle */, -1, 5, {
+    {"diego", "Diego Brando", "Ohh...are you wondering why I was eating those rocks?", 23 /* Wasteland */, -1, 5, {
         {253, 0, 0, 0, 0, {348, 404, 98, 14}, 0, {{0}}}, /* Grovyle; Leaf Blade, X-Scissor, Quick Attack, Swords Dance */
         {880, 0, 0, 0, 0, {754, 200, 89, 332}, 1, {{"ATTACK_TYPE_BOOSTER", 12, 1}}}, /* Dracozolt; Bolt Beak, Outrage, Earthquake, Aerial Ace */
         {567, 0, 0, 0, 0, {512, 444, 89, 369}, 1, {{"ATTACK_TYPE_BOOSTER", 2, 1}}}, /* Archeops; Acrobatics, Stone Edge, Earthquake, U-turn */

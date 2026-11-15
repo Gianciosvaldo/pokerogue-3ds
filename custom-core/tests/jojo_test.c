@@ -11,7 +11,7 @@ static const int SEQ[5][12] = {
     {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5},
     {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14},
     {0, 12, 25, 99, 0, 12, 25, 99, 0, 12, 25, 99},
-    {18, 23, 26, 2, 21, 8, 27, 14, 14, 14, 14, 14},   /* the biomes only the second batch of characters has, then the crowded Desert */
+    {18, 23, 26, 2, 21, 8, 23, 14, 14, 14, 14, 14},   /* the biomes only the second batch of characters has (Wasteland twice: Hol Horse and Diego), then the crowded Desert */
 };
 static const struct { uint64_t seed; int seq; int want[12]; uint64_t state; } GOLDEN[] = {
     {0x0ULL, 0, {22, -1, 1, 3, -1, -1, -1, 2, -1, -1, -1, -1}, 0x2DC6E5E736F71B91ULL},
@@ -23,17 +23,17 @@ static const struct { uint64_t seed; int seq; int want[12]; uint64_t state; } GO
     {0x1ULL, 1, {-1, -1, -1, 6, -1, -1, -1, -1, -1, -1, -1, -1}, 0x6164AAEEBEC3C6A9ULL},
     {0x1ULL, 2, {-1, -1, -1, 27, 1, -1, 22, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
     {0x1ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x4A4F4A4F424F5A40ULL},
-    {0x1ULL, 4, {-1, -1, -1, 33, 23, -1, 29, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
+    {0x1ULL, 4, {-1, -1, -1, 33, 23, -1, 21, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
     {0x12d687ULL, 0, {-1, 2, 22, -1, 9, -1, -1, -1, -1, -1, 17, 20}, 0x2DC6E5E737054E16ULL},
     {0x12d687ULL, 1, {-1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x24F5B77BC03D0105ULL},
     {0x12d687ULL, 2, {-1, 28, 1, -1, 22, -1, -1, -1, -1, 27, -1, -1}, 0xF157F274387055ECULL},
     {0x12d687ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x4A4F4A4F425D8CC6ULL},
-    {0x12d687ULL, 4, {-1, 21, 30, -1, 23, -1, -1, -1, -1, 22, 27, 28}, 0x6A35D95A359A4640ULL},
+    {0x12d687ULL, 4, {-1, 29, 30, -1, 23, -1, -1, -1, -1, 22, 27, 28}, 0x6A35D95A359A4640ULL},
     {0xdeadbeefcafef00dULL, 0, {28, 2, -1, -1, -1, 10, -1, -1, -1, -1, 17, 13}, 0x785A90387D596B9CULL},
     {0xdeadbeefcafef00dULL, 1, {6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0xD151E8138746A276ULL},
     {0xdeadbeefcafef00dULL, 2, {28, 27, -1, -1, -1, 1, -1, -1, -1, 22, -1, -1}, 0x3BEB9CC57EC47372ULL},
     {0xdeadbeefcafef00dULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x94E2F4A088B1AA4CULL},
-    {0xdeadbeefcafef00dULL, 4, {19, 21, -1, -1, -1, 24, -1, -1, -1, 22, 28, -1}, 0x169209F1FCA3E7B1ULL},
+    {0xdeadbeefcafef00dULL, 4, {19, 29, -1, -1, -1, 24, -1, -1, -1, 22, 28, -1}, 0x169209F1FCA3E7B1ULL},
 };
 static const struct { uint64_t seed; int want[12]; uint64_t state; } GOLDEN_SMALL[] = {
     {0, {1, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1}, 0xDA4291D4BBEDB6FEULL},
@@ -46,10 +46,10 @@ static const struct { uint64_t seed; int want[12]; uint64_t state; } GOLDEN_SMAL
     {7, {2, 1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1}, 0xB4E8FF0139CD2B42ULL},
 };
 
-#define POOL_N 21
-static const int POOL[POOL_N] = {14, 4, 9, 29, 7, 5, 10, 19, 1, 30, 24, 20, 13, 41, 18, 23, 26, 2, 21, 8, 27};   /* the biomes some character is in */
+#define POOL_N 20
+static const int POOL[POOL_N] = {14, 4, 9, 29, 7, 5, 10, 19, 1, 30, 24, 20, 13, 41, 18, 23, 26, 2, 21, 8};   /* the biomes some character is in */
 static const int BIOME_OF[34] = {-1, 14, 4, 9, 29, 7, 5, 10, 19, 1, 30, -1, -1, 24, 20, 13, 41,
-                                 20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 27, 26, 1, 41, 2};
+                                 20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 23, 26, 1, 41, 2};
 
 static int same(const cc_jojo_state *a, const cc_jojo_state *b) { return a->rng_state == b->rng_state && a->used == b->used && a->fights == b->fights; }
 
@@ -60,7 +60,7 @@ static void test_table(void)
     for (unsigned i = 0; i < cc_jojo_count && i < 34; i++) {
         const cc_jojo_char *c = &cc_jojo_chars[i];
         CHECK(c->id && c->id[0] && c->name && c->name[0] && c->line && c->line[0]);
-        CHECK(strlen(c->line) <= 80);
+        CHECK(strlen(c->line) <= 96);   /* the dialogue box pages the text; the longest line is Weather Report's, 91 bytes, as lorenzo wrote it */
         CHECK_EQ(c->biome, BIOME_OF[i]);
         CHECK(c->n_members >= 1 && c->n_members <= CC_JOJO_MAX_MEMBERS);
         if (c->biome >= 0) pool++;
@@ -139,7 +139,7 @@ static void test_rules(void)
         uint64_t seen = 0;
         unsigned dealt = 0;
         for (int w = 0; w < 60; w++) {
-            const int biome = POOL[(w * 5 + (int)seed) % POOL_N];
+            const int biome = POOL[(w * 3 + (int)seed) % POOL_N];   /* the stride must be coprime with POOL_N: with 5 and a pool of 20 the walk visits only 4 biomes */
             const int r = cc_jojo_roll(&s, biome);
             if (r == CC_JOJO_NONE) continue;
             CHECK(r >= 0 && r < 34);
@@ -155,7 +155,7 @@ static void test_rules(void)
         total += dealt;
         if (dealt > 2) runs_over_two++;
     }
-    /* with 60 eligible waves over the 21 pool biomes a run deals about 15 characters (the independent copy in tools/golden_jojo.py: 14.99); the old cap of 2 is gone */
+    /* with 60 eligible waves over the 20 pool biomes a run deals about 15 characters (an independent Python copy of this loop on tools/golden_jojo.py's roll: 15.14); the old cap of 2 is gone */
     CHECK(runs_over_two > 3950);
     CHECK(total > 4000ul * 14 && total < 4000ul * 16);
 

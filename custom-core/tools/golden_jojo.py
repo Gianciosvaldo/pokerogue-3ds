@@ -6,7 +6,7 @@ The table is the one the test uses: character index -> biome (-1 = never dealt),
 M = (1 << 64) - 1
 SALT = 0x4A4F4A4F424F5A41
 BIOMES = [-1, 14, 4, 9, 29, 7, 5, 10, 19, 1, 30, -1, -1, 24, 20, 13, 41,   # kars gyro diavolo kira pucci jolyne joseph jotaro dio koichi mista wamuu esidisi valentine polnareff risotto stroheim
-          20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 27, 26, 1, 41, 2]   # caesar kakyoin avdol vanillaice holhorse iggy narancia bruno abbacchio weather johnny sandman diego shigechi josuke rohan giorno
+          20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 23, 26, 1, 41, 2]   # caesar kakyoin avdol vanillaice holhorse iggy narancia bruno abbacchio weather johnny sandman diego shigechi josuke rohan giorno
 P = 30
 
 
@@ -42,7 +42,7 @@ def run(seed, biomes, table=BIOMES):
 
 if __name__ == "__main__":
     seqs = [[14, 4, 14, 9, 1, 30, 14, 4, 13, 41, 20, 24], [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5], [14] * 12, [0, 12, 25, 99] * 3,
-            [18, 23, 26, 2, 21, 8, 27, 14, 14, 14, 14, 14]]
+            [18, 23, 26, 2, 21, 8, 23, 14, 14, 14, 14, 14]]
     for seed in (0, 1, 1234567, 0xDEADBEEFCAFEF00D):
         for k, b in enumerate(seqs):
             r, st = run(seed, b)
