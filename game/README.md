@@ -388,6 +388,16 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   this the layout was fixed at `bv_begin` (`setup.doubles`), so the ally stood on the lead with its box on the lead's: two Pokemon
   overlapping and one HP bar. `tests/final_boss_double_layout_test.c`, `tests/final_boss_double_events_test.c` (real battle-core
   wave-200 fights). Positions are transcribed from the pinned source, not seen on a screen or run against upstream.
+- A lone Pokemon of the player's in a double battle (lorenzo, 2026-11-15): when only one of the player's Pokemon is on the field and no
+  other can come in (the battle began that way, or the partner fainted with nobody on the bench), it stands at `FieldPosition.CENTER`
+  (0, 0) with the single battle's HP box, not on its column with the mini box. Upstream does this inside the faint (`FaintPhase` queues
+  `ToggleDoublePositionPhase(true)`, a 500 ms tween that also swaps party slots 0 and 1 when the survivor was in slot 1); lorenzo wants
+  it when the turn is over, so battle-core says where upstream moves it (`PR_EV_FIELD_CENTER`, presentation only: no state or RNG
+  changes; id 1 is `SummonPhase.summon`'s own `setFieldPosition`, before the send-out) and the converter holds the move to the end of
+  the batch (`BEV_PLAYER_CENTRE`). A partner coming back before the end cancels it; the way back to two columns is not held. A mid-turn
+  `BEV_FIELD_SWAP` is invisible while the pair is in two columns (`B.flipped`). `tests/lone_player_layout_test.c`,
+  `tests/lone_player_events_test.c`, and `runtest` (a double with one able Pokemon never asks a command in the columns). Not seen
+  on a console.
 - Timings: encounter slide 2000 ms, info boxes 1000 ms in and 500 ms out, HP bar
   `clamp(|dHP| x 5, 250, 5000)` ms, damage blink 6 x 100 ms, 20 ms per character, 1500 ms message
   wait, fades 250 / 100 / 250 ms.

@@ -518,6 +518,20 @@ build/final_boss_double_layout_test: final_boss_double_layout_test.c ../source/b
 final_boss_double_layout_test: build/final_boss_double_layout_test
 .PHONY: final_boss_double_layout_test
 
+LONE_EVENTS_SRCS := lone_player_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/lone_player_events_test: $(LONE_EVENTS_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(LONE_EVENTS_SRCS) -lm -o $@
+lone_player_events_test: build/lone_player_events_test
+.PHONY: lone_player_events_test
+
+# a lone Pokemon of the player's in a double battle: centred platform + singles bar (BEV_PLAYER_CENTRE)
+build/lone_player_layout_test: lone_player_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections lone_player_layout_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+lone_player_layout_test: build/lone_player_layout_test
+.PHONY: lone_player_layout_test
+
 # the foes' side of a double battle on the top screen: platform raised (up) with the foes, trainer and doll on their marks, smaller field
 build/doubles_layout_test: doubles_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build
