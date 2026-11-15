@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 118   /* 0..99 as first made, then the 17 "Defeat X" of the second batch of challengers, then Twenty Faces */
+#define GC_ACHV_COUNT 152   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, then the 34 "Flawless X" */
 #define GC_ACHV_TWENTY_FACES 117
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
@@ -54,9 +54,14 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
 #define GC_ACHV_JOJO2_FIRST 100
 int gc_achv_jojo_id(int jojo);
 
+/* The achievement of beating one challenger with none of your Pokemon fainting in that battle ("Flawless X"): GC_ACHV_FLAWLESS_FIRST + the table
+ * index, for all of the table (-1 for an index outside it). */
+#define GC_ACHV_FLAWLESS_FIRST 118
+int gc_achv_flawless_id(int jojo);
+
 /* The order of the Achievements list: the id shown at list position `pos` (0..GC_ACHV_COUNT-1), -1 outside it. The ids are the saved identity of an
  * achievement and cannot move; the list can. It starts with every "Defeat X" in table order (the first 17 and the second batch together), then
- * the other JoJo ones (the Part sets, the counts with Twenty Faces between Ten Faces and Every Face, the feats), then every other group in id order. */
+ * every "Flawless X" in table order, then the other JoJo ones (the Part sets, the counts with Twenty Faces between Ten Faces and Every Face, the feats), then every other group in id order. */
 int gc_achv_order(int pos);
 
 /* A JoJo challenger (index in the order above) was beaten in a Bizarre run. `run_tag` names the run (any value that is the same for the

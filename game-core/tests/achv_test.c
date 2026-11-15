@@ -45,7 +45,8 @@ int main(void)
 
     /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
     {
-        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_JOJO2_FIRST + 17 + 1 && GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17);
+        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_FLAWLESS_FIRST + GC_JOJO_COUNT && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
+               GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17);
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_jojo_id(j);
@@ -55,6 +56,39 @@ int main(void)
         }
         assert(strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GIORNO)].name, "Giorno") && strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].name, "Kars"));
         assert(strstr(gc_achv_defs[26].desc, "34"));   /* Every Face names the number */
+    }
+
+    /* "Flawless X": beating that challenger with none of the party fainted; a win with a faint is not one and a later clean win still is; the
+     * ids are 118 + the table index; they pay two regular vouchers and are the only thing a clean win adds for that character */
+    {
+        assert(gc_achv_flawless_id(-1) == -1 && gc_achv_flawless_id(GC_JOJO_COUNT) == -1 && gc_achv_flawless_id(0) == 118 && gc_achv_flawless_id(33) == 151);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) {
+            const int id = gc_achv_flawless_id(j);
+            assert(gc_achv_defs[id].group == GC_ACHV_GROUP_JOJO && strncmp(gc_achv_defs[id].name, "Flawless ", 9) == 0);
+            assert(strstr(gc_achv_defs[id].desc, gc_achv_defs[gc_achv_jojo_id(j)].name) != NULL);   /* "Defeat <the same name> without ..." */
+            fresh();
+            gc_achv_jojo_won(&S, j, 3, false);
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, gc_achv_jojo_id(j)) && !gc_achv_unlocked(&S, id));         /* beaten, but not flawless */
+            const uint32_t before = vouchers();
+            gc_achv_jojo_won(&S, j, 4, true);                                                      /* again, clean this time */
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, id));
+            assert(vouchers() == before + 2 + 1);                                                  /* two regular vouchers, and "Untouched" (a Plus one) */
+            for (int k = 0; k < GC_JOJO_COUNT; k++) assert(gc_achv_unlocked(&S, gc_achv_flawless_id(k)) == (k == j));
+            gc_achv_jojo_won(&S, j, 5, false);                                                     /* a later faint takes nothing away */
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, id));
+        }
+        fresh();
+        S.achv.jojo_clean_mask_hi = 0xFFFFFFFCu;                                                   /* bits of characters this build does not have */
+        eval(NULL);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
+        fresh();
+        S.achv.jojo_clean_mask = 0xFFFFFFFFu;                                                      /* a clean mask alone is not a beaten one, but the flag only asks the clean mask */
+        S.achv.jojo_clean_mask_hi = 3u;
+        eval(NULL);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
     }
 
     /* the sets */
@@ -164,8 +198,9 @@ int main(void)
         }
         assert(gc_achv_order(-1) == -1 && gc_achv_order(GC_ACHV_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_order(j) == gc_achv_jojo_id(j));
+        for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_order(GC_JOJO_COUNT + j) == gc_achv_flawless_id(j));   /* then the 34 "Flawless X" */
         /* the other JoJo ones: 17..25, Twenty Faces, 26..29 */
-        int pos = GC_JOJO_COUNT;
+        int pos = 2 * GC_JOJO_COUNT;
         for (int id = 17; id <= 29; id++) {
             assert(gc_achv_order(pos++) == id);
             if (id == 25) assert(gc_achv_order(pos++) == GC_ACHV_TWENTY_FACES);
