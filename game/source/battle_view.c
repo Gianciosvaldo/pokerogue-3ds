@@ -94,6 +94,11 @@ static struct {
   bool late_double;   /* BEV_DOUBLES: the player's side went to two columns in the middle of the fight (the final boss' second phase) while
                        * the foe's side did not: setup.doubles says both sides are doubles from the start */
   float split;        /* how far the lead has stepped from the centre to its left place (0..1), tweened by BEV_DOUBLES */
+  bool centred;       /* a double in which only one of the player's Pokemon can fight: it stands in the centre and its info box is the single
+                       * battle's (bv_setup.player_centred from the start, or BEV_PLAYER_CENTRE once a faint has left it alone) */
+  float centre;       /* how far the player's Pokemon are from their columns to the centre (0..1), tweened by BEV_PLAYER_CENTRE */
+  bool flipped;       /* BEV_FIELD_SWAP in two columns: the survivor of slot 1 became slot 0 but keeps standing (and its box) where it was until
+                       * BEV_PLAYER_CENTRE moves it, so a swap in the middle of a turn is not seen */
   float arena_player_x, arena_enemy_x, enemy_slide;
   float arena_old_x;  /* the previous wave's enemy platform, sliding out (setup.next_encounter) */
   bool arena_old_on;
@@ -378,10 +383,13 @@ static int foot_gap(const side* sd) {
 
 /* Whether the player's side stands in two columns: a doubles encounter, or the final boss' second phase (BEV_DOUBLES), which turns a
  * single fight into a double with the one foe where it was. The foe's side follows setup.doubles alone. */
-static bool player_doubles(void) { return B.setup.doubles || B.late_double; }
-/* How far the player's Pokemon are from the centre towards their column: 1 in a doubles encounter, BEV_DOUBLES' tween in the middle of one */
-static float player_split(void) { return B.setup.doubles ? 1.0f : B.late_double ? B.split : 0.0f; }
+static bool player_doubles(void) { return (B.setup.doubles || B.late_double) && !B.centred; }
+/* How far the player's Pokemon are from the centre towards their column: 1 in a doubles encounter, BEV_DOUBLES' tween in the middle of one;
+ * BEV_PLAYER_CENTRE takes it back to 0 when only one of them can fight */
+static float player_split(void) { return (B.setup.doubles ? 1.0f : B.late_double ? B.split : 0.0f) * (1.0f - B.centre); }
 static bool second_column(const side *sd){return field_of(sd)%2!=0;}
+/* The column a player's Pokemon stands in (and its box): its slot's, except after a BEV_FIELD_SWAP that has not been followed by the move to the centre */
+static bool player_right(const side *sd){return second_column(sd)!=B.flipped;}
 static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 
 /* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
@@ -389,7 +397,7 @@ static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 static void (*music_hook)(int a);   /* where BEV_MUSIC goes */
 static bool step_doubles(float dt) {
   if (B.step == 0) {
-    if (player_doubles()) return true;
+    if (B.setup.doubles || B.late_double) return true;
     B.late_double = true;
     B.split = 0;
     tween_start(&B.tw, 0, 1, 500, EASE_SINE_OUT);
@@ -398,6 +406,32 @@ static bool step_doubles(float dt) {
   tween_update(&B.tw, dt);
   B.split = B.tw.value;
   return tween_done(&B.tw);
+}
+
+/* BEV_PLAYER_CENTRE, one frame of it; true when it is over. Pokemon.setFieldPosition(CENTER or LEFT, 500): the boxes change at once (setMini,
+ * setOffset), the sprite slides over 500 ms, Sine.easeOut. Going to the centre it starts from where the Pokemon stands (a survivor of slot 1 that a
+ * BEV_FIELD_SWAP promoted still stands in the right column); a Pokemon that takes its column again does so from the centre. Nothing to do on a screen
+ * that is already there (the swap's hold, if any, ends at once). */
+static bool step_centre(float dt, bool centre, bool at_once) {
+  if (B.step == 0) {
+    if (B.centred == centre) {
+      B.flipped = false;
+      return true;
+    }
+    B.centred = centre;
+    if (!centre || at_once) B.flipped = false;
+    if (at_once) {
+      B.centre = centre ? 1.0f : 0.0f;
+      return true;
+    }
+    tween_start(&B.tw, B.centre, centre ? 1.0f : 0.0f, 500, EASE_SINE_OUT);
+    B.step = 1;
+  }
+  tween_update(&B.tw, dt);
+  B.centre = B.tw.value;
+  if (!tween_done(&B.tw)) return false;
+  B.flipped = false;
+  return true;
 }
 
 /* Doubles: the whole foe side (its platform, trainers and Pokemon) stands FOE_RAISE field pixels higher than in a single battle. The
@@ -416,8 +450,9 @@ static void field_pos(const side* sd, bool player, float* x, float* y) {
   const bool right = field_of(sd) % 2 != 0;
   if (player) {
     const float k = player_split(); /* FieldPosition.LEFT is (-32, -8), RIGHT (32, 0) */
-    *x += (right ? 32 : -32) * k;
-    *y += right ? 0 : -8 * k;
+    const bool pright = player_right(sd);
+    *x += (pright ? 32 : -32) * k;
+    *y += pright ? 0 : -8 * k;
   } else if (B.setup.doubles) {
     *x += right ? 32 : -32;
     *y += right ? 0 : -8;
@@ -976,13 +1011,13 @@ static void draw_stat_panel(side *sd,bool player,float bx,float by){
  * RIGHT position is offset (setOffset: 27 down, 10 to the right for the player and 10 to the left for the foe). */
 static float player_info_y(const side *sd){
   if(!player_doubles())return -72;
-  return -72-12+(second_column(sd)?27:0);
+  return -72-12+(player_right(sd)?27:0);
 }
 
 /* A boss's box rests 48 px to the right of a mini one (Pokemon.showInfo slides it in by 246 px from -198, the others by 150 from -150):
  * the wide box (178 px against 130) keeps the same left margin. */
 static float info_base_x(const side *sd,bool player){
-  if(player)return player_doubles()&&second_column(sd)?320:310;
+  if(player)return player_doubles()&&player_right(sd)?320:310;
   const float base=B.setup.doubles&&second_column(sd)?130:140;
   return base+(sd->mon.boss?48:0);
 }
@@ -1980,10 +2015,15 @@ static void run_event(float dt) {
   B.t += dt;
   switch (e->type) {
     case BEV_FIELD_SWAP: {
-      side tmp=B.s[0];B.s[0]=B.s[2];B.s[2]=tmp;finish_event();break;
+      side tmp=B.s[0];B.s[0]=B.s[2];B.s[2]=tmp;
+      if(player_doubles())B.flipped=!B.flipped;   /* in two columns each Pokemon keeps its place: only BEV_PLAYER_CENTRE moves it */
+      finish_event();break;
     }
     case BEV_DOUBLES:
       if (step_doubles(dt)) finish_event();
+      break;
+    case BEV_PLAYER_CENTRE:
+      if (step_centre(dt, e->a != 0, e->b != 0)) finish_event();
       break;
     case BEV_MESSAGE:
       if (B.step == 0) {
@@ -2863,6 +2903,8 @@ void bv_begin(const bv_setup* setup) {
   set_mon(&B.s[2],&setup->player_ally,true);
   set_mon(&B.s[3],&setup->enemy_ally,false);
   B.begun = true;
+  B.centred = setup->doubles && setup->player_centred;   /* (only a double has a column to leave) */
+  B.centre = B.centred ? 1.0f : 0.0f;
   B.arena_player_x = setup->player_present ? 0 : 300;
   B.arena_enemy_x = -280;
   B.enemy_slide = -300;
@@ -2884,6 +2926,8 @@ void bv_begin(const bv_setup* setup) {
 }
 
 void bv_set_music_hook(void (*hook)(int a)) { music_hook = hook; }
+
+bool bv_player_centred(void) { return B.centred; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   B.n_ev = 0;

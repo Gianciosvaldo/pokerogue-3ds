@@ -40,28 +40,41 @@ static void load_case(const char* bytes, size_t len, rset_values expected, const
   input_len = len;
   read_result = SAVE_OK;
   rset_values got = rset_load();
-  CHECK(got.speed == expected.speed && got.custom == expected.custom && got.mode == expected.mode,
-        "%s (speed %d custom %d mode %d)", why, got.speed, got.custom, got.mode);
+  CHECK(got.speed == expected.speed && got.mode == expected.mode, "%s (speed %d mode %d)", why, got.speed, got.mode);
 }
 
 int main(void) {
-  const rset_values defaults = {.speed=RSET_SPEED_NORMAL,.custom=false,.mode=GAME_MODES_CLASSIC};
+  const rset_values defaults = {.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_CLASSIC};
   load_case("", 0, defaults, "empty file defaults to Classic");
   const char legacy[] = {RSET_SPEED_FAST, 1};
-  load_case(legacy, sizeof legacy, (rset_values){.speed=RSET_SPEED_FAST,.custom=true,.mode=GAME_MODES_CLASSIC},
-            "two-byte settings remain compatible and default to Classic");
+  load_case(legacy, sizeof legacy, (rset_values){.speed=RSET_SPEED_FAST,.mode=RSET_MODE_BIZARRE},
+            "two-byte settings with the old Custom switch on remain compatible and are a Bizarre choice now");
+  const char legacy_off[] = {RSET_SPEED_FAST, 0};
+  load_case(legacy_off, sizeof legacy_off, (rset_values){.speed=RSET_SPEED_FAST,.mode=GAME_MODES_CLASSIC},
+            "two-byte settings with Custom off are Classic");
+  const char custom3[] = {RSET_SPEED_SLOW, 1, GAME_MODES_CLASSIC};
+  load_case(custom3, sizeof custom3, (rset_values){.speed=RSET_SPEED_SLOW,.mode=RSET_MODE_BIZARRE},
+            "three-byte settings the Custom row wrote (switch on, Classic) are Bizarre now");
+  const char bizarre[] = {RSET_SPEED_NORMAL, 1, RSET_MODE_BIZARRE};
+  load_case(bizarre, sizeof bizarre, (rset_values){.speed=RSET_SPEED_NORMAL,.mode=RSET_MODE_BIZARRE}, "Bizarre mode persists");
+  const char daily[] = {RSET_SPEED_NORMAL, 0, GAME_MODES_DAILY};
+  load_case(daily, sizeof daily, defaults, "a stored Daily Run (never offered) falls back to Classic");
   const char endless[] = {RSET_SPEED_SLOW, 0, GAME_MODES_ENDLESS};
-  load_case(endless, sizeof endless, (rset_values){.speed=RSET_SPEED_SLOW,.custom=false,.mode=GAME_MODES_ENDLESS},
+  load_case(endless, sizeof endless, (rset_values){.speed=RSET_SPEED_SLOW,.mode=GAME_MODES_ENDLESS},
             "Endless mode persists");
   const char spliced[] = {RSET_SPEED_TURBO, 0, GAME_MODES_SPLICED_ENDLESS};
-  load_case(spliced, sizeof spliced, (rset_values){.speed=RSET_SPEED_TURBO,.custom=false,.mode=GAME_MODES_SPLICED_ENDLESS},
+  load_case(spliced, sizeof spliced, (rset_values){.speed=RSET_SPEED_TURBO,.mode=GAME_MODES_SPLICED_ENDLESS},
             "Spliced Endless mode persists");
   const char bad_mode[] = {RSET_SPEED_NORMAL, 0, 99};
   load_case(bad_mode, sizeof bad_mode, defaults, "invalid stored modes fall back to Classic");
-  const rset_values write = {.speed=RSET_SPEED_FAST,.custom=true,.mode=GAME_MODES_SPLICED_ENDLESS};
-  CHECK(rset_save(&write) && saved_len == 3 && saved[0] == RSET_SPEED_FAST && saved[1] == 1 && saved[2] == GAME_MODES_SPLICED_ENDLESS,
-        "saving writes speed, custom and mode");
+  const rset_values write = {.speed=RSET_SPEED_FAST,.mode=GAME_MODES_SPLICED_ENDLESS};
+  CHECK(rset_save(&write) && saved_len == 3 && saved[0] == RSET_SPEED_FAST && saved[1] == 0 && saved[2] == GAME_MODES_SPLICED_ENDLESS,
+        "saving writes speed, the Bizarre switch (off) and mode");
+  const rset_values write_bizarre = {.speed=RSET_SPEED_TURBO,.mode=RSET_MODE_BIZARRE};
+  CHECK(rset_save(&write_bizarre) && saved_len == 3 && saved[0] == RSET_SPEED_TURBO && saved[1] == 1 && saved[2] == RSET_MODE_BIZARRE,
+        "saving Bizarre writes the old Custom switch on too");
   CHECK(!rset_save(&(rset_values){.speed=RSET_SPEED_NORMAL,.mode=99}), "invalid modes are not saved");
+  CHECK(!rset_save(&(rset_values){.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_DAILY}), "a Daily Run is not saved");
   read_result = SAVE_NOT_FOUND;
   CHECK(rset_load().mode == GAME_MODES_CLASSIC, "missing settings default to Classic");
   printf("run_settings_test: %d checks, %d failed\n", checks, failures);

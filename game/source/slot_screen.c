@@ -246,8 +246,8 @@ static void draw_slot(float x, float y, const rsv_info* in, bool selected) {
       break;
   }
   char lvl[48];
-  if (in->custom)
-    snprintf(a, sizeof a, "Custom"); /* the custom content's runs: no upstream string */
+  if (in->bizarre)
+    snprintf(a, sizeof a, "Classic (Bizarre)"); /* the port's own mode: no upstream string */
   else
     rt_mode_name(in->mode, a, sizeof a);
   i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:wave", NULL);

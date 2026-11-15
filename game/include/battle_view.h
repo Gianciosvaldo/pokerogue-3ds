@@ -129,6 +129,12 @@ typedef enum {
   BEV_DREAM_PLAY,  /* the dream background and the transformations of every BEV_DREAM_ADD since the last play (doPokemonTransformationSequence,
                     * three centred back to back or three side by side), until all have finished; the background then fades away while the next
                     * events go on */
+  BEV_PLAYER_CENTRE, /* ToggleDoublePositionPhase's setFieldPosition in a double: a = 1: the player's only Pokemon able to fight goes to the centre
+                    * over 500 ms (FieldPosition.CENTER, Sine.easeOut) and its info box becomes the single battle's (setMini(false), setOffset(false):
+                    * at once); a = 0: it takes its column again (LEFT) when a partner is back. b = 1: at once, with no slide (SummonPhase.summon
+                    * places a Pokemon as it is sent out). The foes are not moved. Nothing happens on a screen that is already there. After a faint
+                    * it comes after the events of the turn it ends: lorenzo wants the lone Pokemon to stay where it is until the turn is over
+                    * (upstream moves it right after the faint) */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 
@@ -159,6 +165,9 @@ typedef struct {
   bool doubles;
   bv_mon player_ally,enemy_ally;
   bool player_ally_present;
+  bool player_centred;   /* a doubles encounter in which only one of the player's Pokemon can fight: it stands in the centre with the single
+                          * battle's info box from the start (upstream's EncounterPhase pushes ToggleDoublePositionPhase(true) only with two
+                          * allowed; a Pokemon's field position starts as CENTER). The foes are in two columns as in any double */
   bv_mon player, enemy;  /* the first Pokemon of each side (singles); enemy.species 0 = nobody */
   bool trainer;          /* trainer sprites appear during the encounter intro */
   bool player_female;    /* avatar; defaults to the current app's male player */
@@ -173,6 +182,8 @@ typedef struct {
 
 /* The biome the screen shows now (the last bv_begin's), -1 before the first. */
 int bv_biome(void);
+/* Whether the player's side stands in the centre column, the single battle's layout, in a double (bv_setup.player_centred, BEV_PLAYER_CENTRE). */
+bool bv_player_centred(void);
 
 /* One of the foe's items as the bottom screen's item bar shows it: a frame of the "items" atlas and the stack count. */
 typedef struct {

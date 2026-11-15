@@ -129,7 +129,10 @@ static struct {
   int menu_asks;          /* commands and reward screens that could have opened it */
   bool menu_try;          /* press START at the next step */
   bool quit_now;          /* Save and Quit was answered Yes: the main loop drops the run and continues it from its slot */
+  bool centred;           /* the player's side stands in the centre column of a double (bv_setup.player_centred, BEV_PLAYER_CENTRE) */
+  bool doubles;           /* the scene is a double (bv_setup.doubles, or the final boss' second phase: BEV_DOUBLES) */
 } W;
+static int n_centred_scenes, n_centre_events, n_centre_back_events, n_centred_commands;
 
 /* the reward / shop screen, the biome map and the party screen in item mode (the app's own, on the stack, are not built here) */
 static struct {
@@ -505,6 +508,17 @@ void bv_begin(const bv_setup* setup) {
   W.begun = true;
   W.biome = setup->biome;
   n_scenes++;
+  /* a double in which only one of the player's Pokemon can fight starts with it in the centre, and no other double does */
+  {
+    const gc_run* r = rs_run();
+    int able = 0;
+    for (int i = 0; i < r->n_party; i++) able += r->party[i].b.hp > 0;
+    const bool want = setup->doubles && able < 2;
+    if (setup->player_centred != want) BAD("a scene with doubles %d and %d Pokemon able to fight has player_centred %d", setup->doubles, able, setup->player_centred);
+    W.centred = setup->doubles && setup->player_centred;
+    W.doubles = setup->doubles;
+    n_centred_scenes += W.centred;
+  }
   W.mon[0] = setup->player;
   W.mon[1] = setup->enemy;
   W.mon[2]=setup->player_ally;W.mon[3]=setup->enemy_ally;
@@ -519,6 +533,7 @@ void bv_begin(const bv_setup* setup) {
 
 bv_mon* bv_mon_of(int battler) { return &W.mon[screen_slot(battler)]; }
 int bv_biome(void) { return W.begun ? W.biome : -1; }
+bool bv_player_centred(void) { return W.centred; }
 
 void bv_set_music_hook(void (*hook)(int a)) { (void)hook; }
 
@@ -683,6 +698,17 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         /* the final boss' second phase turns a single fight into a double (the SummonPhase after it sends the ally out): the screen
          * switch names no battler */
         if (e->battler != -1) BAD("the doubles switch names battler %d", e->battler);
+        W.doubles = true;
+        break;
+      case BEV_PLAYER_CENTRE:
+        /* the player's only Pokemon able to fight goes to the centre when the turn is over (or back to its column when a partner is
+         * there again): the converter says it once, never for a screen that is already there, and only in a double */
+        if (e->battler != -1) BAD("the centre move names battler %d", e->battler);
+        if (e->a != 0 && e->a != 1) BAD("the centre move has a = %d", e->a);
+        if ((e->a != 0) == W.centred) BAD("a no-op centre move (a = %d with the screen centred %d)", e->a, W.centred);
+        if (!W.doubles) BAD("a centre move in a single scene");
+        W.centred = e->a != 0;
+        if (W.centred) n_centre_events++; else n_centre_back_events++;
         break;
       case BEV_MOVE_ANIM:
         side_ok(e->battler, "move animation");
@@ -869,6 +895,14 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   }
   const gc_mon* me=acting_mon(r);
   if(!opts||opts->command_slot!=r->screen.slot||!me)BAD("command actor differs from run");
+  /* a double battle (the run's, not the final boss' second phase) with one Pokemon of the player's able to fight shows it in the centre once the
+   * turn that left it alone is over; with two it stands in its column */
+  if (r->double_battle) {
+    int able = 0;
+    for (int i = 0; i < r->n_party; i++) able += r->party[i].b.hp > 0;
+    if (W.centred != (able < 2)) BAD("a double with %d Pokemon able to fight is asked a command with the player %s", able, W.centred ? "centred" : "in its columns");
+    n_centred_commands += W.centred;
+  }
   bool enemy=false;
   for(int field=0;field<4;field++){
     const pr_pokemon *p=r->bt.field[field];int index=screen_slot(field);
@@ -2120,6 +2154,7 @@ int main(int argc, char** argv) {
       }
     }
     cfg.custom = true;
+    cfg.bizarre = true;
     cfg.save = true;
     cfg.slot = 0;
     gc_system* sys = sysd_get();
@@ -2363,6 +2398,8 @@ int main(int argc, char** argv) {
   } else {
     printf("music coverage floor (a trainer victory, a trainer with encounter music) NOT checked: it needs 300+ runs, this one has %d\n", runs);
   }
+  printf("player centred in a double: %d scenes began centred, %d moves to the centre at a turn's end, %d moves back to a column, %d commands asked centred\n",
+         n_centred_scenes, n_centre_events, n_centre_back_events, n_centred_commands);
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
            n_resumes);

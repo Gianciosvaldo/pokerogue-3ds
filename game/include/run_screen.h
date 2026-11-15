@@ -19,7 +19,7 @@
  *                 battle-core drops the number of shakes a ball made before it broke free, so a break-free always wobbles once.
  *                 Not drawn: the ball's open and star particles, the caught Pokemon's info panel, critical captures (battle-core
  *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
- *   - custom rematch: a custom run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave shows the
+ *   - custom rematch: a Classic or Bizarre run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave shows the
  *                 Nemesis that is asking on the enemy side (as a wild Pokemon is shown, with the line "The X that beat you wants a
  *                 rematch!"). Accepted, it is the battle's enemy; declined, it goes back to its ball and the wave's own enemy comes out
  * Saving and loading are wired (cfg.save, rs_resume). START on the command menu or the reward screen opens the in-run menu (run_menu.h): Save
@@ -60,6 +60,9 @@ typedef struct {
   /* A custom run (task C10, custom_run.h): the rematch hooks are installed, the run saves into the custom slot `slot` (a file the ordinary
    * loader never reads) with its overlay, and rs_resume loads from there. false = an ordinary run, played and saved exactly as before. */
   bool custom;
+  /* With `custom`: a Classic (Bizarre) run, which also has the JoJo trainers and the Pillar Men (custom_run.h's cr_bizarre). A resumed run
+   * takes it from its saved overlay, not from here. */
+  bool bizarre;
   /* Upstream's battle style SWITCH (its default): a wild or mystery-encounter battle's start asks "Will you switch?" (CheckSwitchPhase). false = the SET
    * style: no question. Not saved with the run, so rs_start and rs_resume set it from here. */
   bool ask_switch;

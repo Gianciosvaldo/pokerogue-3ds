@@ -479,7 +479,7 @@ static void draw_top(void) {
       centred(160, 150, "It is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     } else {
       centred(160, 66, "No enemy is remembered yet.", TS_WINDOW, 0);
-      centred(160, 94, "A Custom Run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 94, "A Classic run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
       centred(160, 106, "Pokemon that finished your team off.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
       centred(160, 118, "Bosses, trainers and fixed encounters", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
       centred(160, 130, "are not remembered.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
@@ -558,7 +558,7 @@ static void draw_bottom_list(void) {
     o.origin_x = 1.0f;
     text_draw(TS_WINDOW, 310, 5, t, &o);
   }
-  line(10, 28, "Rematches are offered during a Custom Run.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
+  line(10, 28, "Classic and Bizarre runs offer rematches.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
 
   ui_window(1, LIST_Y + 2, 318, VISIBLE * ROW_H + 10, WIN_NORMAL);
   if (!R.usable) {
@@ -570,7 +570,7 @@ static void draw_bottom_list(void) {
     line(12, LIST_Y + 60, "The file is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   } else if (R.roster.count == 0) {
     line(12, LIST_Y + 14, "No enemy is remembered.", TS_WINDOW, 0);
-    line(12, LIST_Y + 38, "A Custom Run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 38, "A Classic run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     line(12, LIST_Y + 50, "Pokemon that finished your team off.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     line(12, LIST_Y + 62, "Bosses, trainers and fixed encounters", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     line(12, LIST_Y + 74, "are not remembered. The result says why.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));

@@ -241,6 +241,10 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
 
   bool music_pending = false;   /* the final boss's Eternamax music, played once the change's message is read */
   int music_from = 0;
+  /* The player's lone Pokemon goes to the centre (and its info box becomes the single battle's) when the turn is over, not at the faint
+   * that left it alone (lorenzo, 2026-11-15; upstream moves it at once, right after the FaintPhase). A partner coming back before the
+   * turn ends cancels it, and the way back to two columns is not held. */
+  bool shown_centred = view->centred, centre_at_end = false;
   for (int i = 0; i < n_events; i++) {
     const pr_event* ev = &events[i];
     int b = ev->battler;
@@ -401,6 +405,24 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       case PR_EV_DOUBLE_START:
         /* the final boss' second phase: the player's side goes to two columns before the ally is sent out */
         PUT(.type=BEV_DOUBLES,.battler=-1);
+        break;
+      case PR_EV_FIELD_CENTER:
+        if (ev->id == 1) {
+          /* SummonPhase.summon's own position, before the send-out: at once (the Pokemon is not there yet) and not held */
+          centre_at_end = false;
+          if ((ev->value != 0) != shown_centred) {
+            PUT(.type = BEV_PLAYER_CENTRE, .battler = -1, .a = ev->value != 0, .b = 1);
+            shown_centred = ev->value != 0;
+          }
+        } else if (ev->value) {
+          if (!shown_centred) centre_at_end = true;   /* held until the events end */
+        } else {
+          centre_at_end = false;
+          if (shown_centred) {
+            PUT(.type = BEV_PLAYER_CENTRE, .battler = -1, .a = 0);
+            shown_centred = false;
+          }
+        }
         break;
       case PR_EV_MOVE_ANIM:
       case PR_EV_CHARGE_ANIM:
@@ -596,6 +618,11 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       seen[k].form = form->form_index;
     }
   }
+  if (centre_at_end && !shown_centred) {
+    PUT(.type = BEV_PLAYER_CENTRE, .battler = -1, .a = 1);
+    shown_centred = true;
+  }
+  view->centred = shown_centred;
   if (music_pending) PUT(.type = BEV_MUSIC, .battler = -1, .a = 1);
 #undef PUT
   for(int k=0;k<4;k++)view->present[view_slot(k)]=seen[k].present;

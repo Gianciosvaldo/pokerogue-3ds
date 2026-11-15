@@ -79,15 +79,18 @@ void ui_push_options(const char* const* labels,int n,bool cancel,void (*done)(in
 /* the run settings before New Game's slot list: started at once with what the test picks (the real screen: run_settings_screen.c) */
 static rset_args RS;
 static int n_rset;
-static bool rset_pick_custom;
-static int rset_pick_mode=GAME_MODES_CLASSIC;
+/* GAME_MODES_* or RSET_MODE_BIZARRE. The sections that test the ordinary run's own files (the rsv slots, Rename, Save and Quit, the result's
+ * report) play an Endless run, which is what is ordinary now (a Classic or Bizarre run is saved in the custom file); the section on the modes
+ * picks the others. The fake player has unlocked what it picks. */
+static int rset_pick_mode=GAME_MODES_ENDLESS;
 static float game_speed;
 void rset_open(const rset_args* a) {
   RS = *a;
   n_rset++;
   rset_values v = a->values;
-  v.custom = rset_pick_custom;
-  v.mode = rset_pick_custom ? GAME_MODES_CLASSIC : rset_pick_mode;
+  v.mode = rset_pick_mode;
+  if (rset_pick_mode == GAME_MODES_ENDLESS) sysd_get()->unlocks.endless_mode = true;
+  if (rset_pick_mode == RSET_MODE_BIZARRE) sysd_get()->stats.classic_wins = 1;
   if (a->on_start) a->on_start(&v, a->arg);
 }
 void ui_set_game_speed(float scale) { game_speed = scale; }
@@ -240,7 +243,11 @@ static int n_start, n_resume;
 static bool fail_start, slot_empty_at_start, sys_saved_ok;
 static gc_system snap; /* 724 KB: not on the stack */
 
+/* the game mode the fake run is made in, whatever the config says (-1 = the config's): a Classic win's result screen is checked on a run in the
+ * ordinary file, which is what Endless gives the tests and what a Classic run saved before the Bizarre mode still is */
+static int force_run_mode = -1;
 static void new_run_mode(gc_run* r, const char* seed, int mode) {
+  if (force_run_mode >= 0) mode = force_run_mode;
   gc_run_new(r, mode, seed, 99);
   gc_starter team[6];
   int n = 0, budget = gc_starter_budget(mode);
@@ -309,12 +316,12 @@ bool rs_start(const rs_config* c) {
   if (fail_start) return false;
   if (c->n_team > 0) {
     /* the run takes the team the player confirmed, as the real driver does */
-    const int mode=c->custom?GAME_MODES_CLASSIC:c->mode;
+    const int mode=force_run_mode>=0?force_run_mode:c->custom?GAME_MODES_CLASSIC:c->mode;
     gc_run_new(&RUN, mode, c->seed, 99);
     RUN.sys = c->sys;
     if (c->custom) {   /* run_screen.c's new_run: the controller starts with the run, before its starters */
       co_begin_run(false);
-      if (!cr_begin(&RUN, c->entropy)) return false;
+      if (!cr_begin(&RUN, c->entropy, c->bizarre)) return false;
     }
     const char* why = NULL;
     if (!gc_run_set_starters(&RUN, c->team, c->n_team, &why)) {
@@ -598,6 +605,7 @@ int main(void) {
   SH.on_exit(SH.arg); /* "Do you want to exit?" Yes */
   CHECK(n_title == titles + 1 && n_start == 2 && status_of(0) == RSV_OK && exists(p), "Exit goes back to the title and the old run is untouched");
   CHECK(T.can_continue, "and Continue still offers it");
+  force_run_mode = GAME_MODES_CLASSIC;   /* the clear below is a Classic one */
   T.on_choose(TITLE_NEW_GAME, T.arg);
   S.on_pick(0, S.arg);
   CHECK(n_sh == 3 && n_start == 2 && status_of(0) == RSV_OK, "the second time: starter select again, still no new run");
@@ -633,6 +641,7 @@ int main(void) {
   sysd_reset(); /* quit and boot again */
   CHECK(sysd_state(NULL) == SYSD_LOADED && !memcmp(&snap, sysd_get(), sizeof snap), "the run's catch is in the system data on the SD card");
   R.on_done(R.arg);
+  force_run_mode = -1;
 
   /* ---- a slot that can't be loaded: Continue says why, the file is never touched, never overwritten */
   new_run(&RUN, "flowtestseed000000000002");
@@ -852,14 +861,17 @@ int main(void) {
   }
   cs_reset();
 
-  /* ---- the run settings before New Game (Custom, Game Speed) and one slot list for both kinds of run, each labelled (lorenzo,
+  /* ---- the run settings before New Game (Mode, Game Speed) and one slot list for both kinds of run, each labelled (lorenzo,
    * 2026-10-19: "do not keep custom load, simply there should be a quick indicator upon selecting a run saying wether the run is classic
-   * or custom"). Was C10's separate Custom Run / Custom Load lists. */
+   * or custom"; 2026-11-15: the Custom row is gone, Classic and Classic (Bizarre) are modes, both with the rematches). The runs of the two
+   * kinds of file: a Classic or Bizarre run is saved in the custom file (csession_<n>), an Endless run in the ordinary one. */
   {
     sh_has_species = true;
     cs_reset();
     sysd_reset();
     ptx_reset();
+    sysd_get()->stats.classic_wins = 1;   /* a Classic win: the Bizarre and Endless modes are open */
+    sysd_get()->unlocks.endless_mode = true;
     app_start(&plain);
     char cp[300];
     snprintf(cp, sizeof cp, "%s/custom.sav", SAVE_DIR);
@@ -873,19 +885,21 @@ int main(void) {
     app_start(&plain);
     CHECK(T.can_continue, "the ordinary run is on the title");
 
-    /* New Game opens the run settings first; Custom: Yes lists the same five slots, the ordinary run included */
+    /* New Game opens the run settings first; Classic (Bizarre) lists the same five slots, the ordinary run included */
     const int slots0 = n_slots, sh0 = n_sh, start0 = n_start, rset0 = n_rset;
-    rset_pick_custom = true;
+    rset_pick_mode = RSET_MODE_BIZARRE;
     T.on_choose(TITLE_NEW_GAME, T.arg);
+    CHECK(n_rset == rset0 + 1 && RS.bizarre_unlocked && RS.endless_unlocked, "the run settings know what the profile has unlocked");
     CHECK(n_rset == rset0 + 1 && n_slots == slots0 + 1 && S.mode == SLOTS_NEW, "New Game opens the run settings, then the slot list");
     CHECK(S_info[0].status == RSV_OK && !S_info[0].custom, "the list shows the ordinary run in slot 0, labelled as such");
     for (int i = 1; i < RSV_SLOTS; i++) CHECK(S_info[i].status == RSV_EMPTY, "slot %d is empty", i);
     S.on_pick(2, S.arg);
     CHECK(n_sh == sh0 + 1 && n_start == start0, "the starter select opens (a developer's team is not used for a custom run)");
     sh_confirm(1);
-    CHECK(n_start == start0 + 1 && CFG.custom && CFG.slot == 2 && CFG.save && CFG.on_end && CFG.n_team == 1 && !CFG.seed, "the run starts as a custom run in slot 2");
+    CHECK(n_start == start0 + 1 && CFG.custom && CFG.bizarre && CFG.mode == GAME_MODES_CLASSIC && CFG.slot == 2 && CFG.save && CFG.on_end &&
+          CFG.n_team == 1 && !CFG.seed, "the run starts as a Bizarre run (a Classic game mode underneath) in slot 2");
     rsv_info inf;
-    CHECK(cr_inspect(2, &inf) == RSV_OK && cr_active(), "it is saved as a custom run and the controller is on");
+    CHECK(cr_inspect(2, &inf) == RSV_OK && cr_active() && cr_bizarre() && inf.bizarre, "it is saved as a Bizarre run and the controller is on");
     CHECK(status_of(2) == RSV_EMPTY && status_of(0) == RSV_OK, "no ordinary run in slot 2, slot 0 as it was");
     snprintf(cp, sizeof cp, "%s/csession_2.sav", SAVE_DIR);
     CHECK(exists(cp), "the file is csession_2");
@@ -899,14 +913,15 @@ int main(void) {
     const int res00 = n_resume;
     CHECK(T.can_continue, "the custom run is Continue's");
     T.on_choose(TITLE_CONTINUE, T.arg);
-    CHECK(n_resume == res00 + 1 && CFG.custom && CFG.slot == 2 && cr_active(), "Continue resumes it as a custom run");
+    CHECK(n_resume == res00 + 1 && CFG.custom && CFG.slot == 2 && cr_active() && cr_bizarre(), "Continue resumes it as a Bizarre run (from its file)");
 
     /* Load Game lists both runs, each with its kind; Rename Run on the custom one names its own file */
     cr_end();
     app_start(&plain);
     T.on_choose(TITLE_LOAD_GAME, T.arg);
     CHECK(S.mode == SLOTS_LOAD && S_info[2].status == RSV_OK && S_info[2].custom && S_info[0].status == RSV_OK && !S_info[0].custom,
-          "Load Game lists the custom run (labelled Custom) beside the ordinary one");
+          "Load Game lists the custom-file run beside the ordinary one");
+    CHECK(S_info[2].bizarre && !S_info[0].bizarre, "the Bizarre one is labelled Classic (Bizarre), the ordinary one by its mode");
     CHECK(S.on_rename && S_info[2].name[0] == '\0', "Rename Run is offered");
     S.on_rename(2, S.arg);
     NE.on_done("Custom one", NE.arg);
@@ -918,7 +933,7 @@ int main(void) {
     /* picked from Load Game it resumes as a custom run, and its end clears the custom file only */
     const int res01 = n_resume;
     S.on_pick(2, S.arg);
-    CHECK(n_resume == res01 + 1 && CFG.custom && CFG.slot == 2 && cr_active(), "Load Game resumes it as a custom run");
+    CHECK(n_resume == res01 + 1 && CFG.custom && CFG.slot == 2 && cr_active() && cr_bizarre(), "Load Game resumes it as a Bizarre run");
     CHECK(RUN.sys == sysd_get(), "with the player's system data");
     driver_end(GC_SCREEN_GAME_OVER);
     CHECK(R.note && !strncmp(R.note, "No enemy remembered: ", 21) && strstr(R.note, cr_defeat_why()) && cr_defeat_why()[0],
@@ -928,27 +943,44 @@ int main(void) {
     CHECK(status_of(0) == RSV_OK, "the ordinary run is untouched");
     R.on_done(R.arg);
 
-    /* Custom: No is an ordinary run */
-    rset_pick_custom = false;
+    /* a plain Classic run has the rematches (the custom file) and not the Bizarre content */
+    rset_pick_mode = GAME_MODES_CLASSIC;
     T.on_choose(TITLE_NEW_GAME, T.arg);
     S.on_pick(1, S.arg);
     sh_confirm(1);
-    CHECK(!CFG.custom && CFG.slot == 1 && !cr_active(), "an ordinary run: no custom flag, no controller");
+    CHECK(CFG.custom && !CFG.bizarre && CFG.mode == GAME_MODES_CLASSIC && CFG.slot == 1 && cr_active() && !cr_bizarre(),
+          "a Classic run: the rematch controller is on, the Bizarre content is not");
+    CHECK(cr_inspect(1, &inf) == RSV_OK && !inf.bizarre && status_of(1) == RSV_EMPTY, "it is saved in the custom file, as a plain Classic run");
+    cr_end();
+    app_start(&plain);
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(S_info[1].status == RSV_OK && S_info[1].custom && !S_info[1].bizarre, "Load Game lists it as a Classic run, not a Bizarre one");
+    S.on_pick(1, S.arg);
+    CHECK(CFG.custom && cr_active() && !cr_bizarre(), "it resumes as a Classic run: no JoJo trainers, no Pillar Men");
+    driver_end(GC_SCREEN_GAME_OVER);
+    R.on_done(R.arg);
+
+    /* an Endless run is an ordinary one */
+    rset_pick_mode = GAME_MODES_ENDLESS;
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(1, S.arg);
+    sh_confirm(1);
+    CHECK(!CFG.custom && !CFG.bizarre && CFG.mode == GAME_MODES_ENDLESS && CFG.slot == 1 && !cr_active(), "an Endless run: no custom flag, no controller");
     driver_end(GC_SCREEN_GAME_OVER);
     CHECK(!R.note || !strstr(R.note, "No enemy remembered"), "an ordinary run's defeat has no 'not remembered' line: it never remembers anyone");
     R.on_done(R.arg);
 
-    /* a slot is one place for either kind: an ordinary New Game over a custom run replaces it */
-    rset_pick_custom = true;
+    /* a slot is one place for either kind: an Endless New Game over a Bizarre run replaces it */
+    rset_pick_mode = RSET_MODE_BIZARRE;
     T.on_choose(TITLE_NEW_GAME, T.arg);
     S.on_pick(3, S.arg);
     sh_confirm(1);
-    CHECK(CFG.custom && CFG.slot == 3 && cr_inspect(3, &inf) == RSV_OK, "a custom run in slot 3");
+    CHECK(CFG.custom && CFG.slot == 3 && cr_inspect(3, &inf) == RSV_OK, "a Bizarre run in slot 3");
     cr_end();
     app_start(&plain);
-    rset_pick_custom = false;
+    rset_pick_mode = GAME_MODES_ENDLESS;
     T.on_choose(TITLE_NEW_GAME, T.arg);
-    CHECK(S_info[3].status == RSV_OK && S_info[3].custom, "the new-game list shows it as the custom run it is");
+    CHECK(S_info[3].status == RSV_OK && S_info[3].custom, "the new-game list shows it as the custom-file run it is");
     S.on_pick(3, S.arg);
     sh_confirm(1);
     snprintf(cp, sizeof cp, "%s/csession_3.sav", SAVE_DIR);
@@ -957,8 +989,8 @@ int main(void) {
     driver_end(GC_SCREEN_GAME_OVER);
     R.on_done(R.arg);
 
-    /* Delete Run on a custom run removes its file only */
-    rset_pick_custom = true;
+    /* Delete Run on a custom-file run removes its file only */
+    rset_pick_mode = RSET_MODE_BIZARRE;
     T.on_choose(TITLE_NEW_GAME, T.arg);
     S.on_pick(4, S.arg);
     sh_confirm(1);
@@ -986,24 +1018,24 @@ int main(void) {
     S.on_delete(4, S.arg);
     CHECK(S_info[4].status == RSV_EMPTY, "and deleted too, the slot is empty");
     S.on_back(S.arg);
-    rset_pick_custom = false;
+    rset_pick_mode = GAME_MODES_ENDLESS;
 
     /* the game speed is kept and applied at the start; the screen gets the saved values */
-    const rset_values fast = {true, RSET_SPEED_TURBO};
+    const rset_values fast = {.speed = RSET_SPEED_TURBO, .mode = RSET_MODE_BIZARRE};
     CHECK(rset_save(&fast), "the settings are written");
     game_speed = 0;
     app_start(&plain);
     CHECK(game_speed == rset_time_scale(RSET_SPEED_TURBO), "app_start applies the saved speed (%.1f)", game_speed);
     T.on_choose(TITLE_NEW_GAME, T.arg);
-    CHECK(RS.values.speed == RSET_SPEED_TURBO && RS.values.custom, "the run settings open with the saved values");
+    CHECK(RS.values.speed == RSET_SPEED_TURBO && RS.values.mode == RSET_MODE_BIZARRE, "the run settings open with the saved values");
     S.on_back(S.arg);
     snprintf(cp, sizeof cp, "%s/settings.sav", SAVE_DIR);
     write_raw(cp, "\x09\x07", 2);
     const rset_values bad = rset_load();
-    CHECK(bad.speed == RSET_SPEED_NORMAL && !bad.custom, "an unreadable settings file gives the defaults");
+    CHECK(bad.speed == RSET_SPEED_NORMAL && bad.mode == GAME_MODES_CLASSIC, "an unreadable settings file gives the defaults");
     remove(cp);
 
-    /* an unusable custom file: the list says so, no custom run starts, ordinary runs are not affected */
+    /* an unusable custom file: the list says so, no Bizarre run starts, a Classic run starts without rematches, Endless runs are not affected */
     snprintf(cp, sizeof cp, "%s/custom.sav", SAVE_DIR);
     write_raw(cp, junk, sizeof junk);
     snprintf(p2, sizeof p2, "%s/custom.sav.bak", SAVE_DIR);
@@ -1011,21 +1043,29 @@ int main(void) {
     cs_reset();
     app_start(&plain);
     const int start1 = n_start;
-    rset_pick_custom = true;
+    rset_pick_mode = RSET_MODE_BIZARRE;
     T.on_choose(TITLE_NEW_GAME, T.arg);
     CHECK(S.mode == SLOTS_NEW && last_msg[0], "the list says the custom file cannot be used: \"%s\"", last_msg);
     last_msg[0] = 0;
     S.on_pick(2, S.arg);
-    CHECK(n_start == start1 && last_msg[0], "and no custom run starts: \"%s\"", last_msg);
+    CHECK(n_start == start1 && last_msg[0], "and no Bizarre run starts: \"%s\"", last_msg);
     CHECK(file_size(cp) == sizeof junk, "the unusable file is untouched");
     S.on_back(S.arg);
-    rset_pick_custom = false;
+    rset_pick_mode = GAME_MODES_CLASSIC;
     T.on_choose(TITLE_NEW_GAME, T.arg);
     S.on_pick(2, S.arg);
     sh_confirm(1);
-    CHECK(!CFG.custom && n_start == start1 + 1, "an ordinary run still starts");
+    CHECK(!CFG.custom && !CFG.bizarre && n_start == start1 + 1 && sh_notice[0], "a Classic run still starts, as an ordinary one without rematches, and says so: \"%s\"", sh_notice);
     driver_end(GC_SCREEN_GAME_OVER);
     R.on_done(R.arg);
+    rset_pick_mode = GAME_MODES_ENDLESS;
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(2, S.arg);
+    sh_confirm(1);
+    CHECK(!CFG.custom && n_start == start1 + 2, "an Endless run still starts");
+    driver_end(GC_SCREEN_GAME_OVER);
+    R.on_done(R.arg);
+    rset_pick_mode = GAME_MODES_ENDLESS;
     remove(cp);
     cs_reset();
   }
@@ -1094,7 +1134,7 @@ int main(void) {
    * carried from New Game through the starter screen into the run. */
   {
     sysd_get()->unlocks.endless_mode=true;
-    rset_pick_custom=false;rset_pick_mode=GAME_MODES_ENDLESS;
+    rset_pick_mode=GAME_MODES_ENDLESS;
     T.on_choose(TITLE_NEW_GAME,T.arg);
     CHECK(RS.endless_unlocked&&RS.values.mode==GAME_MODES_CLASSIC,"Endless is unlocked while New Game still defaults to Classic");
     S.on_pick(3,S.arg);
@@ -1108,7 +1148,7 @@ int main(void) {
     S.on_pick(4,S.arg);sh_confirm(1);
     CHECK(CFG.mode==GAME_MODES_SPLICED_ENDLESS&&RUN.run.mode==GAME_MODES_SPLICED_ENDLESS,"the selected Spliced Endless mode starts in game-core");
     driver_end(GC_SCREEN_GAME_OVER);R.on_done(R.arg);
-    rset_pick_mode=GAME_MODES_CLASSIC;
+    rset_pick_mode=GAME_MODES_ENDLESS;
   }
 
   /* Football has a separate entry: no classic/custom save slot or run is started. */

@@ -23,6 +23,7 @@ typedef struct {
 
 static struct {
   bool active;
+  bool bizarre;              /* a Classic (Bizarre) run: the JoJo trainers and the Pillar Men are on. A plain Classic run has only the rematches */
   cc_run_uid run_uid;
   cc_schedule sched;
   bool forced_done;          /* the overlay is older than the roster: the rematch was won after the save, nothing more is offered */
@@ -58,6 +59,7 @@ const cr_stats* cr_stats_get(void) { return &R.st; }
 void cr_stats_reset(void) { memset(&R.st, 0, sizeof R.st); }
 const char* cr_error(void) { return R.error; }
 bool cr_active(void) { return R.active; }
+bool cr_bizarre(void) { return R.active && R.bizarre; }
 
 static void forget_run(void) {
   const cr_stats st = R.st;
@@ -429,7 +431,7 @@ bool cr_jojo_team(int idx, gc_custom_team* team) {
 static bool hk_trainer(void* user, const struct gc_run* run, const gc_custom_encounter* e, gc_custom_team* team) {
   (void)user;
   (void)run;
-  if (!R.active) return false;
+  if (!R.active || !R.bizarre) return false;   /* only a Bizarre run has JoJo trainers */
   R.st.jojo_waves++;
   const int idx = cc_jojo_roll(&R.jojo, e->biome);
   if (idx == CC_JOJO_NONE) return false;
@@ -445,12 +447,12 @@ const cc_jojo_char* cr_jojo_foe(const gc_run* run) {
   return &cc_jojo_chars[R.jojo_live - 1];
 }
 
-/* The Pillar Men encounter (game-core gc_pillar.c): which < 0 asks whether it is offered (custom runs only), 0..2 is Esidisi, Wamuu or Kars
+/* The Pillar Men encounter (game-core gc_pillar.c): which < 0 asks whether it is offered (Bizarre runs only), 0..2 is Esidisi, Wamuu or Kars
  * and fills the team. They are not biome rivals, so the roll never deals them; marking one dealt keeps the saved roll state consistent
  * (a live character must be a dealt one) and lets the fight show the JoJo intro and iconic line like the other characters'. */
 static bool hk_pillar(void* user, const struct gc_run* run, int which, gc_custom_team* team) {
   (void)user;
-  if (!R.active) return false;
+  if (!R.active || !R.bizarre) return false;
   if (which < 0) return true;
   static const char* const ID[3] = {"esidisi", "wamuu", "kars"};
   if (which > 2) return false;
@@ -659,7 +661,7 @@ static uint64_t mix_seed(uint32_t entropy, cc_run_uid uid) {
   return cc_rng_v1_next(&s);
 }
 
-bool cr_begin(gc_run* run, uint32_t entropy) {
+bool cr_begin(gc_run* run, uint32_t entropy, bool bizarre) {
   forget_run();
   R.error[0] = 0;
   if (!cr_usable(R.error)) return false;
@@ -679,6 +681,7 @@ bool cr_begin(gc_run* run, uint32_t entropy) {
     return false;
   }
   R.active = true;
+  R.bizarre = bizarre;
   R.run_uid = uid;
   cc_jojo_start(&R.jojo, mix_seed(entropy, uid));
   R.st.runs_started++;
@@ -831,13 +834,15 @@ static bool r_carry(rd* r, co_carry* c) {
   return !r->bad && cc_history_validate(&c->hist) == CC_OK;
 }
 
-enum { OF_DONE = 1, OF_LIVE = 2, OF_REMATCH_ENEMY = 4, OF_ALL = 7 };
+/* OF_CLASSIC marks a plain Classic run. A file without it is a Bizarre run: every file written before the Bizarre mode existed was a Custom run
+ * with the JoJo trainers, and it keeps being one. */
+enum { OF_DONE = 1, OF_LIVE = 2, OF_REMATCH_ENEMY = 4, OF_CLASSIC = 8, OF_ALL = 15 };
 
 static size_t overlay_encode(uint8_t* buf, size_t cap) {
   wr w = {buf, 0, cap, false};
   w8(&w, OV_VERSION);
   w64(&w, R.run_uid);
-  w8(&w, (uint8_t)((R.forced_done ? OF_DONE : 0) | (R.rematch_live ? OF_LIVE : 0) | (R.rematch_enemy ? OF_REMATCH_ENEMY : 0)));
+  w8(&w, (uint8_t)((R.forced_done ? OF_DONE : 0) | (R.rematch_live ? OF_LIVE : 0) | (R.rematch_enemy ? OF_REMATCH_ENEMY : 0) | (R.bizarre ? 0 : OF_CLASSIC)));
   w32(&w, R.rematch_enemy_id);
   w16(&w, R.enc_wave);
   w8(&w, R.enc_kind);
@@ -1012,7 +1017,10 @@ rsv_status cr_inspect(int slot, rsv_info* out) {
   }
   const rsv_status s = rsv_inspect_bytes(core, n_core, out);
   free(raw);
-  if (s == RSV_OK) out->from_backup = bak;
+  if (s == RSV_OK) {
+    out->from_backup = bak;
+    out->bizarre = !(o.flags & OF_CLASSIC);
+  }
   return s;
 }
 
@@ -1159,6 +1167,7 @@ rsv_status cr_load(int slot, gc_run* run, char why[RSV_WHY_LEN]) {
   R.carry = carry_in;
   R.have_carry = x.o.has_carry;
   R.active = true;
+  R.bizarre = !(x.o.flags & OF_CLASSIC);
   R.run_uid = x.o.run_uid;
   R.sched = x.sched;
   R.forced_done = (x.o.flags & OF_DONE) != 0;
@@ -1228,6 +1237,7 @@ bool cr_clear(int slot) {
 void cr_view_get(cr_view* v) {
   memset(v, 0, sizeof *v);
   v->active = R.active;
+  v->bizarre = R.bizarre;
   v->run_uid = R.run_uid;
   v->sched = R.sched;
   v->forced_done = R.forced_done;

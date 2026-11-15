@@ -57,7 +57,14 @@ int gc_football_mega_item(const gc_run *run, unsigned party);
  * 0 when it has none or already holds one. */
 #define GC_FOOTBALL_MAX_MEGA_ITEMS 4
 int gc_football_mega_items(const gc_run *run, unsigned party, int *items, int max);
-/* Returns a supported mega form only for a matching, applicable item. */
+/* Kyurem's Dark and Light Stone and Calyrex's Icy and Shadow Reins of Unity (lorenzo 2026-11-15): sold in the football shop at a Mega Stone's
+ * price and held like one, so the holder takes Black or White Kyurem, Ice or Shadow Rider Calyrex for the one match it is selected for.
+ * gc_football_form_items lists the ones the member can use now, in catalog order, at most max (a species has two): its dex condition
+ * (Zekrom, Reshiram, Glastrier or Spectrier caught in the run's profile) holds and it holds no stone or form item yet. They never appear
+ * in gc_football_mega_items, which stays the Mega Stones. */
+bool gc_football_is_form_item(int item);
+int gc_football_form_items(const gc_run *run, unsigned party, int *items, int max);
+/* Returns a supported mega form only for a matching, applicable item (a Mega Stone, or one of the four form items above). */
 const pr_form *gc_football_mega_form(const gc_run *run, unsigned party, int item);
 const pr_form *gc_football_owned_mega(const gc_run *run, unsigned party);
 bool gc_football_give_mega(gc_run *run, unsigned party, int item);
