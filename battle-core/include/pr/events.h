@@ -73,6 +73,13 @@ typedef enum {
                                 * out. The enemy side is not repositioned: the one boss stays where it was. battler = -1 */
     PR_EV_DIALOGUE,            /* ui.showDialogue: msg is the locale key; id is the frozen speaker species (base name, without
                                 * form/fusion/foe affixes). The final boss speaks before its second-form faint. No portrait. */
+    PR_EV_FIELD_CENTER,        /* ToggleDoublePositionPhase's setFieldPosition in a double: value = 1 when the player's Pokemon on the field goes to the
+                                * centre (FieldPosition.CENTER: only one Pokemon of the player can still fight, so it has no partner to stand beside
+                                * and its info box is the single battle's), 0 when it takes its column again (FieldPosition.LEFT: two can). Comes
+                                * before the PR_EV_FIELD_SWAP the same phase makes when the survivor stood in slot 1. battler = -1, id = 0.
+                                * Also SummonPhase.summon's own position for a player's Pokemon sent out in a double (id = 1, battler = the slot,
+                                * at once, before its PR_EV_SWITCH_IN): RIGHT in slot 1, in slot 0 CENTER when it is the only Pokemon of the party
+                                * able to fight (value 1) and LEFT otherwise (value 0) */
     PR_EV_COUNT_
 } pr_event_type;
 

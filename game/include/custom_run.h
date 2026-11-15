@@ -1,8 +1,11 @@
 /*
  * custom_run: the optional Nemesis rematch of a custom run (task C10; docs/CUSTOM-CONTENT-CONTRACTS.md, section 2.16).
  *
- * A CUSTOM run is a Classic run the player starts from the title's "Custom Run" (a separate slot list). It is the only kind of run this
- * module touches: an ordinary run never installs the hooks, so it is played, saved and observed exactly as before. A custom run
+ * A CUSTOM run (the name stays from when it was the player's choice; the player now sees Classic and Classic (Bizarre)) is a Classic run
+ * the app starts on this module's slot kind: every new Classic run and every Classic (Bizarre) run. Endless runs and older Classic saves
+ * are ordinary runs: this module never touches them, they never install the hooks, and they are played, saved and observed exactly as
+ * before. A Bizarre run adds the JoJo trainers and the Pillar Men on top of the rematches (cr_bizarre); a plain Classic run has only the
+ * rematches. A custom run
  *   - carries a sticky flag (its slot is a custom file, "csession_<n>", that the ordinary loader never reads and that never loads as an
  *     ordinary session), the run uid its schedule is keyed by, the frozen rematch schedule, the observation's retained turns, whether
  *     the enemy on the field is a rematch enemy, the reward ids;
@@ -75,12 +78,15 @@ bool cr_usable(char why[CR_WHY_LEN]);
  * gives back what an earlier run still held, freezes the schedule (one draw of its own stream, seeded from `entropy` and the uid, never
  * from the game's random numbers), and installs the hooks. False when the roster could not be written or the file is unusable (the
  * run is not started; cr_error says why). */
-bool cr_begin(gc_run* run, uint32_t entropy);
+bool cr_begin(gc_run* run, uint32_t entropy, bool bizarre);
 const char* cr_error(void);
 
 /* The custom run is over or abandoned by the driver: hooks off, nothing kept. (Does not touch the roster: cr_on_run_end does.) */
 void cr_end(void);
 bool cr_active(void);
+/* The run is a Classic (Bizarre) one (chosen at its start, kept in its overlay): the JoJo trainers and the Pillar Men are on. A plain Classic run
+ * has the rematches and the Radar only. False when no run is active. */
+bool cr_bizarre(void);
 
 /* ---- the custom slot: "csession_<slot>" ---- */
 
@@ -139,7 +145,7 @@ bool cr_jojo_team(int idx, gc_custom_team* team);
 /* ---- for tests ---- */
 const gc_custom_hooks* cr_hooks(void);
 typedef struct {
-  bool active;
+  bool active, bizarre;
   cc_run_uid run_uid;
   cc_schedule sched;
   bool forced_done, rematch_live, rematch_enemy, enemy_down, degraded;

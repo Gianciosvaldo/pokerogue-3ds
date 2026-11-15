@@ -9,33 +9,34 @@
 #include "ui_text.h"
 #include "ui_widgets.h"
 
-#define ROWS 4
+#define ROWS 3
 #define ROW_H 16.0f
+/* the Mode row's name for the port's own mode (run_settings.h's RSET_MODE_BIZARRE) */
+#define BIZARRE_NAME "Classic (Bizarre)"
 
 /* ------------------------------------------------------------------ the screen */
 
 static struct {
   rset_args a;
   rset_values v;
-  int cursor; /* 0 Custom, 1 Mode, 2 Game Speed, 3 Start */
+  int cursor; /* 0 Mode, 1 Game Speed, 2 Start */
 } R;
 
-static int available_modes(int out[3]) {
+/* The Mode row's values: Classic, then Classic (Bizarre) beside it, then upstream's Endless modes, each once unlocked */
+static int available_modes(int out[4]) {
   int n=0;out[n++]=GAME_MODES_CLASSIC;
-  if(!R.v.custom&&R.a.endless_unlocked)out[n++]=GAME_MODES_ENDLESS;
-  if(!R.v.custom&&R.a.spliced_endless_unlocked)out[n++]=GAME_MODES_SPLICED_ENDLESS;
+  if(R.a.bizarre_unlocked)out[n++]=RSET_MODE_BIZARRE;
+  if(R.a.endless_unlocked)out[n++]=GAME_MODES_ENDLESS;
+  if(R.a.spliced_endless_unlocked)out[n++]=GAME_MODES_SPLICED_ENDLESS;
   return n;
 }
 
 static void change(int row, int dir) {
   if (row == 0) {
-    R.v.custom = !R.v.custom;
-    if(R.v.custom)R.v.mode=GAME_MODES_CLASSIC;
-  } else if (row == 1) {
-    int modes[3],n=available_modes(modes),current=0;
+    int modes[4],n=available_modes(modes),current=0;
     for(int i=0;i<n;i++)if(modes[i]==R.v.mode)current=i;
     current=(current+dir+n)%n;R.v.mode=modes[current];
-  } else if (row == 2) {
+  } else if (row == 1) {
     int s = R.v.speed + dir;
     if (s < RSET_SPEED_SLOW) s = RSET_SPEED_TURBO;
     if (s > RSET_SPEED_TURBO) s = RSET_SPEED_SLOW;
@@ -57,13 +58,13 @@ static bool rs_input(ui_screen* s, ui_button b) {
       return true;
     case BTN_LEFT:
     case BTN_RIGHT:
-      if (R.cursor == 3) return false;
+      if (R.cursor == 2) return false;
       change(R.cursor, b == BTN_RIGHT ? 1 : -1);
       ui_play_select();
       return true;
     case BTN_ACTION: {
       ui_play_select();
-      if (R.cursor < 3) {
+      if (R.cursor < 2) {
         change(R.cursor, 1);
         return true;
       }
@@ -94,15 +95,16 @@ static void rs_draw(ui_screen* s, rr_screen which) {
   if (!ui_space(UI_BOTTOM_UI)) return;
   static const char* const SPEED_KEYS[4] = {"settings:gameSpeedSlow", "settings:gameSpeedNormal", "settings:gameSpeedFast",
                                             "settings:gameSpeedTurbo"};
-  char label[ROWS][48], value[3][48];
-  snprintf(label[0], sizeof label[0], "Custom"); /* the custom content's own setting: no upstream string */
-  snprintf(label[1], sizeof label[1], "Mode");
-  i18n_t(label[2], sizeof label[2], "settings:gameSpeed", NULL);
-  i18n_t(label[3], sizeof label[3], "settings:confirm", NULL);
-  i18n_t(value[0], sizeof value[0], R.v.custom ? "menu:yes" : "menu:no", NULL);
+  char label[ROWS][48], value[2][48];
+  snprintf(label[0], sizeof label[0], "Mode");
+  i18n_t(label[1], sizeof label[1], "settings:gameSpeed", NULL);
+  i18n_t(label[2], sizeof label[2], "settings:confirm", NULL);
   static const char* const MODE_KEYS[] = {"gameMode:classic","gameMode:endless","gameMode:endlessSpliced"};
-  i18n_t(value[1], sizeof value[1], MODE_KEYS[R.v.mode], NULL);
-  i18n_t(value[2], sizeof value[2], SPEED_KEYS[R.v.speed - RSET_SPEED_SLOW], NULL);
+  if (R.v.mode == RSET_MODE_BIZARRE)
+    snprintf(value[0], sizeof value[0], "%s", BIZARRE_NAME); /* the port's own mode: no upstream string */
+  else
+    i18n_t(value[0], sizeof value[0], MODE_KEYS[R.v.mode], NULL);
+  i18n_t(value[1], sizeof value[1], SPEED_KEYS[R.v.speed - RSET_SPEED_SLOW], NULL);
   const float w = 200, h = 16 + ROWS * ROW_H, x = 160 - w / 2, y = -48 - h - 8;
   ui_window(x, y, w, h, WIN_NORMAL);
   text_opts right = text_defaults();
@@ -110,13 +112,16 @@ static void rs_draw(ui_screen* s, rr_screen which) {
   for (int i = 0; i < ROWS; i++) {
     const float ry = y + 8 + i * ROW_H;
     text_draw(TS_WINDOW, x + 18, ry, label[i], NULL);
-    if (i < 3) text_draw(TS_WINDOW, x + w - 10, ry, value[i], &right);
+    if (i < 2) text_draw(TS_WINDOW, x + w - 10, ry, value[i], &right);
   }
   ui_cursor(x + 12, y + 8 + R.cursor * ROW_H + 8);
   /* what the highlighted row does, in the message strip */
   ui_window(0, -48, 320, 48, WIN_NORMAL);
-  const char* const HELP[ROWS] = {"A Classic run, or one with your custom content.",
-    R.v.custom ? "Custom runs use Classic rules." : R.a.endless_unlocked ? "Choose Classic, Endless, or Spliced Endless." : "Endless unlocks after a Classic win.",
+  const char* const HELP[ROWS] = {
+    !R.a.bizarre_unlocked ? "Classic Pokemon with Nemesis rematches. More modes unlock after a Classic win."
+    : R.v.mode == RSET_MODE_BIZARRE ? "Classic rules, with JoJo trainers and the Pillar Men on top."
+    : R.v.mode == GAME_MODES_CLASSIC ? "Classic rules with Nemesis rematches. Left and Right pick the mode."
+    : "Endless modes have no Nemesis rematches.",
     "How fast animations and text play.", "Choose a slot and start the run."};
   text_opts help = text_defaults();
   help.wrap_w = 296;
@@ -137,7 +142,8 @@ void rset_open(const rset_args* a) {
   memset(&R, 0, sizeof R);
   R.a = *a;
   R.v = a->values;
-  if(R.v.mode< GAME_MODES_CLASSIC || R.v.mode>GAME_MODES_SPLICED_ENDLESS)R.v.mode=GAME_MODES_CLASSIC;
+  if(R.v.mode< GAME_MODES_CLASSIC || R.v.mode>RSET_MODE_BIZARRE || R.v.mode==GAME_MODES_DAILY || R.v.mode==GAME_MODES_CHALLENGE)R.v.mode=GAME_MODES_CLASSIC;
+  if(R.v.mode==RSET_MODE_BIZARRE&&!a->bizarre_unlocked)R.v.mode=GAME_MODES_CLASSIC;
   if(R.v.mode==GAME_MODES_ENDLESS&&!a->endless_unlocked)R.v.mode=GAME_MODES_CLASSIC;
   if(R.v.mode==GAME_MODES_SPLICED_ENDLESS&&!a->spliced_endless_unlocked)R.v.mode=a->endless_unlocked?GAME_MODES_ENDLESS:GAME_MODES_CLASSIC;
   if (R.v.speed < RSET_SPEED_SLOW || R.v.speed > RSET_SPEED_TURBO) R.v.speed = RSET_SPEED_NORMAL;

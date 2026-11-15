@@ -129,6 +129,21 @@ int main(void) {
     sys1.achievement_flags[GC_ACHV_CLASSIC_VICTORY] = 1;
     CHECK(gc_system_repair_unlocks(&sys1) && sys1.unlocks.endless_mode, "the victory achievement unlocks Endless too");
 
+    /* Classic (Bizarre) opens with the first Classic win, as Endless does, and needs no flag of its own */
+    gc_system_init_defaults(&sys1);
+    CHECK(!gc_system_bizarre_unlocked(&sys1) && !gc_system_bizarre_unlocked(NULL), "a new profile has no Bizarre mode");
+    sys1.stats.classic_wins = 1;
+    CHECK(gc_system_bizarre_unlocked(&sys1), "a recorded Classic win opens it");
+    gc_system_init_defaults(&sys1);
+    sys1.achievement_flags[GC_ACHV_CLASSIC_VICTORY] = 1;
+    CHECK(gc_system_bizarre_unlocked(&sys1), "the victory achievement opens it");
+    gc_system_init_defaults(&sys1);
+    sys1.unlocks.endless_mode = true;
+    CHECK(gc_system_bizarre_unlocked(&sys1), "an Endless unlock opens it");
+    gc_system_init_defaults(&sys1);
+    sys1.unlocks.spliced_endless_mode = true;
+    CHECK(!gc_system_bizarre_unlocked(&sys1), "Spliced Endless alone does not");
+
     printf("All system save tests passed successfully!\n");
     return 0;
 }
