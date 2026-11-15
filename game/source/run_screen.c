@@ -501,6 +501,13 @@ static void wave_black(void* arg) {
   if (!trainer && !mystery && !offer && G.run.n_enemy > 0 && (!loaded||(G.run.bt.field[2]&&G.run.bt.field[2]->on_field&&G.run.bt.field[2]->hp>0))) s.enemy = make_mon(&G.run.enemy[0], false);
   s.doubles=G.run.double_battle;
   if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
+  /* a double with only one Pokemon of the player's that can fight: no partner to stand beside, so it stands in the centre with the single
+   * battle's box (the same count battle-core's start uses: no ToggleDoublePositionPhase(true) and no second summon below two) */
+  if(G.run.double_battle){
+    int able=0;
+    for(int i=0;i<G.run.n_party;i++)if(G.run.party[i].b.hp>0)able++;
+    s.player_centred=able<2;
+  }
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
   if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) {   /* the encounter's own sprites on the platform */
@@ -692,6 +699,7 @@ static bool handle_event(int i) {
       v.present[2]=G.present[2];v.present[3]=G.present[3];
       v.exp_ratio = exp_ratio_cb;
       v.level_of = level_of_cb;
+      v.centred = bv_player_centred();
       const pr_pokemon* enemy_ptr[6];
       for (int k = 0; k < G.run.n_enemy && k < 6; k++) enemy_ptr[k] = &G.run.enemy[k].b;
       v.enemy_party = enemy_ptr;

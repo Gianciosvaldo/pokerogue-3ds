@@ -4113,6 +4113,11 @@ static void toggle_double_position_phase(pr_battle *bt,pr_engine *e,int ph)
     for (int k = 0; k < n; k++) {
         pr_pokemon *p = bt->party[0][k];
         if (!is_active_on_field(p)) continue;
+        /* setFieldPosition(double && getPokemonAllowedInBattle().length > 1 ? LEFT : CENTER, 500): presentation only (the screen moves the
+         * sprite and swaps the info box for the single battle's), no rule reads it. Every caller in a double passes double = true */
+        int allowed = 0;
+        for (int j = 0; j < bt->n_party[0]; j++) if (party_hp(bt, 0, j) > 0) allowed++;
+        pr_event_add(bt,e,PR_EV_FIELD_CENTER,-1,-1,0,allowed > 1 ? 0 : 1,NULL);
         if (k == 1) {
             bt->party[0][1] = bt->party[0][0];
             bt->party[0][0] = p;
