@@ -399,6 +399,10 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   `BEV_FIELD_SWAP` is invisible while the pair is in two columns (`B.flipped`). `tests/lone_player_layout_test.c`,
   `tests/lone_player_events_test.c`, and `runtest` (a double with one able Pokemon never asks a command in the columns). Not seen
   on a console.
+- "Will you switch?" (CheckSwitchPhase): the Yes / No opens under the question itself. Other text can be written after the question in the
+  same drain (the biome's weather, a level cap line); `run_screen.c` remembers the question and, when it is not the last text written,
+  shows it again (callbackDelay 1 ms) before the Yes / No (lorenzo, 2026-11-15: "it started to snow   Yes / No"). `runtest` checks the
+  last text written when a CHECK_SWITCH confirm opens (489 violations in 5000 runs without the fix, 0 with it).
 - Timings: encounter slide 2000 ms, info boxes 1000 ms in and 500 ms out, HP bar
   `clamp(|dHP| x 5, 250, 5000)` ms, damage blink 6 x 100 ms, 20 ms per character, 1500 ms message
   wait, fades 250 / 100 / 250 ms.
