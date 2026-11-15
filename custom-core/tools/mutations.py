@@ -1113,8 +1113,8 @@ equiv(Q, "    if (n->life != CC_LIFE_DEFEATED) return CC_E_LIFECYCLE;", "    if 
 
 # ---------------------------------------------------------------- jojo.c and jojo_table.c (the JoJo trainers)
 J, JH, JT = "src/jojo.c", "include/cc/jojo.h", "src/jojo_table.c"
-mut(JH, "#define CC_JOJO_P_PERCENT 25u", "#define CC_JOJO_P_PERCENT 26u")
-mut(JH, "#define CC_JOJO_P_PERCENT 25u", "#define CC_JOJO_P_PERCENT 24u")
+mut(JH, "#define CC_JOJO_P_PERCENT 30u", "#define CC_JOJO_P_PERCENT 31u")
+mut(JH, "#define CC_JOJO_P_PERCENT 30u", "#define CC_JOJO_P_PERCENT 29u")
 mut(JH, "    uint64_t used;              /* bit i: character i was dealt this run (at most CC_JOJO_MAX_CHARS characters) */", "    uint32_t used;              /* bit i: character i was dealt this run (at most CC_JOJO_MAX_CHARS characters) */", "the dealt mask is 32 bits again")
 mut(J, "0x4A4F4A4F424F5A41ull", "0x4A4F4A4F424F5A40ull", "the salt changes")
 mut(J, "    s->rng_state = seed ^ CC_JOJO_SALT;", "    s->rng_state = seed;", "the stream is the plain seed")
@@ -1144,6 +1144,9 @@ mut(JT, '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years ol
 mut(JT, '29 /* Temple */, 3 /* Speed Boost */, 6', '29 /* Temple */, -1, 6', "Pucci loses the passive")
 mut(JT, '"I shall become the ultimate lifeform!", -1,', '"I shall become the ultimate lifeform!", 25,', "Kars in a biome pool")
 mut(JT, '"Nyo-ho!", 14 /* Desert */, -1, 6,', '"Nyo-ho!", 14 /* Desert */, -1, 5,', "Gyro loses a member")
+mut(JT, '"What did you just say about my hair?!", 1 /* Plains */, -1, 5,', '"What did you just say about my hair?!", 0 /* Town */, -1, 5,', "Josuke back in Town (no trainers there)")
+mut(JT, '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 5,', '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 4,', "Giorno loses a member")
+mut(JT, '"My spirit is unbending! Witness the ultimate Zeppeli technique!", 20 /* Dojo */, -1, 4,', '"My spirit is unbending! Witness the ultimate Zeppeli technique!", 20 /* Dojo */, -1, 5,', "Caesar gains a member that does not exist")
 
 
 def build_and_run(workdir: Path):

@@ -19,7 +19,7 @@
 
 #include "cc/model.h"
 
-#define CC_JOJO_P_PERCENT 25u   /* chance per eligible wave that has an undealt character in its biome */
+#define CC_JOJO_P_PERCENT 30u   /* chance per eligible wave that has an undealt character in its biome (25 until the Bizarre mode, lorenzo 2026-11-15: "slightly higher") */
 #define CC_JOJO_MAX_CHARS 64   /* the roll state is a 64-bit mask of dealt characters: the table can never have more */
 #define CC_JOJO_MAX_MEMBERS 6
 #define CC_JOJO_MAX_ITEMS 5

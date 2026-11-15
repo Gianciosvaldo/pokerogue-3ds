@@ -42,7 +42,7 @@ See the [battle-core README](battle-core/README.md), [completion checklist](batt
 
 - Custom Run Legacy reports record the final blow and support persistent Nemeses, radar, rematch scheduling, optional encounters and claims. Nemeses originate from Custom Runs. Report, roster and transaction persistence are integrated with the app.
 - The capsule machine supports voucher-to-egg transactions, reveal presentation and touch interaction, with durable transaction handling. Additional mystery encounter ports include Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can’t Refuse, the Pokémon Salesman and Fun and Games.
-- JoJo challengers in Custom Runs: character/team tables, biome-based spawn policy, run-screen introductions and dialogue, sprite keys, and persisted encounter state.
+- JoJo challengers in Classic (Bizarre) runs (34 characters; the first 17 of 2026-10-18/19, then 17 more of 2026-11-15, Caesar to Giorno): character/team tables, biome-based spawn policy (30% of the eligible waves), run-screen introductions and dialogue, sprite keys, and persisted encounter state (a 64-bit dealt mask).
 - The title’s Football entry opens a separate live 22-player mode: a 55-point profile-based draft, editable offense/defense lineups, movement, manual snaps, passing, running, tackling, coverage, 20 offensive plays and eight defensive schemes, a seven-round playoff, experience, evolution/move choices, shops and compatible Mega forms. It uses `football_live.sav`; START retains access to the older six-player mode and its `football.sav`. Ordinary run saves remain separate. See [live football controls and limits](football-core/LIVE.md).
 
 ## Validation and remaining work
