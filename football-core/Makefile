@@ -396,6 +396,13 @@ mega-split-test: core-libs
 	$(BUILD)/mega_split_test
 test: mega-split-test
 
+.PHONY: form-item-shop-test
+form-item-shop-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form_item_shop_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/form_item_shop_test
+	$(BUILD)/form_item_shop_test
+test: form-item-shop-test
+
 .PHONY: return-camera-test
 return-camera-test: core-libs
 	mkdir -p $(BUILD)

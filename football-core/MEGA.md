@@ -24,6 +24,24 @@ holders moves by two a round, which would pin a holder to one parity. A holder b
 for it afterwards. The legacy six-player season still offers the first stone (`gc_football_mega_item`). `tests/mega_split_test.c`
 sweeps all six species.
 
+## Kyurem and Calyrex (lorenzo 2026-11-15)
+
+Dark Stone and Light Stone (Kyurem), Icy and Shadow Reins of Unity (Calyrex) are sold in the live career's two stone slots at a Mega Stone's price
+(1000) and held, selected and played exactly like a Mega Stone: the selected holder plays the match as Black or White Kyurem, Ice or Shadow Rider
+Calyrex (the form's base stats, weight and types), the roster member stays in its regular form, and the item is kept for later matches. The ready
+screen's line reads "Form change" instead of "Mega evolution" once one of them is selected.
+
+- Offered only for a member of that species in its base form who holds no stone or form item, and only when the classic game's own condition holds:
+  the profile's dex has caught Zekrom (Dark Stone), Reshiram (Light Stone), Glastrier (Icy Reins) or Spectrier (Shadow Reins). The dex gates the
+  offer, not a held item: a checkpoint with the item stays valid whatever the dex says (`gc_football_form_items` vs `gc_football_mega_form`).
+- A member who can use one comes first, every round, so it is always there to buy. One takes the first stone slot and the Mega Stones keep rotating
+  through the second; two (Kyurem and Calyrex on one roster) take both slots, and the Mega Stones come back as soon as one is bought; with more than
+  two the pair moves on like the Mega Stones do. A species with two form items (both Zekrom and Reshiram caught) is offered one a round, by the same
+  hash as the split Mega Stones, so over a playoff it is offered each.
+- They are never in `gc_football_mega_items` / `gc_football_mega_item`, which stay the Mega Stones (the legacy six-player season is unchanged).
+- Classic and Custom runs are a separate matter: there a Kyurem item is a rare reward (Rogue tier), not for sale. Its rate was measured with the
+  port's own roll (`game-core/tests/kyurem_items_host_test.c` proves the wiring end to end).
+
 The holder must match the item's species and current pre-form key. The generated
 inactive transition identifies the corresponding mega form, including distinct
 Charizard X/Y and Mewtwo X/Y targets. Conditional transitions that the football

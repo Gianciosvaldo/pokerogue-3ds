@@ -198,10 +198,20 @@ bool gc_football_item_evolve(gc_run *r, unsigned party, int item, int (*forget_s
     }
     return fail(why,"evolution did not finish");
 }
+/* The four form items of Kyurem and Calyrex (lorenzo 2026-11-15): Dark and Light Stone, Icy and Shadow Reins of Unity. The football shop
+ * sells them like a Mega Stone and the holder takes the form for one match like a Mega. In the classic game each one waits for another
+ * Pokemon in the dex (Zekrom, Reshiram, Glastrier, Spectrier); that condition decides whether the shop offers it (gc_football_form_items),
+ * not whether a held one still works, so a checkpoint never turns invalid because the dex changed. */
+bool gc_football_is_form_item(int item)
+{
+    return item==FORM_CHANGE_ITEM_DARK_STONE || item==FORM_CHANGE_ITEM_LIGHT_STONE ||
+           item==FORM_CHANGE_ITEM_ICY_REINS_OF_UNITY || item==FORM_CHANGE_ITEM_SHADOW_REINS_OF_UNITY;
+}
 const pr_form *gc_football_mega_form(const gc_run *r,unsigned party,int item)
 {
     if (!r || party>=(unsigned)r->n_party || r->n_party>6 || item<0) return NULL;
     const gc_mon *m=&r->party[party];
+    const bool form_item=gc_football_is_form_item(item);
     int key=pr_reward_form_key(m->b.species,m->b.form);
     for (int i=0;i<pr_item_fc_species_count;++i) {
         const pr_species_slice *s=&pr_item_fc_species[i];
@@ -209,7 +219,9 @@ const pr_form *gc_football_mega_form(const gc_run *r,unsigned party,int item)
         bool applicable=false;
         for (unsigned k=0;k<s->n;++k) {
             const pr_item_fc *f=&pr_item_fcs[s->start+k];
-            if (f->item==item && (f->flags&5)==5 && !f->n_cond && f->pre_form_key==key) applicable=true;
+            if (f->item!=item || f->pre_form_key!=key) continue;
+            /* a Mega or Primal stone with no condition, or one of the four form items (its dex condition is the shop's to check) */
+            if (form_item ? (f->flags&4)!=0 : ((f->flags&5)==5 && !f->n_cond)) applicable=true;
         }
         if (!applicable) return NULL;
         /* The generated inactive transition identifies the held item's mega
@@ -219,7 +231,7 @@ const pr_form *gc_football_mega_form(const gc_run *r,unsigned party,int item)
             if (f->item!=item || (f->flags&4)) continue;
             for (unsigned j=0;j<PR_FORM_COUNT;++j) {
                 const pr_form *form=&pr_forms[j];
-                if (form->species==m->b.species && !strncmp(form->form_key,"mega",4) &&
+                if (form->species==m->b.species && (form_item || !strncmp(form->form_key,"mega",4)) &&
                     pr_reward_form_key(form->species,form->form_index)==f->pre_form_key) return form;
             }
         }
@@ -248,7 +260,38 @@ int gc_football_mega_items(const gc_run *r,unsigned party,int *items,int max)
         if (s->species!=r->party[party].b.species) continue;
         for (unsigned k=0;k<s->n && n<max;++k) {
             const pr_item_fc *f=&pr_item_fcs[s->start+k];
-            if (!gc_football_mega_form(r,party,f->item)) continue;
+            if (gc_football_is_form_item(f->item) || !gc_football_mega_form(r,party,f->item)) continue;
+            bool seen=false;
+            for (int j=0;j<n;++j) if (items[j]==f->item) seen=true;
+            if (!seen) items[n++]=f->item;
+        }
+    }
+    return n;
+}
+/* Whether the form change's conditions hold for a member of this run: the only one a form item has is "the dex has caught that species"
+ * (kind 5), read from the profile the run was made with. No profile, nothing caught. */
+static bool form_conditions_hold(const gc_run *r,const pr_item_fc *f)
+{
+    for (unsigned c=0;c<f->n_cond;++c) {
+        const pr_fc_cond *cond=&pr_fc_conds[f->cond_start+c];
+        if (cond->kind!=5) return false;
+        if (!r->sys || cond->a<=0 || cond->a>GC_MAX_SPECIES_ID || !r->sys->dex[cond->a].caught_attr) return false;
+    }
+    return true;
+}
+int gc_football_form_items(const gc_run *r,unsigned party,int *items,int max)
+{
+    if (!items || max<=0 || !r || r->n_party<1 || r->n_party>6 || party>=(unsigned)r->n_party || gc_football_owned_mega(r,party)) return 0;
+    int n=0;
+    const int key=pr_reward_form_key(r->party[party].b.species,r->party[party].b.form);
+    for (int i=0;i<pr_item_fc_species_count;++i) {
+        const pr_species_slice *s=&pr_item_fc_species[i];
+        if (s->species!=r->party[party].b.species) continue;
+        for (unsigned k=0;k<s->n && n<max;++k) {
+            const pr_item_fc *f=&pr_item_fcs[s->start+k];
+            /* the active transition out of the member's form: its own conditions, not those of the way back */
+            if (!gc_football_is_form_item(f->item) || !(f->flags&4) || f->pre_form_key!=key || !form_conditions_hold(r,f) ||
+                !gc_football_mega_form(r,party,f->item)) continue;
             bool seen=false;
             for (int j=0;j<n;++j) if (items[j]==f->item) seen=true;
             if (!seen) items[n++]=f->item;
