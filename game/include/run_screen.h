@@ -19,8 +19,9 @@
  *                 battle-core drops the number of shakes a ball made before it broke free, so a break-free always wobbles once.
  *                 Not drawn: the ball's open and star particles, the caught Pokemon's info panel, critical captures (battle-core
  *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
- *   - custom rematch: a Classic or Bizarre run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave is the
- *                 statement, the enemy appears after the answer
+ *   - custom rematch: a Classic or Bizarre run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave shows the
+ *                 Nemesis that is asking on the enemy side (as a wild Pokemon is shown, with the line "The X that beat you wants a
+ *                 rematch!"). Accepted, it is the battle's enemy; declined, it goes back to its ball and the wave's own enemy comes out
  * Saving and loading are wired (cfg.save, rs_resume). START on the command menu or the reward screen opens the in-run menu (run_menu.h): Save
  * and Quit calls cfg.on_quit. The music follows the scenes (bgm.h). Not wired yet: the Pokedex, eggs.
  */

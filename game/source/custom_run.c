@@ -480,6 +480,12 @@ const gc_custom_hooks* cr_hooks(void) { return &HOOKS; }
 
 int cr_offer_species(void) { return R.offering ? R.offer_rec.species : 0; }
 
+bool cr_offer_enemy(gc_custom_enemy* spec) {
+  if (!R.offering) return false;
+  spec_of(&R.offer_rec, spec);
+  return true;
+}
+
 const char* cr_take_message(void) {
   static char out[160];
   if (!R.msg[0]) return NULL;

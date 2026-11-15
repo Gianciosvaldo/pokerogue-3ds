@@ -93,6 +93,7 @@ static struct {
    * foe's send-out (they were shown when the battle began, before the save) */
   bool resume_wave;             /* the next WAVE event is the loaded battle's */
   bool resume_foe;              /* the foe may be on the field in the run and not on the screen yet */
+  bool offer_look;              /* the Nemesis on offer is on the enemy side of the screen (the run's enemy is still the ordinary one) */
   cs_defeat defeat;             /* a custom run's attributed defeat (rs_custom_defeat) */
   bool have_defeat;
 } G = {.shown = -1, .ball = -1};
@@ -125,7 +126,7 @@ static void reset_driver(void) {
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
   G.me_stage = 0;
-  G.resume_wave = G.resume_foe = false;
+  G.resume_wave = G.resume_foe = G.offer_look = false;
 }
 
 static bool msg_is(const gc_event* e, const char* key) {
@@ -438,6 +439,27 @@ static void preload_moves(void) {
     for (int k = 0; k < PR_N_MOVES(&G.run.enemy[i].b); k++) ba_preload_move(PR_MOVES(&G.run.enemy[i].b)[k]);
 }
 
+/* The Pokemon a custom rematch's intro shows on the enemy side: what accepting would build, so the player sees who is asking. It is only a
+ * look: the wave's own enemy stays the run's until the answer. It takes the ordinary enemy's level, id and IVs (as game-core's build does) with
+ * the record's species, form, gender, shininess and ability, and its stats worked out again for that species. False when nothing is on offer. */
+static bool offer_look(bv_mon* out) {
+  gc_custom_enemy spec;
+  if (G.run.n_enemy < 1 || !cr_offer_enemy(&spec)) return false;
+  static pr_pokemon p;   /* big: off the 3DS stack */
+  p = G.run.enemy[0].b;
+  p.species = spec.species;
+  p.form = spec.form;
+  p.gender = spec.gender;
+  p.shiny = spec.shiny;
+  p.variant = 0;
+  p.fusion_species = 0;
+  p.fusion_form = 0;
+  p.base_ability = p.ability = spec.ability;
+  pr_calculate_stats(&G.run.bt, &p);
+  be_mon(&G.run.bt, &p, out);
+  return out->species > 0;
+}
+
 /* At black: the new wave's scene, and the intro events (already in G.ev up to the call) */
 static void wave_black(void* arg) {
   (void)arg;
@@ -454,9 +476,13 @@ static void wave_black(void* arg) {
     for(int j=G.wave_ev+1;j<G.nq&&j<=G.wave_ev+5;j++)
       if(G.q[j].kind==GC_EV_TRAINER){G.skip[j]=true;break;}
 
-  /* a custom rematch is on offer: the ordinary enemy in the run is about to be replaced (or kept), so nobody is shown on the enemy side
-   * yet; it appears when the battle starts, after the answer */
+  /* a custom rematch is on offer: the ordinary enemy in the run is about to be replaced (or kept). The intro shows the Nemesis that is
+   * asking, as a wild Pokemon is shown; after the answer it stays (accepted: it is the enemy) or goes back and the wave's own comes out
+   * (settle_offer_look). Without a look to show nobody is on the enemy side until the answer. */
   const bool offer = G.cfg.custom && gc_run_screen(&G.run)->kind == GC_SCREEN_CUSTOM_OFFER;
+  static bv_mon nemesis;
+  const bool looking = offer && offer_look(&nemesis);
+  G.offer_look = looking;
   const bool loaded = G.resume_wave;
   G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
@@ -499,6 +525,7 @@ static void wave_black(void* arg) {
     s.player = make_mon(&G.run.party[G.run.party_order[0]], true);
   }
   if (!trainer && !mystery && !offer && G.run.n_enemy > 0 && (!loaded||(G.run.bt.field[2]&&G.run.bt.field[2]->on_field&&G.run.bt.field[2]->hp>0))) s.enemy = make_mon(&G.run.enemy[0], false);
+  else if (looking) s.enemy = nemesis;
   s.doubles=G.run.double_battle;
   if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
   /* a double with only one Pokemon of the player's that can fight: no partner to stand beside, so it stands in the centre with the single
@@ -518,7 +545,7 @@ static void wave_black(void* arg) {
   preload_moves();
   refresh_item_bars();
   G.present[0] = s.player_present;
-  G.present[1] = !trainer && !mystery && !offer && s.enemy.species > 0;
+  G.present[1] = !trainer && !mystery && (!offer || looking) && s.enemy.species > 0;
   G.present[2]=s.player_ally_present;G.present[3]=s.enemy_ally.species>0;
   if(!G.present[2])G.shown_ally=-1;
   if (!G.present[0]) G.shown = -1;
@@ -581,7 +608,7 @@ static void wave_black(void* arg) {
     bv_event* r = ev_new();
     if (r) *r = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = 0, .b = 3};
   } else {
-    *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
+    *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || (offer && !looking) ? 1 : 0, .b = looking ? 4 : 0, .text = t};
     if (jojo) { /* then his iconic line, in the name box (BEV_DIALOGUE, no portrait) */
       bv_event* d = ev_new();
       if (d) *d = (bv_event){.type = BEV_DIALOGUE, .battler = -1, .text = jojo->line, .name = jojo->name};
@@ -1686,11 +1713,37 @@ static void mystery_screen(void) {
 
 /* ---- a custom rematch: the offer (the intro of the wave already said who wants it) ---- */
 
+/* After the answer: the Nemesis the intro showed is the run's enemy (accepted and built) or it is not (declined, or game-core kept the ordinary
+ * enemy). If not, it goes back to its ball and the run's enemy comes out, before game-core's own "A wild X appeared!" is read. */
+static void settle_offer_look(void) {
+  if (!G.offer_look) return;
+  G.offer_look = false;
+  if (!G.present[1]) return;
+  const bool have = G.run.n_enemy > 0;
+  static bv_mon sent;
+  if (have) {
+    sent = make_mon(&G.run.enemy[0], false);
+    const bv_mon* shown = bv_mon_of(BV_ENEMY);
+    if (shown->species == sent.species && shown->form == sent.form && shown->gender == sent.gender && shown->shiny == sent.shiny &&
+        shown->variant == sent.variant && shown->fusion_species == sent.fusion_species)
+      return;
+  }
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  *ev_new() = (bv_event){.type = BEV_WITHDRAW, .battler = BV_ENEMY};
+  G.present[1] = false;
+  if (have) {
+    *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = BV_ENEMY, .mon = &sent};
+    G.present[1] = true;
+  }
+}
+
 static void on_offer_answer(int yes, void* arg) {
   (void)arg;
-  G.resume_foe=true; /* The offer intentionally hid the enemy during the wave intro. */
+  G.resume_foe = true;   /* an enemy the screen does not show yet comes out with the command menu */
   gc_choice c = {.kind = GC_CH_CONFIRM, .a = yes == 1 ? 1 : 0};   /* No and B decline */
-  answer(&c);
+  if (!submit(&c)) return;
+  settle_offer_look();
+  pump(NULL);
 }
 
 static void offer_asked(void* arg) {
