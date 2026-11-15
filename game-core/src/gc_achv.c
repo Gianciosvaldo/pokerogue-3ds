@@ -141,6 +141,41 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Giorno Giovanna", "Defeat Giorno Giovanna.", J, V(GC_VOUCHER_REGULAR, 1)},
     /* 117: listed between Ten Faces and Every Face (gc_achv_order), now that "every" is 34 */
     {"Twenty Faces", "Defeat 20 different challengers.", J, V(GC_VOUCHER_PREMIUM, 1)},
+    /* 118..151: the same 34 challengers beaten with none of the party fainted in the battle, in table order (GC_ACHV_FLAWLESS_FIRST + index) */
+    {"Flawless Kars", "Defeat Kars without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Gyro Zeppeli", "Defeat Gyro Zeppeli without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Diavolo", "Defeat Diavolo without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Yoshikage Kira", "Defeat Yoshikage Kira without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Enrico Pucci", "Defeat Enrico Pucci without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Jolyne Cujoh", "Defeat Jolyne Cujoh without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Joseph Joestar", "Defeat Joseph Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Jotaro Kujo", "Defeat Jotaro Kujo without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless DIO", "Defeat DIO without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Koichi Hirose", "Defeat Koichi Hirose without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Guido Mista", "Defeat Guido Mista without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Wamuu", "Defeat Wamuu without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Esidisi", "Defeat Esidisi without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Funny Valentine", "Defeat Funny Valentine without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Jean Pierre Polnareff", "Defeat Jean Pierre Polnareff without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Risotto Nero", "Defeat Risotto Nero without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Rudolf von Stroheim", "Defeat Rudolf von Stroheim without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Caesar Zeppeli", "Defeat Caesar Zeppeli without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Noriaki Kakyoin", "Defeat Noriaki Kakyoin without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Muhammad Avdol", "Defeat Muhammad Avdol without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Vanilla Ice", "Defeat Vanilla Ice without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Hol Horse", "Defeat Hol Horse without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Iggy", "Defeat Iggy without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Narancia Ghirga", "Defeat Narancia Ghirga without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Bruno Bucciarati", "Defeat Bruno Bucciarati without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Leone Abbacchio", "Defeat Leone Abbacchio without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Weather Report", "Defeat Weather Report without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Johnny Joestar", "Defeat Johnny Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Sandman", "Defeat Sandman without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Diego Brando", "Defeat Diego Brando without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Shigechi", "Defeat Shigechi without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Josuke Higashikata", "Defeat Josuke Higashikata without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Rohan Kishibe", "Defeat Rohan Kishibe without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Flawless Giorno Giovanna", "Defeat Giorno Giovanna without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -155,12 +190,18 @@ typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
 /* the characters of the table only: a bit for a character a build does not have (a profile from a later build) counts for nothing */
 #define JOJO_VALID (GC_JOJO_COUNT >= 64 ? ~0ull : (1ull << GC_JOJO_COUNT) - 1)
 static uint64_t beaten_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32) & JOJO_VALID; }
+static uint64_t clean_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_clean_mask | (uint64_t)a->jojo_clean_mask_hi << 32) & JOJO_VALID; }
 
 int gc_achv_jojo_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
     return jojo < GC_JOJO_CAESAR ? jojo : GC_ACHV_JOJO2_FIRST + (jojo - GC_JOJO_CAESAR);
 }
+
+int gc_achv_flawless_id(int jojo) { return jojo >= 0 && jojo < GC_JOJO_COUNT ? GC_ACHV_FLAWLESS_FIRST + jojo : -1; }
+
+/* the challenger an achievement id is the "Flawless X" of, or -1 */
+static int flawless_of_id(int id) { return id >= GC_ACHV_FLAWLESS_FIRST && id < GC_ACHV_FLAWLESS_FIRST + GC_JOJO_COUNT ? id - GC_ACHV_FLAWLESS_FIRST : -1; }
 
 /* the challenger an achievement id is the "Defeat X" of, or -1 */
 static int jojo_of_id(int id)
@@ -177,8 +218,9 @@ int gc_achv_order(int pos)
     if (!built) {
         int n = 0;
         for (int j = 0; j < GC_JOJO_COUNT; j++) order[n++] = (uint8_t)gc_achv_jojo_id(j);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) order[n++] = (uint8_t)gc_achv_flawless_id(j);
         for (int id = 0; id < GC_ACHV_COUNT; id++) {
-            if (gc_achv_defs[id].group != GC_ACHV_GROUP_JOJO || jojo_of_id(id) >= 0 || id == GC_ACHV_TWENTY_FACES) continue;
+            if (gc_achv_defs[id].group != GC_ACHV_GROUP_JOJO || jojo_of_id(id) >= 0 || flawless_of_id(id) >= 0 || id == GC_ACHV_TWENTY_FACES) continue;
             order[n++] = (uint8_t)id;
             if (id == 25) order[n++] = GC_ACHV_TWENTY_FACES;   /* Twenty Faces sits between Ten Faces and Every Face */
         }
@@ -277,7 +319,11 @@ void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean)
     if (jojo < 32) a->jojo_beaten |= 1u << jojo;
     else a->jojo_beaten_hi |= 1u << (jojo - 32);
     if (a->jojo_battles < UINT32_MAX) a->jojo_battles++;
-    if (clean && a->jojo_clean < UINT32_MAX) a->jojo_clean++;
+    if (clean) {
+        if (a->jojo_clean < UINT32_MAX) a->jojo_clean++;
+        if (jojo < 32) a->jojo_clean_mask |= 1u << jojo;
+        else a->jojo_clean_mask_hi |= 1u << (jojo - 32);
+    }
     if (a->run_tag != run_tag || a->run_jojo == 0) {
         a->run_tag = run_tag;
         a->run_jojo = 0;
@@ -484,6 +530,8 @@ static bool met(const gc_system *sys, int id)
     const gc_achv_progress *a = &sys->achv;
     const int jojo = jojo_of_id(id);
     if (jojo >= 0) return (beaten_mask(a) >> jojo & 1ull) != 0;
+    const int flawless = flawless_of_id(id);
+    if (flawless >= 0) return (clean_mask(a) >> flawless & 1ull) != 0;
     if (id == 29) return a->jojo_clean > 0;
     if (id == 65) return (a->hatch_feats & GC_HATCH_EPIC) != 0;
     if (id == 66) return (a->hatch_feats & GC_HATCH_LEGENDARY) != 0;

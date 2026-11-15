@@ -116,9 +116,9 @@ int main(void) {
 
   /* the first page: the first seven names and the count */
   draw(1);
-  char zero_of[16], three_of[16];   /* the total is the table's own: the list grows with each batch of characters */
+  char zero_of[16], four_of[16];   /* the total is the table's own: the list grows with each batch of characters */
   snprintf(zero_of, sizeof zero_of, "0/%d", GC_ACHV_COUNT);
-  snprintf(three_of, sizeof three_of, "3/%d", GC_ACHV_COUNT);
+  snprintf(four_of, sizeof four_of, "4/%d", GC_ACHV_COUNT);
   CHECK(has_text(1, "Achievements") && has_text(1, zero_of), "title and count");
   CHECK(has_text(1, D(0)->name) && has_text(1, D(6)->name), "first seven rows");
   CHECK(!has_text(1, D(7)->name), "the eighth is on the next page");
@@ -156,12 +156,12 @@ int main(void) {
   draw(1);
   CHECK(has_text(1, "Done"), "a finished one");
   CHECK(has_text(1, "2/3") == false, "the Pillar Men set is not on the first page");
-  for (int i = 0; i < GC_JOJO_COUNT; i++) press(BTN_DOWN);   /* past the 34 "Defeat X": the Pillar Men set is the first of the other JoJo ones */
+  for (int i = 0; i < 2 * GC_JOJO_COUNT; i++) press(BTN_DOWN);   /* past the 34 "Defeat X" and the 34 "Flawless X": the Pillar Men set is the first of the other JoJo ones */
   draw(0);
-  CHECK(has_text(0, gc_achv_defs[17].name), "the Pillar Men set follows the 34 characters");
+  CHECK(has_text(0, gc_achv_defs[17].name), "the Pillar Men set follows the 68 character ones");
   draw(1);
   CHECK(has_text(1, "2/3"), "the Pillar Men set has 2 of 3");
-  CHECK(has_text(1, three_of), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
+  CHECK(has_text(1, four_of), "four finished (Kars, Wamuu, Untouched and Flawless Kars: Kars fell with nobody fainted)");
   draw(0);
   CHECK(has_text(0, "Progress: 2/3"), "the top screen says the progress of a counting one");
   for (int i = 0; i < 7; i++) press(BTN_DOWN);

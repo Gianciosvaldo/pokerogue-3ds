@@ -68,6 +68,9 @@ int main(void)
   CHECK(m && strstr(m, "Achievement unlocked: DIO!") && strstr(m, "You received 1 Egg Voucher!"), "the first message names DIO and its reward: %s", m ? m : "(none)");
   m = ach_take_message();
   CHECK(m && strstr(m, "Untouched"), "the second names Untouched");
+  m = ach_take_message();
+  CHECK(m && strstr(m, "Flawless DIO") && strstr(m, "You received 2 Egg Vouchers!"), "the third is the clean win over DIO: %s", m ? m : "(none)");
+  CHECK(gc_achv_unlocked(&S, gc_achv_flawless_id(GC_JOJO_DIO)), "Flawless DIO is unlocked");
   CHECK(ach_take_message() == NULL, "nothing more");
   const uint32_t battles = S.achv.jojo_battles;
   CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_DIO, true) && S.achv.jojo_battles == battles, "the reward screen seen again counts nothing");
