@@ -729,11 +729,12 @@ static bool handle_event(int i) {
         if (caught) G.st.catches++;
       }
       G.ball = -1;
-      G.n_ev += be_convert_events(&G.run.bt, &gc_run_battle_event_data(&G.run)[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
+      const pr_event* batch = &gc_run_battle_event_data(&G.run)[e->a];
+      G.n_ev += be_convert_events(&G.run.bt, batch, e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
       /* CheckSwitchPhase's question: kept, so the Yes / No can be opened under it even when later text (the biome's weather) was written
        * after it (lorenzo, 2026-11-15: "it started to snow   Yes / No") */
       for (int k = 0; k < e->b; k++) {
-        const pr_event* be = &gc_run_battle_event_data(&G.run)[e->a + k];
+        const pr_event* be = &batch[k];
         if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, "battle:switchQuestion")) {
           be_format_message(&be->msg, G.switch_question, sizeof G.switch_question);
           G.question_last = false;
