@@ -462,26 +462,8 @@ bool gc_can_tera_command(const gc_run *run, int field)
     return run->bt.player_teras_used + planned < GC_MAX_TERAS_PER_ARENA;
 }
 
-/* A rematch's enemy (gc/custom.h foe_locked) cannot be run from or forced out: the flag a mystery encounter's no-flee fight sets, which pr_can_run
- * ("An unseen force prevents escape"), a forced switch and the enemy's own flight read. Set at every command, not only at the battle's start:
- * a battle loaded from a save is built before the app has its rematch state back. It is never cleared here, a new battle sets it from the encounter. */
-static void sync_foe_lock(gc_run *run)
-{
-    if (gc_custom_foe_locked(run)) run->bt.me_no_flee = true;
-}
-
-/* The app's rematch state came after the battle was loaded (gc_run_set_custom): the command screen the load built was made without the lock, so it
- * offers Run; the lock takes it away. Nothing else on the screen depends on it. */
-void gc_battle_custom_refresh(gc_run *run)
-{
-    if (!gc_custom_foe_locked(run)) return;
-    sync_foe_lock(run);
-    if (run->screen.kind == GC_SCREEN_COMMAND) run->screen.can_run = false;
-}
-
 void gc_battle_command_screen(gc_run *run)
 {
-    sync_foe_lock(run);
     gc_screen *s = &run->screen;
     int field=s->slot==1?1:0;
     memset(s, 0, sizeof *s);
@@ -510,7 +492,6 @@ void gc_battle_command_screen(gc_run *run)
 /* CommandPhase.handleFightCommand / handleSwitchCommand for field slot 0 */
 bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
 {
-    sync_foe_lock(run);
     pr_battle *bt = &run->bt;
     int field=run->screen.slot==1?1:0;
     pr_pokemon *p = bt->field[field];
