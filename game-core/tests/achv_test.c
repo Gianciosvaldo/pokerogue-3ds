@@ -45,7 +45,7 @@ int main(void)
 
     /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
     {
-        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_JOJO2_FIRST + 17);
+        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_JOJO2_FIRST + 17 + 1 && GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17);
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_jojo_id(j);
@@ -58,14 +58,14 @@ int main(void)
     }
 
     /* the sets */
-    static const struct { int id; int members[5]; int n; } SETS[] = {
+    static const struct { int id; int members[8]; int n; } SETS[] = {
         {17, {GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI}, 3},
-        {18, {GC_JOJO_JOSEPH, GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_STROHEIM}, 5},
-        {19, {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF}, 3},
-        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA}, 2},
-        {21, {GC_JOJO_DIAVOLO, GC_JOJO_MISTA, GC_JOJO_RISOTTO}, 3},
-        {22, {GC_JOJO_JOLYNE, GC_JOJO_PUCCI}, 2},
-        {23, {GC_JOJO_VALENTINE, GC_JOJO_GYRO}, 2},
+        {18, {GC_JOJO_JOSEPH, GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_STROHEIM, GC_JOJO_CAESAR}, 6},
+        {19, {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY}, 8},
+        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA, GC_JOJO_JOSUKE, GC_JOJO_ROHAN, GC_JOJO_SHIGECHI}, 5},
+        {21, {GC_JOJO_DIAVOLO, GC_JOJO_MISTA, GC_JOJO_RISOTTO, GC_JOJO_GIORNO, GC_JOJO_BRUNO, GC_JOJO_ABBACCHIO, GC_JOJO_NARANCIA}, 7},
+        {22, {GC_JOJO_JOLYNE, GC_JOJO_PUCCI, GC_JOJO_WEATHER}, 3},
+        {23, {GC_JOJO_VALENTINE, GC_JOJO_GYRO, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO}, 5},
     };
     for (unsigned k = 0; k < sizeof SETS / sizeof SETS[0]; k++) {
         fresh();
@@ -75,15 +75,41 @@ int main(void)
             eval(NULL);
         }
         assert(gc_achv_unlocked(&S, SETS[k].id));
+        /* the progress line counts exactly the members, and a challenger outside the set adds nothing */
+        uint32_t h, n;
+        assert(gc_achv_progress_of(&S, SETS[k].id, &h, &n) && h == (uint32_t)SETS[k].n && n == (uint32_t)SETS[k].n);
+    }
+    /* every Part set but the Pillar Men's: the six Parts hold the 34 challengers (the Pillar Men sit in Battle Tendency) with nobody in two */
+    {
+        fresh();
+        uint32_t total = 0;
+        for (int id = 18; id <= 23; id++) {
+            uint32_t h, n;
+            assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0);
+            total += n;
+        }
+        assert(total == GC_JOJO_COUNT);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) {   /* one challenger moves exactly one Part set's line */
+            fresh();
+            gc_achv_jojo_won(&S, j, 1, false);
+            int moved = 0;
+            for (int id = 18; id <= 23; id++) {
+                uint32_t h, n;
+                assert(gc_achv_progress_of(&S, id, &h, &n));
+                moved += h;
+            }
+            assert(moved == 1);
+        }
     }
 
-    /* counts of different challengers: 5, 10 and all 34 (the last gives a tier-3 shiny egg) */
+    /* counts of different challengers: 5, 10, 20 and all 34 (the last gives a tier-3 shiny egg) */
     fresh();
     for (int j = 0; j < GC_JOJO_COUNT; j++) {
         gc_achv_jojo_won(&S, j, 100 + j, false); /* a new run each time */
         eval(NULL);
         assert(gc_achv_unlocked(&S, 24) == (j + 1 >= 5));
         assert(gc_achv_unlocked(&S, 25) == (j + 1 >= 10));
+        assert(gc_achv_unlocked(&S, GC_ACHV_TWENTY_FACES) == (j + 1 >= 20));
         assert(gc_achv_unlocked(&S, 26) == (j + 1 >= GC_JOJO_COUNT));
         assert(!gc_achv_unlocked(&S, 27));
     }
@@ -117,6 +143,37 @@ int main(void)
     gc_achv_jojo_won(&S, 63, 1, false);                 /* an index the table does not have is refused: nothing recorded */
     gc_achv_jojo_won(&S, GC_JOJO_COUNT, 1, false);
     assert(S.achv.jojo_battles == 0 && S.achv.jojo_beaten == 0 && S.achv.jojo_beaten_hi == 0);
+
+    /* Twenty Faces: the line, the reward (one Premium voucher) and where it sits in the list */
+    {
+        fresh();
+        for (int j = 0; j < 20; j++) gc_achv_jojo_won(&S, j, 200 + j, false);
+        eval(NULL);
+        uint32_t h, n;
+        assert(gc_achv_progress_of(&S, GC_ACHV_TWENTY_FACES, &h, &n) && h == 20 && n == 20);
+        assert(S.voucher_counts[GC_VOUCHER_PREMIUM] == 1);
+    }
+
+    /* the list order: a permutation of the ids; the 34 "Defeat X" first in table order, then the other JoJo ones, then the rest by id */
+    {
+        int seen[GC_ACHV_COUNT] = {0};
+        for (int pos = 0; pos < GC_ACHV_COUNT; pos++) {
+            const int id = gc_achv_order(pos);
+            assert(id >= 0 && id < GC_ACHV_COUNT && !seen[id]);
+            seen[id] = 1;
+        }
+        assert(gc_achv_order(-1) == -1 && gc_achv_order(GC_ACHV_COUNT) == -1);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_order(j) == gc_achv_jojo_id(j));
+        /* the other JoJo ones: 17..25, Twenty Faces, 26..29 */
+        int pos = GC_JOJO_COUNT;
+        for (int id = 17; id <= 29; id++) {
+            assert(gc_achv_order(pos++) == id);
+            if (id == 25) assert(gc_achv_order(pos++) == GC_ACHV_TWENTY_FACES);
+        }
+        /* everything else in id order, from the runs */
+        for (int id = 30; id < GC_ACHV_JOJO2_FIRST; id++) assert(gc_achv_order(pos++) == id);
+        assert(pos == GC_ACHV_COUNT);
+    }
 
     /* three in one run; the count belongs to a run */
     fresh();

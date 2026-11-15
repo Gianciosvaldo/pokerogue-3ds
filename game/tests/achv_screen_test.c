@@ -104,6 +104,8 @@ static bool has_text(int screen, const char* needle) {
   return false;
 }
 static void press(ui_button b) { g_top->input(g_top, b); }
+/* the achievement the list shows at a position (gc_achv_order) */
+static const gc_achv_def* D(int pos) { return &gc_achv_defs[gc_achv_order(pos)]; }
 
 int main(void) {
   gc_system_init_defaults(&S);
@@ -118,34 +120,34 @@ int main(void) {
   snprintf(zero_of, sizeof zero_of, "0/%d", GC_ACHV_COUNT);
   snprintf(three_of, sizeof three_of, "3/%d", GC_ACHV_COUNT);
   CHECK(has_text(1, "Achievements") && has_text(1, zero_of), "title and count");
-  CHECK(has_text(1, gc_achv_defs[0].name) && has_text(1, gc_achv_defs[6].name), "first seven rows");
-  CHECK(!has_text(1, gc_achv_defs[7].name), "the eighth is on the next page");
+  CHECK(has_text(1, D(0)->name) && has_text(1, D(6)->name), "first seven rows");
+  CHECK(!has_text(1, D(7)->name), "the eighth is on the next page");
   CHECK(has_text(1, "1 Egg Voucher"), "the reward of a row");
 
   /* every achievement can be reached one step at a time, and the top screen shows it in full */
   for (int i = 0; i < GC_ACHV_COUNT; i++) {
     draw(0);
-    CHECK(has_text(0, gc_achv_defs[i].name), "top shows %s", gc_achv_defs[i].name);
-    CHECK(has_text(0, gc_achv_defs[i].desc), "top shows what %d asks", i);
-    CHECK(has_text(0, gc_achv_reward_name(&gc_achv_defs[i])), "top shows the reward of %d", i);
+    CHECK(has_text(0, D(i)->name), "top shows %s", D(i)->name);
+    CHECK(has_text(0, D(i)->desc), "top shows what %d asks", i);
+    CHECK(has_text(0, gc_achv_reward_name(D(i))), "top shows the reward of %d", i);
     draw(1);
-    CHECK(has_text(1, gc_achv_defs[i].name), "row %d is on the page", i);
+    CHECK(has_text(1, D(i)->name), "row %d is on the page", i);
     if (i < GC_ACHV_COUNT - 1) press(BTN_DOWN);
   }
   press(BTN_DOWN); /* the last one stays */
   draw(0);
-  CHECK(has_text(0, gc_achv_defs[GC_ACHV_COUNT - 1].name), "the cursor stops at the last");
+  CHECK(has_text(0, D(GC_ACHV_COUNT - 1)->name), "the cursor stops at the last");
   for (int i = 0; i < GC_ACHV_COUNT + 3; i++) press(BTN_UP);
   draw(0);
-  CHECK(has_text(0, gc_achv_defs[0].name), "and at the first");
+  CHECK(has_text(0, D(0)->name), "and at the first");
 
   /* paging */
   press(BTN_RIGHT);
   draw(0);
-  CHECK(has_text(0, gc_achv_defs[7].name), "right pages by seven");
+  CHECK(has_text(0, D(7)->name), "right pages by seven");
   press(BTN_LEFT);
   draw(0);
-  CHECK(has_text(0, gc_achv_defs[0].name), "left pages back");
+  CHECK(has_text(0, D(0)->name), "left pages back");
 
   /* states: a plain one says nothing on its row, a counting one how far it is, a finished one "Done" */
   gc_achv_jojo_won(&S, GC_JOJO_KARS, 1, true);
@@ -154,7 +156,9 @@ int main(void) {
   draw(1);
   CHECK(has_text(1, "Done"), "a finished one");
   CHECK(has_text(1, "2/3") == false, "the Pillar Men set is not on the first page");
-  for (int i = 0; i < 17; i++) press(BTN_DOWN);
+  for (int i = 0; i < GC_JOJO_COUNT; i++) press(BTN_DOWN);   /* past the 34 "Defeat X": the Pillar Men set is the first of the other JoJo ones */
+  draw(0);
+  CHECK(has_text(0, gc_achv_defs[17].name), "the Pillar Men set follows the 34 characters");
   draw(1);
   CHECK(has_text(1, "2/3"), "the Pillar Men set has 2 of 3");
   CHECK(has_text(1, three_of), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
