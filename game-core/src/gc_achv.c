@@ -129,13 +129,18 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
 #undef TR
 #undef FB
 
-static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
-static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
-static const uint32_t SET_P3 = 1u << GC_JOJO_JOTARO | 1u << GC_JOJO_DIO | 1u << GC_JOJO_POLNAREFF;
-static const uint32_t SET_P4 = 1u << GC_JOJO_KOICHI | 1u << GC_JOJO_KIRA;
-static const uint32_t SET_P5 = 1u << GC_JOJO_DIAVOLO | 1u << GC_JOJO_MISTA | 1u << GC_JOJO_RISOTTO;
-static const uint32_t SET_P6 = 1u << GC_JOJO_JOLYNE | 1u << GC_JOJO_PUCCI;
-static const uint32_t SET_P7 = 1u << GC_JOJO_VALENTINE | 1u << GC_JOJO_GYRO;
+/* The beaten challengers are a 64-bit mask kept in two 32-bit fields of the profile (jojo_beaten, jojo_beaten_hi); a table longer than 64 cannot be held. */
+typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
+#define JB(i) (1ull << (i))
+static uint64_t beaten_mask(const gc_achv_progress *a) { return (uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32; }
+
+static const uint64_t SET_PILLAR = JB(GC_JOJO_KARS) | JB(GC_JOJO_WAMUU) | JB(GC_JOJO_ESIDISI);
+static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM);
+static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO_POLNAREFF);
+static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA);
+static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO);
+static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI);
+static const uint64_t SET_P7 = JB(GC_JOJO_VALENTINE) | JB(GC_JOJO_GYRO);
 
 /* ---- the trainers: TrainerType values, the groups of pr_enums.h (Gym Leaders 200.., Elite Four 300.., Champions 350..) ---- */
 #define GYM_FIRST TRAINER_TYPE_BROCK
@@ -200,7 +205,7 @@ static uint32_t regions_done(const gc_system *sys)
     return done;
 }
 
-static int popcount32(uint32_t v)
+static int popcount64(uint64_t v)
 {
     int n = 0;
     for (; v; v &= v - 1) n++;
@@ -211,7 +216,8 @@ void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean)
 {
     if (!sys || jojo < 0 || jojo >= GC_JOJO_COUNT) return;
     gc_achv_progress *a = &sys->achv;
-    a->jojo_beaten |= 1u << jojo;
+    if (jojo < 32) a->jojo_beaten |= 1u << jojo;
+    else a->jojo_beaten_hi |= 1u << (jojo - 32);
     if (a->jojo_battles < UINT32_MAX) a->jojo_battles++;
     if (clean && a->jojo_clean < UINT32_MAX) a->jojo_clean++;
     if (a->run_tag != run_tag || a->run_jojo == 0) {
@@ -315,18 +321,19 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
 {
     if (!sys || id < 0 || id >= GC_ACHV_COUNT) return false;
     const gc_achv_progress *a = &sys->achv;
+    const uint64_t jb = beaten_mask(a);
     uint32_t h, n;
     switch (id) {
-    case 17: h = (uint32_t)popcount32(a->jojo_beaten & SET_PILLAR); n = 3; break;
-    case 18: h = (uint32_t)popcount32(a->jojo_beaten & SET_P2); n = 5; break;
-    case 19: h = (uint32_t)popcount32(a->jojo_beaten & SET_P3); n = 3; break;
-    case 20: h = (uint32_t)popcount32(a->jojo_beaten & SET_P4); n = 2; break;
-    case 21: h = (uint32_t)popcount32(a->jojo_beaten & SET_P5); n = 3; break;
-    case 22: h = (uint32_t)popcount32(a->jojo_beaten & SET_P6); n = 2; break;
-    case 23: h = (uint32_t)popcount32(a->jojo_beaten & SET_P7); n = 2; break;
-    case 24: h = (uint32_t)popcount32(a->jojo_beaten); n = 5; break;
-    case 25: h = (uint32_t)popcount32(a->jojo_beaten); n = 10; break;
-    case 26: h = (uint32_t)popcount32(a->jojo_beaten); n = GC_JOJO_COUNT; break;
+    case 17: h = (uint32_t)popcount64(jb & SET_PILLAR); n = 3; break;
+    case 18: h = (uint32_t)popcount64(jb & SET_P2); n = 5; break;
+    case 19: h = (uint32_t)popcount64(jb & SET_P3); n = 3; break;
+    case 20: h = (uint32_t)popcount64(jb & SET_P4); n = 2; break;
+    case 21: h = (uint32_t)popcount64(jb & SET_P5); n = 3; break;
+    case 22: h = (uint32_t)popcount64(jb & SET_P6); n = 2; break;
+    case 23: h = (uint32_t)popcount64(jb & SET_P7); n = 2; break;
+    case 24: h = (uint32_t)popcount64(jb); n = 5; break;
+    case 25: h = (uint32_t)popcount64(jb); n = 10; break;
+    case 26: h = (uint32_t)popcount64(jb); n = GC_JOJO_COUNT; break;
     case 27: h = a->best_run_jojo; n = 3; break;
     case 28: h = a->jojo_battles; n = 100; break;
     case 30: h = sys->stats.classic_wins; n = 1; break;
@@ -416,7 +423,7 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
 static bool met(const gc_system *sys, int id)
 {
     const gc_achv_progress *a = &sys->achv;
-    if (id < GC_JOJO_COUNT) return (a->jojo_beaten >> id & 1u) != 0;
+    if (id < GC_JOJO_COUNT) return (beaten_mask(a) >> id & 1ull) != 0;
     if (id == 29) return a->jojo_clean > 0;
     if (id == 65) return (a->hatch_feats & GC_HATCH_EPIC) != 0;
     if (id == 66) return (a->hatch_feats & GC_HATCH_LEGENDARY) != 0;

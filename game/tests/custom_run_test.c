@@ -2263,7 +2263,9 @@ static void test_jojo(void) {
   printf("%d battles over %d custom runs, each the table's team, identical across loads\n", total, JOJO_SEEDS);
 }
 
-/* the overlay's JoJo block: a file made before it (version 1) still loads, a damaged block refuses */
+/* the overlay's JoJo block: a file made before it (version 1) still loads, so does a version 2 one (32-bit dealt mask), a damaged block refuses.
+ * Version 3's block: rng state 8 | dealt mask 8 | fights 1 | live 1 | wave 2 = 20 bytes. */
+enum { JB_RNG = 0, JB_USED = 8, JB_FIGHTS = 16, JB_LIVE = 17, JB_LEN = 20 };
 static void jojo_edit_slot(int mode) {
   char name[24];
   snprintf(name, sizeof name, CR_FILE_PREFIX "%d", slot_used);
@@ -2275,18 +2277,29 @@ static void jojo_edit_slot(int mode) {
   uint8_t* f = (uint8_t*)raw;
   const uint32_t ov_len = (uint32_t)f[8] | (uint32_t)f[9] << 8 | (uint32_t)f[10] << 16 | (uint32_t)f[11] << 24;
   uint8_t* ov = f + 16;
+  CHECK(ov[0] == 3, "a file is written as version 3 (%d)", ov[0]);
   const size_t at = 26 + 32 + 4u * ov[26 + 2] + 4u * ov[26 + 3];   /* after the schedule: n_frozen and n_windows are its 3rd and 4th bytes */
   if (mode == 1) {
     /* version 1: no JoJo block */
-    memmove(ov + at, ov + at + 16, len - 16 - at - 16);
+    memmove(ov + at, ov + at + JB_LEN, len - 16 - at - JB_LEN);
     ov[0] = 1;
-    const uint32_t n = ov_len - 16;
+    const uint32_t n = ov_len - JB_LEN;
     f[8] = (uint8_t)n; f[9] = (uint8_t)(n >> 8); f[10] = (uint8_t)(n >> 16); f[11] = (uint8_t)(n >> 24);
-    CHECK(save_write(name, raw, len - 16) == SAVE_OK, "the version 1 file is written");
+    CHECK(save_write(name, raw, len - JB_LEN) == SAVE_OK, "the version 1 file is written");
+  } else if (mode == 5) {
+    /* version 2: a 32-bit dealt mask (characters 0 and 2 dealt, fights 2); the high half of the mask is not there */
+    ov[at + JB_USED] = 5;
+    ov[at + JB_FIGHTS] = 2;
+    memmove(ov + at + JB_USED + 4, ov + at + JB_USED + 8, len - 16 - (at + JB_USED + 8));
+    ov[0] = 2;
+    const uint32_t n = ov_len - 4;
+    f[8] = (uint8_t)n; f[9] = (uint8_t)(n >> 8); f[10] = (uint8_t)(n >> 16); f[11] = (uint8_t)(n >> 24);
+    CHECK(save_write(name, raw, len - 4) == SAVE_OK, "the version 2 file is written");
   } else {
-    if (mode == 2) ov[at + 8 + 2] = 0x20;   /* a character the table does not have is marked dealt: used bit 21 */
-    if (mode == 3) ov[at + 8 + 4 + 1] = 5;  /* a battle against character 5 that was never dealt */
-    if (mode == 4) ov[at + 8 + 4 + 1] = 200; /* a battle against a character the table does not have */
+    if (mode == 2) ov[at + JB_USED + 2] = 0x20;   /* a character the table does not have is marked dealt: used bit 21 */
+    if (mode == 3) ov[at + JB_LIVE] = 6;          /* a battle against character 5 that was never dealt (live is the index + 1) */
+    if (mode == 4) ov[at + JB_LIVE] = 200;        /* a battle against a character the table does not have */
+    if (mode == 6) { ov[at + JB_USED + 4] = 2; ov[at + JB_FIGHTS] = 1; }   /* a mask bit in the high half (character 33) the table does not have */
     CHECK(save_write(name, raw, len) == SAVE_OK, "the damaged file is written");
   }
   free(raw);
@@ -2313,7 +2326,27 @@ static void test_jojo_overlay(void) {
   bot.save_every = 1;
   CHECK(run_until(20000) == STEP_STOPPED, "the resumed run goes on");
   end_run(GC_SCREEN_GAME_OVER, true);
-  for (int mode = 2; mode <= 4; mode++) {
+  /* a version 2 file (32-bit dealt mask) loads with the same characters dealt */
+  sd_new();
+  CHECK(new_run("jojo-overlay", true, 100), "the run starts");
+  bot.heal = true;
+  bot.save_every = 1;
+  bot.stop_wave = 3;
+  CHECK(run_until(20000) == STEP_STOPPED, "wave 3");
+  jojo_edit_slot(5);
+  CHECK(resume_run(slot_used, why) == RSV_OK, "a version 2 file loads: %s", why);
+  {
+    cr_view v;
+    cr_view_get(&v);
+    CHECK(v.jojo.used == 5 && v.jojo.fights == 2 && v.jojo_live == 0, "with the same characters dealt (%llx, %d)", (unsigned long long)v.jojo.used, v.jojo.fights);
+  }
+  bot.heal = true;
+  bot.stop_wave = 12;
+  bot.save_every = 1;
+  CHECK(run_until(20000) == STEP_STOPPED, "the resumed run goes on");
+  end_run(GC_SCREEN_GAME_OVER, true);
+  for (int mode = 2; mode <= 6; mode++) {
+    if (mode == 5) continue;   /* the version 2 file above */
     sd_new();
     CHECK(new_run("jojo-overlay", true, 100), "the run starts");
     bot.heal = true;

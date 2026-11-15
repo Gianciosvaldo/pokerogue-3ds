@@ -20,6 +20,7 @@
 #include "cc/model.h"
 
 #define CC_JOJO_P_PERCENT 25u   /* chance per eligible wave that has an undealt character in its biome */
+#define CC_JOJO_MAX_CHARS 64   /* the roll state is a 64-bit mask of dealt characters: the table can never have more */
 #define CC_JOJO_MAX_MEMBERS 6
 #define CC_JOJO_MAX_ITEMS 5
 #define CC_JOJO_NONE (-1)
@@ -57,7 +58,7 @@ extern const unsigned cc_jojo_count;
 /* The roll state of one run. Small and plain, so the adapter can persist it as is. */
 typedef struct {
     uint64_t rng_state;         /* the JoJo stream (cc_rng_v1: SplitMix64) */
-    uint32_t used;              /* bit i: character i was dealt this run */
+    uint64_t used;              /* bit i: character i was dealt this run (at most CC_JOJO_MAX_CHARS characters) */
     uint8_t fights;             /* characters dealt this run (the number of bits in `used`) */
 } cc_jojo_state;
 
@@ -73,7 +74,7 @@ cc_status cc_jojo_validate(const cc_jojo_state *s);
  * undealt characters of the biome in table order. A NULL or invalid state returns CC_JOJO_NONE and changes nothing. */
 int cc_jojo_roll(cc_jojo_state *s, int biome);
 
-/* The same two on a table the caller passes (count at most 32): the tests use small tables with several characters in one biome. */
+/* The same two on a table the caller passes (count at most CC_JOJO_MAX_CHARS): the tests use small tables with several characters in one biome. */
 cc_status cc_jojo_validate_in(const cc_jojo_state *s, unsigned count);
 int cc_jojo_roll_in(cc_jojo_state *s, const cc_jojo_char *chars, unsigned count, int biome);
 

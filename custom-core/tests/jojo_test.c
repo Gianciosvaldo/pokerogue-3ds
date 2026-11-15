@@ -216,6 +216,72 @@ static void test_validate(void)
     CHECK(cc_rng_v1_next(&a) != cc_rng_v1_next(&other));
 }
 
+static void test_wide_table(void)
+{
+    /* more than 32 characters: the mask is 64 bits, so a table of 40 in one biome is dealt completely, nobody twice */
+    cc_jojo_char big[64];
+    memset(big, 0, sizeof big);
+    for (unsigned i = 0; i < 64; i++) big[i].biome = i < 40 ? 7 : 5;
+    for (unsigned seed = 0; seed < 50; seed++) {
+        cc_jojo_state s;
+        cc_jojo_start(&s, seed);
+        uint64_t seen = 0;
+        unsigned dealt = 0;
+        for (int w = 0; w < 2000 && dealt < 40; w++) {
+            const int r = cc_jojo_roll_in(&s, big, 40, 7);
+            if (r == CC_JOJO_NONE) continue;
+            CHECK(r >= 0 && r < 40);
+            CHECK(!(seen >> r & 1ull));
+            seen |= 1ull << r;
+            dealt++;
+            CHECK_EQ(s.fights, dealt);
+            CHECK(s.used == seen);
+            CHECK_STATUS(cc_jojo_validate_in(&s, 40), CC_OK);
+        }
+        CHECK_EQ(dealt, 40u);
+        CHECK(s.used == (1ull << 40) - 1);
+        CHECK_EQ(cc_jojo_roll_in(&s, big, 40, 7), CC_JOJO_NONE);   /* everybody is dealt: nothing left, nothing drawn */
+    }
+    /* the pick reaches the characters of the high half (indexes 32..39) */
+    unsigned high = 0;
+    for (unsigned seed = 0; seed < 400; seed++) {
+        cc_jojo_state s;
+        cc_jojo_start(&s, seed);
+        s.used = (1ull << 32) - 1;                            /* the low half is dealt already */
+        s.fights = 32;
+        const int r = cc_jojo_roll_in(&s, big, 40, 7);
+        if (r != CC_JOJO_NONE) {
+            CHECK(r >= 32 && r < 40);
+            CHECK_EQ(s.fights, 33u);
+            high++;
+        }
+    }
+    CHECK(high > 50);
+    /* the last slot, index 63, and the validation at the limits */
+    cc_jojo_state s;
+    cc_jojo_start(&s, 1);
+    s.used = 1ull << 63;
+    s.fights = 1;
+    CHECK_STATUS(cc_jojo_validate_in(&s, 64), CC_OK);
+    CHECK_STATUS(cc_jojo_validate_in(&s, 63), CC_E_RANGE);     /* a character a 63-character table does not have */
+    CHECK_STATUS(cc_jojo_validate_in(&s, 65), CC_E_RANGE);     /* a table the mask cannot hold */
+    CHECK_STATUS(cc_jojo_validate_in(&s, 40), CC_E_RANGE);
+    s.used = 1ull << 40;
+    CHECK_STATUS(cc_jojo_validate_in(&s, 40), CC_E_RANGE);     /* index 40 of a 40-character table */
+    CHECK_STATUS(cc_jojo_validate_in(&s, 41), CC_OK);
+    s.fights = 2;
+    CHECK_STATUS(cc_jojo_validate_in(&s, 41), CC_E_CONSISTENCY);
+    /* a table of 65 deals nobody and is left alone */
+    cc_jojo_state c;
+    cc_jojo_start(&c, 9);
+    cc_jojo_state keep = c;
+    cc_jojo_char huge[65];
+    memset(huge, 0, sizeof huge);
+    for (unsigned i = 0; i < 65; i++) huge[i].biome = 7;
+    for (int i = 0; i < 50; i++) CHECK_EQ(cc_jojo_roll_in(&c, huge, 65, 7), CC_JOJO_NONE);
+    CHECK(same(&c, &keep));
+}
+
 int main(void)
 {
     test_table();
@@ -223,5 +289,6 @@ int main(void)
     test_roll_small();
     test_rules();
     test_validate();
+    test_wide_table();
     return cc_summary("jojo_test");
 }
