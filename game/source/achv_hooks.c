@@ -88,7 +88,7 @@ static bool evaluate(gc_system* sys, const gc_run* run)
   return fresh.n > 0;
 }
 
-bool ach_on_screen(const gc_run* run, int kind, int jojo, bool custom)
+bool ach_on_screen(const gc_run* run, int kind, int jojo, bool bizarre)
 {
   if (!run || !run->sys) return false;
   gc_system* sys = run->sys;
@@ -127,7 +127,7 @@ bool ach_on_screen(const gc_run* run, int kind, int jojo, bool custom)
       if (all) feats |= GC_FEAT_SIX_UNEVOLVED;
       if (!H.loaded && bits(H.fielded) == 1) feats |= GC_FEAT_SOLO;
       if (!H.loaded && H.balls == 0) feats |= GC_FEAT_NO_BALL;
-      gc_achv_run_won(sys, custom, feats);
+      gc_achv_run_won(sys, bizarre, feats);
     }
     evaluate(sys, run);
   }

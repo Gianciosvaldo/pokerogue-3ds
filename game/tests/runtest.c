@@ -2090,6 +2090,7 @@ int main(int argc, char** argv) {
       }
     }
     cfg.custom = true;
+    cfg.bizarre = true;
     cfg.save = true;
     cfg.slot = 0;
     gc_system* sys = sysd_get();

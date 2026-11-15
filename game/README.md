@@ -128,14 +128,14 @@ history is no longer lost when the app closes (C04): [`custom_store.c`](source/c
 last turns, the id counters and the transaction ledger in one file, `save/custom.sav`, written once at the start of a run (the run's
 durable uid) and once at its end (the report; before the run's slot is cleared). A file that can't be used (damaged, or from another
 version) is never overwritten or removed: the result screen says why and nothing is stored until the player removes it. An ordinary run stores
-the report with an unknown cause and inserts no Nemesis; a Custom Run (C10, below) can name the finishing enemy
+the report with an unknown cause and inserts no Nemesis; a Classic or Classic (Bizarre) run (C10, below) can name the finishing enemy
 (contracts sections 2.10 and 2.16).
 
 The title screen has a **Nemesis Radar** (custom content, task C06): [`radar_screen.c`](source/radar_screen.c) lists the remembered enemies
 of `custom.sav`, newest first, with a free Scout page for each (what the record remembers, "not recorded" for the rest). It is a read-only
-look: it writes nothing, starts no rematch, spends nothing and says that rematches are offered during a Custom Run (C10). Only a custom
-run creates records (only the ordinary wild Pokemon whose attack finished the team: bosses, trainers and fixed encounters are not kept, and the
-result screen of a Custom Run's defeat says "No enemy remembered: ..." with the reason, `cr_not_remembered_note`), so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
+look: it writes nothing, starts no rematch, spends nothing and says that Classic and Classic (Bizarre) runs offer rematches (C10). Only those
+runs create records (only the ordinary wild Pokemon whose attack finished the team: bosses, trainers and fixed encounters are not kept, and the
+result screen of such a run's defeat says "No enemy remembered: ..." with the reason, `cr_not_remembered_note`), so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
 records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
 
 There is a **capsule machine preview** (custom content, task C07): [`capsule_screen.c`](source/capsule_screen.c) over the pure
@@ -155,14 +155,15 @@ the source's display order and records it as shown. Opening the machine first fi
 restart left unshown, once; neither pulls again. The result is eggs only: no species is marked caught, nothing hatches. A held button acts once;
 no touch (same reason as the Radar). Contracts section 2.15.
 
-There are **Custom Run** and **Custom Load** on the title (custom content, task C10): a Classic run with the optional hooks of game-core's
+Every **Classic** and **Classic (Bizarre)** run is a custom run (custom content, task C10; the Mode row of the run settings picks one, Bizarre after a Classic
+win: it adds the JoJo trainers and the Pillar Men, plain Classic has the rematches only; Endless and Endless (Spliced) are ordinary runs). A custom run is a Classic run with the optional hooks of game-core's
 [`gc/custom.h`](../game-core/include/gc/custom.h) installed and the controller [`custom_run.c`](source/custom_run.c) behind them, saved in its own slot list
 (`csession_<n>.sav`: the run bytes and the run's custom state in one file, never readable as an ordinary session). At the windows of the frozen
 schedule (waves 27, 77, 127 and 177) it may ask, before any combat, whether to fight a remembered Nemesis; Yes builds that enemy through game-core's
 own enemy construction at the wave's ordinary level (no scaling, boosts, boss segments or change to what the player carries), No gives the ordinary
 encounter. A win pays one regular voucher, once. A verified wild finisher from a double battle can be remembered on its own; only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
-when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used the custom entries say so and start
-nothing. Contracts section 2.16.
+when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used a Bizarre run refuses to start and says so; a Classic run starts as an ordinary
+run with a note that it has no rematches. Contracts section 2.16.
 
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a

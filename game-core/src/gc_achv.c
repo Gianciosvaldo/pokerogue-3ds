@@ -52,8 +52,8 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Ten Victories", "Win 10 Classic runs.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
     {"Twenty-Five Victories", "Win 25 Classic runs.", RUN, EGG(3)},
     {"Fifty Victories", "Win 50 Classic runs.", RUN, SHINY(2)},
-    {"Custom Victor", "Win a Custom run.", RUN, V(GC_VOUCHER_PLUS, 1)},
-    {"Custom Veteran", "Win 10 Custom runs.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Bizarre Victor", "Win a Classic (Bizarre) run.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    {"Bizarre Veteran", "Win 10 Classic (Bizarre) runs.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
     {"Wave 50", "Reach wave 50 in a run.", RUN, V(GC_VOUCHER_REGULAR, 2)},
     {"Wave 100", "Reach wave 100 in a run.", RUN, V(GC_VOUCHER_PLUS, 1)},
     {"Wave 150", "Reach wave 150 in a run.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
@@ -304,10 +304,10 @@ void gc_achv_football_won(gc_system *sys, unsigned wins, unsigned titles, unsign
     add_sat(&sys->achv.fb_blowouts, blowouts);
 }
 
-void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats)
+void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats)
 {
     if (!sys) return;
-    if (custom && sys->achv.custom_wins < UINT32_MAX) sys->achv.custom_wins++;
+    if (bizarre && sys->achv.custom_wins < UINT32_MAX) sys->achv.custom_wins++;
     sys->achv.feats |= feats;
 }
 

@@ -469,3 +469,8 @@ bool gc_system_repair_unlocks(gc_system *sys) {
     sys->unlocks.endless_mode = sys->unlocks.mini_black_hole = true;
     return true;
 }
+
+bool gc_system_bizarre_unlocked(const gc_system *sys) {
+    if (!sys) return false;
+    return sys->stats.classic_wins > 0 || sys->achievement_flags[GC_ACHV_CLASSIC_VICTORY] || sys->unlocks.endless_mode;
+}

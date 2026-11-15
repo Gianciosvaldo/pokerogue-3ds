@@ -502,6 +502,7 @@ static const gc_starter* team3(void) {
 }
 
 /* a new run: custom (the controller's hooks) or ordinary. false: the custom run could not be started */
+static bool g_bizarre = true;   /* new_run's controller is a Bizarre run's unless a test turns it off (the plain Classic run) */
 static bool new_run(const char* seed, bool custom, int level) {
   memset(R, 0, sizeof *R);
   drain_no = 0;
@@ -516,7 +517,7 @@ static bool new_run(const char* seed, bool custom, int level) {
   gc_run_new(R, GAME_MODES_CLASSIC, seed, 7);
   R->sys = sysd_get();
   if (custom) {
-    if (!cr_begin(R, 7)) return false;
+    if (!cr_begin(R, 7, g_bizarre)) return false;   /* the Bizarre run is what most of these tests exercise (test_classic_plain turns it off) */
   } else {
     cr_end();
   }
@@ -935,6 +936,27 @@ static void test_rematch_real(void) {
     CHECK(e->n_moves == nem.n_moves && !memcmp(e->moves, nem.moves, nem.n_moves * 2u), "the record's moves, none replaced");
     CHECK(e->level == ctl.enemy27.level, "the ordinary generated level (%d, control %d)", e->level, ctl.enemy27.level);
     CHECK(e->wave == 27, "wave 27");
+
+    /* the same offer in a plain Classic run (no JoJo trainers, so the waves before 27 may differ from the Bizarre run's: only the offer and
+     * the enemy's identity are compared) */
+    if (shown == 1) {
+      restore(&base2);
+      reboot_io();
+      reboot();
+      g_bizarre = false;
+      rm_out cls;
+      rm_play(&cfg, &cls);
+      g_bizarre = true;
+      CHECK(cls.offered && cls.rematch && cls.stats.offers == 1 && cls.stats.accepts == 1 && cls.stats.built == 1 && cls.stats.refused == 0,
+            "a plain Classic run is offered the rematch too, accepted and built (%d %u %u %u %u)", cls.offered, cls.stats.offers, cls.stats.accepts,
+            cls.stats.built, cls.stats.refused);
+      CHECK(cls.enemy27.species == nem.species && cls.enemy27.form == nem.form && cls.end == STEP_STOPPED && cls.wave_end == 29,
+            "its enemy is the record's and the run goes on to wave 29 (%d/%d, %d, %d)", cls.enemy27.species, cls.enemy27.form, (int)cls.end,
+            cls.wave_end);
+      restore(&base2);
+      reboot_io();
+      reboot();
+    }
 
     /* decline: the ordinary encounter, as the control had it */
     restore(&base2);
@@ -2099,6 +2121,56 @@ static void test_pillar(void) {
   end_run(GC_SCREEN_GAME_OVER, true);
 }
 
+/* A plain Classic run (no Bizarre content): the rematches and the Radar only. The roll is never asked, the Pillar Men are not offered, no JoJo
+ * trainer is met over whole runs, and the choice is the run's: saved in its file, read back by the slot list and by a load. */
+static void test_classic_plain(void) {
+  g_bizarre = false;
+  CHECK(new_run("classic-plain", true, 100), "a plain Classic run starts");
+  cr_view v;
+  cr_view_get(&v);
+  CHECK(cr_active() && !cr_bizarre() && v.active && !v.bizarre, "its controller is on and it is not a Bizarre run");
+  const gc_custom_hooks* h = cr_hooks();
+  CHECK(h->pillar && !h->pillar(NULL, R, -1, NULL), "the Pillar Men are not offered");
+  gc_custom_team t;
+  memset(&t, 0, sizeof t);
+  CHECK(!h->pillar(NULL, R, 0, &t), "and no Pillar Man hands in a team");
+  const gc_custom_encounter e = {.wave = 5, .biome = 14 /* Desert: Gyro's */, .kind = GC_ENC_TRAINER, .flags = GC_ENF_RANDOM_TRAINER, .level = 20, .species = 1};
+  for (int i = 0; i < 400; i++) CHECK(!h->trainer(NULL, R, &e, &t), "an eligible trainer wave never becomes a JoJo trainer (%d)", i);
+  CHECK(cr_stats_get()->jojo_waves == 0, "the roll was not even asked");
+  cr_view_get(&v);
+  CHECK(v.jojo.used == 0 && v.jojo.fights == 0 && v.jojo_live == 0, "nobody was dealt");
+  /* saved, listed and loaded as what it is */
+  R->battle_type = BATTLE_TYPE_WILD;
+  CHECK(cr_save(slot_used, R) == RSV_SAVED, "it saves");
+  rsv_info info;
+  CHECK(cr_inspect(slot_used, &info) == RSV_OK && !info.bizarre, "the slot list reads it as a plain Classic run");
+  char why[RSV_WHY_LEN];
+  CHECK(resume_run(slot_used, why) == RSV_OK, "it loads: %s", why);
+  CHECK(cr_active() && !cr_bizarre(), "and is still a plain Classic run");
+  CHECK(h->pillar && !h->pillar(NULL, R, -1, NULL), "with no Pillar Men");
+  end_run(GC_SCREEN_GAME_OVER, true);
+  /* whole runs: the same seeds as the Bizarre ones, no JoJo trainer ever */
+  cr_stats_reset();
+  int foes = 0;
+  for (int s = 0; s < 6; s++) {
+    char seed[24];
+    snprintf(seed, sizeof seed, "jojo-run-%d", s);   /* seeds on which the Bizarre runs below do meet characters */
+    jojo_play(seed, s, false, true, 60);
+    foes += J.n;
+    CHECK(!cr_bizarre(), "seed %d: still a plain Classic run", s);
+    end_run(GC_SCREEN_GAME_OVER, true);
+  }
+  CHECK(foes == 0 && cr_stats_get()->jojo_waves == 0, "plain Classic runs met %d JoJo trainers and asked the roll %u times", foes, (unsigned)cr_stats_get()->jojo_waves);
+  /* a Bizarre run's choice survives a load too */
+  g_bizarre = true;
+  CHECK(new_run("classic-bizarre", true, 100), "a Bizarre run starts");
+  R->battle_type = BATTLE_TYPE_WILD;
+  CHECK(cr_save(slot_used, R) == RSV_SAVED && cr_inspect(slot_used, &info) == RSV_OK && info.bizarre, "the slot list reads it as a Bizarre run");
+  CHECK(resume_run(slot_used, why) == RSV_OK && cr_active() && cr_bizarre(), "and a load keeps it Bizarre");
+  end_run(GC_SCREEN_GAME_OVER, true);
+  printf("8b plain Classic runs: no JoJo trainers, no Pillar Men, the choice is saved: done\n");
+}
+
 #define JOJO_WAVES 100
 #define JOJO_SEEDS 30
 /* a character's team as game-core takes it, and the live roll over a real run */
@@ -2308,6 +2380,7 @@ int main(int argc, char** argv) {
   test_reward_crash();
   test_jojo();
   test_pillar();
+  test_classic_plain();
   test_jojo_overlay();
   test_not_remembered();
   printf("custom_run_test: %d checks, %d failed\n", checks, failed);
