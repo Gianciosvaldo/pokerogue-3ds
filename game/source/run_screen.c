@@ -1874,7 +1874,7 @@ static void screen_step(void) {
   /* achievements: a JoJo challenger beaten, a wave reached, a run won; what they unlock is told before the screen is handled */
   {
     const cc_jojo_char* foe = G.cfg.custom ? cr_jojo_foe(&G.run) : NULL;
-    if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1, G.cfg.custom) && G.cfg.save_sys) G.cfg.save_sys();
+    if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1, G.cfg.custom && cr_bizarre()) && G.cfg.save_sys) G.cfg.save_sys();
     const char* ach = ach_take_message();
     if (ach) {
       say(ach);
@@ -1981,7 +1981,7 @@ static bool new_run(bool from_black) {
   G.have_defeat = false;
   if (G.cfg.custom) {
     /* the run's identity, its schedule and the hooks, before the starters (the first wave is reported to them) */
-    if (!cr_begin(&G.run, G.cfg.entropy + (uint32_t)G.st.runs)) {
+    if (!cr_begin(&G.run, G.cfg.entropy + (uint32_t)G.st.runs, G.cfg.bizarre)) {
       G.st.stuck++;
       return false;
     }

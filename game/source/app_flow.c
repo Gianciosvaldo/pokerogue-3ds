@@ -38,7 +38,8 @@ static struct {
   int slot;                 /* the slot the run on screen is saved into */
   result_args result;
   const co_report* kept;    /* the report whose custom store write failed: tried once more when the result screen is left */
-  bool custom;              /* the run on screen (or about to start) is a custom one (csession_<n>, custom_run.h) */
+  bool custom;              /* the run on screen (or about to start) has the rematch overlay (csession_<n>, custom_run.h): Classic and Bizarre runs */
+  bool bizarre;             /* ... and it is a Classic (Bizarre) one: the JoJo trainers and the Pillar Men are on. Only read for a run about to start */
   bool kind[RSV_SLOTS];     /* what each slot of the list holds: true = a custom run (csession_<n>), false = an ordinary one */
   rset_values settings;     /* the run settings screen's last values */
   char note[CS_WHY_LEN + 64];
@@ -66,8 +67,9 @@ static rs_config run_config(int slot, bool fresh) {
     A.first_used = true;
   }
   c.custom = A.custom;
+  c.bizarre = A.custom && A.bizarre;
   c.ask_switch = true; /* upstream's default battle style (SWITCH): "Will you switch?" at a wild battle's start */
-  c.mode = A.custom ? GAME_MODES_CLASSIC : A.settings.mode;
+  c.mode = A.settings.mode;
   /* each run has its own randomness: the session's base, and when the player got here (frames since boot) */
   c.entropy = A.first.entropy ^ (A.runs_started * 0x9E3779B1u) ^ (ui_frame() * 2654435761u);
   A.runs_started++;
@@ -97,9 +99,10 @@ static const char* slot_file(int slot, bool custom, char out[24]) {
 }
 static const char* slot_file_of(int slot, char out[24]) { return slot_file(slot, A.kind[slot], out); }
 
-/* The five slots hold ordinary and custom runs alike (lorenzo, 2026-10-19: one Load Game, each run labelled Classic or Custom). A slot
- * shows its ordinary run, else its custom one; both only exist from before the lists were one, and then the ordinary run shows and the
- * custom one comes back once that is deleted. */
+/* The five slots hold ordinary and custom-file runs alike (lorenzo, 2026-10-19: one Load Game, each run labelled with its mode). A slot
+ * shows its ordinary run, else its custom-file one; both only exist from before the lists were one, and then the ordinary run shows and
+ * the custom-file one comes back once that is deleted. Since the Bizarre mode (2026-11-15) the custom file is what every new Classic and
+ * Bizarre run is saved in; the ordinary kind holds Endless runs and the Classic runs saved before that (no rematches for those). */
 static void look(void) {
   static rsv_info custom[RSV_SLOTS];
   rsv_inspect_all(A.info);
@@ -181,11 +184,20 @@ static void tell_custom_unusable(const char* why) {
 }
 
 static void new_run_in(int slot) {
+  char custom_note[CR_WHY_LEN + 64];
+  custom_note[0] = 0;
+  /* the first New Game of a session with a developer's team (rundriver.txt) is an ordinary run, as before the rematches were Classic's */
+  if (A.custom && !A.first_used && A.first.n_starters > 0) A.custom = A.bizarre = false;
   if (A.custom) {
     char why[CR_WHY_LEN];
     if (!cr_usable(why)) {
-      tell_custom_unusable(why);
-      return;
+      if (A.bizarre) { /* the Bizarre mode is the custom content: it does not start without its file */
+        tell_custom_unusable(why);
+        return;
+      }
+      /* a Classic run does not wait for the rematch file: it starts as an ordinary run, and says so */
+      A.custom = false;
+      snprintf(custom_note, sizeof custom_note, "No rematches in this run: the remembered-enemies file cannot be used.");
     }
   }
   /* the list never offers this: what can't be read is not overwritten */
@@ -200,13 +212,13 @@ static void new_run_in(int slot) {
   }
   /* an unreadable system file is not repaired or overwritten: the player starts with the defaults, and is told */
   char why[SYSD_WHY_LEN], notice[SYSD_WHY_LEN + 96];
-  const char* text = NULL;
+  const char* text = custom_note[0] ? custom_note : NULL;
   if (sysd_state(why) == SYSD_UNREADABLE) {
     snprintf(notice, sizeof notice, "%s The file is left as it is, and nothing is saved to it until it is removed.", why);
     text = notice;
   }
   const sh_events ev = {.on_start=on_starters_chosen,.on_exit=on_starters_exit,.arg=(void*)(long)slot,
-                        .mode=A.custom?GAME_MODES_CLASSIC:A.settings.mode};
+                        .mode=A.settings.mode};
   if (!sh_open(sysd_get(), text, &ev)) tell("There is no Pokemon to start with.");
 }
 
@@ -349,20 +361,23 @@ static void show_slots(slots_mode mode, int cursor) {
 
 /* ------------------------------------------------------------------ the title */
 
-/* The run settings' Start: Custom picks the kind of run the slot list starts; a custom file that cannot be used is said so, not guessed
- * around (the list opens all the same, and no custom run starts from it) */
+/* The run settings' Start: the Mode picks the kind of run the slot list starts. Classic and Classic (Bizarre) are runs with the rematch overlay
+ * (a Classic game mode underneath); Endless runs are ordinary. A custom file that cannot be used is said so for Bizarre, not guessed around
+ * (the list opens all the same, and no Bizarre run starts from it); a Classic run starts without rematches (new_run_in). */
 static void on_settings_start(const rset_values* v, void* arg) {
   (void)arg;
   A.settings = *v;
-  if(A.settings.custom)A.settings.mode=GAME_MODES_CLASSIC;
   const gc_system* sys=sysd_get();
+  if(A.settings.mode==RSET_MODE_BIZARRE&&!gc_system_bizarre_unlocked(sys))A.settings.mode=GAME_MODES_CLASSIC;
   if(A.settings.mode==GAME_MODES_ENDLESS&&(!sys||!sys->unlocks.endless_mode))A.settings.mode=GAME_MODES_CLASSIC;
   if(A.settings.mode==GAME_MODES_SPLICED_ENDLESS&&(!sys||!sys->unlocks.spliced_endless_mode))
     A.settings.mode=sys&&sys->unlocks.endless_mode?GAME_MODES_ENDLESS:GAME_MODES_CLASSIC;
-  A.custom = v->custom;
+  A.bizarre = A.settings.mode == RSET_MODE_BIZARRE;
+  if (A.bizarre) A.settings.mode = GAME_MODES_CLASSIC;   /* the run underneath is a Classic one */
+  A.custom = A.settings.mode == GAME_MODES_CLASSIC;
   show_slots(SLOTS_NEW, 0);
   char why[CR_WHY_LEN];
-  if (A.custom && !cr_usable(why)) tell_custom_unusable(why);
+  if (A.bizarre && !cr_usable(why)) tell_custom_unusable(why);
 }
 
 static void on_football_exit(void *arg) { (void)arg;show_title(); }
@@ -390,13 +405,13 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_NEW_GAME: {
       A.settings = rset_load(); /* as the screen last left them (B keeps a changed speed too) */
       const gc_system* sys=sysd_get();
-      const rset_args a = {.values=A.settings,.endless_unlocked=sys&&sys->unlocks.endless_mode,
+      const rset_args a = {.values=A.settings,.bizarre_unlocked=gc_system_bizarre_unlocked(sys),.endless_unlocked=sys&&sys->unlocks.endless_mode,
         .spliced_endless_unlocked=sys&&sys->unlocks.spliced_endless_mode,.on_start=on_settings_start};
       rset_open(&a);
       break;
     }
     case TITLE_LOAD_GAME:
-      A.custom = false;
+      A.custom = A.bizarre = false;
       show_slots(SLOTS_LOAD, 0);
       break;
     case TITLE_HISTORY:
@@ -508,7 +523,7 @@ static void show_capsule_preview(int n) {
 void app_debug_capsule(int n) { g_capsule_preview = n >= 1 && n <= CAP_MAX ? n : 0; }
 
 static void show_title(void) {
-  A.custom = false;
+  A.custom = A.bizarre = false;
   look();
   int last = rsv_last_slot();
   /* Continue needs a file in the slot it would load; a slot that is gone (cleared, deleted by hand) is forgotten. An
