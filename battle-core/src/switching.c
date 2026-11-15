@@ -8,6 +8,18 @@
 #include <math.h>
 #include <string.h>
 
+/* SummonPhase.summon: a player's Pokemon takes its field position as it is sent out in a double (setFieldPosition with no duration, so at once):
+ * slot 1 is RIGHT, slot 0 is CENTER when it is the only Pokemon of the party that can fight and LEFT otherwise. Presentation only, no rule reads
+ * it: the screen turns it into the single battle's layout or the two columns before the send-out. value = 1 for CENTER; id = 1 for "at the
+ * summon" (ToggleDoublePositionPhase's, id 0, takes 500 ms and is held to the end of the turn by the screen) */
+static void summon_position_event(pr_battle *bt, pr_engine *e, int side, int field)
+{
+    if (side != 0 || !bt->double_battle) return;
+    int allowed = 0;
+    for (int k = 0; k < bt->n_party[0]; k++) if (bt->party[0][k] && bt->party[0][k]->hp > 0) allowed++;
+    pr_event_add(bt, e, PR_EV_FIELD_CENTER, side * 2 + field, -1, 1, field == 0 && allowed == 1 ? 1 : 0, NULL);
+}
+
 /* Proven stat/FieldEffect portion of SummonPhase.updateModifiers: discard
  * canonical orphans and clear FieldEffect virtual stacks before party recalc.
  * Other families remain in their existing lifecycle scopes. */
@@ -531,6 +543,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     update_proven_held_items(bt,side);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, in, false);
+    summon_position_event(bt, e, side, field);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, side * 2 + field, -1, 0, field, NULL);
 
     /* SummonPhase.onEnd */
@@ -773,6 +786,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     update_proven_held_items(bt,side);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, p, false);
+    summon_position_event(bt, e, side, field);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, b, -1, 0, field, NULL);
 
     /* onEnd */

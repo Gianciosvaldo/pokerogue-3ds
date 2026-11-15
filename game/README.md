@@ -128,14 +128,14 @@ history is no longer lost when the app closes (C04): [`custom_store.c`](source/c
 last turns, the id counters and the transaction ledger in one file, `save/custom.sav`, written once at the start of a run (the run's
 durable uid) and once at its end (the report; before the run's slot is cleared). A file that can't be used (damaged, or from another
 version) is never overwritten or removed: the result screen says why and nothing is stored until the player removes it. An ordinary run stores
-the report with an unknown cause and inserts no Nemesis; a Custom Run (C10, below) can name the finishing enemy
+the report with an unknown cause and inserts no Nemesis; a Classic or Classic (Bizarre) run (C10, below) can name the finishing enemy
 (contracts sections 2.10 and 2.16).
 
 The title screen has a **Nemesis Radar** (custom content, task C06): [`radar_screen.c`](source/radar_screen.c) lists the remembered enemies
 of `custom.sav`, newest first, with a free Scout page for each (what the record remembers, "not recorded" for the rest). It is a read-only
-look: it writes nothing, starts no rematch, spends nothing and says that rematches are offered during a Custom Run (C10). Only a custom
-run creates records (only the ordinary wild Pokemon whose attack finished the team: bosses, trainers and fixed encounters are not kept, and the
-result screen of a Custom Run's defeat says "No enemy remembered: ..." with the reason, `cr_not_remembered_note`), so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
+look: it writes nothing, starts no rematch, spends nothing and says that Classic and Classic (Bizarre) runs offer rematches (C10). Only those
+runs create records (only the ordinary wild Pokemon whose attack finished the team: bosses, trainers and fixed encounters are not kept, and the
+result screen of such a run's defeat says "No enemy remembered: ..." with the reason, `cr_not_remembered_note`), so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
 records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
 
 There is a **capsule machine preview** (custom content, task C07): [`capsule_screen.c`](source/capsule_screen.c) over the pure
@@ -155,14 +155,15 @@ the source's display order and records it as shown. Opening the machine first fi
 restart left unshown, once; neither pulls again. The result is eggs only: no species is marked caught, nothing hatches. A held button acts once;
 no touch (same reason as the Radar). Contracts section 2.15.
 
-There are **Custom Run** and **Custom Load** on the title (custom content, task C10): a Classic run with the optional hooks of game-core's
+Every **Classic** and **Classic (Bizarre)** run is a custom run (custom content, task C10; the Mode row of the run settings picks one, Bizarre after a Classic
+win: it adds the JoJo trainers and the Pillar Men, plain Classic has the rematches only; Endless and Endless (Spliced) are ordinary runs). A custom run is a Classic run with the optional hooks of game-core's
 [`gc/custom.h`](../game-core/include/gc/custom.h) installed and the controller [`custom_run.c`](source/custom_run.c) behind them, saved in its own slot list
 (`csession_<n>.sav`: the run bytes and the run's custom state in one file, never readable as an ordinary session). At the windows of the frozen
 schedule (waves 27, 77, 127 and 177) it may ask, before any combat, whether to fight a remembered Nemesis; Yes builds that enemy through game-core's
 own enemy construction at the wave's ordinary level (no scaling, boosts, boss segments or change to what the player carries), No gives the ordinary
 encounter. A win pays one regular voucher, once. A verified wild finisher from a double battle can be remembered on its own; only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
-when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used the custom entries say so and start
-nothing. Contracts section 2.16.
+when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used a Bizarre run refuses to start and says so; a Classic run starts as an ordinary
+run with a note that it has no rematches. Contracts section 2.16.
 
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
@@ -388,6 +389,16 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   this the layout was fixed at `bv_begin` (`setup.doubles`), so the ally stood on the lead with its box on the lead's: two Pokemon
   overlapping and one HP bar. `tests/final_boss_double_layout_test.c`, `tests/final_boss_double_events_test.c` (real battle-core
   wave-200 fights). Positions are transcribed from the pinned source, not seen on a screen or run against upstream.
+- A lone Pokemon of the player's in a double battle (lorenzo, 2026-11-15): when only one of the player's Pokemon is on the field and no
+  other can come in (the battle began that way, or the partner fainted with nobody on the bench), it stands at `FieldPosition.CENTER`
+  (0, 0) with the single battle's HP box, not on its column with the mini box. Upstream does this inside the faint (`FaintPhase` queues
+  `ToggleDoublePositionPhase(true)`, a 500 ms tween that also swaps party slots 0 and 1 when the survivor was in slot 1); lorenzo wants
+  it when the turn is over, so battle-core says where upstream moves it (`PR_EV_FIELD_CENTER`, presentation only: no state or RNG
+  changes; id 1 is `SummonPhase.summon`'s own `setFieldPosition`, before the send-out) and the converter holds the move to the end of
+  the batch (`BEV_PLAYER_CENTRE`). A partner coming back before the end cancels it; the way back to two columns is not held. A mid-turn
+  `BEV_FIELD_SWAP` is invisible while the pair is in two columns (`B.flipped`). `tests/lone_player_layout_test.c`,
+  `tests/lone_player_events_test.c`, and `runtest` (a double with one able Pokemon never asks a command in the columns). Not seen
+  on a console.
 - Timings: encounter slide 2000 ms, info boxes 1000 ms in and 500 ms out, HP bar
   `clamp(|dHP| x 5, 250, 5000)` ms, damage blink 6 x 100 ms, 20 ms per character, 1500 ms message
   wait, fades 250 / 100 / 250 ms.

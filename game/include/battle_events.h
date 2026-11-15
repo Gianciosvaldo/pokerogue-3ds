@@ -49,6 +49,9 @@ typedef struct {
                                                * in the same events): NULL = none */
   int n_enemy_party;
   const pr_pokemon* sent[4];                  /* out: the last Pokemon sent out on each side (NULL: none, or not found) */
+  bool centred;                               /* the screen shows the player's side in the centre column, the single battle's layout (bv_player_centred):
+                                               * a double in which only one of the player's Pokemon can fight. In and out: the events leave it as they
+                                               * make it (PR_EV_FIELD_CENTER -> BEV_PLAYER_CENTRE) */
 } be_view;
 
 /* Converts battle-core events (a turn's, or the rest of one after a switch) into screen events, at most

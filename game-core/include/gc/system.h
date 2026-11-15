@@ -92,7 +92,7 @@ typedef struct {
     uint32_t run_tag;       /* the run run_jojo counts in (a hash of its seed) */
     uint8_t run_jojo;       /* challengers beaten in that run */
     uint8_t best_run_jojo;  /* the most in one run */
-    uint32_t custom_wins;   /* Custom runs won */
+    uint32_t custom_wins;   /* Classic (Bizarre) runs won (called Custom runs before the mode was named; the saved field keeps its name) */
     uint32_t best_wave;     /* the highest wave any run reached */
     uint8_t feats;          /* GC_FEAT_* bits: won a run with that feat at least once */
     uint8_t hatch_feats;    /* GC_HATCH_* bits: hatched an Epic egg / a Legendary egg / a shiny from an egg */
@@ -169,6 +169,10 @@ bool gc_system_has_achievement(const gc_system *sys, int achievement_id);
 bool gc_system_unlock_achievement(gc_system *sys, int achievement_id);
 void gc_system_add_classic_win(gc_system *sys, uint16_t species_id);
 bool gc_system_repair_unlocks(gc_system *sys);   /* Endless + Mini Black Hole from a recorded Classic win (older-build profiles); true if it changed anything */
+/* The port's own Classic (Bizarre) mode (JoJo trainers and the Pillar Men on top of Classic): open once a Classic run has been won, as Endless
+ * is. It reads the recorded win (or the Endless unlock) and keeps no flag of its own, so no profile needs repairing and the save format is
+ * untouched. */
+bool gc_system_bizarre_unlocked(const gc_system *sys);
 uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id);
 
 /* SD Card System Data Serializer */

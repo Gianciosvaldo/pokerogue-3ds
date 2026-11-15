@@ -43,16 +43,17 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
        GC_JOJO_KOICHI, GC_JOJO_MISTA, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_VALENTINE, GC_JOJO_POLNAREFF, GC_JOJO_RISOTTO,
        GC_JOJO_STROHEIM, GC_JOJO_COUNT };
 
-/* A JoJo challenger (index in the order above) was beaten in a Custom run. `run_tag` names the run (any value that is the same for the
+/* A JoJo challenger (index in the order above) was beaten in a Bizarre run. `run_tag` names the run (any value that is the same for the
  * whole run and differs between runs), `clean` is true when none of the party fainted in the battle. */
 void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean);
 
 /* Group B, the runs: what the app tells at the end of a run. The wave is told whenever a run reaches one (only a new best is kept). A won run
- * is told once, after game-core has counted the Classic win (gc_classic_finish); `feats` are the GC_FEAT_* it was won with. A Custom win also
- * counts as a Classic win (a Custom run is a Classic run with the custom content on). */
+ * is told once, after game-core has counted the Classic win (gc_classic_finish); `feats` are the GC_FEAT_* it was won with. A Bizarre win also
+ * counts as a Classic win (a Classic (Bizarre) run is a Classic run with the JoJo trainers and the Pillar Men on). `bizarre` is true for that
+ * mode only: a plain Classic win counts for the Classic achievements alone (its counter keeps the old name custom_wins, which saves hold). */
 enum { GC_FEAT_SIX_UNEVOLVED = 1, GC_FEAT_SOLO = 2, GC_FEAT_NO_BALL = 4 };
 void gc_achv_wave_reached(gc_system *sys, uint32_t wave);
-void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats);
+void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats);
 
 /* Group C, the collection, reads the Pokedex of the profile itself (nothing to report): species caught, shinies owned, legendaries and
  * mythicals caught, generations completed. "Every species" and a "completed generation" count the species the game lets the player catch
