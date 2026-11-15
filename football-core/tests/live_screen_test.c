@@ -305,24 +305,30 @@ int main(void)
         press(BTN_DOWN);tick();assert(!w->message[0] && on_bottom("Target ")); /* the cursor moved on from the Scyther row to Continue */
         press(BTN_ACTION);tick();assert(w->phase==FB_CAREER_READY && w->evo_count==0);
     }
-    /* The six vitamins: a row each, three sales a round, and how many are left. */
+    /* The six vitamins: together at the top of the list, three sales a round in all, and how many are left. */
     {
         FootballCareer *w=(FootballCareer *)career();
         w->evo_count=0;memset(w->evo,0,sizeof w->evo);memset(w->sold,0,sizeof w->sold);memset(w->bought,0,sizeof w->bought);w->message[0]=0;
         w->stone_target=-1;w->stone2_target=-1;w->round=3;w->wins=3;w->wallet=2000;
         for(unsigned k=0;k<FB_SHOP_FIXED;++k)w->prices[k]=90+k;
-        memset(w->roster.stamina,0,sizeof w->roster.stamina);memset(w->roster.tackling,0,sizeof w->roster.tackling);
+        memset(w->roster.stamina,0,sizeof w->roster.stamina);memset(w->roster.tackling,0,sizeof w->roster.tackling);memset(w->roster.speed,0,sizeof w->roster.speed);
         w->phase=FB_CAREER_READY;tick();w->phase=FB_CAREER_SHOP;tick();
-        assert(on_bottom("Carbos") && on_bottom("Protein") && on_bottom("HP Up") && on_bottom("Iron") && on_bottom("Calcium") && on_bottom("Zinc") && !on_bottom("(2 left)"));
-        for(unsigned i=0;i<4;++i){press(BTN_DOWN);}tick(); /* on HP Up, the fifth row */
-        assert(on_top("HP Up: +2 Stamina for") && on_top_has("(0 of 20). 3 left this round."));
+        assert(on_bottom("HP Up") && on_bottom("Protein") && on_bottom("Iron") && on_bottom("Calcium") && on_bottom("Zinc") && on_bottom("Carbos") && !on_bottom("(2 left)"));
+        /* the rows in order: the six vitamins, then the two stones (here without a holder) */
+        {static const char *const rows[8]={"HP Up","Protein","Iron","Calcium","Zinc","Carbos","Mega stone","Mega stone"};
+         for(unsigned r=0;r<8;++r){tick();assert(r>5 || on_bottom(rows[r]));press(BTN_DOWN);}
+         press(BTN_DOWN);tick();} /* past Continue, back on the first row */
+        assert(on_top("HP Up: +2 Stamina for") && on_top_has("(0 of 20). Vitamins left this round: 3."));
         press(BTN_ACTION);tick();
-        assert(w->bought[4]==1 && total(w->roster.stamina)==2 && w->wallet==2000-94 && on_bottom("HP Up (2 left)") && !on_bottom("Sold"));
-        press(BTN_ACTION);tick();press(BTN_ACTION);tick();
-        assert(w->bought[4]==3 && w->sold[4] && total(w->roster.stamina)==6 && w->wallet==2000-3*94 && on_bottom("Sold") && !on_bottom("(2 left)"));
-        press(BTN_ACTION);tick();assert(w->bought[4]==3 && w->wallet==2000-3*94); /* a fourth is not sold */
-        press(BTN_DOWN);tick();press(BTN_ACTION);tick(); /* the next row, Iron, is a vitamin of its own */
-        assert(w->bought[5]==1 && total(w->roster.tackling)==2 && on_bottom("Iron (2 left)"));
+        assert(w->bought[4]==1 && total(w->roster.stamina)==2 && w->wallet==2000-94 && on_bottom("HP Up (2 left)") && on_bottom("Iron (2 left)") && !on_bottom("Sold"));
+        press(BTN_DOWN);press(BTN_DOWN);tick(); /* Iron */
+        press(BTN_ACTION);tick();
+        assert(w->bought[5]==1 && total(w->roster.tackling)==2 && on_bottom("Iron (1 left)"));
+        press(BTN_ACTION);tick();
+        assert(w->bought[5]==2 && !on_bottom("Sold") == false); /* the third vitamin: every vitamin row is sold now */
+        assert(w->sold[4] && w->sold[5] && w->sold[0] && w->sold[1] && w->sold[6] && w->sold[7] && w->wallet==2000-94-2*95);
+        press(BTN_UP);tick();press(BTN_ACTION);tick(); /* a fourth, of a kind not bought yet, is not sold */
+        assert(w->bought[1]==0 && w->wallet==2000-94-2*95 && on_bottom("Sold"));
         w->round=3;w->message[0]=0;
     }
     /* A Mega Stone has a fixed holder: changing the vitamin target must not mislabel it. */
@@ -333,16 +339,16 @@ int main(void)
         assert(football_roster_refresh(&w->roster,1));w->roster.mega_item[1]=0;
         w->stone_target=1;w->stone_item=FORM_CHANGE_ITEM_MAWILITE;
         w->wallet=1500;w->prices[2]=1000;w->sold[2]=false;w->message[0]=0;
-        w->phase=FB_CAREER_SHOP;tick();press(BTN_DOWN);press(BTN_DOWN);tick();
+        w->phase=FB_CAREER_SHOP;tick();for(unsigned i=0;i<6;++i){press(BTN_DOWN);}tick(); /* the first stone is the seventh row, under the six vitamins */
         assert(on_bottom("Mawile: Mawilite") && on_bottom("Holder: Mawile") && on_top("Mawile") && on_top("For Mawile. Select Mega"));
         press(BTN_RIGHT);tick();assert(on_bottom("Holder: Mawile") && on_top("Mawile"));
         press(BTN_ACTION);tick();assert(w->wallet==500 && w->roster.mega_item[1]==FORM_CHANGE_ITEM_MAWILITE && on_bottom("Sold"));
-        /* The second stone offer (row four) has its own holder, name, price and Sold mark. */
+        /* The second stone offer (row eight) has its own holder, name, price and Sold mark. */
         w->roster.mon[3].b.species=3;w->roster.mon[3].b.form=0; /* Venusaur */
         assert(football_roster_refresh(&w->roster,3));w->roster.mega_item[3]=0;
         w->stone2_target=3;w->stone2_item=FORM_CHANGE_ITEM_VENUSAURITE;w->prices[3]=1000;w->sold[3]=false;w->wallet=1500;w->message[0]=0;
         w->phase=FB_CAREER_READY;tick();w->phase=FB_CAREER_SHOP;tick(); /* the shop's names and icons are prepared on entering */
-        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick();
+        for(unsigned i=0;i<7;++i){press(BTN_DOWN);}tick();
         assert(on_bottom("Venusaur: Venusaurite") && on_bottom("Holder: Venusaur") && on_top("For Venusaur. Select Mega"));
         press(BTN_ACTION);tick();assert(w->wallet==500 && w->roster.mega_item[3]==FORM_CHANGE_ITEM_VENUSAURITE && w->sold[3] && w->sold[2]);
         w->stone2_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));

@@ -61,6 +61,11 @@ static int evo_cursor(void)
     const FootballCareer *c=&L.career;
     return c->phase==FB_CAREER_SHOP && L.cursor>=FB_SHOP_FIXED && L.cursor<FB_SHOP_FIXED+c->evo_count?(int)(L.cursor-FB_SHOP_FIXED):-1;
 }
+/* The shop lists the vitamins together, then the two Mega Stones, then the evolution items (lorenzo 2026-11-15: "all stat boosting items should be
+ * grouped together"). A row is not its offer's number (football_career.h keeps those so that checkpoints and tests do not move): the cursor
+ * is a row, and this gives the offer on it (an evolution row is its own offer). */
+static unsigned shop_offer(unsigned row){static const uint8_t order[FB_SHOP_FIXED]={4,1,5,6,7,0,2,3};return row<FB_SHOP_FIXED?order[row]:row;}
+static unsigned cursor_offer(void){return shop_offer(L.cursor);}
 /* What the highlighted evolution offer would make of its member: worked out when the cursor or the offer changes, because it runs the evolution. */
 static void evo_refresh(void)
 {
@@ -282,7 +287,7 @@ static void choose_current(void)
         }break;
     case FB_CAREER_RESULT:football_career_continue(c);L.cursor=0;break;
     case FB_CAREER_EVOLVE:football_career_evolve(c,L.cursor<c->evolution_count?(int)L.cursor:-1);L.cursor=0;break;
-    case FB_CAREER_SHOP:if(L.cursor==FB_SHOP_FIXED+c->evo_count){football_career_continue(c);L.cursor=0;}else football_career_buy(c,L.cursor,L.member);break;
+    case FB_CAREER_SHOP:if(L.cursor==FB_SHOP_FIXED+c->evo_count){football_career_continue(c);L.cursor=0;}else football_career_buy(c,cursor_offer(),L.member);break;
     case FB_CAREER_END:leave_playoff();break;
     default:break;
     }
@@ -414,22 +419,23 @@ static void list_menu(unsigned count)
                 else{snprintf(row_value[n],sizeof row_value[n],"%u",o->price);r->value=row_value[n];r->value_style=TS_MONEY;}
                 break;
             }
-            snprintf(row_label[n],sizeof row_label[n],"%s",football_career_offer_name(i));
-            if(football_career_offer_boost(i)>=0 && c->bought[i] && !c->sold[i])snprintf(row_label[n],sizeof row_label[n],"%s (%u left)",football_career_offer_name(i),football_career_vitamins_left(c,i));
-            if(i>=2 && i<2+FB_SHOP_STONES && football_career_stone_target(c,i)>=0){
-                const char *stone=i==2?L.shop.names[2]:L.stone2_name;
-                snprintf(row_label[n],sizeof row_label[n],"%.18s: %.25s",name(c->roster.mon[football_career_stone_target(c,i)].b.species),stone?stone:"Mega stone");
+            const unsigned offer=shop_offer(i);
+            snprintf(row_label[n],sizeof row_label[n],"%s",football_career_offer_name(offer));
+            if(football_career_offer_boost(offer)>=0 && football_career_vitamins_left(c,offer)<FB_VITAMIN_LIMIT && !c->sold[offer])snprintf(row_label[n],sizeof row_label[n],"%s (%u left)",football_career_offer_name(offer),football_career_vitamins_left(c,offer));
+            if(offer>=2 && offer<2+FB_SHOP_STONES && football_career_stone_target(c,offer)>=0){
+                const char *stone=offer==2?L.shop.names[2]:L.stone2_name;
+                snprintf(row_label[n],sizeof row_label[n],"%.18s: %.25s",name(c->roster.mon[football_career_stone_target(c,offer)].b.species),stone?stone:"Mega stone");
             }
-            if(c->sold[i]){r->value="Sold";r->dim=true;}
-            else if(i>=2 && i<2+FB_SHOP_STONES && football_career_stone_target(c,i)<0){r->value="No stock";r->dim=true;}
-            else{snprintf(row_value[n],sizeof row_value[n],"%u",c->prices[i]);r->value=row_value[n];r->value_style=TS_MONEY;}
+            if(c->sold[offer]){r->value="Sold";r->dim=true;}
+            else if(offer>=2 && offer<2+FB_SHOP_STONES && football_career_stone_target(c,offer)<0){r->value="No stock";r->dim=true;}
+            else{snprintf(row_value[n],sizeof row_value[n],"%u",c->prices[offer]);r->value=row_value[n];r->value_style=TS_MONEY;}
             break;
         default:break;
         }
     }
     football_menu_list(page_rows,n,(int)(L.cursor-first),first,count);
     if(c->phase==FB_CAREER_SHOP)for(unsigned k=0;k<n;++k){
-        unsigned i=first+k;const rr_frame *icon=football_career_offer_boost(i)>=0?L.vitamin_icons[i]:i==2?L.shop.icons[2]:i==3?L.stone2_icon:i>=FB_SHOP_FIXED && i<FB_SHOP_FIXED+c->evo_count?L.evo_icons[i-FB_SHOP_FIXED]:NULL;
+        unsigned i=first+k;const unsigned offer=shop_offer(i);const rr_frame *icon=football_career_offer_boost(offer)>=0?L.vitamin_icons[offer]:offer==2?L.shop.icons[2]:offer==3?L.stone2_icon:i>=FB_SHOP_FIXED && i<FB_SHOP_FIXED+c->evo_count?L.evo_icons[i-FB_SHOP_FIXED]:NULL;
         if(icon){ /* with the classic UI's own draw (depth 0), so a window pushed over the shop, like the pause menu, covers it */
             const rr_draw_opts small={.origin_x=.5f,.origin_y=.5f,.scale_x=.45f,.scale_y=.45f,.tint=RR_RGBA(255,255,255,255)};
             rr_draw(icon,FM_LIST_X+FM_LABEL_X+12,FM_LIST_Y+FM_LIST_PAD+8+k*FM_ROW_PITCH,&small);
@@ -593,8 +599,8 @@ static void bottom_menu(void)
             else snprintf(left,sizeof left,"%s",o->state==FB_EVO_SOLD?"Bought: this Pokemon has evolved.":"This Pokemon evolved another way.");
             football_menu_foot(left);
         }
-        else if(L.cursor>=2 && L.cursor<2+FB_SHOP_STONES && football_career_stone_target(c,L.cursor)>=0){
-            snprintf(left,sizeof left,"Holder: %.24s    A: buy",name(c->roster.mon[football_career_stone_target(c,L.cursor)].b.species));football_menu_foot(left);
+        else if(cursor_offer()>=2 && cursor_offer()<2+FB_SHOP_STONES && football_career_stone_target(c,cursor_offer())>=0){
+            snprintf(left,sizeof left,"Holder: %.24s    A: buy",name(c->roster.mon[football_career_stone_target(c,cursor_offer())].b.species));football_menu_foot(left);
         }
         else {snprintf(left,sizeof left,"Target %u: %.16s    Left/Right: change    A: buy",L.member+1,name(c->roster.mon[L.member].b.species));football_menu_foot(left);}
         break;
@@ -643,7 +649,7 @@ static unsigned top_member(void)
     const FootballCareer *c=&L.career;
     if(c->phase==FB_CAREER_SHOP){
         if(evo_cursor()>=0)return c->evo[evo_cursor()].member%22u;
-        if(L.cursor>=2 && L.cursor<2+FB_SHOP_STONES && football_career_stone_target(c,L.cursor)>=0)return (unsigned)football_career_stone_target(c,L.cursor)%22;
+        if(cursor_offer()>=2 && cursor_offer()<2+FB_SHOP_STONES && football_career_stone_target(c,cursor_offer())>=0)return (unsigned)football_career_stone_target(c,cursor_offer())%22;
         return L.member%22;
     }
     if(c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE)return c->exp_member%22;
@@ -725,12 +731,12 @@ static void top_menu(void)
         if(c->message[0])snprintf(shop_tip,sizeof shop_tip,"%.90s",c->message);
         else if(evo_cursor()>=0){const FootballEvoOffer *o=&c->evo[evo_cursor()];
             snprintf(shop_tip,sizeof shop_tip,o->state==FB_EVO_OFFER?"%.20s evolves into %.20s.%s":"%.20s: %.20s.%s",name(id),o->state==FB_EVO_OFFER?name(o->species):evo_item_name(o->item),o->item>50 && o->state==FB_EVO_OFFER?" A rare item.":"");}
-        else if(football_career_offer_boost(L.cursor)>=0){
-            const FootballBoost kind=(FootballBoost)football_career_offer_boost(L.cursor);
-            snprintf(shop_tip,sizeof shop_tip,"%s: +2 %s for %.14s (%u of %u). %u left this round.",football_career_offer_name(L.cursor),football_boost_name(kind),name(id),
-                (unsigned)*football_roster_boost(&c->roster,kind,L.member%22),(unsigned)FB_BOOST_MAX,football_career_vitamins_left(c,L.cursor));
+        else if(football_career_offer_boost(cursor_offer())>=0){
+            const FootballBoost kind=(FootballBoost)football_career_offer_boost(cursor_offer());
+            snprintf(shop_tip,sizeof shop_tip,"%s: +2 %s for %.14s (%u of %u). Vitamins left this round: %u.",football_career_offer_name(cursor_offer()),football_boost_name(kind),name(id),
+                (unsigned)*football_roster_boost(&c->roster,kind,L.member%22),(unsigned)FB_BOOST_MAX,football_career_vitamins_left(c,cursor_offer()));
         }
-        else if(L.cursor>=2 && L.cursor<2+FB_SHOP_STONES){const int holder=football_career_stone_target(c,L.cursor);
+        else if(cursor_offer()>=2 && cursor_offer()<2+FB_SHOP_STONES){const int holder=football_career_stone_target(c,cursor_offer());
             snprintf(shop_tip,sizeof shop_tip,holder>=0?
             "For %.24s. Select Mega before the next match.":"Mega Stones require a compatible holder.",holder>=0?name(c->roster.mon[holder].b.species):"");}
     }

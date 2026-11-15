@@ -8,8 +8,9 @@ typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,
 #define FB_SHOP_EVO_MAX 8
 #define FB_SHOP_FIXED 8
 #define FB_SHOP_STONES 2 /* mega stones on offer each round: offers 2 and 3 */
-/* Each vitamin can be bought this many times in a shop (a shop is one round), for one member or several (lorenzo 2026-11-15: "a limit of 3x
- * boosters per round"; before it each was sold once). One purchase is +2 of its attribute, up to FB_BOOST_MAX for a member. */
+/* A shop (one round) sells at most this many vitamins in all, of any kinds, for one member or several (lorenzo 2026-11-15: "a limit of 3x
+ * boosters per round", and then "3 in total"; before it each of the two vitamins was sold once). One purchase is +2 of its attribute, up to
+ * FB_BOOST_MAX for a member. */
 #define FB_VITAMIN_LIMIT 3
 /* The boost (FootballBoost) a vitamin offer gives, or -1 for an offer that is not a vitamin; its name ("Iron"), and how many are left to buy. */
 int football_career_offer_boost(unsigned offer);
@@ -66,7 +67,7 @@ int football_career_forget_slot(const pr_pokemon *p);
 /* member is the target of Carbos and Protein; an evolution offer is bound to its own member. An evolution runs the real evolution and
  * move-learning phases on the member and refreshes the roster; the result is told in c->message. */
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member);
-/* How many of a vitamin offer can still be bought this round (0 for any other offer). */
+/* How many vitamins (of any kind) can still be bought this round, as seen from a vitamin offer (0 for any other offer). */
 unsigned football_career_vitamins_left(const FootballCareer *c,unsigned offer);
 /* Whether an evolution offer still holds against the roster (the member can use that item and it brings that species). */
 bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *offer);

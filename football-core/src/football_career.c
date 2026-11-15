@@ -334,9 +334,18 @@ const char *football_career_offer_name(unsigned offer)
     static const char *const names[FB_SHOP_FIXED]={"Carbos","Protein","Mega stone","Mega stone","HP Up","Iron","Calcium","Zinc"};
     return offer<FB_SHOP_FIXED?names[offer]:"";
 }
+/* The vitamins bought this round, of every kind. */
+static unsigned vitamins_bought(const FootballCareer *c)
+{
+    unsigned total=0;
+    for(unsigned offer=0;offer<FB_SHOP_FIXED;++offer)if(football_career_offer_boost(offer)>=0)total+=c->bought[offer];
+    return total;
+}
 unsigned football_career_vitamins_left(const FootballCareer *c,unsigned offer)
 {
-    return c && football_career_offer_boost(offer)>=0?FB_VITAMIN_LIMIT-(c->bought[offer]>FB_VITAMIN_LIMIT?FB_VITAMIN_LIMIT:c->bought[offer]):0;
+    if(!c || football_career_offer_boost(offer)<0)return 0;
+    const unsigned total=vitamins_bought(c);
+    return total>=FB_VITAMIN_LIMIT?0:FB_VITAMIN_LIMIT-total;
 }
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
 {
@@ -353,7 +362,9 @@ bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
         const unsigned after=*football_attribute_of(&c->roster.player[member].attributes,(FootballBoost)kind);
         const char *who="Pokemon";for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==c->roster.mon[member].b.species){who=pr_species_table[i].name;break;}
         snprintf(c->message,sizeof c->message,"%s: %s %u to %u (boost %u/%u)",who,football_boost_name((FootballBoost)kind),before,after,(unsigned)*boost,(unsigned)FB_BOOST_MAX);
-        ++c->bought[offer];c->wallet-=c->prices[offer];c->sold[offer]=c->bought[offer]>=FB_VITAMIN_LIMIT;return true;
+        ++c->bought[offer];c->wallet-=c->prices[offer];
+        if(vitamins_bought(c)>=FB_VITAMIN_LIMIT)for(unsigned other=0;other<FB_SHOP_FIXED;++other)if(football_career_offer_boost(other)>=0)c->sold[other]=true; /* none is left, of any kind */
+        return true;
     }
     if(offer==2 || offer==3){
         const int target=football_career_stone_target(c,offer),item=football_career_stone_item(c,offer);

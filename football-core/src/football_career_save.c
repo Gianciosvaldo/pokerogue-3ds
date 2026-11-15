@@ -59,7 +59,11 @@ static void state(Stream *s,FootballCareer *c)
         c->bought[0]=c->sold[0];c->bought[1]=c->sold[1];
         for(unsigned k=2;k<6;++k)c->prices[vitamin_offers[k]]=c->prices[0];
     }
-    for(unsigned k=0;k<6;++k)c->sold[vitamin_offers[k]]=c->bought[vitamin_offers[k]]>=FB_VITAMIN_LIMIT;
+    {   /* The three vitamins of a shop are in all, not of each kind: a save with more is not one this game made. */
+        unsigned total=0;for(unsigned k=0;k<6;++k)total+=c->bought[vitamin_offers[k]];
+        if(total>FB_VITAMIN_LIMIT)s->ok=false;
+        for(unsigned k=0;k<6;++k)c->sold[vitamin_offers[k]]=total>=FB_VITAMIN_LIMIT;
+    }
     if(c->phase==FB_CAREER_MATCH){
         FootballLive *m=&c->live;FootballRules *r=&m->rules;
         N(m->rng,UINT32_MAX);N(m->snaps,4096);

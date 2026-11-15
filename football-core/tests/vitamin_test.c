@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-/* The football shop sells all six vitamins, and each can be bought FB_VITAMIN_LIMIT (3) times a round (lorenzo 2026-11-15: "a limit of 3x boosters
- * per round... the other stat boosting vitamins should be added as well"). Before it only Carbos and Protein were on sale, once each. */
+/* The football shop sells all six vitamins, and at most FB_VITAMIN_LIMIT (3) of them in all each round, of any kinds (lorenzo 2026-11-15: "a limit
+ * of 3x boosters per round... the other stat boosting vitamins should be added as well", then "3 in total"). Before it only Carbos and Protein were
+ * on sale, once each. */
 static gc_run scratch,other;
 static gc_system profile;
 static FootballCareer career,loaded;
@@ -39,6 +40,7 @@ int main(void)
 
     /* ---- each vitamin raises its own attribute by 2 (to 99 at most) and nothing else ---- */
     for(unsigned k=0;k<6;++k){
+        shop_of(20+k);
         const unsigned member=3+k;FootballAttributes before=career.roster.player[member].attributes;const unsigned wallet=career.wallet;
         assert(before.spd<90 && before.str<90 && before.sta<90 && before.tak<90 && before.tha<90 && before.cth<90);
         assert(football_career_buy(&career,VITAMINS[k],member));
@@ -48,23 +50,27 @@ int main(void)
         assert(career.roster.player[member].attributes.agi==before.agi && career.roster.player[member].attributes.thp==before.thp);
         char want[96];snprintf(want,sizeof want,"%s %u to %u (boost 2/%u)",football_boost_name(KINDS[k]),*football_attribute_of(&before,KINDS[k]),attribute(member,KINDS[k]),(unsigned)FB_BOOST_MAX);
         assert(strstr(career.message,want)); /* the purchase says what it did */
-        assert(football_career_vitamins_left(&career,VITAMINS[k])==FB_VITAMIN_LIMIT-1 && !career.sold[VITAMINS[k]]);
+        for(unsigned other_offer=0;other_offer<6;++other_offer)assert(football_career_vitamins_left(&career,VITAMINS[other_offer])==FB_VITAMIN_LIMIT-1 && !career.sold[VITAMINS[other_offer]]);
     }
 
-    /* ---- three of each a round, for one member or several, then no more ---- */
+    /* ---- three vitamins in all a round: of one kind, or of several, for one member or several, then no more of any kind ---- */
     shop_of(8);
-    for(unsigned k=0;k<6;++k){
-        const unsigned offer=VITAMINS[k],wallet=career.wallet;
-        assert(football_career_buy(&career,offer,10) && football_career_buy(&career,offer,10) && football_career_buy(&career,offer,11)); /* two for one, one for another */
-        assert(!football_career_buy(&career,offer,12) && !football_career_buy(&career,offer,10)); /* a fourth is refused for anyone */
-        assert(career.bought[offer]==FB_VITAMIN_LIMIT && career.sold[offer] && football_career_vitamins_left(&career,offer)==0);
-        assert(career.wallet==wallet-3*career.prices[offer]); /* the refused ones cost nothing */
-        assert(*football_roster_boost(&career.roster,KINDS[k],10)==4 && *football_roster_boost(&career.roster,KINDS[k],11)==2 && *football_roster_boost(&career.roster,KINDS[k],12)==0);
+    {
+        const unsigned wallet=career.wallet;
+        assert(football_career_buy(&career,0,10) && football_career_buy(&career,0,10) && football_career_buy(&career,5,11)); /* two Carbos, one Iron */
+        assert(career.bought[0]==2 && career.bought[5]==1 && football_career_vitamins_left(&career,4)==0);
+        for(unsigned k=0;k<6;++k){
+            assert(career.sold[VITAMINS[k]] && football_career_vitamins_left(&career,VITAMINS[k])==0);
+            assert(!football_career_buy(&career,VITAMINS[k],12) && !football_career_buy(&career,VITAMINS[k],10)); /* a fourth is refused, whatever it is, for anyone */
+        }
+        assert(career.wallet==wallet-2*career.prices[0]-career.prices[5]); /* the refused ones cost nothing */
+        assert(*football_roster_boost(&career.roster,FB_BOOST_SPD,10)==4 && *football_roster_boost(&career.roster,FB_BOOST_TAK,11)==2 && *football_roster_boost(&career.roster,FB_BOOST_SPD,12)==0);
     }
-    /* A kind that is used up does not stop the others: each has its own count. */
     shop_of(9);
-    for(unsigned i=0;i<3;++i)assert(football_career_buy(&career,0,0));
-    assert(!football_career_buy(&career,0,0) && football_career_buy(&career,1,0) && football_career_buy(&career,5,0) && career.bought[1]==1 && career.bought[5]==1);
+    for(unsigned i=0;i<3;++i)assert(football_career_buy(&career,0,0)); /* three of one kind is allowed */
+    assert(!football_career_buy(&career,0,0) && !football_career_buy(&career,1,0) && career.bought[0]==3 && career.bought[1]==0);
+    shop_of(13);
+    assert(football_career_buy(&career,4,0) && football_career_buy(&career,6,1) && football_career_buy(&career,7,2) && !football_career_buy(&career,5,3) && !football_career_buy(&career,4,0)); /* three kinds */
 
     /* ---- the other refusals ---- */
     shop_of(10);
@@ -77,59 +83,58 @@ int main(void)
         /* A member holds 20 of a boost at most; the refused purchase is not counted or paid for. */
         career.roster.stamina[5]=18;assert(football_career_buy(&career,4,5) && career.roster.stamina[5]==20 && career.bought[4]==2);
         const unsigned after=career.wallet;
-        assert(!football_career_buy(&career,4,5) && career.roster.stamina[5]==20 && career.bought[4]==2 && career.wallet==after);
+        assert(!football_career_buy(&career,4,5) && career.roster.stamina[5]==20 && career.bought[4]==2 && career.wallet==after && football_career_vitamins_left(&career,4)==1);
         football_career_continue(&career);assert(!football_career_buy(&career,4,5)); /* not in the shop any more */
     }
 
     /* ---- a new round, a new shop ---- */
     shop_of(11);
-    for(unsigned k=0;k<6;++k)for(unsigned i=0;i<3;++i)assert(football_career_buy(&career,VITAMINS[k],(unsigned)i));
+    assert(football_career_buy(&career,0,0) && football_career_buy(&career,4,0) && football_career_buy(&career,7,0) && !football_career_buy(&career,1,0));
     assert(football_career_continue(&career) && career.phase==FB_CAREER_READY && career.round==2);
     assert(football_career_start(&career));
     fb_play_win(&career);career.wallet=20000;
-    for(unsigned k=0;k<6;++k){
-        assert(career.bought[VITAMINS[k]]==0 && !career.sold[VITAMINS[k]] && career.prices[VITAMINS[k]]==FB_CAREER_VITAMIN_PRICE(career.round));
-        assert(football_career_buy(&career,VITAMINS[k],0));
-    }
+    for(unsigned k=0;k<6;++k)assert(career.bought[VITAMINS[k]]==0 && !career.sold[VITAMINS[k]] && career.prices[VITAMINS[k]]==FB_CAREER_VITAMIN_PRICE(career.round));
+    assert(football_career_buy(&career,0,0) && football_career_buy(&career,4,0) && football_career_buy(&career,7,0));
     assert(career.roster.speed[0]==4 && career.roster.catching[0]==4 && career.roster.stamina[0]==4); /* the boosts of round one are still there */
 
     /* ---- a checkpoint in the shop keeps what was bought and the boosts of every kind ---- */
     shop_of(12);
-    for(unsigned k=0;k<6;++k)for(unsigned i=0;i<=k%3;++i)assert(football_career_buy(&career,VITAMINS[k],2+k));
+    assert(football_career_buy(&career,4,2) && football_career_buy(&career,4,2) && football_career_buy(&career,6,3));
     {
         const size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n);
         assert(football_career_load(&loaded,&other,&profile,bytes,n));
         for(unsigned k=0;k<6;++k){
-            assert(loaded.bought[VITAMINS[k]]==career.bought[VITAMINS[k]] && loaded.sold[VITAMINS[k]]==career.sold[VITAMINS[k]] && loaded.prices[VITAMINS[k]]==career.prices[VITAMINS[k]]);
+            assert(loaded.bought[VITAMINS[k]]==career.bought[VITAMINS[k]] && loaded.sold[VITAMINS[k]] && loaded.prices[VITAMINS[k]]==career.prices[VITAMINS[k]]);
             for(unsigned m=0;m<22;++m)assert(*football_roster_boost(&loaded.roster,KINDS[k],m)==*football_roster_boost(&career.roster,KINDS[k],m));
         }
-        assert(loaded.sold[0]==(career.bought[0]>=FB_VITAMIN_LIMIT) && loaded.wallet==career.wallet);
+        assert(loaded.wallet==career.wallet && loaded.bought[4]==2 && loaded.bought[6]==1);
         for(unsigned m=0;m<22;++m)assert(!memcmp(&loaded.roster.player[m].attributes,&career.roster.player[m].attributes,sizeof(FootballAttributes)));
-        assert(football_career_buy(&loaded,4,2) || loaded.bought[4]==FB_VITAMIN_LIMIT); /* and the shop goes on from there */
+        assert(!football_career_buy(&loaded,7,2) && !football_career_buy(&loaded,4,2)); /* the three are used up, and stay so */
 
-        /* A checkpoint of version 3 (before the other vitamins) loads: the Carbos and Protein it had sold count as one bought, and the new ones
+        /* A checkpoint of version 3 (before the other vitamins) loads: the Carbos or Protein it had sold counts as one bought, and the new ones
          * are fresh and priced like them. Its vitamin block is 22 members of four boosts, six counts and four prices, at the end of a shop's. */
         const size_t tail=(22u*4u+6u+4u)*4u;
         FootballCareer *v3=calloc(1,sizeof *v3);assert(v3);*v3=career;
-        v3->bought[0]=1;v3->sold[0]=true;v3->bought[1]=0;v3->sold[1]=false;
+        memset(v3->bought,0,sizeof v3->bought);memset(v3->sold,0,sizeof v3->sold);v3->bought[0]=1;v3->sold[0]=true;
         const size_t m=football_career_save(v3,bytes,sizeof bytes);assert(m>tail+20);
         reseal(m-tail,3);
         assert(football_career_load(&loaded,&other,&profile,bytes,m-tail));
         assert(loaded.bought[0]==1 && !loaded.sold[0] && loaded.bought[1]==0 && football_career_vitamins_left(&loaded,0)==2);
         for(unsigned k=2;k<6;++k)assert(loaded.bought[VITAMINS[k]]==0 && !loaded.sold[VITAMINS[k]] && loaded.prices[VITAMINS[k]]==loaded.prices[0]);
         for(unsigned m2=0;m2<22;++m2)assert(loaded.roster.stamina[m2]==0 && loaded.roster.catching[m2]==0); /* the old save knew only two boosts */
-        assert(football_career_buy(&loaded,0,0) && football_career_buy(&loaded,0,0) && !football_career_buy(&loaded,0,0));
+        assert(football_career_buy(&loaded,0,0) && football_career_buy(&loaded,5,0) && !football_career_buy(&loaded,0,0));
         free(v3);
 
-        /* A count above the limit, or a boost above 20, is a corrupt save, not a shop that sells a fourth. */
+        /* A count above the limit, more than the limit in all, or a boost above 20 is a corrupt save, not a shop that sells a fourth. */
         const size_t full=football_career_save(&career,bytes,sizeof bytes);assert(full>tail+20);
         const size_t counts=full-(6u+4u)*4u; /* the six counts follow the boosts of 22 members */
-        const unsigned saved=bytes[counts];
-        bytes[counts]=FB_VITAMIN_LIMIT+1;reseal(full,4);assert(!football_career_load(&loaded,&other,&profile,bytes,full));
-        bytes[counts]=(unsigned char)saved;reseal(full,4);assert(football_career_load(&loaded,&other,&profile,bytes,full));
+        unsigned char kept[24];memcpy(kept,bytes+counts,sizeof kept);
+        put32(counts,FB_VITAMIN_LIMIT+1);reseal(full,4);assert(!football_career_load(&loaded,&other,&profile,bytes,full));
+        memcpy(bytes+counts,kept,sizeof kept);put32(counts,2);put32(counts+4,2);reseal(full,4);assert(!football_career_load(&loaded,&other,&profile,bytes,full)); /* 2 Carbos and 2 Protein */
+        memcpy(bytes+counts,kept,sizeof kept);reseal(full,4);assert(football_career_load(&loaded,&other,&profile,bytes,full));
         bytes[full-tail]=FB_BOOST_MAX+1;reseal(full,4);assert(!football_career_load(&loaded,&other,&profile,bytes,full));
     }
-    printf("football vitamins: six vitamins, %u a round each, boosts of every kind, checkpoints before and after passed\n",(unsigned)FB_VITAMIN_LIMIT);
+    printf("football vitamins: six vitamins, %u in all a round, boosts of every kind, checkpoints before and after passed\n",(unsigned)FB_VITAMIN_LIMIT);
     puts("football vitamin tests passed");
     return 0;
 }
