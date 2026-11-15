@@ -937,6 +937,27 @@ static void test_rematch_real(void) {
     CHECK(e->level == ctl.enemy27.level, "the ordinary generated level (%d, control %d)", e->level, ctl.enemy27.level);
     CHECK(e->wave == 27, "wave 27");
 
+    /* the same offer in a plain Classic run (no JoJo trainers, so the waves before 27 may differ from the Bizarre run's: only the offer and
+     * the enemy's identity are compared) */
+    if (shown == 1) {
+      restore(&base2);
+      reboot_io();
+      reboot();
+      g_bizarre = false;
+      rm_out cls;
+      rm_play(&cfg, &cls);
+      g_bizarre = true;
+      CHECK(cls.offered && cls.rematch && cls.stats.offers == 1 && cls.stats.accepts == 1 && cls.stats.built == 1 && cls.stats.refused == 0,
+            "a plain Classic run is offered the rematch too, accepted and built (%d %u %u %u %u)", cls.offered, cls.stats.offers, cls.stats.accepts,
+            cls.stats.built, cls.stats.refused);
+      CHECK(cls.enemy27.species == nem.species && cls.enemy27.form == nem.form && cls.end == STEP_STOPPED && cls.wave_end == 29,
+            "its enemy is the record's and the run goes on to wave 29 (%d/%d, %d, %d)", cls.enemy27.species, cls.enemy27.form, (int)cls.end,
+            cls.wave_end);
+      restore(&base2);
+      reboot_io();
+      reboot();
+    }
+
     /* decline: the ordinary encounter, as the control had it */
     restore(&base2);
     reboot_io();
