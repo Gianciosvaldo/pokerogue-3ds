@@ -34,12 +34,12 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Risotto Nero", "Defeat Risotto Nero.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"Rudolf von Stroheim", "Defeat Rudolf von Stroheim.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"The Pillar Men", "Defeat Kars, Wamuu and Esidisi.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Battle Tendency", "Defeat Joseph, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Stardust Crusaders", "Defeat Jotaro, DIO and Polnareff.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Diamond Is Unbreakable", "Defeat Koichi and Kira.", J, V(GC_VOUCHER_REGULAR, 2)},
-    {"Golden Wind", "Defeat Diavolo, Mista and Risotto.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Stone Ocean", "Defeat Jolyne and Pucci.", J, V(GC_VOUCHER_REGULAR, 2)},
-    {"Steel Ball Run", "Defeat Valentine and Gyro.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Battle Tendency", "Defeat Joseph, Caesar, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
+    {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse and Iggy.", J, V(GC_VOUCHER_PLUS, 1)},
+    {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan and Shigechi.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio and Narancia.", J, V(GC_VOUCHER_PLUS, 1)},
+    {"Stone Ocean", "Defeat Jolyne, Pucci and Weather Report.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Steel Ball Run", "Defeat Valentine, Gyro, Johnny, Sandman and Diego.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Five Faces", "Defeat 5 different challengers.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Ten Faces", "Defeat 10 different challengers.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Every Face", "Defeat all 34 different challengers.", J, SHINY(2)},
@@ -139,6 +139,8 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Josuke Higashikata", "Defeat Josuke Higashikata.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"Rohan Kishibe", "Defeat Rohan Kishibe.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"Giorno Giovanna", "Defeat Giorno Giovanna.", J, V(GC_VOUCHER_REGULAR, 1)},
+    /* 117: listed between Ten Faces and Every Face (gc_achv_order), now that "every" is 34 */
+    {"Twenty Faces", "Defeat 20 different challengers.", J, V(GC_VOUCHER_PREMIUM, 1)},
 };
 #undef J
 #undef RUN
@@ -168,13 +170,35 @@ static int jojo_of_id(int id)
     return -1;
 }
 
+int gc_achv_order(int pos)
+{
+    static uint8_t order[GC_ACHV_COUNT];
+    static bool built;
+    if (!built) {
+        int n = 0;
+        for (int j = 0; j < GC_JOJO_COUNT; j++) order[n++] = (uint8_t)gc_achv_jojo_id(j);
+        for (int id = 0; id < GC_ACHV_COUNT; id++) {
+            if (gc_achv_defs[id].group != GC_ACHV_GROUP_JOJO || jojo_of_id(id) >= 0 || id == GC_ACHV_TWENTY_FACES) continue;
+            order[n++] = (uint8_t)id;
+            if (id == 25) order[n++] = GC_ACHV_TWENTY_FACES;   /* Twenty Faces sits between Ten Faces and Every Face */
+        }
+        for (int id = 0; id < GC_ACHV_COUNT; id++)
+            if (gc_achv_defs[id].group != GC_ACHV_GROUP_JOJO) order[n++] = (uint8_t)id;
+        built = n == GC_ACHV_COUNT;
+    }
+    return built && pos >= 0 && pos < GC_ACHV_COUNT ? order[pos] : -1;
+}
+
 static const uint64_t SET_PILLAR = JB(GC_JOJO_KARS) | JB(GC_JOJO_WAMUU) | JB(GC_JOJO_ESIDISI);
-static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM);
-static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO_POLNAREFF);
-static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA);
-static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO);
-static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI);
-static const uint64_t SET_P7 = JB(GC_JOJO_VALENTINE) | JB(GC_JOJO_GYRO);
+/* The Part sets hold every challenger of the Part, the second batch included (lorenzo's file groups them by Part). */
+static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM) | JB(GC_JOJO_CAESAR);
+static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO_POLNAREFF) | JB(GC_JOJO_KAKYOIN) | JB(GC_JOJO_AVDOL) |
+                               JB(GC_JOJO_VANILLAICE) | JB(GC_JOJO_HOLHORSE) | JB(GC_JOJO_IGGY);
+static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI);
+static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO) | JB(GC_JOJO_GIORNO) | JB(GC_JOJO_BRUNO) |
+                               JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA);
+static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI) | JB(GC_JOJO_WEATHER);
+static const uint64_t SET_P7 = JB(GC_JOJO_VALENTINE) | JB(GC_JOJO_GYRO) | JB(GC_JOJO_JOHNNY) | JB(GC_JOJO_SANDMAN) | JB(GC_JOJO_DIEGO);
 
 /* ---- the trainers: TrainerType values, the groups of pr_enums.h (Gym Leaders 200.., Elite Four 300.., Champions 350..) ---- */
 #define GYM_FIRST TRAINER_TYPE_BROCK
@@ -359,14 +383,15 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     uint32_t h, n;
     switch (id) {
     case 17: h = (uint32_t)popcount64(jb & SET_PILLAR); n = 3; break;
-    case 18: h = (uint32_t)popcount64(jb & SET_P2); n = 5; break;
-    case 19: h = (uint32_t)popcount64(jb & SET_P3); n = 3; break;
-    case 20: h = (uint32_t)popcount64(jb & SET_P4); n = 2; break;
-    case 21: h = (uint32_t)popcount64(jb & SET_P5); n = 3; break;
-    case 22: h = (uint32_t)popcount64(jb & SET_P6); n = 2; break;
-    case 23: h = (uint32_t)popcount64(jb & SET_P7); n = 2; break;
+    case 18: h = (uint32_t)popcount64(jb & SET_P2); n = (uint32_t)popcount64(SET_P2); break;
+    case 19: h = (uint32_t)popcount64(jb & SET_P3); n = (uint32_t)popcount64(SET_P3); break;
+    case 20: h = (uint32_t)popcount64(jb & SET_P4); n = (uint32_t)popcount64(SET_P4); break;
+    case 21: h = (uint32_t)popcount64(jb & SET_P5); n = (uint32_t)popcount64(SET_P5); break;
+    case 22: h = (uint32_t)popcount64(jb & SET_P6); n = (uint32_t)popcount64(SET_P6); break;
+    case 23: h = (uint32_t)popcount64(jb & SET_P7); n = (uint32_t)popcount64(SET_P7); break;
     case 24: h = (uint32_t)popcount64(jb); n = 5; break;
     case 25: h = (uint32_t)popcount64(jb); n = 10; break;
+    case GC_ACHV_TWENTY_FACES: h = (uint32_t)popcount64(jb); n = 20; break;
     case 26: h = (uint32_t)popcount64(jb); n = GC_JOJO_COUNT; break;
     case 27: h = a->best_run_jojo; n = 3; break;
     case 28: h = a->jojo_battles; n = 100; break;

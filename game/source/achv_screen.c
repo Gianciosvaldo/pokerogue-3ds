@@ -17,6 +17,7 @@
 
 static const char* const HINTS[3] = {"B: back", "^/v: choose", "</>: page"};
 
+/* the list is in gc_achv_order: `sel` and `scroll` are positions in it, the achievement shown there is gc_achv_order(position) */
 static struct {
   achv_args args;
   int sel, scroll;
@@ -89,7 +90,8 @@ static void draw_top(void)
 {
   if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
   if (!ui_space(UI_FIELD)) return;
-  const gc_achv_def* d = &gc_achv_defs[A.sel];
+  const int sel_id = gc_achv_order(A.sel);
+  const gc_achv_def* d = &gc_achv_defs[sel_id];
   char t[160];
   ui_window(8, 8, 304, 164, WIN_NORMAL);
   text_draw(TS_WINDOW, 20, 18, d->name, NULL);
@@ -101,8 +103,8 @@ static void draw_top(void)
   snprintf(t, sizeof t, "Reward: %s", gc_achv_reward_name(d));
   text_draw(TS_INSTRUCTIONS_TEXT, 20, 96, t, NULL);
   char st[48];
-  state_text(A.sel, st, sizeof st);
-  if (gc_achv_unlocked(A.args.sys, A.sel))
+  state_text(sel_id, st, sizeof st);
+  if (gc_achv_unlocked(A.args.sys, sel_id))
     snprintf(t, sizeof t, "Done");
   else if (st[0])
     snprintf(t, sizeof t, "Progress: %s", st);
@@ -111,9 +113,10 @@ static void draw_top(void)
   text_draw(TS_INSTRUCTIONS_TEXT, 20, 118, t, NULL);
 }
 
-static void draw_row(int id, float y)
+static void draw_row(int pos, float y)
 {
-  const bool sel = id == A.sel, done = gc_achv_unlocked(A.args.sys, id);
+  const int id = gc_achv_order(pos);
+  const bool sel = pos == A.sel, done = gc_achv_unlocked(A.args.sys, id);
   if (sel) {
     rr_rect(4, y - 2, 312, ROW_H - 2, RR_RGBA(255, 255, 255, 30));
     ui_cursor(11, y + 10);
