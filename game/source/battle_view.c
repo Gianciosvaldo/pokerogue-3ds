@@ -736,8 +736,10 @@ static float fit_zoom(float z) {
   }
   return z;
 }
+static float field_zoom_cur = 1;   /* the zoom field_zoom set last (draw_trainers draws a JoJo challenger without it) */
 static void field_zoom(bool on) {
-  rr_set_zoom(on ? fit_zoom(B.field_scale * FIELD_ZOOM) : 1, 160, 132);
+  field_zoom_cur = on ? fit_zoom(B.field_scale * FIELD_ZOOM) : 1;
+  rr_set_zoom(field_zoom_cur, 160, 132);
 }
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
@@ -755,6 +757,16 @@ static void draw_trainers(void) {
     if (B.trainer_show_ms>0) { /* BEV_TRAINER_SHOW: in from 16 px up and right */
       float k=1-ease(EASE_CUBIC_OUT,B.trainer_show_ms/750);
       x+=16*k;y-=16*k;
+    }
+    if (!strncmp(B.setup.trainer_keys[k],"images/trainer/custom/",22)) {
+      /* a JoJo challenger (lorenzo, 2026-11-15) is drawn 1:1, not FIELD_ZOOM times bigger: the zoom (about (160, 132)) left room for only
+       * 83 px above the feet and doubled every fifth row and column of the art. The feet go where the zoom puts them, so he still stands
+       * on the platform; at 1:1 a sprite up to 99 px tall fits under the top of the screen (field y -30). */
+      const float z=field_zoom_cur;
+      if (z!=1) rr_set_zoom(1,160,132);
+      rr_draw(frame,160+(x-160)*z,132+(y-132)*z,&o);
+      if (z!=1) rr_set_zoom(z,160,132);
+      continue;
     }
     rr_draw(frame,x,y,&o);
   }

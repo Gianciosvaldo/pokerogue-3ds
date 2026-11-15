@@ -42,9 +42,9 @@ void img_draw(const char *key,const char *frame,float x,float y,float ox,float o
 void img_draw_opts(const char *key,const char *frame,float x,float y,const rr_draw_opts *o){(void)o;img_draw(key,frame,x,y,0,0);}
 void rr_rect(float x,float y,float w,float h,rr_color c){(void)x;(void)y;(void)w;(void)h;(void)c;}
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)w;(void)h;(void)o;}
-typedef struct{float x,y;}rr_call;
+typedef struct{float x,y,zoom;}rr_call;
 static rr_call draws[64];static int nd;
-void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)o;if(nd<64){draws[nd].x=x;draws[nd].y=y;nd++;}}
+void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)o;if(nd<64){draws[nd].x=x;draws[nd].y=y;draws[nd].zoom=cur_zoom;nd++;}}
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
 void rr_set_blend(rr_blend b){(void)b;}
 int rr_frame_alpha(const rr_frame *f,int x,int y){(void)f;(void)x;(void)y;return 255;}
@@ -115,6 +115,17 @@ int main(void){
  }
  {float x2,y2,x3,y3;field_pos(side_of(2),false,&x2,&y2);field_pos(side_of(3),false,&x3,&y3);CHECK(!near(x2,x3));} /* the two foes' dolls are apart */
  B.setup.doubles=false;reset();B.trainer_visible=true;draw_trainers();CHECK(near(draws[0].y,80));B.setup.doubles=true;
+ /* a JoJo challenger: drawn with no zoom, his feet where the zoomed trainer's feet are; the zoom is back on after him */
+ B.setup.doubles=false;snprintf(B.setup.trainer_keys[0],sizeof B.setup.trainer_keys[0],"images/trainer/custom/kakyoin");
+ {field_zoom(true);const float z=field_zoom_cur;
+  reset();draw_trainers();
+  CHECK(nd==1&&near(draws[0].y,132+(80-132)*z)&&near(draws[0].x,160+(228+B.enemy_slide-160)*z)&&draws[0].zoom==1.0f&&near(cur_zoom,z));
+  CHECK(near(z,FIELD_ZOOM)&&near(132+(80-132)*z+30-99,0.6f));   /* at the shipped zoom the feet are at screen y 99.6: 99 px fit */
+ }
+ snprintf(B.setup.trainer_keys[0],sizeof B.setup.trainer_keys[0],"images/trainer/test");
+ reset();field_zoom(true);draw_trainers();CHECK(nd==1&&near(draws[0].y,80)&&near(draws[0].zoom,field_zoom_cur));   /* any other trainer: unchanged, under the field zoom */
+ field_zoom(false);
+ B.setup.doubles=true;
 
  /* ---- 4: no zoom-out; with the raise the app ships (none) the foes stand on the singles platform and clear the mini boxes */
  foe_raise_px=FOE_RAISE;
