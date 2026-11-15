@@ -155,6 +155,10 @@ typedef struct gc_custom_hooks {
      * which = 0, 1, 2: the option the player chose (easy, hard, brutal): true = `team` (zeroed by the caller) is that foe's team, which
      * fights as a trainer battle of the encounter. NULL = the encounter is never offered. */
     bool (*pillar)(void *user, const struct gc_run *run, int which, gc_custom_team *team);
+    /* Whether the enemy of the battle on the field is a rematch's (the app keeps that with the run, so a battle loaded from a save has it too).
+     * true = no Poke Ball can be thrown at it and the player cannot run from it or force it out, with the End biome's refusals ("An unseen
+     * force prevents using Poke Balls / escape"). A pure query: asked whenever a command screen is built and a ball or run command is checked. */
+    bool (*foe_locked)(void *user, const struct gc_run *run);
 } gc_custom_hooks;
 
 /* Installs (or, with NULL, removes) the hooks. The pointer is kept: it must outlive the run. Safe at any time, also in the middle of a battle

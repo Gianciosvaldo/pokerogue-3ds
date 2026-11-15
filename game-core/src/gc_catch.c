@@ -50,6 +50,9 @@ const char *gc_catch_ball_refusal(const gc_run *run, int ball)
     int active=0;const pr_pokemon *foe=NULL;
     for(int k=2;k<4;k++)if(run->bt.field[k]&&run->bt.field[k]->on_field&&run->bt.field[k]->hp>0&&!run->bt.field[k]->switch_out_status){foe=run->bt.field[k];active++;}
 
+    /* a custom rematch's enemy (gc/custom.h): the End biome's unseen force, whatever the biome */
+    if (gc_custom_foe_locked(run)) return "battle:noPokeballForce";
+
     if (run->biome == BIOME_ID_END && wild) {
         bool uncaught_on_field = false;
         if (foe && foe->hp > 0)

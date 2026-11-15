@@ -886,8 +886,18 @@ wave 27 / 77 / 127 / 177: encounter hook -> scheduler (C05) -> OFFER (accept / d
    decline  -> the ordinary encounter, schedule DECLINED, the record is given back (nothing was written to the roster by the offer itself)
    accept   -> record SCHEDULED -> CHALLENGED (one staged cs_txn); game-core builds the enemy; built(ok) or refusal (counted, not a custom combat)
    fight    -> the first non-COMMAND / GAME_OVER / CLEAR screen after the rematch enemy's faint = WON (DEFEATED, then ONE ptx claim = ONE regular voucher)
-               anything else (the player's side wiped, a catch, a flight) = LOST: the record goes back to STORED, no second try this run
+               anything else (the player's side wiped) = LOST: the record goes back to STORED, no second try this run
 ```
+
+**The rematch enemy is locked.** The rematch enemy cannot be caught or run from, with the End biome's own refusals ("An unseen force prevents using
+Poke Balls", "An unseen force prevents escape"). game-core's `gc_custom_hooks.foe_locked` asks the app; `custom_run.c` answers from `R.rematch_enemy`
+(the overlay's own flag, so a battle loaded from a save is locked too, and only the enemy whose id was built: never an ordinary wild Pokemon of the
+same wave). While it is true game-core refuses `GC_CH_BALL` (`gc_catch_ball_refusal`), takes Run off the command screen, refuses `GC_CH_RUN`, and sets
+battle-core's `me_no_flee` for the battle, which is the flag a mystery encounter's no-flee fight uses (it also stops the player forcing the enemy out and the
+enemy leaving of its own accord, as in those fights). The
+flag is set again at every command because a loaded battle is built before the app has its rematch state back; `gc_run_set_custom` takes Run off a
+command screen the load had already built. A refusal spends no ball and leaves the command screen as it was. The hook is a query: nothing is saved, and
+no mode flag is involved.
 
 - **Defeat attribution.** A defeat becomes a candidate Nemesis only when the last faint of the player's party was `direct`, its attacker was an enemy of
   that battle with a known id, the wave matched, the species/form did not change, and the encounter kind was not unsupported. Otherwise nothing is
@@ -1482,7 +1492,7 @@ win and the voucher are exercised through the real `run_screen.c` by `RUNTEST_CU
 run (it needs the pinned upstream checkout, network and Node 22): the one battle-core change is a read-only observer, NULL by default, and the digests above
 show the ordinary game unchanged; CI runs what it runs. No fused or Tera wild enemy is exercised by a real wave (the port generates none), so those
 refusals are tested with synthetic reports only. The IVs and held items of the record are not applied to the rematch enemy (they stay the ordinary generated ones);
-a lost rematch has no second try in the same run; catching or fleeing the rematch enemy is a loss. A load that finds the overlay and the roster in
+a lost rematch has no second try in the same run; the rematch enemy cannot be caught or run from (see 2.16, "The rematch enemy is locked"), so those can no longer end a rematch. A load that finds the overlay and the roster in
 disagreement is refused (not silently resumed). Declining is not durable across loading an older save (the offer returns; the frozen schedule prevents a reroll).
 Nemeses are made only in custom runs. No final-boss or Classic-clear claim. The power-cut model is "write n and everything after never happens", as in 5.7.
 The custom runs' memory and time were not measured on a device. Status for this task: **COMPLETE** against the C10 card's scope.

@@ -10,6 +10,7 @@
  *     it was dealt, and on yes builds that enemy through game-core's own enemy construction (gc/custom.h) at the wave's ordinary level;
  *   - remembers, from game-core's faint hook, the enemy that took the last Pokemon of the party when battle-core's own state names it
  *     (never from the last animation or the last enemy standing), and hands it to the store as the candidate of the run's report;
+ *   - locks the rematch enemy: no Poke Ball can be thrown at it and the player cannot run from it (hk_foe_locked, the End biome's refusals);
  *   - records a rematch's result durably (won: the enemy fainted and the run went on; lost: anything else) and claims the record's one
  *     regular voucher through profile_tx.
  *
