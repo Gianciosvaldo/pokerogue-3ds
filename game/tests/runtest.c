@@ -186,6 +186,7 @@ static int n_offer_intros, n_offer_kept, n_offer_swapped;
 static int offer_shown;          /* the species the offer's intro put on the enemy side until the first command after the answer (0 = none) */
 static bool offer_withdrawn;     /* ... and whether it went back to its ball in between */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
+static int n_rematch_cmds;   /* RUNTEST_CUSTOM: commands asked against a rematch enemy: the menu must not offer Run (it cannot be run from or caught) */
 
 /* A full-party catch: the party as the question "release one?" found it, and the Pokemon about to be caught */
 static struct {
@@ -925,6 +926,14 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       BAD("field%d screen boss %d %d/%d, run %d %d/%d",field,a->boss,a->boss_segment_index,a->boss_segments,p->is_boss,p->boss_segment_index,p->boss_segments);
   }
   if(!enemy)BAD("asked command with no enemy");
+  if (custom_on) {
+    cr_view v;
+    cr_view_get(&v);
+    if (v.rematch_enemy) {
+      n_rematch_cmds++;
+      if (opts->can_run) BAD("the command menu against a rematch enemy offers Run (wave %d)", r->wave);
+    }
+  }
   if (offer_shown) {
     /* the first command after a rematch offer: if the run's enemy is the Nemesis the intro showed, it never left; if not, the Nemesis went back
      * and the wave's own enemy came out (the identity check above says the screen's enemy is the run's) */
@@ -2447,6 +2456,8 @@ int main(int argc, char** argv) {
     /* the runs' own rewards (trainer vouchers) are in the wallet too: it holds at least the claims */
     if (regular - vouchers0 < cs->claims) BAD("%u vouchers claimed, %u more in the wallet", cs->claims, regular - vouchers0);
     if (cs->wins != cs->claims) BAD("%u rematches won, %u vouchers claimed", cs->wins, cs->claims);
+    printf("custom: %d commands asked against a rematch enemy, none offering Run\n", n_rematch_cmds);
+    if (custom_strong && runs >= 100 && !n_rematch_cmds) BAD("no command was asked against a rematch enemy");
     if (cs->offers != cs->accepts + cs->declines) BAD("%u offers, %u answers", cs->offers, cs->accepts + cs->declines);
     if (cs->built + cs->refused != cs->accepts) BAD("%u accepted, %u built or refused", cs->accepts, cs->built + cs->refused);
     if (cs->degraded) BAD("%u runs lost their rematch to a card that refused a write", cs->degraded);

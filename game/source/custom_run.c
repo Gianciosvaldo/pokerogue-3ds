@@ -468,7 +468,14 @@ static bool hk_pillar(void* user, const struct gc_run* run, int which, gc_custom
   return true;
 }
 
-static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint, hk_trainer, hk_pillar};
+/* The battle's enemy is a rematch's: no Poke Balls and no running, the End biome's own refusals (gc/custom.h foe_locked). From the overlay's rematch
+ * state, so a battle loaded from a save has it as well; the enemy is the one built (its id), never an ordinary wild Pokemon of the same wave. */
+static bool hk_foe_locked(void* user, const struct gc_run* run) {
+  (void)user;
+  return R.active && R.rematch_enemy && run->n_enemy == 1 && run->enemy[0].b.id == R.rematch_enemy_id;
+}
+
+static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint, hk_trainer, hk_pillar, hk_foe_locked};
 const gc_custom_hooks* cr_hooks(void) { return &HOOKS; }
 
 int cr_offer_species(void) { return R.offering ? R.offer_rec.species : 0; }

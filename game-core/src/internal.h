@@ -409,6 +409,8 @@ void gc_sync_party_order(gc_run *run);            /* party_order from battle-cor
 /* CommandPhase.checkCanUseBall + handleBallCommand's boss rule: NULL = this ball may be thrown now, else the locale
  * key of the text upstream shows instead */
 const char *gc_catch_ball_refusal(const gc_run *run, int ball);
+void gc_battle_custom_refresh(gc_run *run);          /* the lock on a command screen already built (gc_run_set_custom after a load) */
+bool gc_custom_foe_locked(const gc_run *run);   /* gc/custom.h foe_locked: the battle's enemy is a rematch's (wild battles only) */
 bool gc_catch_is_catch(const gc_run *run, int enemy_idx);   /* at a stop for a VictoryPhase: the enemy was caught, not fainted */
 bool gc_catch_start(gc_run *run, gc_rphase *p);
 bool gc_catch_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char **why, bool *ok);

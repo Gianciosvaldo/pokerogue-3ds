@@ -355,7 +355,7 @@ static void strengthen(gc_run* r, int level) {
 typedef struct {
   bool heal;               /* heal the party at every command (a strong party that cannot lose) */
   bool wipe;               /* play to lose: Splash, HP 1 */
-  bool flee_rematch;       /* try to run from a rematch enemy */
+  bool flee_rematch;       /* try to run from and to throw a Poke Ball at a rematch enemy at every command: both are refused (try_escape) */
   int offer_answer;        /* 1 accept, 0 decline */
   int save_every;          /* save into slot_used at each save point (every n-th, 0 = never) */
   int stop_wave;           /* stop the run at the COMMAND screen of this wave (0 = never) */
@@ -368,6 +368,22 @@ typedef struct {
 } bot_t;
 static bot_t bot;
 static int saves_written, save_points;
+static int escapes_refused;   /* commands of a rematch battle at which a Run and a Poke Ball were both refused */
+
+/* A rematch enemy cannot be run from or caught (the End biome's refusals, gc/custom.h foe_locked): the command screen offers no Run, and a Run or a
+ * ball sent anyway is refused with those texts, spends nothing and leaves the battle where it was. */
+static void try_escape(const gc_screen* s) {
+  CHECK(!s->can_run, "a rematch enemy: the command screen offers no Run");
+  CHECK(R->pokeballs[0] > 0, "a Poke Ball to throw");
+  const int balls = R->pokeballs[0];
+  const gc_choice flee = {GC_CH_RUN, 0, 0, 0}, ball = {GC_CH_BALL, 0, 0, 0};
+  const char* why = "";
+  CHECK(!gc_run_choose(R, &flee, &why) && why && !strcmp(why, "battle:noEscapeForce"), "a rematch enemy: Run is refused with the End biome's text (%s)", why ? why : "");
+  why = "";
+  CHECK(!gc_run_choose(R, &ball, &why) && why && !strcmp(why, "battle:noPokeballForce"), "a rematch enemy: a Poke Ball is refused with the End biome's text (%s)", why ? why : "");
+  CHECK(R->pokeballs[0] == balls && gc_run_screen(R)->kind == GC_SCREEN_COMMAND, "the refusals spent nothing and left the command screen");
+  escapes_refused++;
+}
 static int offers_seen;
 static char last_msg[160];
 static int n_msgs;
@@ -426,10 +442,10 @@ static step_t step(void) {
           c.a = (int16_t)i;
           break;
         }
-      if (bot.flee_rematch && cr_hooks() && s->can_run) {
+      if (bot.flee_rematch && cr_hooks()) {
         cr_view v;
         cr_view_get(&v);
-        if (v.rematch_enemy) c.kind = GC_CH_RUN;
+        if (v.rematch_enemy) try_escape(s);
       }
       break;
     case GC_SCREEN_TARGET:
@@ -745,7 +761,7 @@ static bool real_nemesis(int first, int tries, cc_record_id* id, cc_nemesis* cop
 }
 
 enum { RL_OFFER = 1, RL_ACCEPT = 2, RL_WIN = 4, RL_ALL = 7 };
-enum { FIGHT_WIN, FIGHT_LOSE, FIGHT_FLEE };
+enum { FIGHT_WIN, FIGHT_LOSE, FIGHT_ESCAPE };   /* FIGHT_ESCAPE: Run and a Poke Ball are tried (and refused) at every command, then the fight is fought and won */
 
 typedef struct {
   int attempt;       /* the run's seed */
@@ -768,6 +784,7 @@ typedef struct {
   int life_end;                 /* the record's life when the run stopped (-1: none) */
   int wave_end;
   int msgs;                     /* the voucher announcements the player was shown */
+  int escapes_refused;          /* commands at which the Run and the ball sent to a rematch enemy were refused (FIGHT_ESCAPE) */
   cr_stats stats;
   cs_result commit;             /* the report of a lost run */
   bool have_defeat;
@@ -793,6 +810,7 @@ static void rm_play(const rm_cfg* c, rm_out* o) {
   hashing = true;
   CHECK(new_run(seed, c->custom, 100), "start the run");
   H = 1469598103934665603ull;
+  escapes_refused = 0;
   bot.heal = true;
   bot.offer_answer = c->answer;
   bot.save_every = c->reload ? 1 : 0;
@@ -815,7 +833,7 @@ static void rm_play(const rm_cfg* c, rm_out* o) {
           bot.heal = false;
           bot.wipe = true;
         }
-        if (c->fight == FIGHT_FLEE) {
+        if (c->fight == FIGHT_ESCAPE) {
           bot.flee_rematch = true;
         }
       }
@@ -873,6 +891,7 @@ static void rm_play(const rm_cfg* c, rm_out* o) {
   o->v_after = vouchers();
   o->life_end = c->rid ? life_of(c->rid) : -1;
   o->msgs = n_msgs;
+  o->escapes_refused = escapes_refused;
   o->stats = *cr_stats_get();
   o->offered = o->stats.offers > 0;
   hashing = false;
@@ -1008,15 +1027,19 @@ static void test_rematch_real(void) {
     CHECK(!lose.have_defeat || lose.commit.commit.refusal == CC_REFUSE_REMATCH, "lost: any finisher named is refused as a rematch (%d)",
           lose.commit.commit.refusal);
 
-    /* fled: lost as well, the run goes on */
+    /* a Run and a Poke Ball sent to the rematch enemy at every command are refused (try_escape checks each one), so there is no flight and no catch:
+     * the fight is fought out and won, exactly as the uninterrupted one */
     restore(&base2);
     reboot_io();
     reboot();
-    cfg = (rm_cfg){attempt, true, 1, FIGHT_FLEE, 0, 29, rid};
+    cfg = (rm_cfg){attempt, true, 1, FIGHT_ESCAPE, 0, 29, rid};
     rm_out flee;
     rm_play(&cfg, &flee);
-    CHECK(flee.life_end == CC_LIFE_STORED && flee.v_after == flee.v_before, "fled: the record is back, no voucher (%d)", flee.life_end);
-    CHECK(flee.stats.wins == 0 && flee.stats.losses == 1, "fled: counted as lost");
+    CHECK(flee.escapes_refused >= 1, "escape: the Run and the ball were tried and refused (%d commands)", flee.escapes_refused);
+    CHECK(flee.life_end == CC_LIFE_REWARD_CLAIMED && flee.v_after == flee.v_before + 1, "escape refused: the fight is won and paid (%d, %u -> %u)", flee.life_end,
+          flee.v_before, flee.v_after);
+    CHECK(flee.stats.wins == 1 && flee.stats.losses == 0 && flee.wave_end == 29, "escape refused: one win, no loss (%u %u, wave %d)", flee.stats.wins,
+          flee.stats.losses, flee.wave_end);
 
     /* the same rematch with the run saved and loaded: at the offer, at the first turn, after the win, and at all of them */
     static const int masks[4] = {RL_OFFER, RL_ACCEPT, RL_WIN, RL_ALL};
@@ -1047,7 +1070,7 @@ static void test_rematch_real(void) {
     CHECK(dr.stats.offers == 2 && dr.stats.declines == 1, "declined with loads: asked again after the load of the older save (%u, %u)", dr.stats.offers,
           dr.stats.declines);
 
-    /* lost and fled with loads at the first turn and later */
+    /* lost, and an escape refused, with loads at the first turn and later */
     restore(&base2);
     reboot_io();
     reboot();
@@ -1061,10 +1084,12 @@ static void test_rematch_real(void) {
     restore(&base2);
     reboot_io();
     reboot();
-    cfg = (rm_cfg){attempt, true, 1, FIGHT_FLEE, RL_ACCEPT | RL_WIN, 29, rid};
+    cfg = (rm_cfg){attempt, true, 1, FIGHT_ESCAPE, RL_ACCEPT | RL_WIN, 29, rid};
     rm_out fl;
     rm_play(&cfg, &fl);
-    CHECK(fl.life_end == CC_LIFE_STORED && fl.v_after == fl.v_before && fl.stats.wins == 0, "fled after a load: record stored, no voucher (%d)", fl.life_end);
+    CHECK(fl.escapes_refused >= 1, "escape after a load: tried and refused (%d commands), the loaded battle keeps the lock", fl.escapes_refused);
+    CHECK(fl.life_end == CC_LIFE_REWARD_CLAIMED && fl.v_after == fl.v_before + 1 && fl.stats.wins == 1, "escape refused after a load: won and paid (%d, %u -> %u)", fl.life_end,
+          fl.v_before, fl.v_after);
     cr_end();
     drop(&base);
     drop(&base2);

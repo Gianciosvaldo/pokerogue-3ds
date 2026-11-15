@@ -95,6 +95,7 @@ void gc_run_set_custom(gc_run *run, const gc_custom_hooks *hooks)
 {
     gc_int(run)->custom = hooks;
     gc_custom_install_observer(run);
+    if (hooks) gc_battle_custom_refresh(run);   /* a battle loaded before the app had its rematch state back */
 }
 
 bool gc_custom_report(gc_run *run, const gc_custom_encounter *enc)
@@ -146,6 +147,13 @@ bool gc_custom_enemy_check(const gc_custom_enemy *spec, const char **why)
         for (int j = 0; j < i; j++) if (spec->moves[j] == m) { *why = "repeated move"; return false; }
     }
     return true;
+}
+
+/* The app's answer to "is this battle's enemy a rematch's" (gc/custom.h foe_locked); false with no hooks, no such hook or outside a wild battle. */
+bool gc_custom_foe_locked(const gc_run *run)
+{
+    const gc_custom_hooks *h = gc_int((gc_run *)run)->custom;
+    return h && h->foe_locked && run->battle_type == BATTLE_TYPE_WILD && !run->me_battle && h->foe_locked(h->user, run);
 }
 
 /* The ordinary wild enemy (the only one of the battle) becomes the rematch enemy, at its own level and with its own id, IVs and friendship, through

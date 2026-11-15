@@ -636,6 +636,87 @@ static void test_check(void)
     b.gender = -1; CHECK(gc_custom_enemy_check(&b, &why));
 }
 
+/* ---------------------------------------------------------------- 5. the rematch enemy cannot be run from or caught (foe_locked) */
+static bool lock_on;
+static bool h_locked(void *user, const gc_run *r)
+{
+    (void)user;
+    return lock_on && r->n_enemy == 1;
+}
+static const gc_custom_hooks hooks_lock = {NULL, h_encounter, h_answer, h_built, h_faint, NULL, NULL, h_locked};
+
+/* A run that stopped at its first offer, accepted: the rematch enemy is out and the command screen waits. `lock` is what foe_locked answers. */
+static void to_rematch(bool lock, const gc_custom_hooks *hooks)
+{
+    ask_here = true;
+    lock_on = lock;
+    built_calls = built_ok = answered = 0;
+    new_run_in(&run, &sys, "offer-seed-1", hooks);
+    CHECK(to_offer(&run, 1));
+    const snap ordinary = snap_of(&run);
+    pick_spec(&ordinary, &next_spec);
+    gc_choice yes = {GC_CH_CONFIRM, 1, 0, 0};
+    const char *why = "";
+    CHECK(gc_run_choose(&run, &yes, &why));
+    CHECK(built_ok == 1 && run.screen.kind == GC_SCREEN_COMMAND);
+    run.pokeballs[0] = 5;
+}
+
+static void test_lock(void)
+{
+    const char *why = "";
+    const gc_choice ball = {GC_CH_BALL, 0, 0, 0}, flee = {GC_CH_RUN, 0, 0, 0};
+
+    /* the control: the hook is installed but says no. A wild battle outside the End can be run from and a ball can be thrown at it */
+    to_rematch(false, &hooks_lock);
+    CHECK(run.screen.can_run && run.screen.can_ball);
+    CHECK(!run.bt.me_no_flee);
+    CHECK(gc_catch_ball_refusal(&run, 0) == NULL);
+    /* with no such hook at all (an app that has not got one) nothing changes either */
+    to_rematch(false, &hooks_all);
+    CHECK(run.screen.can_run && gc_catch_ball_refusal(&run, 0) == NULL);
+
+    /* locked from the start of the battle: the command screen offers no Run, a ball and a run are refused with the End biome's texts, nothing is spent */
+    to_rematch(true, &hooks_lock);
+    gc_battle_command_screen(&run);
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && !run.screen.can_run && run.screen.can_ball);
+    CHECK(run.bt.me_no_flee);
+    CHECK(gc_catch_ball_refusal(&run, 0) && !strcmp(gc_catch_ball_refusal(&run, 0), "battle:noPokeballForce"));
+    why = "";
+    CHECK(!gc_run_choose(&run, &ball, &why) && why && !strcmp(why, "battle:noPokeballForce"));
+    CHECK(run.pokeballs[0] == 5);
+    why = "";
+    CHECK(!gc_run_choose(&run, &flee, &why) && why && !strcmp(why, "battle:noEscapeForce"));
+    CHECK(gc_int(&run)->refusal_message.key && !strcmp(gc_int(&run)->refusal_message.key, "battle:noEscapeForce"));
+    /* every ball type, not only the first */
+    for (int b = 0; b < 5; b++) CHECK(gc_catch_ball_refusal(&run, b) != NULL);
+    /* refusals leave the battle where it was: the same command screen, and a move still goes in */
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND);
+    {
+        gc_choice fight = {GC_CH_FIGHT, 0, -1, 0};
+        for (int i = 0; i < 4; i++) if (run.screen.move_ok[i]) { fight.a = (int16_t)i; break; }
+        CHECK(gc_run_choose(&run, &fight, &why));
+    }
+
+    /* a battle loaded before the app had its rematch state: the screen the load built offers Run; installing the hooks takes it away */
+    to_rematch(false, &hooks_lock);
+    CHECK(run.screen.can_run && !run.bt.me_no_flee);
+    lock_on = true;
+    gc_run_set_custom(&run, &hooks_lock);
+    CHECK(!run.screen.can_run && run.bt.me_no_flee);
+    why = "";
+    CHECK(!gc_run_choose(&run, &flee, &why) && why && !strcmp(why, "battle:noEscapeForce"));
+    why = "";
+    CHECK(!gc_run_choose(&run, &ball, &why) && why && !strcmp(why, "battle:noPokeballForce"));
+
+    /* the lock ends with the battle: the next wave's battle is built from the encounter again and is not locked */
+    lock_on = false;
+    CHECK(run.bt.me_no_flee);   /* this battle's flag is still set: it is only ever set again, never cleared, inside a battle */
+    for (int guard = 0; guard < 4000 && !(run.screen.kind == GC_SCREEN_COMMAND && !run.bt.me_no_flee); guard++)
+        if (!bot_step(&run, false)) break;
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && run.screen.can_run && !run.bt.me_no_flee && !run.me_battle);
+}
+
 int main(void)
 {
     test_check();
@@ -644,6 +725,7 @@ int main(void)
     test_kind_agrees();
     test_faint_notes();
     test_offer();
+    test_lock();
     printf("custom_hooks_test: %d checks, 0 failed\n", checks);
     return 0;
 }
