@@ -35,13 +35,23 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 100
+#define GC_ACHV_COUNT 117   /* 0..99 as first made, then the 17 "Defeat X" of the second batch of challengers */
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
 enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI, GC_JOJO_JOLYNE, GC_JOJO_JOSEPH, GC_JOJO_JOTARO, GC_JOJO_DIO,
        GC_JOJO_KOICHI, GC_JOJO_MISTA, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_VALENTINE, GC_JOJO_POLNAREFF, GC_JOJO_RISOTTO,
-       GC_JOJO_STROHEIM, GC_JOJO_COUNT };
+       GC_JOJO_STROHEIM,
+       /* the second batch (2026-11-15) */
+       GC_JOJO_CAESAR, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY, GC_JOJO_NARANCIA, GC_JOJO_BRUNO,
+       GC_JOJO_ABBACCHIO, GC_JOJO_WEATHER, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO, GC_JOJO_SHIGECHI, GC_JOJO_JOSUKE, GC_JOJO_ROHAN,
+       GC_JOJO_GIORNO, GC_JOJO_COUNT };
+
+/* The achievement of beating one challenger ("Defeat X"): ids 0..16 for the first 17 (the table index), then GC_ACHV_JOJO2_FIRST + (index - 17)
+ * for the second batch, because the ids of the others (the sets, the runs, ...) were taken before it existed and a profile keeps them by id.
+ * -1 for an index outside the table. */
+#define GC_ACHV_JOJO2_FIRST 100
+int gc_achv_jojo_id(int jojo);
 
 /* A JoJo challenger (index in the order above) was beaten in a Bizarre run. `run_tag` names the run (any value that is the same for the
  * whole run and differs between runs), `clean` is true when none of the party fainted in the battle. */

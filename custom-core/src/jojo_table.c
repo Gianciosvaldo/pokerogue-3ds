@@ -1,4 +1,5 @@
-/* custom-core: the JoJo characters (data, generated once from lorenzo's lineup file of 2026-10-18/19 and edited by hand; see jojo.h).
+/* custom-core: the JoJo characters (data, generated from lorenzo's lineup files of 2026-10-18/19 (the first 17) and 2026-11-15 (the next 17, from
+ * Caesar to Giorno) and edited by hand; see jojo.h).
  *
  * One row per character: id, display name, iconic line, biome (BiomeId; -1 = not in a biome pool: the Pillar Men), the background
  * passive (an AbilityId; -1 = none) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
@@ -142,6 +143,109 @@ const cc_jojo_char cc_jojo_chars[] = {
         {295, 0, 2, 0, 0, {586, 315, 304, 59}, 1, {{"ATTACK_TYPE_BOOSTER", 0, 5}}}, /* Exploud; Boomburst, Overheat, Hyper Voice, Blizzard */
         {966, 0, 2, 0, 0, {859, 441, 508, 442}, 4, {{"QUICK_CLAW", -1, 3}, {"ATTACK_TYPE_BOOSTER", 8, 4}, {"SHELL_BELL", -1, 3}, {"FOCUS_BAND", -1, 2}}}, /* Revavroom; Spin Out, Gunk Shot, Shift Gear, Iron Head */
         {376, 1, 0, 0, 0, {309, 418, 428, 153}, 1, {{"ATTACK_TYPE_BOOSTER", 8, 5}}}, /* Metagross (mega); Meteor Mash, Bullet Punch, Zen Headbutt, Explosion */
+    }},
+    {"caesar", "Caesar Zeppeli", "My spirit is unbending! Witness the ultimate Zeppeli technique!", 20 /* Dojo */, -1, 4, {
+        {730, 0, 0, 1, 0, {664, 585, 453, 304}, 0, {{0}}}, /* Primarina; Sparkling Aria, Moonblast, Aqua Jet, Hyper Voice */
+        {752, 0, 0, 0, 0, {710, 679, 564, 277}, 1, {{"ATTACK_TYPE_BOOSTER", 10, 1}}}, /* Araquanid; Liquidation, Lunge, Sticky Web, Magic Coat */
+        {700, 0, 0, 0, 0, {304, 585, 595, 98}, 0, {{0}}}, /* Sylveon; Hyper Voice, Moonblast, Mystical Fire, Quick Attack */
+        {448, 0, 0, 1, 2, {396, 370, 418, 245}, 1, {{"ATTACK_TYPE_BOOSTER", 1, 1}}}, /* Lucario; Aura Sphere, Close Combat, Bullet Punch, Extreme Speed */
+    }},
+    {"kakyoin", "Noriaki Kakyoin", "Rororerorerorerorerorero", 29 /* Temple */, -1, 4, {
+        {254, 1, 0, 0, 0, {437, 406, 411, 202}, 1, {{"ATTACK_TYPE_BOOSTER", 11, 1}}}, /* Sceptile (mega); Leaf Storm, Dragon Pulse, Focus Blast, Giga Drain */
+        {73, 0, 0, 0, 0, {503, 188, 282, 390}, 0, {{0}}}, /* Tentacruel; Scald, Sludge Bomb, Knock Off, Toxic Spikes */
+        {724, 0, 0, 0, 0, {662, 348, 389, 369}, 0, {{0}}}, /* Decidueye; Spirit Shackle, Leaf Blade, Sucker Punch, U-turn */
+        {429, 0, 0, 1, 1, {247, 595, 417, 220}, 1, {{"ATTACK_TYPE_BOOSTER", 7, 1}}}, /* Mismagius; Shadow Ball, Mystical Fire, Nasty Plot, Pain Split */
+    }},
+    {"avdol", "Muhammad Avdol", "I truly did plan to send you to the hospital", 18 /* Volcano */, -1, 4, {
+        {257, 0, 0, 0, 0, {394, 370, 182, 14}, 2, {{"ATTACK_TYPE_BOOSTER", 9, 1}, {"ATTACK_TYPE_BOOSTER", 1, 1}}}, /* Blaziken; Flare Blitz, Close Combat, Protect, Swords Dance */
+        {655, 0, 0, 0, 0, {53, 94, 595, 347}, 2, {{"ATTACK_TYPE_BOOSTER", 9, 1}, {"ATTACK_TYPE_BOOSTER", 13, 1}}}, /* Delphox; Flamethrower, Psychic, Mystical Fire, Calm Mind */
+        {663, 0, 0, 0, 0, {413, 394, 355, 369}, 3, {{"ATTACK_TYPE_BOOSTER", 2, 1}, {"ATTACK_TYPE_BOOSTER", 9, 1}, {"SHELL_BELL", -1, 1}}}, /* Talonflame; Brave Bird, Flare Blitz, Roost, U-turn */
+        {178, 0, 0, 0, 0, {94, 403, 355, 100}, 3, {{"ATTACK_TYPE_BOOSTER", 13, 1}, {"ATTACK_TYPE_BOOSTER", 2, 1}, {"LEFTOVERS", -1, 1}}}, /* Xatu; Psychic, Air Slash, Roost, Teleport */
+    }},
+    {"vanillaice", "Vanilla Ice", "Into the void of absolute dark! Cream, devour them!", 24 /* Abyss */, -1, 4, {
+        {799, 0, 0, 0, 0, {242, 407, 484, 282}, 2, {{"LEFTOVERS", -1, 1}, {"SHELL_BELL", -1, 1}}}, /* Guzzlord; Crunch, Dragon Rush, Heavy Slam, Knock Off */
+        {362, 0, 0, 0, 0, {38, 89, 242, 153}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"ATTACK_TYPE_BOOSTER", 5, 1}}}, /* Glalie; Double-Edge, Earthquake, Crunch, Explosion */
+        {442, 0, 0, 1, 0, {389, 506, 261, 492}, 0, {{0}}}, /* Spiritomb; Sucker Punch, Hex, Will-O-Wisp, Foul Play */
+        {635, 0, 0, 0, 0, {399, 434, 126, 369}, 2, {{"ATTACK_TYPE_BOOSTER", 16, 1}, {"ATTACK_TYPE_BOOSTER", 15, 1}}}, /* Hydreigon; Dark Pulse, Draco Meteor, Fire Blast, U-turn */
+    }},
+    {"holhorse", "Hol Horse", "I'm strictly a 'Number Two' guy, but I never miss my mark!", 23 /* Wasteland */, -1, 3, {
+        {818, 0, 0, 0, 0, {745, 58, 369, 403}, 2, {{"ATTACK_TYPE_BOOSTER", 10, 1}, {"SCOPE_LENS", -1, 1}}}, /* Inteleon; Snipe Shot, Ice Beam, U-turn, Air Slash */
+        {750, 0, 0, 0, 0, {667, 334, 776, 484}, 0, {{0}}}, /* Mudsdale; High Horsepower, Iron Defense, Body Press, Heavy Slam */
+        {128, 0, 0, 0, 0, {38, 89, 370, 37}, 1, {{"ATTACK_TYPE_BOOSTER", 0, 1}}}, /* Tauros; Double-Edge, Earthquake, Close Combat, Thrash */
+    }},
+    {"iggy", "Iggy", "*farts*", 14 /* Desert */, -1, 4, {
+        {943, 0, 0, 0, 0, {242, 583, 746, 575}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Mabosstiff; Crunch, Play Rough, Jaw Lock, Parting Shot */
+        {450, 0, 0, 0, 0, {89, 303, 446, 18}, 0, {{0}}}, /* Hippowdon; Earthquake, Slack Off, Stealth Rock, Whirlwind */
+        {770, 0, 0, 0, 0, {414, 247, 659, 202}, 1, {{"ATTACK_TYPE_BOOSTER", 4, 1}}}, /* Palossand; Earth Power, Shadow Ball, Shore Up, Giga Drain */
+        {508, 0, 0, 0, 0, {216, 242, 583, 276}, 1, {{"ATTACK_TYPE_BOOSTER", 0, 1}}}, /* Stoutland; Return, Crunch, Play Rough, Superpower */
+    }},
+    {"narancia", "Narancia Ghirga", "Aerosmith! Volare Via!", 21 /* Factory */, -1, 4, {
+        {886, 0, 0, 0, 0, {751, 566, 369, 389}, 2, {{"ATTACK_TYPE_BOOSTER", 15, 1}, {"ATTACK_TYPE_BOOSTER", 7, 1}}}, /* Drakloak; Dragon Darts, Phantom Force, U-turn, Sucker Punch */
+        {381, 1, 0, 0, 0, {94, 406, 396, 355}, 2, {{"ATTACK_TYPE_BOOSTER", 13, 1}, {"ATTACK_TYPE_BOOSTER", 15, 1}}}, /* Latios (mega); Psychic, Dragon Pulse, Aura Sphere, Roost */
+        {715, 0, 0, 0, 0, {586, 434, 542, 369}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"ATTACK_TYPE_BOOSTER", 15, 1}}}, /* Noivern; Boomburst, Draco Meteor, Hurricane, U-turn */
+        {227, 0, 0, 0, 0, {413, 355, 191, 18}, 3, {{"ATTACK_TYPE_BOOSTER", 2, 1}, {"ATTACK_TYPE_BOOSTER", 8, 1}, {"LEFTOVERS", -1, 1}}}, /* Skarmory; Brave Bird, Roost, Spikes, Whirlwind */
+    }},
+    {"bruno", "Bruno Bucciarati", "Arrivederci! Sticky Fingers!", 8 /* Beach */, -1, 4, {
+        {354, 1, 0, 1, 0, {809, 425, 282, 194}, 0, {{0}}}, /* Banette (mega); Poltergeist, Shadow Sneak, Knock Off, Destiny Bond */
+        {625, 0, 0, 1, 0, {442, 389, 282, 14}, 0, {{0}}}, /* Bisharp; Iron Head, Sucker Punch, Knock Off, Swords Dance */
+        {707, 0, 0, 0, 0, {583, 191, 86, 115}, 0, {{0}}}, /* Klefki; Play Rough, Spikes, Thunder Wave, Reflect */
+        {448, 0, 0, 0, 0, {396, 370, 309, 245}, 1, {{"ATTACK_TYPE_BOOSTER", 1, 1}}}, /* Lucario; Aura Sphere, Close Combat, Meteor Mash, Extreme Speed */
+    }},
+    {"abbacchio", "Leone Abbacchio", "Moody Blues!", 19 /* Graveyard */, -1, 3, {
+        {233, 0, 0, 1, 0, {161, 58, 85, 105}, 1, {{"EVIOLITE", -1, 1}}}, /* Porygon2; Tri Attack, Ice Beam, Thunderbolt, Recover */
+        {132, 0, 2, 1, 0, {144, 0, 0, 0}, 0, {{0}}}, /* Ditto; Transform */
+        {571, 0, 0, 0, 0, {399, 53, 188, 417}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Zoroark; Dark Pulse, Flamethrower, Sludge Bomb, Nasty Plot */
+    }},
+    {"weather", "Weather Report", "You... The kind of evil that doesn't realize that it's evil... is the worst one there is...", 30 /* Slum */, -1, 5, {
+        {351, 0, 0, 0, 0, {311, 126, 56, 59}, 0, {{0}}}, /* Castform; Weather Ball, Fire Blast, Hydro Pump, Blizzard */
+        {186, 0, 2, 0, 0, {503, 92, 182, 156}, 1, {{"ATTACK_TYPE_BOOSTER", 10, 1}}}, /* Politoed; Scald, Toxic, Protect, Rest */
+        {6706, 0, 0, 0, 0, {406, 188, 330, 151}, 1, {{"ATTACK_TYPE_BOOSTER", 3, 1}}}, /* Goodra; Dragon Pulse, Sludge Bomb, Muddy Water, Acid Armor */
+        {641, 0, 0, 0, 0, {846, 542, 369, 282}, 0, {{0}}}, /* Tornadus (incarnate); Bleakwind Storm, Hurricane, U-turn, Knock Off */
+        {642, 1, 0, 0, 0, {85, 521, 411, 447}, 1, {{"MULTI_LENS", -1, 1}}}, /* Thundurus (therian); Thunderbolt, Volt Switch, Focus Blast, Grass Knot */
+    }},
+    {"johnny", "Johnny Joestar", "Gyro! What are you trying to make her do?! She's only 14!", 14 /* Desert */, -1, 4, {
+        {4080, 0, 0, 1, 1, {801, 188, 94, 303}, 0, {{0}}}, /* Slowbro; Shell Side Arm, Sludge Bomb, Psychic, Slack Off */
+        {237, 0, 0, 0, 0, {229, 370, 813, 389}, 1, {{"ATTACK_TYPE_BOOSTER", 1, 1}}}, /* Hitmontop; Rapid Spin, Close Combat, Triple Axel, Sucker Punch */
+        {896, 0, 0, 0, 0, {556, 667, 370, 14}, 0, {{0}}}, /* Glastrier; Icicle Crash, High Horsepower, Close Combat, Swords Dance */
+        {724, 0, 0, 1, 0, {662, 348, 389, 369}, 1, {{"SCOPE_LENS", -1, 1}}}, /* Decidueye; Spirit Shackle, Leaf Blade, Sucker Punch, U-turn */
+    }},
+    {"sandman", "Sandman", "I will cross the continent with my feet alone.", 14 /* Desert */, -1, 4, {
+        {291, 0, 0, 0, 0, {814, 404, 14, 182}, 0, {{0}}}, /* Ninjask; Dual Wingbeat, X-Scissor, Swords Dance, Protect */
+        {849, 0, 0, 0, 0, {786, 586, 188, 521}, 1, {{"ATTACK_TYPE_BOOSTER", 12, 1}}}, /* Toxtricity (amped); Overdrive, Boomburst, Sludge Bomb, Volt Switch */
+        {85, 0, 0, 0, 0, {413, 65, 26, 14}, 0, {{0}}}, /* Dodrio; Brave Bird, Drill Peck, Jump Kick, Swords Dance */
+        {330, 0, 0, 0, 0, {89, 337, 369, 349}, 2, {{"ATTACK_TYPE_BOOSTER", 4, 1}, {"ATTACK_TYPE_BOOSTER", 15, 1}}}, /* Flygon; Earthquake, Dragon Claw, U-turn, Dragon Dance */
+    }},
+    {"diego", "Diego Brando", "Ohh...are you wondering why I was eating those rocks?", 23 /* Wasteland */, -1, 5, {
+        {253, 0, 0, 0, 0, {348, 404, 98, 14}, 0, {{0}}}, /* Grovyle; Leaf Blade, X-Scissor, Quick Attack, Swords Dance */
+        {880, 0, 0, 0, 0, {754, 200, 89, 332}, 1, {{"ATTACK_TYPE_BOOSTER", 12, 1}}}, /* Dracozolt; Bolt Beak, Outrage, Earthquake, Aerial Ace */
+        {567, 0, 0, 0, 0, {512, 444, 89, 369}, 1, {{"ATTACK_TYPE_BOOSTER", 2, 1}}}, /* Archeops; Acrobatics, Stone Edge, Earthquake, U-turn */
+        {445, 0, 0, 0, 0, {89, 200, 14, 444}, 1, {{"ATTACK_TYPE_BOOSTER", 4, 1}}}, /* Garchomp; Earthquake, Outrage, Swords Dance, Stone Edge */
+        {483, 0, 0, 0, 0, {459, 430, 414, 396}, 0, {{0}}}, /* Dialga; Roar of Time, Flash Cannon, Earth Power, Aura Sphere */
+    }},
+    {"shigechi", "Shigechi", "You won't get nothing from me! Not a single yen!", 26 /* Construction Site */, -1, 3, {
+        {925, 0, 0, 0, 0, {860, 44, 369, 882}, 1, {{"KINGS_ROCK", -1, 1}}}, /* Maushold (four); Population Bomb, Bite, U-turn, Tidy Up */
+        {999, 1, 0, 0, 0, {310, 33, 168, 109}, 0, {{0}}}, /* Gimmighoul (roaming); Astonish, Tackle, Thief, Confuse Ray */
+        {820, 0, 0, 0, 0, {34, 242, 89, 747}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"BERRY", 0, 1}}}, /* Greedent; Body Slam, Crunch, Earthquake, Stuff Cheeks */
+    }},
+    {"josuke", "Josuke Higashikata", "What did you just say about my hair?!", 1 /* Plains */, -1, 5, {
+        {719, 0, 0, 1, 0, {591, 585, 215, 776}, 1, {{"LEFTOVERS", -1, 1}}}, /* Diancie; Diamond Storm, Moonblast, Heal Bell, Body Press */
+        {626, 0, 0, 0, 0, {543, 89, 370, 14}, 0, {{0}}}, /* Bouffalant; Head Charge, Earthquake, Close Combat, Swords Dance */
+        {675, 0, 0, 0, 0, {370, 282, 418, 575}, 2, {{"ATTACK_TYPE_BOOSTER", 1, 1}, {"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Pangoro; Close Combat, Knock Off, Bullet Punch, Parting Shot */
+        {764, 0, 1, 0, 0, {666, 577, 347, 235}, 0, {{0}}}, /* Comfey; Floral Healing, Draining Kiss, Calm Mind, Synthesis */
+        {936, 0, 0, 1, 0, {890, 797, 396, 347}, 1, {{"ATTACK_TYPE_BOOSTER", 9, 1}}}, /* Armarouge; Armor Cannon, Expanding Force, Aura Sphere, Calm Mind */
+    }},
+    {"rohan", "Rohan Kishibe", "It's great! I've found the perfect inspiration for my comics!!", 41 /* Laboratory */, -1, 4, {
+        {235, 0, 0, 0, 0, {147, 564, 417, 226}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"BERRY", 1, 1}}}, /* Smeargle; Spore, Sticky Web, Nasty Plot, Baton Pass */
+        {765, 0, 0, 1, 0, {689, 94, 492, 433}, 2, {{"ATTACK_TYPE_BOOSTER", 13, 1}, {"LEFTOVERS", -1, 1}}}, /* Oranguru; Instruct, Psychic, Foul Play, Trick Room */
+        {168, 0, 0, 0, 0, {564, 672, 224, 389}, 2, {{"ATTACK_TYPE_BOOSTER", 3, 1}, {"ATTACK_TYPE_BOOSTER", 6, 1}}}, /* Ariados; Sticky Web, Toxic Thread, Megahorn, Sucker Punch */
+        {201, 17, 0, 0, 0, {237, 0, 0, 0}, 1, {{"ATTACK_TYPE_BOOSTER", 13, 1}}}, /* Unown (r); Hidden Power */
+    }},
+    {"giorno", "Giorno Giovanna", "I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 5, {
+        {1000, 0, 0, 0, 0, {874, 247, 417, 105}, 2, {{"ATTACK_TYPE_BOOSTER", 7, 1}, {"ATTACK_TYPE_BOOSTER", 8, 1}}}, /* Gholdengo; Make It Rain, Shadow Ball, Nasty Plot, Recover */
+        {3, 1, 0, 0, 0, {202, 188, 414, 235}, 2, {{"ATTACK_TYPE_BOOSTER", 11, 1}, {"ATTACK_TYPE_BOOSTER", 3, 1}}}, /* Venusaur (mega); Giga Drain, Sludge Bomb, Earth Power, Synthesis */
+        {166, 0, 0, 1, 0, {409, 183, 405, 115}, 0, {{0}}}, /* Ledian; Drain Punch, Mach Punch, Bug Buzz, Reflect */
+        {510, 0, 0, 0, 0, {282, 389, 369, 252}, 0, {{0}}}, /* Liepard; Knock Off, Sucker Punch, U-turn, Fake Out */
+        {716, 0, 0, 1, 2, {601, 585, 411, 87}, 1, {{"ATTACK_TYPE_BOOSTER", 17, 1}}}, /* Xerneas (neutral); Geomancy, Moonblast, Focus Blast, Thunder */
     }},
 };
 

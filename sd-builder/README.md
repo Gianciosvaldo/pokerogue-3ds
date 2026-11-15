@@ -2,11 +2,11 @@
 
 One download and one double-click that put the game on a 3DS SD card, with nothing to install. The game is either one file (`PokeRogue.3dsx` or an installable `PokeRogue.cia`, with the packs inside it: see **One file instead of loose packs**) or the app plus the loose packs. The packs (`gfx`, `snd`, `bgm`, `font` and `data.pak`, 848 MB) are Pokémon and PokeRogue content, so they can't be shared: each person builds their own from PokeRogue's public files. This wraps [`assets-pipeline/build_sd.py`](../assets-pipeline/) so a non-developer can do that.
 
-**The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (45 KB), the 17 JoJo trainer sprites, the release notes and the game app (`game/`: the 3.9 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
+**The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (45 KB), the JoJo trainer sprites, the release notes and the game app (`game/`: the 3.9 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
 
 ## The project's own pictures (JoJo trainers)
 
-The JoJo challengers' sprites (17 PNGs, third-party art of unclear licence, committed at lorenzo's decision of 2026-10-25) live in
+The JoJo challengers' sprites (third-party art of unclear licence, committed at lorenzo's decision of 2026-10-25; the first 17 characters' 17 PNGs, then the new characters' as they arrive: diego, sandman and johnny so far, 20 PNGs; a character with no PNG yet falls back to the ordinary trainer sprite) live in
 `sd-builder/extra-images/` and `make-zip.sh` copies them into the zip. The builder packs any PNG it finds under
 `files/extra-images/` (next to `builder.py`) into `gfx.pak`, laid out like upstream's `images/` folder, so
 `files/extra-images/trainer/custom/kira.png` becomes the picture `images/trainer/custom/kira` that the game asks for. A file of

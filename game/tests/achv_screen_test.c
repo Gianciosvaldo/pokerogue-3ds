@@ -114,7 +114,10 @@ int main(void) {
 
   /* the first page: the first seven names and the count */
   draw(1);
-  CHECK(has_text(1, "Achievements") && has_text(1, "0/100"), "title and count");
+  char zero_of[16], three_of[16];   /* the total is the table's own: the list grows with each batch of characters */
+  snprintf(zero_of, sizeof zero_of, "0/%d", GC_ACHV_COUNT);
+  snprintf(three_of, sizeof three_of, "3/%d", GC_ACHV_COUNT);
+  CHECK(has_text(1, "Achievements") && has_text(1, zero_of), "title and count");
   CHECK(has_text(1, gc_achv_defs[0].name) && has_text(1, gc_achv_defs[6].name), "first seven rows");
   CHECK(!has_text(1, gc_achv_defs[7].name), "the eighth is on the next page");
   CHECK(has_text(1, "1 Egg Voucher"), "the reward of a row");
@@ -154,7 +157,7 @@ int main(void) {
   for (int i = 0; i < 17; i++) press(BTN_DOWN);
   draw(1);
   CHECK(has_text(1, "2/3"), "the Pillar Men set has 2 of 3");
-  CHECK(has_text(1, "3/100"), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
+  CHECK(has_text(1, three_of), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
   draw(0);
   CHECK(has_text(0, "Progress: 2/3"), "the top screen says the progress of a counting one");
   for (int i = 0; i < 7; i++) press(BTN_DOWN);

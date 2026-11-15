@@ -34,12 +34,27 @@ int main(void)
         gc_achv_jojo_won(&S, j, 7, false);
         gc_achv_new n;
         assert(eval(&n) >= 1);
-        assert(gc_achv_unlocked(&S, j));
+        assert(gc_achv_unlocked(&S, gc_achv_jojo_id(j)));
+        for (int k = 0; k < GC_JOJO_COUNT; k++) assert(gc_achv_unlocked(&S, gc_achv_jojo_id(k)) == (k == j));   /* only this one's */
         assert(S.voucher_counts[GC_VOUCHER_REGULAR] >= 1);
         const uint32_t before = vouchers();
         assert(eval(&n) == 0 && n.n == 0);            /* nothing twice */
         gc_achv_jojo_won(&S, j, 7, false);
         assert(eval(&n) == 0 && vouchers() == before); /* the same challenger again gives nothing new */
+    }
+
+    /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
+    {
+        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_JOJO2_FIRST + 17);
+        assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
+        for (int j = 0; j < GC_JOJO_COUNT; j++) {
+            const int id = gc_achv_jojo_id(j);
+            assert(id >= 0 && id < GC_ACHV_COUNT && gc_achv_defs[id].group == GC_ACHV_GROUP_JOJO);
+            assert(id == (j < 17 ? j : 100 + j - 17));
+            for (int k = 0; k < j; k++) assert(gc_achv_jojo_id(k) != id);
+        }
+        assert(strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GIORNO)].name, "Giorno") && strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].name, "Kars"));
+        assert(strstr(gc_achv_defs[26].desc, "34"));   /* Every Face names the number */
     }
 
     /* the sets */
@@ -62,7 +77,7 @@ int main(void)
         assert(gc_achv_unlocked(&S, SETS[k].id));
     }
 
-    /* counts of different challengers: 5, 10 and all 17 (the last gives a tier-3 shiny egg) */
+    /* counts of different challengers: 5, 10 and all 34 (the last gives a tier-3 shiny egg) */
     fresh();
     for (int j = 0; j < GC_JOJO_COUNT; j++) {
         gc_achv_jojo_won(&S, j, 100 + j, false); /* a new run each time */
@@ -74,27 +89,34 @@ int main(void)
     }
     assert(S.n_eggs == 1 && S.eggs[0].is_shiny && S.eggs[0].variant_tier == 2 && S.eggs[0].species != 0 && S.eggs[0].tier == 2);
 
-    /* the beaten mask is 64 bits (two profile fields): challengers 32..63 count towards the totals and the progress line like the first 32.
-     * No table has them yet, so the profile is written directly, as a later build's saves will have it. */
+    /* the beaten mask is 64 bits (two profile fields): challengers 32 and 33 (Rohan, Giorno) count towards the totals and the progress line
+     * like the first 32 */
     fresh();
-    S.achv.jojo_beaten_hi = 0x1Fu;                    /* indexes 32..36 */
+    for (int j = 0; j < 3; j++) gc_achv_jojo_won(&S, j, 40 + j, false);
+    gc_achv_jojo_won(&S, GC_JOJO_ROHAN, 50, false);
+    gc_achv_jojo_won(&S, GC_JOJO_GIORNO, 51, false);
+    assert(S.achv.jojo_beaten == 7u && S.achv.jojo_beaten_hi == 3u);
     eval(NULL);
     uint32_t have = 0, need = 0;
     assert(gc_achv_unlocked(&S, 24) && !gc_achv_unlocked(&S, 25));   /* five different challengers, not ten */
     assert(gc_achv_progress_of(&S, 25, &have, &need) && have == 5 && need == 10);
-    S.achv.jojo_beaten = 0x1Fu;                       /* five of the first word: ten in all */
+    assert(gc_achv_progress_of(&S, 26, &have, &need) && have == 5 && need == GC_JOJO_COUNT);
+    assert(gc_achv_unlocked(&S, gc_achv_jojo_id(GC_JOJO_ROHAN)) && gc_achv_unlocked(&S, gc_achv_jojo_id(GC_JOJO_GIORNO)));
+    /* a bit for a character the table does not have (a profile from a later build) counts for nothing, and neither do the ones it does have
+     * towards another one's achievement */
+    fresh();
+    S.achv.jojo_beaten_hi = 0xFFFFFFFCu;                /* indexes 34..63 */
     eval(NULL);
-    assert(gc_achv_unlocked(&S, 25));
-    assert(gc_achv_progress_of(&S, 26, &have, &need) && have == 10 && need == GC_JOJO_COUNT);
-    S.achv.jojo_beaten = 0xFFFFFFFFu;                 /* more bits than the table has characters: the line is capped at the table's size */
+    for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_jojo_id(j)));
+    assert(!gc_achv_unlocked(&S, 24) && gc_achv_progress_of(&S, 24, &have, &need) && have == 0);
+    S.achv.jojo_beaten = 0xFFFFFFFFu;                   /* all 32 of the first word, and two of the second: all 34 */
+    S.achv.jojo_beaten_hi |= 3u;
     eval(NULL);
     assert(gc_achv_progress_of(&S, 26, &have, &need) && have == GC_JOJO_COUNT && need == GC_JOJO_COUNT && gc_achv_unlocked(&S, 26));
     fresh();
-    S.achv.jojo_beaten_hi = 0xFFFFFFFFu;               /* a mask bit outside the table never opens a challenger's own achievement */
-    eval(NULL);
-    for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, j));
-    gc_achv_jojo_won(&S, 63, 1, false);                /* an index the table does not have is refused: nothing recorded */
-    assert(S.achv.jojo_battles == 0 && S.achv.jojo_beaten == 0 && S.achv.jojo_beaten_hi == 0xFFFFFFFFu);
+    gc_achv_jojo_won(&S, 63, 1, false);                 /* an index the table does not have is refused: nothing recorded */
+    gc_achv_jojo_won(&S, GC_JOJO_COUNT, 1, false);
+    assert(S.achv.jojo_battles == 0 && S.achv.jojo_beaten == 0 && S.achv.jojo_beaten_hi == 0);
 
     /* three in one run; the count belongs to a run */
     fresh();
@@ -448,7 +470,7 @@ int main(void)
         /* a new profile has beaten nobody */
         fresh();
         assert(eval(NULL) == 0);
-        for (int id = 68; id < GC_ACHV_COUNT; id++) assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0 && n > 0);
+        for (int id = 68; id < GC_ACHV_JOJO2_FIRST; id++) assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0 && n > 0);   /* trainers and football: every one has a count (the ids from 100 are "Defeat X") */
 
         /* each one alone gives its own first achievement, once, and no count above one */
         for (int t = TRAINER_TYPE_BROCK; t <= TRAINER_TYPE_GRUSHA; t++) {

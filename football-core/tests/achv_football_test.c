@@ -16,7 +16,7 @@ int main(void)
 {
     (void)fb_win_round; /* a fixture helper this test has no use for */
     football_test_unlock_all(&profile);
-    assert(GC_ACHV_COUNT==100 && !strcmp(gc_achv_defs[91].name,"Kickoff") && !strcmp(gc_achv_defs[99].name,"Blowout") && gc_achv_defs[91].group==GC_ACHV_GROUP_FOOTBALL);
+    assert(GC_ACHV_COUNT>=100 && !strcmp(gc_achv_defs[91].name,"Kickoff") && !strcmp(gc_achv_defs[99].name,"Blowout") && gc_achv_defs[91].group==GC_ACHV_GROUP_FOOTBALL);
     const gc_achv_progress zero={0};
     assert(!memcmp(&profile.achv.fb_wins,&zero.fb_wins,sizeof zero.fb_wins) && profile.achv.fb_titles==0);
 

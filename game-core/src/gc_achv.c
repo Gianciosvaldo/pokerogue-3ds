@@ -14,7 +14,7 @@
 #define EGGS GC_ACHV_GROUP_EGGS
 #define TR GC_ACHV_GROUP_TRAINERS
 #define FB GC_ACHV_GROUP_FOOTBALL
-/* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
+/* Ids follow the list order: the first 17 challengers (GC_JOJO_*), then the sets and counts, ..., and from 100 the next 17 challengers. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"Gyro Zeppeli", "Defeat Gyro Zeppeli.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -42,7 +42,7 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Steel Ball Run", "Defeat Valentine and Gyro.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Five Faces", "Defeat 5 different challengers.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Ten Faces", "Defeat 10 different challengers.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Every Face", "Defeat all 17 different challengers.", J, SHINY(2)},
+    {"Every Face", "Defeat all 34 different challengers.", J, SHINY(2)},
     {"Hat Trick", "Defeat 3 challengers in one run.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Hundred Duels", "Win 100 challenger battles.", J, EGG(3)},
     {"Untouched", "Defeat a challenger without any of your Pokemon fainting.", J, V(GC_VOUCHER_PLUS, 1)},
@@ -121,6 +121,24 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Hall of Famer", "Win the Football Playoffs title 10 times.", FB, V(GC_VOUCHER_GOLDEN, 1)},
     {"Shutout", "Win a Football Playoffs match without conceding a point.", FB, V(GC_VOUCHER_REGULAR, 2)},
     {"Blowout", "Win a Football Playoffs match by 21 points or more.", FB, V(GC_VOUCHER_REGULAR, 2)},
+    /* 100..116: the second batch of challengers (GC_JOJO_CAESAR..GC_JOJO_GIORNO), in table order */
+    {"Caesar Zeppeli", "Defeat Caesar Zeppeli.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Noriaki Kakyoin", "Defeat Noriaki Kakyoin.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Muhammad Avdol", "Defeat Muhammad Avdol.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Vanilla Ice", "Defeat Vanilla Ice.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Hol Horse", "Defeat Hol Horse.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Iggy", "Defeat Iggy.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Narancia Ghirga", "Defeat Narancia Ghirga.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Bruno Bucciarati", "Defeat Bruno Bucciarati.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Leone Abbacchio", "Defeat Leone Abbacchio.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Weather Report", "Defeat Weather Report.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Johnny Joestar", "Defeat Johnny Joestar.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Sandman", "Defeat Sandman.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Diego Brando", "Defeat Diego Brando.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Shigechi", "Defeat Shigechi.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Josuke Higashikata", "Defeat Josuke Higashikata.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Rohan Kishibe", "Defeat Rohan Kishibe.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Giorno Giovanna", "Defeat Giorno Giovanna.", J, V(GC_VOUCHER_REGULAR, 1)},
 };
 #undef J
 #undef RUN
@@ -132,7 +150,23 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
 /* The beaten challengers are a 64-bit mask kept in two 32-bit fields of the profile (jojo_beaten, jojo_beaten_hi); a table longer than 64 cannot be held. */
 typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
 #define JB(i) (1ull << (i))
-static uint64_t beaten_mask(const gc_achv_progress *a) { return (uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32; }
+/* the characters of the table only: a bit for a character a build does not have (a profile from a later build) counts for nothing */
+#define JOJO_VALID (GC_JOJO_COUNT >= 64 ? ~0ull : (1ull << GC_JOJO_COUNT) - 1)
+static uint64_t beaten_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32) & JOJO_VALID; }
+
+int gc_achv_jojo_id(int jojo)
+{
+    if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
+    return jojo < GC_JOJO_CAESAR ? jojo : GC_ACHV_JOJO2_FIRST + (jojo - GC_JOJO_CAESAR);
+}
+
+/* the challenger an achievement id is the "Defeat X" of, or -1 */
+static int jojo_of_id(int id)
+{
+    if (id >= 0 && id < GC_JOJO_CAESAR) return id;
+    if (id >= GC_ACHV_JOJO2_FIRST && id < GC_ACHV_JOJO2_FIRST + (GC_JOJO_COUNT - GC_JOJO_CAESAR)) return GC_JOJO_CAESAR + (id - GC_ACHV_JOJO2_FIRST);
+    return -1;
+}
 
 static const uint64_t SET_PILLAR = JB(GC_JOJO_KARS) | JB(GC_JOJO_WAMUU) | JB(GC_JOJO_ESIDISI);
 static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM);
@@ -423,7 +457,8 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
 static bool met(const gc_system *sys, int id)
 {
     const gc_achv_progress *a = &sys->achv;
-    if (id < GC_JOJO_COUNT) return (beaten_mask(a) >> id & 1ull) != 0;
+    const int jojo = jojo_of_id(id);
+    if (jojo >= 0) return (beaten_mask(a) >> jojo & 1ull) != 0;
     if (id == 29) return a->jojo_clean > 0;
     if (id == 65) return (a->hatch_feats & GC_HATCH_EPIC) != 0;
     if (id == 66) return (a->hatch_feats & GC_HATCH_LEGENDARY) != 0;
