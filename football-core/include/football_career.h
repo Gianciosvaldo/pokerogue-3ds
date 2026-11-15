@@ -3,11 +3,18 @@
 #include "football_live.h"
 #include "gc/achv.h"
 typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN /* unused: level-up moves are learned without a prompt; kept so saved phase numbers stay valid */,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
-/* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0..3 are Carbos, Protein
- * and the two mega stones (2 and 3), 4 + n is evo[n]. */
+/* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0 Carbos, 1 Protein, the two mega
+ * stones (2 and 3), then the other vitamins (4 HP Up, 5 Iron, 6 Calcium, 7 Zinc), and FB_SHOP_FIXED + n is evo[n]. */
 #define FB_SHOP_EVO_MAX 8
-#define FB_SHOP_FIXED 4
+#define FB_SHOP_FIXED 8
 #define FB_SHOP_STONES 2 /* mega stones on offer each round: offers 2 and 3 */
+/* A shop (one round) sells at most this many vitamins in all, of any kinds, for one member or several (lorenzo 2026-11-15: "a limit of 3x
+ * boosters per round", and then "3 in total"; before it each of the two vitamins was sold once). One purchase is +2 of its attribute, up to
+ * FB_BOOST_MAX for a member. */
+#define FB_VITAMIN_LIMIT 3
+/* The boost (FootballBoost) a vitamin offer gives, or -1 for an offer that is not a vitamin; its name ("Iron"), and how many are left to buy. */
+int football_career_offer_boost(unsigned offer);
+const char *football_career_offer_name(unsigned offer);
 /* The playoff is FB_CAREER_ROUNDS (13) matches, one against each Kanto Gym Leader, Elite Four member and the Champion (football_opponent.h).
  * Beating a trainer pays one Egg Voucher into the profile, of the kind that trainer's rank pays (lorenzo 2026-11-09): a Regular one for each
  * Gym Leader, a Plus one for each Elite Four member and a Premium one for the Champion. It is due the moment the win is counted and reaches
@@ -43,7 +50,7 @@ typedef struct {
      * (achv_told is how many of them it has told). */
     unsigned achv_wins,achv_titles,achv_shutouts,achv_blowouts,achv_told;gc_achv_new achv_new;
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
-    unsigned prices[FB_SHOP_FIXED];bool sold[FB_SHOP_FIXED];int stone_target,stone_item,stone2_target,stone2_item,mega; /* stone*: the first mega stone offer (offer 2), stone2*: the second (offer 3) */
+    unsigned prices[FB_SHOP_FIXED];bool sold[FB_SHOP_FIXED];uint8_t bought[FB_SHOP_FIXED]; /* bought: vitamins bought this round; sold is set when none is left (or the stone is bought) */ int stone_target,stone_item,stone2_target,stone2_item,mega; /* stone*: the first mega stone offer (offer 2), stone2*: the second (offer 3) */
     unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
     char message[160];
 } FootballCareer;
@@ -60,6 +67,8 @@ int football_career_forget_slot(const pr_pokemon *p);
 /* member is the target of Carbos and Protein; an evolution offer is bound to its own member. An evolution runs the real evolution and
  * move-learning phases on the member and refreshes the roster; the result is told in c->message. */
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member);
+/* How many vitamins (of any kind) can still be bought this round, as seen from a vitamin offer (0 for any other offer). */
+unsigned football_career_vitamins_left(const FootballCareer *c,unsigned offer);
 /* Whether an evolution offer still holds against the roster (the member can use that item and it brings that species). */
 bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *offer);
 /* The player an evolution offer would make of its member (its attributes with the boosts it carries), without buying: the shop shows

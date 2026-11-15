@@ -70,8 +70,9 @@ int main(void)
     assert(!changed);
     assert(career.phase==FB_CAREER_SHOP && guard<10000 && career.wins==1 && career.wallet==FB_CAREER_WIN_PAY(1));
     for(unsigned i=0;i<22;++i)assert(career.roster.mon[i].b.level>5);
-    assert(football_career_buy(&career,0,21));assert(!football_career_buy(&career,0,21));
-    n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));assert(loaded.roster.speed[21]==2 && loaded.sold[0]);
+    for(unsigned i=0;i<FB_VITAMIN_LIMIT;++i)assert(football_career_buy(&career,0,21)); /* a Carbos is sold three times a round */
+    assert(!football_career_buy(&career,0,21));
+    n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));assert(loaded.roster.speed[21]==2*FB_VITAMIN_LIMIT && loaded.sold[0] && loaded.bought[0]==FB_VITAMIN_LIMIT);
     assert(football_career_continue(&loaded) && loaded.round==2 && loaded.phase==FB_CAREER_READY);
     {   /* Replacing a full moveset drops the weakest move; status moves count as power 0 and the earliest slot wins a tie. */
         pr_pokemon p;memset(&p,0,sizeof p);unsigned strong=0,weak=0,status=0;

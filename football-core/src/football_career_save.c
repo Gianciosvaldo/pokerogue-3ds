@@ -48,6 +48,22 @@ static void state(Stream *s,FootballCareer *c)
         N(c->prices[3],1000);N(c->sold[3],1);
         unsigned target2=(unsigned)(c->stone2_target+1);N(target2,22);c->stone2_target=(int)target2-1;N(c->stone2_item,INT16_MAX);
     }
+    /* The other vitamins (version 4): their boosts, how many of each were bought this round, and the price of the new ones. A save before that
+     * has bought a Carbos or Protein at most once (its sold flag) and never the others. */
+    static const unsigned vitamin_offers[6]={0,1,4,5,6,7};
+    if(s->version>=4){
+        for(unsigned i=0;i<c->roster.count;++i){N(c->roster.stamina[i],FB_BOOST_MAX);N(c->roster.tackling[i],FB_BOOST_MAX);N(c->roster.accuracy[i],FB_BOOST_MAX);N(c->roster.catching[i],FB_BOOST_MAX);}
+        for(unsigned k=0;k<6;++k)N(c->bought[vitamin_offers[k]],FB_VITAMIN_LIMIT);
+        for(unsigned k=2;k<6;++k)N(c->prices[vitamin_offers[k]],1000);
+    }else{
+        c->bought[0]=c->sold[0];c->bought[1]=c->sold[1];
+        for(unsigned k=2;k<6;++k)c->prices[vitamin_offers[k]]=c->prices[0];
+    }
+    {   /* The three vitamins of a shop are in all, not of each kind: a save with more is not one this game made. */
+        unsigned total=0;for(unsigned k=0;k<6;++k)total+=c->bought[vitamin_offers[k]];
+        if(total>FB_VITAMIN_LIMIT)s->ok=false;
+        for(unsigned k=0;k<6;++k)c->sold[vitamin_offers[k]]=total>=FB_VITAMIN_LIMIT;
+    }
     if(c->phase==FB_CAREER_MATCH){
         FootballLive *m=&c->live;FootballRules *r=&m->rules;
         N(m->rng,UINT32_MAX);N(m->snaps,4096);
@@ -77,14 +93,14 @@ bool football_career_save_ready(const FootballCareer *c)
 size_t football_career_save(FootballCareer *c,void *buffer,size_t capacity)
 {
     if(!football_career_save_ready(c) || !buffer || capacity<4096 || capacity>FB_CAREER_SAVE_MAX)return 0;
-    Stream s={buffer,20,capacity,false,true,3};state(&s,c);if(!s.ok)return 0;
-    Stream header={buffer,8,20,false,true,3};number(&header,3,3);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
+    Stream s={buffer,20,capacity,false,true,4};state(&s,c);if(!s.ok)return 0;
+    Stream header={buffer,8,20,false,true,4};number(&header,4,4);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
 }
 bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,const void *buffer,size_t length)
 {
     if(!c || !scratch || !profile || !buffer || length<20 || length>FB_CAREER_SAVE_MAX || memcmp(buffer,"PRFBLIVE",8))return false;
-    Stream s={(unsigned char *)buffer,8,length,true,true,0};unsigned version=number(&s,0,3),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
-    if(!s.ok || version<1 || version>3 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
+    Stream s={(unsigned char *)buffer,8,length,true,true,0};unsigned version=number(&s,0,4),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
+    if(!s.ok || version<1 || version>4 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
     FootballCareer *copy=calloc(1,sizeof *copy);if(!copy)return false;
     s.version=version;bool valid=football_career_new(copy,scratch,NULL,1);state(&s,copy);
     valid=valid && s.ok && s.n==length && copy->round>0 && copy->seed && football_career_save_ready(copy) && copy->wins<=copy->round;

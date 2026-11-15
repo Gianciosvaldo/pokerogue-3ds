@@ -26,8 +26,7 @@ bool football_career_start(FootballCareer *c)
         prepare(c,(unsigned)c->mega);
         const pr_form *form=gc_football_mega_form(c->scratch,0,c->roster.mega_item[c->mega]);
         if(!form || !football_stats_generate(&mega_player,c->roster.mon[c->mega].b.id,form,&c->roster.maxima))return false;
-        unsigned spd=mega_player.attributes.spd+c->roster.speed[c->mega],str=mega_player.attributes.str+c->roster.strength[c->mega];
-        mega_player.attributes.spd=(uint8_t)(spd>99?99:spd);mega_player.attributes.str=(uint8_t)(str>99?99:str);
+        football_roster_apply_boosts(&c->roster,(unsigned)c->mega,&mega_player.attributes);
     }
     if(!football_live_begin(&c->live,&c->roster,c->seed+c->round*104729u,c->round))return false;
     if(mega){
@@ -195,7 +194,8 @@ static int pick_stone(const FootballCareer *c,unsigned member,const int *list,in
 static void shop(FootballCareer *c)
 {
     pay_match(c,true);
-    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[1]=c->prices[0];c->prices[2]=c->prices[3]=1000;
+    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);memset(c->bought,0,sizeof c->bought);
+    c->prices[0]=c->prices[1]=c->prices[4]=c->prices[5]=c->prices[6]=c->prices[7]=FB_CAREER_VITAMIN_PRICE(c->round);c->prices[2]=c->prices[3]=1000;
     c->stone_target=c->stone2_target=-1;c->stone_item=c->stone2_item=0;c->message[0]=0;
     unsigned able[22],items[22],n=0,form_able[22],form_items[22],nf=0;
     for(unsigned i=0;i<22;++i){
@@ -337,26 +337,54 @@ static bool buy_evolution(FootballCareer *c,unsigned index)
     snprintf(c->message,sizeof c->message,"%s evolved into %s!",from?from:"Pokemon",to?to:"a new form");
     return true;
 }
+int football_career_offer_boost(unsigned offer)
+{
+    static const int boosts[FB_SHOP_FIXED]={FB_BOOST_SPD,FB_BOOST_STR,-1,-1,FB_BOOST_STA,FB_BOOST_TAK,FB_BOOST_THA,FB_BOOST_CTH};
+    return offer<FB_SHOP_FIXED?boosts[offer]:-1;
+}
+const char *football_career_offer_name(unsigned offer)
+{
+    static const char *const names[FB_SHOP_FIXED]={"Carbos","Protein","Mega stone","Mega stone","HP Up","Iron","Calcium","Zinc"};
+    return offer<FB_SHOP_FIXED?names[offer]:"";
+}
+/* The vitamins bought this round, of every kind. */
+static unsigned vitamins_bought(const FootballCareer *c)
+{
+    unsigned total=0;
+    for(unsigned offer=0;offer<FB_SHOP_FIXED;++offer)if(football_career_offer_boost(offer)>=0)total+=c->bought[offer];
+    return total;
+}
+unsigned football_career_vitamins_left(const FootballCareer *c,unsigned offer)
+{
+    if(!c || football_career_offer_boost(offer)<0)return 0;
+    const unsigned total=vitamins_bought(c);
+    return total>=FB_VITAMIN_LIMIT?0:FB_VITAMIN_LIMIT-total;
+}
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
 {
     if(!c || c->phase!=FB_CAREER_SHOP)return false;
     if(offer>=FB_SHOP_FIXED)return offer-FB_SHOP_FIXED<c->evo_count && buy_evolution(c,offer-FB_SHOP_FIXED);
     if(member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
+    const int kind=football_career_offer_boost(offer);
+    if(kind>=0){
+        if(!football_career_vitamins_left(c,offer))return false;
+        uint8_t *boost=football_roster_boost(&c->roster,(FootballBoost)kind,member);if(!boost || *boost>=FB_BOOST_MAX)return false;
+        const unsigned before=*football_attribute_of(&c->roster.player[member].attributes,(FootballBoost)kind);
+        *boost=(uint8_t)(*boost+2>FB_BOOST_MAX?FB_BOOST_MAX:*boost+2);football_roster_refresh(&c->roster,member);
+        /* Say what changed: the boost only shows in the member's stats, which the shop does not list. */
+        const unsigned after=*football_attribute_of(&c->roster.player[member].attributes,(FootballBoost)kind);
+        const char *who="Pokemon";for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==c->roster.mon[member].b.species){who=pr_species_table[i].name;break;}
+        snprintf(c->message,sizeof c->message,"%s: %s %u to %u (boost %u/%u)",who,football_boost_name((FootballBoost)kind),before,after,(unsigned)*boost,(unsigned)FB_BOOST_MAX);
+        ++c->bought[offer];c->wallet-=c->prices[offer];
+        if(vitamins_bought(c)>=FB_VITAMIN_LIMIT)for(unsigned other=0;other<FB_SHOP_FIXED;++other)if(football_career_offer_boost(other)>=0)c->sold[other]=true; /* none is left, of any kind */
+        return true;
+    }
     if(offer==2 || offer==3){
         const int target=football_career_stone_target(c,offer),item=football_career_stone_item(c,offer);
         if(target<0 || target>=c->roster.count || c->roster.mega_item[target])return false;
         prepare(c,(unsigned)target);
         if(!gc_football_mega_form(c->scratch,0,item))return false;
         c->roster.mega_item[target]=(int16_t)item;
-    }
-    else {
-        uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;
-        const unsigned before=offer==0?c->roster.player[member].attributes.spd:c->roster.player[member].attributes.str;
-        *boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);
-        /* Say what changed: the boost only shows in the member's stats, which the shop does not list. */
-        const unsigned after=offer==0?c->roster.player[member].attributes.spd:c->roster.player[member].attributes.str;
-        const char *who="Pokemon";for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==c->roster.mon[member].b.species){who=pr_species_table[i].name;break;}
-        snprintf(c->message,sizeof c->message,"%s: %s %u to %u (boost %u/20)",who,offer==0?"Speed":"Strength",before,after,(unsigned)*boost);
     }
     c->wallet-=c->prices[offer];c->sold[offer]=true;return true;
 }

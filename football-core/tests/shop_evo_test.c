@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* The vitamin block that ends a version 4 shop checkpoint: four boosts of 22 members, six counts, four prices (words). */
+#define VITAMIN_BLOCK ((22u*4u+6u+4u)*4u)
 /* The shop's evolution items: the game-core call that evolves a member with an item, and the career's offers, purchase and save. */
 static FootballCareer career,loaded,again;
 static gc_run scratch,other;
@@ -249,11 +251,12 @@ int main(void)
     career.wallet+=500;wallet=career.wallet;
     assert(career.prices[0]==FB_CAREER_VITAMIN_PRICE(career.round) && career.prices[0]<career.evo[0].price); /* a vitamin is cheaper than the cheapest evolution item */
     unsigned spd_before=career.roster.player[21].attributes.spd;
-    assert(football_career_buy(&career,0,21) && !football_career_buy(&career,0,21) && career.roster.speed[21]==2 && career.wallet==wallet-career.prices[0]);
+    assert(football_career_buy(&career,0,21) && career.roster.speed[21]==2 && career.wallet==wallet-career.prices[0]);
     {   /* the purchase says what it did: "<name>: Speed <before> to <after> (boost 2/20)" */
         char want[64];snprintf(want,sizeof want,"Speed %u to %u (boost 2/20)",spd_before,(unsigned)career.roster.player[21].attributes.spd);
         assert(strstr(career.message,want) && career.roster.player[21].attributes.spd>=spd_before);
     }
+    assert(football_career_buy(&career,0,21) && football_career_buy(&career,0,21) && !football_career_buy(&career,0,21) && career.roster.speed[21]==6 && career.sold[0]); /* three a round (vitamin_test has the rest) */
     size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n);
     assert(football_career_load(&loaded,&other,&profile,bytes,n));
     assert(loaded.evo_count==career.evo_count && !memcmp(loaded.evo,career.evo,sizeof career.evo) && loaded.wallet==career.wallet && loaded.roster.mon[member].b.species==first.species);
@@ -284,7 +287,7 @@ int main(void)
     {   int stone_before=career.stone_target;career.stone_target=(int)saved.member;
         assert(!football_career_evo_valid(&career,&saved));career.stone_target=stone_before;}
     n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));
-    put32(8,4);put32(16,crc(bytes+20,n-20));assert(!football_career_load(&loaded,&other,&profile,bytes,n)); /* a newer format is refused */
+    put32(8,5);put32(16,crc(bytes+20,n-20));assert(!football_career_load(&loaded,&other,&profile,bytes,n)); /* a newer format is refused */
     put32(8,0);put32(16,crc(bytes+20,n-20));assert(!football_career_load(&loaded,&other,&profile,bytes,n));
     {   /* Offers outside the shop are refused. */
         FootballCareer *lineup=calloc(1,sizeof *lineup);assert(lineup);*lineup=career;lineup->phase=FB_CAREER_LINEUP;lineup->wins=lineup->round-1; /* a consistent lineup checkpoint, but for the offers */
@@ -297,12 +300,12 @@ int main(void)
     {
         FootballCareer *v1=calloc(1,sizeof *v1);assert(v1);*v1=career;v1->wallet=1000;v1->evo_count=0;memset(v1->evo,0,sizeof v1->evo);
         n=football_career_save(v1,bytes,sizeof bytes);assert(n>24);
-        n-=20;put32(8,1);put32(12,(uint32_t)n);put32(16,crc(bytes+20,n-20)); /* the offer count (one word) and the second stone block (four) end a shop checkpoint */
+        n-=20+VITAMIN_BLOCK;put32(8,1);put32(12,(uint32_t)n);put32(16,crc(bytes+20,n-20)); /* the offer count (one word), the second stone block (four) and the vitamin block end a shop checkpoint */
         assert(football_career_load(&loaded,&other,&profile,bytes,n) && loaded.evo_count==0 && loaded.phase==FB_CAREER_SHOP && loaded.wallet==v1->wallet);
         assert(football_career_buy(&loaded,1,3) && loaded.roster.strength[3]==2); /* the rest of the shop works as before */
         /* A version 2 checkpoint (offers, one stone) loads with no second stone. */
         n=football_career_save(v1,bytes,sizeof bytes);assert(n>24);
-        n-=16;put32(8,2);put32(12,(uint32_t)n);put32(16,crc(bytes+20,n-20));
+        n-=16+VITAMIN_BLOCK;put32(8,2);put32(12,(uint32_t)n);put32(16,crc(bytes+20,n-20));
         assert(football_career_load(&loaded,&other,&profile,bytes,n) && loaded.stone2_target<0 && loaded.phase==FB_CAREER_SHOP && loaded.wallet==v1->wallet);
         free(v1);
     }
