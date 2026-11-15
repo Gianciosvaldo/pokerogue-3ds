@@ -458,8 +458,8 @@ static bool hk_pillar(void* user, const struct gc_run* run, int which, gc_custom
   if (which > 2) return false;
   const int idx = cc_jojo_find(ID[which]);
   if (idx == CC_JOJO_NONE || !cr_jojo_team(idx, team)) return false;
-  if (!(R.jojo.used >> idx & 1u)) {
-    R.jojo.used |= 1u << idx;
+  if (!(R.jojo.used >> idx & 1ull)) {
+    R.jojo.used |= 1ull << idx;
     R.jojo.fights++;
   }
   R.jojo_live = (uint8_t)(idx + 1);
@@ -712,7 +712,7 @@ static uint16_t r16(rd* r) { const uint16_t a = r8(r); return (uint16_t)(a | (ui
 static uint32_t r32(rd* r) { const uint32_t a = r16(r); return a | (uint32_t)r16(r) << 16; }
 static uint64_t r64(rd* r) { const uint64_t a = r32(r); return a | (uint64_t)r32(r) << 32; }
 
-#define OV_VERSION 2u   /* 2 adds the JoJo block; version 1 files (from before) still load, with a fresh JoJo state */
+#define OV_VERSION 3u   /* 3 widens the JoJo dealt mask to 64 bits (room for 64 characters); 2 added the JoJo block (32-bit mask); version 1 files still load, with a fresh JoJo state */
 #define OV_MAX 16384u
 
 static void w_sched(wr* w, const cc_schedule* s) {
@@ -845,7 +845,7 @@ static size_t overlay_encode(uint8_t* buf, size_t cap) {
   w32(&w, R.reward_txn);
   w_sched(&w, &R.sched);
   w64(&w, R.jojo.rng_state);
-  w32(&w, R.jojo.used);
+  w64(&w, R.jojo.used);
   w8(&w, R.jojo.fights);
   w8(&w, R.jojo_live);
   w16(&w, R.jojo_wave);
@@ -865,7 +865,7 @@ typedef struct {
   uint8_t enc_kind, enc_flags;
   uint32_t reward_record, reward_txn;
   cc_schedule sched;
-  bool has_jojo;             /* version 2: the JoJo block follows */
+  bool has_jojo;             /* version 2 and later: the JoJo block follows */
   cc_jojo_state jojo;
   uint8_t jojo_live;
   uint16_t jojo_wave;
@@ -876,7 +876,7 @@ static bool overlay_decode(const uint8_t* buf, size_t len, overlay* o, co_carry*
   rd r = {buf, len, 0, false};
   memset(o, 0, sizeof *o);
   const uint8_t version = r8(&r);
-  if (version != OV_VERSION && version != 1u) return false;
+  if (version != OV_VERSION && version != 2u && version != 1u) return false;
   o->run_uid = r64(&r);
   o->flags = r8(&r);
   o->rematch_enemy_id = r32(&r);
@@ -890,12 +890,12 @@ static bool overlay_decode(const uint8_t* buf, size_t len, overlay* o, co_carry*
   if (version >= 2u) {
     o->has_jojo = true;
     o->jojo.rng_state = r64(&r);
-    o->jojo.used = r32(&r);
+    o->jojo.used = version >= 3u ? r64(&r) : r32(&r);   /* version 2 held a 32-bit mask */
     o->jojo.fights = r8(&r);
     o->jojo_live = r8(&r);
     o->jojo_wave = r16(&r);
     if (r.bad || cc_jojo_validate(&o->jojo) != CC_OK) return false;
-    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;
+    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1ull))) return false;
   }
   const uint8_t has = r8(&r);
   if (has > 1) return false;

@@ -86,7 +86,8 @@ typedef struct {
 
 /* What the custom achievements count (gc_achv.c; no upstream equivalent). Only ever grows. */
 typedef struct {
-    uint32_t jojo_beaten;   /* bit i: the JoJo challenger i (the table's order in custom-core) has been beaten */
+    uint32_t jojo_beaten;   /* bit i: the JoJo challenger i (the table's order in custom-core) has been beaten (i = 0..31) */
+    uint32_t jojo_beaten_hi; /* bit i - 32: the same for the challengers 32..63 (a profile saved before they existed has none: 0) */
     uint32_t jojo_battles;  /* JoJo battles won */
     uint32_t jojo_clean;    /* ... of them with none of the party fainted */
     uint32_t run_tag;       /* the run run_jojo counts in (a hash of its seed) */

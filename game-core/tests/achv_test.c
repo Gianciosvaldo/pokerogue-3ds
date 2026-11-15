@@ -74,6 +74,28 @@ int main(void)
     }
     assert(S.n_eggs == 1 && S.eggs[0].is_shiny && S.eggs[0].variant_tier == 2 && S.eggs[0].species != 0 && S.eggs[0].tier == 2);
 
+    /* the beaten mask is 64 bits (two profile fields): challengers 32..63 count towards the totals and the progress line like the first 32.
+     * No table has them yet, so the profile is written directly, as a later build's saves will have it. */
+    fresh();
+    S.achv.jojo_beaten_hi = 0x1Fu;                    /* indexes 32..36 */
+    eval(NULL);
+    uint32_t have = 0, need = 0;
+    assert(gc_achv_unlocked(&S, 24) && !gc_achv_unlocked(&S, 25));   /* five different challengers, not ten */
+    assert(gc_achv_progress_of(&S, 25, &have, &need) && have == 5 && need == 10);
+    S.achv.jojo_beaten = 0x1Fu;                       /* five of the first word: ten in all */
+    eval(NULL);
+    assert(gc_achv_unlocked(&S, 25));
+    assert(gc_achv_progress_of(&S, 26, &have, &need) && have == 10 && need == GC_JOJO_COUNT);
+    S.achv.jojo_beaten = 0xFFFFFFFFu;                 /* more bits than the table has characters: the line is capped at the table's size */
+    eval(NULL);
+    assert(gc_achv_progress_of(&S, 26, &have, &need) && have == GC_JOJO_COUNT && need == GC_JOJO_COUNT && gc_achv_unlocked(&S, 26));
+    fresh();
+    S.achv.jojo_beaten_hi = 0xFFFFFFFFu;               /* a mask bit outside the table never opens a challenger's own achievement */
+    eval(NULL);
+    for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, j));
+    gc_achv_jojo_won(&S, 63, 1, false);                /* an index the table does not have is refused: nothing recorded */
+    assert(S.achv.jojo_battles == 0 && S.achv.jojo_beaten == 0 && S.achv.jojo_beaten_hi == 0xFFFFFFFFu);
+
     /* three in one run; the count belongs to a run */
     fresh();
     gc_achv_jojo_won(&S, 0, 5, false);

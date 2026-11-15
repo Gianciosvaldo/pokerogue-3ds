@@ -12,7 +12,7 @@ void cc_jojo_start(cc_jojo_state *s, uint64_t seed)
     s->fights = 0;
 }
 
-static unsigned popcount32(uint32_t v)
+static unsigned popcount64(uint64_t v)
 {
     unsigned n = 0;
     for (; v; v &= v - 1) n++;
@@ -22,8 +22,9 @@ static unsigned popcount32(uint32_t v)
 cc_status cc_jojo_validate_in(const cc_jojo_state *s, unsigned count)
 {
     if (!s) return CC_E_NULL;
-    if (count < 32 && (s->used >> count) != 0) return CC_E_RANGE;
-    if (popcount32(s->used) != s->fights) return CC_E_CONSISTENCY;
+    if (count > CC_JOJO_MAX_CHARS) return CC_E_RANGE;
+    if (count < CC_JOJO_MAX_CHARS && (s->used >> count) != 0) return CC_E_RANGE;
+    if (popcount64(s->used) != s->fights) return CC_E_CONSISTENCY;
     return CC_OK;
 }
 
@@ -31,18 +32,18 @@ cc_status cc_jojo_validate(const cc_jojo_state *s) { return cc_jojo_validate_in(
 
 int cc_jojo_roll_in(cc_jojo_state *s, const cc_jojo_char *chars, unsigned count, int biome)
 {
-    if (!s || !chars || count > 32 || cc_jojo_validate_in(s, count) != CC_OK) return CC_JOJO_NONE;
+    if (!s || !chars || count > CC_JOJO_MAX_CHARS || cc_jojo_validate_in(s, count) != CC_OK) return CC_JOJO_NONE;
     if (biome < 0) return CC_JOJO_NONE;   /* biome -1 is the Pillar Men's: never dealt here */
     unsigned n = 0;
     for (unsigned i = 0; i < count; i++)
-        if (chars[i].biome == biome && !(s->used >> i & 1u)) n++;
+        if (chars[i].biome == biome && !(s->used >> i & 1ull)) n++;
     if (!n) return CC_JOJO_NONE;
     if (cc_rng_v1_pick(&s->rng_state, 100) >= CC_JOJO_P_PERCENT) return CC_JOJO_NONE;
     unsigned pick = cc_rng_v1_pick(&s->rng_state, n);
     for (unsigned i = 0; i < count; i++) {
-        if (chars[i].biome != biome || (s->used >> i & 1u)) continue;
+        if (chars[i].biome != biome || (s->used >> i & 1ull)) continue;
         if (pick-- == 0) {
-            s->used |= 1u << i;
+            s->used |= 1ull << i;
             s->fights++;
             return (int)i;
         }

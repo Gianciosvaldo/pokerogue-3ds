@@ -61,6 +61,10 @@ int main(void) {
     /* Starter candy */
     gc_system_add_starter_candy(&sys1, 1, 15);
 
+    /* The JoJo challengers beaten: a 64-bit mask in two fields, the high one for challengers 32..63 */
+    sys1.achv.jojo_beaten = 0x80000001u;
+    sys1.achv.jojo_beaten_hi = 0x40000005u;
+
     /* 3. Serialize system data */
     size_t len = gc_system_save(&sys1, save_buf, sizeof save_buf);
     CHECK(len > 20, "gc_system_save produced valid non-empty buffer");
@@ -84,6 +88,7 @@ int main(void) {
     /* 6. Verify sys2 contents match sys1 */
     CHECK(gc_system_has_achievement(&sys2, 10), "reloaded achievement 10 is unlocked");
     CHECK(gc_system_has_achievement(&sys2, 42), "reloaded achievement 42 is unlocked");
+    CHECK(sys2.achv.jojo_beaten == 0x80000001u && sys2.achv.jojo_beaten_hi == 0x40000005u, "reloaded JoJo beaten mask (both words)");
     CHECK(!gc_system_has_achievement(&sys2, 99), "reloaded achievement 99 is locked");
 
     CHECK(gc_system_get_ribbons(&sys2, 1) == 2, "reloaded Bulbasaur ribbons == 2");
