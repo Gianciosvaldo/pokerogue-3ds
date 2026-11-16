@@ -1146,6 +1146,8 @@ mut(JT, '29 /* Temple */, CC_JOJO_PASSIVE_MADE_IN_HEAVEN, 6', '29 /* Temple */, 
 mut(JT, '19 /* Graveyard */, CC_JOJO_PASSIVE_THE_WORLD, 6', '19 /* Graveyard */, -1, 6', "DIO loses The World")
 mut(JT, '19 /* Graveyard */, CC_JOJO_PASSIVE_THE_WORLD, 6', '19 /* Graveyard */, CC_JOJO_PASSIVE_MADE_IN_HEAVEN, 6', "DIO gets Made in Heaven")
 mut(JT, '"I shall become the ultimate lifeform!", -1,', '"I shall become the ultimate lifeform!", 25,', "Kars in a biome pool")
+mut(JT, '"I shall become the ultimate lifeform!", -1, CC_JOJO_PASSIVE_PERFECT_BEING, 6', '"I shall become the ultimate lifeform!", -1, -1, 6', "Kars loses Perfect Being")
+mut(JT, '"I shall become the ultimate lifeform!", -1, CC_JOJO_PASSIVE_PERFECT_BEING, 6', '"I shall become the ultimate lifeform!", -1, CC_JOJO_PASSIVE_THE_WORLD, 6', "Kars gets The World")
 mut(JT, '"Nyo-ho!", 14 /* Desert */, -1, 6,', '"Nyo-ho!", 14 /* Desert */, -1, 5,', "Gyro loses a member")
 mut(JT, '"What did you just say about my hair?!", 1 /* Plains */, -1, 5,', '"What did you just say about my hair?!", 0 /* Town */, -1, 5,', "Josuke back in Town (no trainers there)")
 mut(JT, '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 5,', '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 4,', "Giorno loses a member")

@@ -43,6 +43,7 @@ typedef enum {
     PH_ME_START_CLEANUP,       /* appended: MysteryEncounterBattleStartCleanupPhase */
     PH_MADE_IN_HEAVEN,         /* appended, custom content only (no upstream phase): emits PR_EV_MADE_IN_HEAVEN */
     PH_THE_WORLD,              /* appended, custom content only (no upstream phase): emits PR_EV_THE_WORLD (value in anim) */
+    PH_PERFECT_BEING,          /* appended, custom content only (no upstream phase): emits PR_EV_PERFECT_BEING (value in anim) */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -92,6 +93,7 @@ typedef struct pr_phase {
     double hit_eff[4];
     uint8_t n_hit_checks;
     bool first_hit, last_hit;
+    uint8_t perfect_blocked;   /* MoveEffectPhase: bit i = hit_check[i] is a physical move Perfect Being stopped (custom content) */
     /* StatStageChangePhase options: the changes, sourcePokemon (source_p), whether a message was
      * given, ignoreAbilities, sourceEffectType (StatChangeSource, 0 = none), processed; and
      * selfTarget, which the constructor fixes */
