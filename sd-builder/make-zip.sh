@@ -31,6 +31,10 @@ x86_64-w64-mingw32-gcc -O2 -static -s -Wl,--no-insert-timestamp -o "$D/files/pip
 for app in "$@"; do cp "$app" "$D/files/apps/"; done
 # The project's own pictures (the JoJo trainers' sprites): the builder packs them into gfx.pak (see README.md)
 cp -R "$HERE/extra-images" "$D/files/extra-images"
+# Your own music (the JoJo themes) goes in files/extra-audio/custom/; the zip holds only this note, never a track (see README.md)
+mkdir -p "$D/files/extra-audio/custom" "$D/files/extra-audio/se"
+cp "$HERE/extra-audio-README.txt" "$D/files/extra-audio/custom/PUT-MUSIC-HERE.txt"
+cp "$HERE/extra-audio-README.txt" "$D/files/extra-audio/se/PUT-SOUNDS-HERE.txt"   # (zip -D stores no empty folders)
 
 BANNERTOOL_URL=https://github.com/carstene1ns/3ds-bannertool/releases/download/1.2.3/bannertool-1.2.3-linux.tar.gz
 BANNERTOOL_SHA256=748519d200519db18e9fd00c332ac32f5411e41230258291e89953a76c1f7155
@@ -58,7 +62,7 @@ REV=$(git -C "$REPO" rev-parse --short HEAD)
 printf 'Built from pokerogue-3ds %s (%s).\n' "$REV" "$(git -C "$REPO" log -1 --format=%cd --date=short)" > "$D/files/VERSION.txt"
 
 # Windows line endings for what Windows tools read (cmd needs them for labels in .bat files)
-for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/WHATS-NEW.txt" "$D/files/setup.ps1" "$D/files/VERSION.txt"; do
+for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/WHATS-NEW.txt" "$D/files/setup.ps1" "$D/files/VERSION.txt" "$D/files/extra-audio/custom/PUT-MUSIC-HERE.txt" "$D/files/extra-audio/se/PUT-SOUNDS-HERE.txt"; do
   python3 -c 'import sys; p=sys.argv[1]; b=open(p,"rb").read().replace(b"\r\n",b"\n").replace(b"\n",b"\r\n"); open(p,"wb").write(b)' "$f"
 done
 

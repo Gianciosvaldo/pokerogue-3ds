@@ -2111,7 +2111,14 @@ static bool new_run(bool from_black) {
   return true;
 }
 
+/* bgm.h: the JoJo trainer of the battle, for his theme */
+static const char* jojo_music_id(const gc_run* run) {
+  const cc_jojo_char* j = G.cfg.custom ? cr_jojo_foe(run) : NULL;
+  return j ? j->id : NULL;
+}
+
 bool rs_start(const rs_config* cfg) {
+  bgm_set_foe_source(jojo_music_id);
   be_set_fusion_shine(fusion_shine_of);
   memset(&G.st, 0, sizeof G.st);
   G.cfg = *cfg;
@@ -2119,6 +2126,7 @@ bool rs_start(const rs_config* cfg) {
 }
 
 rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
+  bgm_set_foe_source(jojo_music_id);
   be_set_fusion_shine(fusion_shine_of);
   G.cfg = *cfg; /* the stats go on counting: a resume is not a new session */
   reset_driver();
