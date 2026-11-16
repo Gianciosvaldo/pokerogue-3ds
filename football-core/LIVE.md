@@ -30,10 +30,11 @@ All 22 slots must be filled. A pool smaller than 22 or too expensive even with
 its cheapest 22 members shows a progression/cost-reduction notice. Existing saves
 are also checked against the current profile's original starter unlocks and remain
 preserved if they cannot be used with that profile.
-On the lineup screen A toggles editing and Left/Right swaps the selected slot's
-member. Touch rows select slots and the bottom buttons cycle members while
-editing. B finishes editing, then returns to the round hub. Auto-assignment and
-Ready also have touch buttons. Lineups can be revisited between rounds.
+On the lineup screen A picks up the position under the cursor (its row says "Moving", the header names the Pokemon) and A on another
+position swaps the two Pokemon; the cursor can travel and page (Left/Right) as far as it likes first, and nothing moves until that second A.
+B, or A on the same position, puts it back. (It used to cycle the slot through every Pokemon with Left/Right, swapping with each one it
+passed, which scrambled them.) A touch on a row does the same as A. The bottom buttons are Auto-assign and Ready, and Cancel instead of
+Auto-assign while a position is held. B with nothing held returns to the round hub. Lineups can be revisited between rounds.
 
 One heap scratch `gc_run` creates members and runs the existing EXP/evolution
 queue for one member at a time. Each winning match awards all 22 members exactly ten levels
