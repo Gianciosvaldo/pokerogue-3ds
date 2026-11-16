@@ -408,6 +408,7 @@ bool cr_jojo_team(int idx, gc_custom_team* team) {
   team->name = c->name;
   team->passive = c->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN ? GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN
                 : c->passive == CC_JOJO_PASSIVE_THE_WORLD    ? GC_CUSTOM_PASSIVE_THE_WORLD
+                : c->passive == CC_JOJO_PASSIVE_PERFECT_BEING ? GC_CUSTOM_PASSIVE_PERFECT_BEING
                                                              : c->passive;
   team->n = c->n_members;
   for (int i = 0; i < c->n_members && i < GC_CUSTOM_MAX_TEAM; i++) {

@@ -525,6 +525,13 @@ build/lone_player_events_test: $(LONE_EVENTS_SRCS)
 lone_player_events_test: build/lone_player_events_test
 .PHONY: lone_player_events_test
 
+PERFECT_EVENTS_SRCS := perfect_being_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/perfect_being_events_test: $(PERFECT_EVENTS_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(PERFECT_EVENTS_SRCS) -lm -o $@
+perfect_being_events_test: build/perfect_being_events_test
+.PHONY: perfect_being_events_test
+
 # a lone Pokemon of the player's in a double battle: centred platform + singles bar (BEV_PLAYER_CENTRE)
 build/lone_player_layout_test: lone_player_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build
@@ -580,3 +587,8 @@ build/final_boss_form_anim_test: final_boss_form_anim_test.c ../source/battle_vi
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_form_anim_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
 final_boss_form_anim_test: build/final_boss_form_anim_test
 .PHONY: final_boss_form_anim_test
+build/perfect_being_view_test: perfect_being_view_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections perfect_being_view_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
+perfect_being_view_test: build/perfect_being_view_test
+.PHONY: perfect_being_view_test

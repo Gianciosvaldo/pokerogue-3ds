@@ -636,6 +636,7 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
 
 static void made_in_heaven_turn_start(pr_battle *bt, pr_engine *e);
 static void the_world_turn_start(pr_battle *bt, pr_engine *e);
+static void perfect_being_phase(pr_battle *bt, pr_engine *e, int battler, int value);
 static void the_world_phase(pr_battle *bt, pr_engine *e, int battler, int value, bool unshift);
 
 static void turn_start(pr_battle *bt, pr_engine *e)
@@ -1944,7 +1945,7 @@ static bool check_bypass_acc_and_invuln(pr_battle *bt, pr_pokemon *user, pr_poke
 }
 
 /* MoveEffectPhase.hitCheck(target) */
-static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double *eff_out)
+static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double *eff_out, bool *perfect_out)
 {
     pr_phase *fx = PH(ph);
     pr_pokemon *user = me_user(bt, fx);
@@ -2005,6 +2006,8 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     bool cancel_msg = false;
     double eff = pr_get_move_effectiveness_ex(bt, target, user, move, false, &cancel_msg);
     if (eff == 0) return cancel_msg ? HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE : HIT_CHECK_RESULT_NO_EFFECT;
+    /* Perfect Being (custom content): a physical move does nothing, with its own line in place of "It doesn't affect" */
+    if (pr_perfect_being_blocks(bt, target, user, move)) { *perfect_out = true; return HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE; }
     double accuracy = pr_calculate_battle_accuracy(bt, user, target, move);
     if (user->hits_left < user->hit_count
         && (!(mv->flags & MOVE_FLAGS_CHECK_ALL_HITS) || pr_has_ability_with_attr(bt, user, PR_AC_MaxMultiHitAbAttr))) {
@@ -2259,6 +2262,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     }
     double final = blocked ? 0 : damage_and_update(bt, e, target, d.damage, d.result, true, user, crit);
     if (crit) pr_queue_msg(bt, e, pr_msg0("battle:hitResultCriticalHit"));
+    if (d.softened && final > 0) perfect_being_phase(bt, e, pr_battler_index(bt, target), 3);   /* Perfect Being (custom content) */
     r.critical = crit;
     if (final <= 0) return r;
     user->total_damage_dealt += (int32_t)final;
@@ -2644,9 +2648,12 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *targets[4];
     int nt = active_in_list(bt, tlist(e, fx->targets), targets);
     bool any_success = false, all_miss = true;
+    fx->perfect_blocked = 0;
     for (int i = 0; i < nt; i++) {
         double eff;
-        int hc = hit_check(bt, e, ph, targets[i], &eff);
+        bool perfect = false;
+        int hc = hit_check(bt, e, ph, targets[i], &eff, &perfect);
+        if (perfect && i < 4) fx->perfect_blocked |= (uint8_t)(1u << i);
         if (field_move && hc == HIT_CHECK_RESULT_REFLECTED) {
             /* a field move stops at the first target that bounces it: targets = [target] */
             targets[0] = targets[i];
@@ -2714,6 +2721,9 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
                                         pr_arg_pokemon(bt, "pokemonName", targets[i])));
             /* fall through */
         case HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE: case HIT_CHECK_RESULT_PROTECTED:
+            if (fx->hit_check[i] == HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE && (fx->perfect_blocked >> i & 1))
+                perfect_being_phase(bt, e, pr_battler_index(bt, targets[i]), 2);
+            /* fall through */
         case HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD:
             miss_effects(bt, e, user, move, PR_AC_NoEffectAttr);
             break;
@@ -3146,6 +3156,31 @@ static void the_world_turn_start(pr_battle *bt, pr_engine *e)
     the_world_phase(bt, e, foe, 1, true);
 }
 
+/* ---------------------------------------------------------------- Perfect Being (custom content, PR_CUSTOM_PASSIVE_PERFECT_BEING) */
+
+static void perfect_being_phase(pr_battle *bt, pr_engine *e, int battler, int value)
+{
+    int ph = pr_phase_new(e, PH_PERFECT_BEING, (int8_t)battler);
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+    e->pool[ph].anim = (uint16_t)value;
+    pr_phase_unshift(bt, e, ph);
+}
+
+/* doFaint: the faint that leaves the side one member with HP, when that member has Perfect Being (lorenzo, 2026-11-16: Kars becomes the
+ * Ultimate Life Form after his fifth Pokemon is knocked out); after the fainted text and the exp, before the next send-out */
+static void perfect_being_faint(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int battler)
+{
+    if (p->custom_passive != PR_CUSTOM_PASSIVE_PERFECT_BEING) return;
+    const int side = p->is_player ? 0 : 1;
+    const pr_pokemon *left = NULL;   /* one with HP: awake only if it is the only one */
+    for (int k = 0; k < bt->n_party[side] && !left; k++) {
+        const pr_pokemon *q = bt->party[side][k];
+        if (q && q != p && q->hp > 0) left = q;
+    }
+    if (!left || !pr_perfect_being_awake(bt, left)) return;
+    perfect_being_phase(bt, e, battler, 1);
+}
+
 static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *f = PH(ph);
@@ -3313,6 +3348,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         }
     }
     made_in_heaven_faint(bt, e, p, f->battler);
+    perfect_being_faint(bt, e, p, f->battler);
     pr_leave_field(bt, e, p, true);
 }
 
@@ -4419,6 +4455,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         if (PH(ph)->anim == 0) bt->the_world_active = false;
         pr_event_add(bt, e, PR_EV_THE_WORLD, PH(ph)->battler, -1, 0, PH(ph)->anim, NULL);
         break;
+    case PH_PERFECT_BEING: pr_event_add(bt, e, PR_EV_PERFECT_BEING, PH(ph)->battler, -1, 0, PH(ph)->anim, NULL); break;
     case PH_FORM_CHANGE: form_change_phase(bt, e, ph); break;
     case PH_END_EVOLUTION: break; /* UI force-message transition, no battle state */
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
