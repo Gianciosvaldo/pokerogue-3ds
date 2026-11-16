@@ -34,6 +34,14 @@ void bgm_tick(float dt_ms);    /* once per frame (ui_tick): runs the fade and a 
  * bgm_play, bgm_stop or fade cancels the wait. */
 void bgm_play_faded(const char* name, float fade_ms, float delay_ms);
 const char* bgm_current(void); /* the track playing ("" = none) */
+/* The pack has the track `name` (audio/bgm/<name>). The project's own tracks (the JoJo themes, "custom/<id>") come from the builder's
+ * extra-audio folder, which the user fills; a scene asks for one only after this says yes, and otherwise plays what it always did. */
+bool bgm_has(const char* name);
+
+/* The JoJo trainer of the battle on screen (his id, "jotaro"), or NULL for none. The app registers it once; with it, a battle against him plays
+ * "custom/<id>" from the wave's start to its end (not the trainer class's encounter and battle music) when the pack has that track. Esidisi, Wamuu and
+ * Kars, who only appear in the Pillar Men encounter, play "custom/pillar_men" unless they have a track of their own. The class's victory music stays. */
+void bgm_set_foe_source(const char* (*foe_id)(const gc_run* run));
 
 /* ---- the scenes (bgm.c): each is called where upstream starts or changes the music ---- */
 /* TitlePhase.start: title, or winter_title from December to January 15. Call as the title screen comes up (at black). */
@@ -60,6 +68,7 @@ void bgm_on_football_match(unsigned seed, unsigned round);
 /* A mystery encounter's visuals begin (withOnVisualsStart): Weird Dream, Delibirdy-y, Fun and Games and the Global Trade System start their own
  * track, 500 ms fade over the old one. Nothing for the other encounters. */
 void bgm_on_mystery(int type);
+/* (The Pillar Men encounter, which has no upstream track, plays "custom/pillar_men" when the pack has it.) */
 /* GameOverPhase.handleGameOver: the music fades out, over 10 s after a win and 5 s after a loss */
 void bgm_on_run_end(bool clear);
 

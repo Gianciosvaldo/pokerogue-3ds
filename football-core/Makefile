@@ -190,7 +190,7 @@ test: career-test live-screen-check
 .PHONY: live-screen-test
 live-screen-test: core-libs
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/live_screen_test.c ../game/source/football_live_screen.c ../game/source/football_menu.c ../game/menus/item_ui.c ../game/gen/gm_item_ui.c src/football_career.c src/football_career_save.c src/playoff_season.c src/football_camera.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_screen_test
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/live_screen_test.c ../game/source/football_live_screen.c ../game/source/football_menu.c ../game/menus/item_ui.c ../game/gen/gm_item_ui.c src/football_sound.c src/football_career.c src/football_career_save.c src/playoff_season.c src/football_camera.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_screen_test
 	$(BUILD)/live_screen_test
 test: live-screen-test
 
@@ -331,6 +331,12 @@ evolve-all-test: core-libs
 	$(BUILD)/evolve_all_test
 test: evolve-all-test
 
+.PHONY: sound-test
+sound-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/sound_test.c src/football_sound.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/sound_test
+	$(BUILD)/sound_test
+test: sound-test
 .PHONY: fx-test
 fx-test: core-libs
 	mkdir -p $(BUILD)

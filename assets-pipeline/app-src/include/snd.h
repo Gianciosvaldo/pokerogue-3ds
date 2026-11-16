@@ -31,6 +31,7 @@ bool snd_bgm_play(const char* key, bool loop);
 bool snd_bgm_play_from(const char* key, bool loop, float loop_seconds);
 void snd_bgm_stop(void);
 bool snd_bgm_playing(void);
+bool snd_bgm_has(const char* key); /* the pack has this track (so snd_bgm_play would start it) */
 void snd_bgm_volume(float v); /* 0..1 */
 
 /* key e.g. "audio/se/select", "audio/cry/445", "audio/battle_anims/Absorb2".

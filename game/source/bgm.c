@@ -1,6 +1,7 @@
 /* The scenes' music (see bgm.h). The track is bgm_choose's; bgm_play plays it. */
 #include "bgm.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -39,13 +40,36 @@ static void wave_call(const gc_run* r, int wave, int biome, int battle_type) {
   (void)r;
 }
 
+static const char* (*foe_source)(const gc_run*);
+void bgm_set_foe_source(const char* (*foe_id)(const gc_run* run)) { foe_source = foe_id; }
+
+/* The JoJo trainer's own theme, when there is one in the pack: custom/<id>; the three Pillar Men share custom/pillar_men. */
+#define PILLAR_TRACK "custom/pillar_men"
+static const char* custom_theme(const gc_run* r, char buf[BGM_NAME_LEN]) {
+  const char* id = foe_source ? foe_source(r) : NULL;
+  if (!id || !*id) return NULL;
+  snprintf(buf, BGM_NAME_LEN, "custom/%s", id);
+  if (bgm_has(buf)) return buf;
+  if (!strcmp(id, "esidisi") || !strcmp(id, "wamuu") || !strcmp(id, "kars")) {
+    snprintf(buf, BGM_NAME_LEN, "%s", PILLAR_TRACK);
+    if (bgm_has(buf)) return buf;
+  }
+  return NULL;
+}
+
 static const char* track_now(const gc_run* r, char buf[BGM_NAME_LEN]) {
+  const char* own = custom_theme(r, buf);
+  if (own) return own;
   bgm_scene s;
   scene_of(r, &s);
   return bgm_scene_track(&s, buf);
 }
 
 void bgm_on_mystery(int type) {
+  if (type == GC_ME_PILLAR_MEN && bgm_has(PILLAR_TRACK)) {
+    bgm_play_faded(PILLAR_TRACK, 500, 750);
+    return;
+  }
   const char* track = bgm_mystery_track(type, true); /* all_gens: the default music preference */
   if (track) bgm_play_faded(track, 500, 750);
 }

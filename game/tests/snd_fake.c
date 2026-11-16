@@ -34,6 +34,8 @@ bool snd_bgm_play(const char* key, bool loop) {
   return true;
 }
 
+bool snd_bgm_has(const char* key) { return SND.ready && (!SND.has || SND.has(key)); }
+
 void snd_bgm_stop(void) {
   SND.key[0] = 0;
   SND.stops++;

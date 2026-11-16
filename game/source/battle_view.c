@@ -139,6 +139,7 @@ static struct {
     float inv_r;          /* the inverted circle's radius (field px), 0 = none */
     float bulge;          /* the background's extra zoom about DIO while the circle grows */
     float grey;           /* 0..1: the touched layers in grey blue */
+    float hold;           /* ms the grey stage waits past its own 300 for the time-stop sound to end */
     char key[64];         /* his sprite */
   } world;
   float ko_wait;
@@ -1374,6 +1375,12 @@ static void draw_heaven_box(void) {
 #define WORLD_DRAIN_MS 300.0f
 #define WORLD_MAX_R 440.0f   /* past the farthest corner of the 400 x 240 screen from DIO */
 #define WORLD_BULGE 0.06f
+/* The time stop's sounds (lorenzo 2026-11-16): the user's own files, from the builder's extra-audio/se folder; without them it is silent.
+ * the_world starts with the inverted circle, and the battle goes on once it has played out (at most WORLD_HOLD_MAX_MS past the grey);
+ * the_world_resume starts as the colour comes back. */
+#define WORLD_SOUND "se/the_world"
+#define WORLD_RESUME_SOUND "se/the_world_resume"
+#define WORLD_HOLD_MAX_MS 6000.0f
 
 /* BEV_WORLD's sprite: <id>_world next to the trainer's (dio -> dio_world) if the pack has it, else his own */
 static void world_key(void) {
@@ -2326,6 +2333,8 @@ static void run_event(float dt) {
           if (!step_dialogue(&d, dt)) break;
           B.world.t = 0;
           B.world.stage = 3;
+          ui_play_sound(WORLD_SOUND);
+          B.world.hold = fminf(fmaxf(ui_sound_seconds(WORLD_SOUND) * 1000 - WORLD_GROW_MS, 0), WORLD_HOLD_MAX_MS);
         }
         if (B.world.stage == 3) {
           B.world.t += dt;
@@ -2341,7 +2350,7 @@ static void run_event(float dt) {
         if (B.world.stage == 4) {
           B.world.t += dt;
           B.world.grey = fminf(B.world.t / WORLD_DRAIN_MS, 1);
-          if (B.world.t < WORLD_DRAIN_MS) break;
+          if (B.world.t < fmaxf(WORLD_DRAIN_MS, B.world.hold)) break;
           B.world.stage = 0;
           finish_event();
         }
@@ -2356,6 +2365,7 @@ static void run_event(float dt) {
         if (!step_dialogue(&d, dt)) break;
         B.world.t = 0;
         B.world.stage = 2;
+        ui_play_sound(WORLD_RESUME_SOUND);
       }
       if (B.world.stage == 2) {
         B.world.t += dt;

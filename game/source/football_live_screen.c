@@ -3,6 +3,7 @@
 #include "football_career.h"
 #include "football_live_art.h"
 #include "football_menu.h"
+#include "football_sound.h"
 #include "football_shop_render.h"
 #include "gm_item_ui.h"
 #include "mui.h"
@@ -38,6 +39,7 @@ static struct {
     unsigned pending;int receiver;
     uint64_t checkpoint;
     FootballCareerPhase old_phase;
+    FootballSoundWatch sound;bool sound_armed; /* the match sounds: armed while a match is being watched */
 } L;
 static void achv_toast_step(unsigned ms);
 static unsigned char checkpoint_bytes[FB_CAREER_SAVE_MAX];
@@ -263,35 +265,38 @@ static void cycle_mega(int direction)
     for(unsigned n=0;n<23;++n){L.career.mega+=direction;if(L.career.mega>21)L.career.mega=-1;if(L.career.mega< -1)L.career.mega=21;
         if(L.career.mega==-1 || L.career.roster.mega_item[L.career.mega])break;}
 }
-static void choose_current(void)
+static bool choose_current(void)
 {
     FootballCareer *c=&L.career;
     switch(c->phase){
     case FB_CAREER_DRAFT:{gc_starter s;const char *why=NULL;
-        if(!L.catalog_count || !football_roster_starter(L.args.profile,L.catalog[L.cursor],&s))return;
+        if(!L.catalog_count || !football_roster_starter(L.args.profile,L.catalog[L.cursor],&s))return false;
         /* Picks fill the slots in order (QB, RB, WR1 ...) and lineup[] starts as the identity, so each pick is already in its position. */
-        if(!football_roster_add(&c->roster,L.scratch,&s,L.args.profile,&why))snprintf(c->message,sizeof c->message,"%s",why?why:"Cannot draft this Pokemon.");
+        if(!football_roster_add(&c->roster,L.scratch,&s,L.args.profile,&why)){snprintf(c->message,sizeof c->message,"%s",why?why:"Cannot draft this Pokemon.");return false;}
         else {c->message[0]=0;if(c->roster.count==22){c->phase=FB_CAREER_READY;L.cursor=0;}}break;}
     case FB_CAREER_LINEUP:L.editing=!L.editing;break;
-    case FB_CAREER_READY:if(football_career_start(c)){L.cursor=0;L.asset_offense=-1;L.camera.ready=false;}break;
+    case FB_CAREER_READY:if(!football_career_start(c))return false;L.cursor=0;L.asset_offense=-1;L.camera.ready=false;break;
     case FB_CAREER_MATCH:
-        if(c->live.phase==FB_LIVE_CALL){FootballPlayId id=(FootballPlayId)(L.play_page*4+L.cursor);if(c->live.rules.offense==FB_AWAY)football_live_defend(&c->live,(FootballDefenseId)(L.play_page*4+L.cursor));
+        if(c->live.phase==FB_LIVE_CALL){FootballPlayId id=(FootballPlayId)(L.play_page*4+L.cursor);if(c->live.rules.offense==FB_AWAY){if(!football_live_defend(&c->live,(FootballDefenseId)(L.play_page*4+L.cursor)))return false;}
             else if(c->live.conversion==1){
                 /* The try after a touchdown: kick it, or play it from the 4 with the ordinary playcall. */
-                if(L.cursor==0){if(!football_live_special(&c->live,FB_SPECIAL_EXTRA_POINT))return;}
-                else{if(football_live_go_for_two(&c->live)){L.cursor=0;L.play_page=0;}return;}
+                if(L.cursor==0){if(!football_live_special(&c->live,FB_SPECIAL_EXTRA_POINT))return false;}
+                else{if(!football_live_go_for_two(&c->live))return false;L.cursor=0;L.play_page=0;return true;}
             }
-            else if(special_page()){if(!football_live_special(&c->live,L.cursor?FB_SPECIAL_FIELD_GOAL:FB_SPECIAL_PUNT))return;}
-            else football_live_call(&c->live,id);
+            else if(special_page()){if(!football_live_special(&c->live,L.cursor?FB_SPECIAL_FIELD_GOAL:FB_SPECIAL_PUNT))return false;}
+            else if(!football_live_call(&c->live,id))return false;
             L.ignore_keys=true;
         }break;
     case FB_CAREER_RESULT:football_career_continue(c);L.cursor=0;break;
     case FB_CAREER_EVOLVE:football_career_evolve(c,L.cursor<c->evolution_count?(int)L.cursor:-1);L.cursor=0;break;
-    case FB_CAREER_SHOP:if(L.cursor==FB_SHOP_FIXED+c->evo_count){football_career_continue(c);L.cursor=0;}else football_career_buy(c,cursor_offer(),L.member);break;
+    case FB_CAREER_SHOP:if(L.cursor==FB_SHOP_FIXED+c->evo_count){football_career_continue(c);L.cursor=0;}else if(!football_career_buy(c,cursor_offer(),L.member))return false;break;
     case FB_CAREER_END:leave_playoff();break;
     default:break;
     }
+    return true;
 }
+/* A choice that went through clicks like any menu; one the game refuses (no cash, a full roster, a kick out of range) gives the error sound. */
+static bool choose_sound(void){bool ok=choose_current();if(ok)ui_play_select();else ui_play_error();return ok;}
 static bool input(ui_screen *s,ui_button button)
 {
     (void)s;if(ui_input_repeating() && (button==BTN_ACTION || button==BTN_SUBMIT))return true;
@@ -300,27 +305,27 @@ static bool input(ui_screen *s,ui_button button)
     if(c->phase==FB_CAREER_MATCH && c->live.phase!=FB_LIVE_CALL)return true; /* hardware held/edge state owns live controls */
     unsigned count=option_count();if(!count)return true;
     if(button==BTN_UP || button==BTN_DOWN)c->message[0]=0; /* the shop's note on the last purchase goes when the cursor moves */
-    if(button==BTN_UP)L.cursor=(L.cursor+count-1)%count;
-    else if(button==BTN_DOWN)L.cursor=(L.cursor+1)%count;
-    else if(button==BTN_LEFT || button==BTN_RIGHT){int delta=button==BTN_RIGHT?1:-1;
+    if(button==BTN_UP){L.cursor=(L.cursor+count-1)%count;ui_play_select();}
+    else if(button==BTN_DOWN){L.cursor=(L.cursor+1)%count;ui_play_select();}
+    else if(button==BTN_LEFT || button==BTN_RIGHT){int delta=button==BTN_RIGHT?1:-1;ui_play_select();
         if(c->phase==FB_CAREER_LINEUP && L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+22+delta)%22);}
         else if(c->phase==FB_CAREER_DRAFT)L.cursor=(L.cursor+count+(delta>0?FM_ROWS:count-FM_ROWS%count))%count;
         else if(c->phase==FB_CAREER_READY)cycle_mega(delta);
         else if(c->phase==FB_CAREER_SHOP)L.member=(L.member+22+delta)%22;
         else if(c->phase==FB_CAREER_MATCH && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+pages()+(unsigned)delta)%pages();L.cursor=0;}
-    }else if(button==BTN_ACTION || button==BTN_SUBMIT)choose_current();
+    }else if(button==BTN_ACTION || button==BTN_SUBMIT)choose_sound();
     else if(button==BTN_CANCEL){
-        if(c->phase==FB_CAREER_DRAFT && c->roster.count){unsigned i=--c->roster.count;c->roster.cost-=gc_starter_value(L.args.profile,c->roster.mon[i].b.species);}
-        else if(c->phase==FB_CAREER_LINEUP){if(L.editing)L.editing=false;else {c->phase=FB_CAREER_READY;L.cursor=0;}}
-        else if(c->phase==FB_CAREER_READY){c->phase=FB_CAREER_LINEUP;L.cursor=0;}
-        else if(c->phase==FB_CAREER_EVOLVE){football_career_evolve(c,-1);L.cursor=0;}
+        if(c->phase==FB_CAREER_DRAFT && c->roster.count){unsigned i=--c->roster.count;c->roster.cost-=gc_starter_value(L.args.profile,c->roster.mon[i].b.species);ui_play_select();}
+        else if(c->phase==FB_CAREER_LINEUP){if(L.editing)L.editing=false;else {c->phase=FB_CAREER_READY;L.cursor=0;}ui_play_select();}
+        else if(c->phase==FB_CAREER_READY){c->phase=FB_CAREER_LINEUP;L.cursor=0;ui_play_select();}
+        else if(c->phase==FB_CAREER_EVOLVE){football_career_evolve(c,-1);L.cursor=0;ui_play_select();}
     }
     return true;
 }
 static bool touch(ui_screen *s,float x,float y)
 {
     (void)s;FootballCareer *c=&L.career;
-    if(c->phase==FB_CAREER_RESULT || c->phase==FB_CAREER_END){choose_current();return true;}
+    if(c->phase==FB_CAREER_RESULT || c->phase==FB_CAREER_END){choose_sound();return true;}
     if(c->phase==FB_CAREER_MATCH && c->live.phase!=FB_LIVE_CALL){
         if(c->live.rules.offense==FB_AWAY && y>=MAP_Y && y<MAP_Y+108){
             unsigned nearest=0;float best=100000;
@@ -336,12 +341,12 @@ static bool touch(ui_screen *s,float x,float y)
         else if(y>=FM_FOOT_Y-4){if(x<160)L.pending|=FB_LIVE_JUKE|FB_LIVE_SWITCH;else L.pending|=FB_LIVE_ACTION;}
         return true;
     }
-    if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=FM_FOOT_Y-2 && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+1)%pages();L.cursor=0;}return true;}
-    if(c->phase==FB_CAREER_READY){if(y>=124 && y<FM_FOOT_Y-4)cycle_mega(1);else if(y>=FM_FOOT_Y-4){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else choose_current();}return true;}
-    if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
-    if(c->phase==FB_CAREER_SHOP && y>=FM_FOOT_Y-4){L.member=(L.member+1)%22;return true;}
+    if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_sound();}else if(y>=FM_FOOT_Y-2 && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+1)%pages();L.cursor=0;ui_play_select();}return true;}
+    if(c->phase==FB_CAREER_READY){if(y>=124 && y<FM_FOOT_Y-4){cycle_mega(1);ui_play_select();}else if(y>=FM_FOOT_Y-4){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;ui_play_select();}else choose_sound();}return true;}
+    if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){ui_play_select();if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
+    if(c->phase==FB_CAREER_SHOP && y>=FM_FOOT_Y-4){L.member=(L.member+1)%22;ui_play_select();return true;}
     int row=football_menu_row_at(x,y);
-    if(row>=0){unsigned option=L.cursor/FM_ROWS*FM_ROWS+(unsigned)row;if(option<option_count()){L.cursor=option;if(c->phase==FB_CAREER_SHOP)c->message[0]=0;choose_current();}}
+    if(row>=0){unsigned option=L.cursor/FM_ROWS*FM_ROWS+(unsigned)row;if(option<option_count()){L.cursor=option;if(c->phase==FB_CAREER_SHOP)c->message[0]=0;choose_sound();}}
     return true;
 }
 static void update(ui_screen *s,float dt)
@@ -373,6 +378,13 @@ static void update(ui_screen *s,float dt)
     float focus_x=0,focus_y=0,focus_vx=0;if(c->phase==FB_CAREER_MATCH)football_live_focus(&c->live,&focus_x,&focus_y,&focus_vx);
     bool framing=c->phase==FB_CAREER_MATCH && c->live.phase==FB_LIVE_SET && L.camera.ready && fabsf(L.camera.x-focus_x)>14;
     football_career_tick(c,framing?0:ms,controls);
+    /* The sounds of the match: the first look at a match is silent, then every frame says what happened since the last. A finished match is
+     * already in the result phase when its last sounds are told, so the watch goes on through it. */
+    if(c->phase==FB_CAREER_MATCH && !L.sound_armed){football_sound_reset(&L.sound,&c->live);L.sound_armed=true;}
+    else if(c->phase==FB_CAREER_MATCH || (c->phase==FB_CAREER_RESULT && L.sound_armed)){
+        FootballSound heard[FB_SOUND_MAX];unsigned n=football_sound_scan(&L.sound,&c->live,heard);
+        for(unsigned i=0;i<n;++i)ui_play_sound(football_sound_key(heard[i]));
+    }else L.sound_armed=false;
     if(c->phase!=L.old_phase){L.cursor=0;L.editing=false;if(c->phase==FB_CAREER_SHOP)shop_assets();
         /* A match plays an upbeat battle track (a new one each round); the title music returns once it is over. */
         if(c->phase==FB_CAREER_MATCH)bgm_on_football_match(c->seed,c->round);else if(L.old_phase==FB_CAREER_MATCH)bgm_on_title();
