@@ -634,8 +634,11 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
     pr_phase_push(bt, e, ph);
 }
 
+static void made_in_heaven_turn_start(pr_battle *bt, pr_engine *e);
+
 static void turn_start(pr_battle *bt, pr_engine *e)
 {
+    made_in_heaven_turn_start(bt, e);
     /* getCommandOrder: the active field, player side first; commands other than FIGHT go first
      * (the comparator keeps the original order otherwise, so this is a stable partition) */
     int order[4], n = 0;
@@ -3051,6 +3054,53 @@ static void faint_notify(pr_battle *bt, const pr_phase *f, const pr_pokemon *p, 
     bt->faint_observer(bt, &n, bt->faint_observer_ctx);
 }
 
+/* ---------------------------------------------------------------- Made in Heaven (custom content, PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN) */
+
+/* the members of p's side, p left out, with HP left (want_hp) or none */
+static int heaven_side_count(const pr_battle *bt, const pr_pokemon *p, bool want_hp)
+{
+    const int side = p->is_player ? 0 : 1;
+    int n = 0;
+    for (int k = 0; k < bt->n_party[side]; k++) {
+        const pr_pokemon *q = bt->party[side][k];
+        if (q && q != p && (q->hp > 0) == want_hp) n++;
+    }
+    return n;
+}
+
+/* doFaint: the side's first faint is the C-Moon stage (shown, no effect), its second wakes Made in Heaven (lorenzo, 2026-11-16:
+ * Whitesnake, C-Moon, then Made in Heaven); after the fainted text and the exp, before the next send-out */
+static void made_in_heaven_faint(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int battler)
+{
+    if (p->custom_passive != PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN) return;
+    const int stage = heaven_side_count(bt, p, false) + 1;
+    if (stage > PR_MADE_IN_HEAVEN_FAINTS || heaven_side_count(bt, p, true) == 0) return;
+    int ph = pr_phase_new(e, PH_MADE_IN_HEAVEN, (int8_t)battler);
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+    e->pool[ph].anim = (uint16_t)stage;
+    pr_phase_unshift(bt, e, ph);
+}
+
+/* TurnStartPhase, before anything of the turn runs (the move order is read later, when each MovePhase comes up): each awake member on
+ * the field, Speed +1. The suppression and fusion gates are Speed Boost's (pr_can_apply_ability); at +6 nothing is shown. */
+static void made_in_heaven_turn_start(pr_battle *bt, pr_engine *e)
+{
+    pr_speed_iter it;
+    pr_pokemon *p;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        if (p->custom_passive != PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN || p->hp <= 0 || p->switch_out_status) continue;
+        if (heaven_side_count(bt, p, false) < PR_MADE_IN_HEAVEN_FAINTS) continue;
+        if (p->stat_stages[STAT_SPD - 1] >= 6) continue;
+        if (!pr_can_apply_ability(bt, p, ABILITY_ID_SPEED_BOOST)) continue;
+        static const int32_t stat = STAT_SPD;
+        const int b = pr_battler_index(bt, p);
+        pr_queue_ability_display_id(bt, e, p, PR_ABILITY_SHOW_MADE_IN_HEAVEN);
+        if (pr_unshift_stat_stage_change(bt, e, b, &stat, 1, 1, p) < 0) e->overflow = true;
+        pr_queue_ability_display(bt, e, p, true, false);
+    }
+}
+
 static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *f = PH(ph);
@@ -3217,6 +3267,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
             }
         }
     }
+    made_in_heaven_faint(bt, e, p, f->battler);
     pr_leave_field(bt, e, p, true);
 }
 
@@ -3666,7 +3717,8 @@ static void show_ability_phase(pr_battle *bt, pr_engine *e, int ph)
     if (bt->ability_bar_visible) {
         bool passive = s->anim_result;
         pr_phase_unshift(bt, e, pr_phase_new(e, PH_HIDE_ABILITY, -1));
-        pr_queue_ability_display(bt, e, p, passive, true);
+        if (s->anim == PR_ABILITY_SHOW_MADE_IN_HEAVEN) pr_queue_ability_display_id(bt, e, p, PR_ABILITY_SHOW_MADE_IN_HEAVEN);
+        else pr_queue_ability_display(bt, e, p, passive, true);
         return;
     }
     if (p->is_player) bt->last_player_involved = (int8_t)(s->battler % 2);
@@ -4317,6 +4369,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;
+    case PH_MADE_IN_HEAVEN: pr_event_add(bt, e, PR_EV_MADE_IN_HEAVEN, PH(ph)->battler, -1, 0, PH(ph)->anim, NULL); break;
     case PH_FORM_CHANGE: form_change_phase(bt, e, ph); break;
     case PH_END_EVOLUTION: break; /* UI force-message transition, no battle state */
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;

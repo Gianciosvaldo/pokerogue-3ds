@@ -248,6 +248,14 @@ typedef struct pr_illusion {
     bool active;
 } pr_illusion;
 
+/* Made in Heaven (lorenzo's JoJo content, Pucci's team; not an upstream ability). A member with custom_passive set to this has no
+ * passive of its own (passive_flag stays false, its ability is its own). The side's first faint shows PR_EV_MADE_IN_HEAVEN value 1
+ * (C-Moon, no effect), its PR_MADE_IN_HEAVEN_FAINTS-th (the second) value 2, and from the next turn on, while that many of its side have no HP left, at the start of every turn, each such member on the field gets
+ * Speed +1 (up to +6) with its ability bar naming PR_ABILITY_SHOW_MADE_IN_HEAVEN. No state of its own: "awake" is read from the
+ * party (a member with no HP left), so a reloaded battle carries it with the saved HP. */
+#define PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN (-2)
+#define PR_MADE_IN_HEAVEN_FAINTS 2
+#define PR_ABILITY_SHOW_MADE_IN_HEAVEN 0xFFFEu   /* PR_EV_ABILITY_SHOW id: not an AbilityId (the app names it) */
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -274,7 +282,7 @@ typedef struct pr_pokemon {
     int32_t ability_override;  /* summonData.ability (-1 = undefined); ability follows it while set */
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
-    int16_t custom_passive;    /* customPokemonData.passive, -1 = none */
+    int16_t custom_passive;    /* customPokemonData.passive, -1 = none; PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN (custom content) */
     int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
     /* customPokemonData.types and fusionCustomPokemonData.types: a slot is 0 when null/absent (the form's own type shows
      * through, getBaseTypes' `??`), else PokemonType + 1. Only the regular types 0..17 can be stored. */

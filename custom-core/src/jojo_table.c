@@ -2,7 +2,7 @@
  * Caesar to Giorno) and edited by hand; see jojo.h).
  *
  * One row per character: id, display name, iconic line, biome (BiomeId; -1 = not in a biome pool: the Pillar Men), the background
- * passive (an AbilityId; -1 = none) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
+ * passive (an AbilityId; -1 = none; CC_JOJO_PASSIVE_MADE_IN_HEAVEN for Pucci) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
  * form's abilities, 2 = hidden), shiny (0/1) and its variant tier (0..2, 0 unless the species has variant palettes), four move ids and
  * the held items {modifierTypes key, argument, stack}. The comments name the species, form and moves. Held items upstream does not have
  * were dropped (lorenzo, 2026-10-18: no substitutions); stacks are capped as upstream caps them. The ids are checked against
@@ -43,7 +43,7 @@ const cc_jojo_char cc_jojo_chars[] = {
         {424, 0, 0, 0, 0, {252, 458, 369, 282}, 3, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"KINGS_ROCK", -1, 1}, {"GRIP_CLAW", -1, 1}}}, /* Ambipom; Fake Out, Double Hit, U-turn, Knock Off */
         {289, 0, 0, 0, 0, {38, 89, 389, 303}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"LEFTOVERS", -1, 1}}}, /* Slaking; Double-Edge, Earthquake, Sucker Punch, Slack Off */
     }},
-    {"pucci", "Enrico Pucci", "Do you believe in 'gravity'?", 29 /* Temple */, 3 /* Speed Boost */, 6, {
+    {"pucci", "Enrico Pucci", "Do you believe in 'gravity'?", 29 /* Temple */, CC_JOJO_PASSIVE_MADE_IN_HEAVEN, 6, {
         {687, 0, 0, 0, 0, {276, 282, 427, 576}, 2, {{"ATTACK_TYPE_BOOSTER", 16, 1}, {"LEFTOVERS", -1, 1}}}, /* Malamar; Superpower, Knock Off, Psycho Cut, Topsy-Turvy */
         {826, 1, 0, 1, 0, {356, 94, 405, 105}, 2, {{"ATTACK_TYPE_BOOSTER", 13, 1}, {"ATTACK_TYPE_BOOSTER", 6, 1}}}, /* Orbeetle (gigantamax); Gravity, Psychic, Bug Buzz, Recover */
         {894, 0, 0, 0, 0, {486, 521, 229, 182}, 2, {{"ATTACK_TYPE_BOOSTER", 12, 1}, {"MULTI_LENS", -1, 1}}}, /* Regieleki; Electro Ball, Volt Switch, Rapid Spin, Protect */

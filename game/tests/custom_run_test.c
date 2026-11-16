@@ -2076,7 +2076,8 @@ static void jojo_seen(void) {
       }
     if (e->b.n_moves != nm) J.bad++;
     if (foe->passive >= 0 && (e->b.passive != foe->passive || e->b.custom_passive != foe->passive)) J.bad++;
-    if (foe->passive < 0 && e->b.custom_passive != -1) J.bad++;
+    if (foe->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN && (e->b.custom_passive != PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN || e->b.passive_flag || e->b.passive)) J.bad++;
+    if (foe->passive == -1 && e->b.custom_passive != -1) J.bad++;
     if (!e->b.has_trainer) J.bad++;
   }
 }

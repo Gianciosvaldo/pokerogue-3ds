@@ -41,6 +41,7 @@ typedef enum {
     PH_REVIVAL_BLESSING,       /* appended: player party selection, paused mid-phase */
     PH_FORM_CHANGE, PH_END_EVOLUTION, /* appended: nonquiet scene form changes */
     PH_ME_START_CLEANUP,       /* appended: MysteryEncounterBattleStartCleanupPhase */
+    PH_MADE_IN_HEAVEN,         /* appended, custom content only (no upstream phase): emits PR_EV_MADE_IN_HEAVEN */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -354,6 +355,8 @@ void pr_event_acknowledge(pr_engine *e);
 pr_event *pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
                   const pr_msg *m);
 void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool passive, bool show);
+/* a ShowAbilityPhase that names `id` (PR_ABILITY_SHOW_MADE_IN_HEAVEN) instead of the Pokemon's ability or passive; shown as a passive */
+void pr_queue_ability_display_id(pr_battle *bt, pr_engine *e, const pr_pokemon *p, uint16_t id);
 /* queueFaintPhase(battlerIndex, preventInstantRevive, source) */
 void pr_queue_faint(pr_battle *bt, pr_engine *e, int battler, bool prevent_instant_revive, int source);
 /* ---- battler tags being added, lapsed and removed (src/battler_tags.c) ---- */

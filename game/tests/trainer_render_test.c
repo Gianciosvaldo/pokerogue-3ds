@@ -25,6 +25,8 @@ static void near(float x,float y) { assert(fabsf(x-y)<0.001f); }
 void rr_set_zoom(float z,float cx,float cy) { (void)z;(void)cx;(void)cy; } /* draw_trainers drops the field zoom for a JoJo challenger */
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
+static bool stage_files = true;   /* whether the pack has Pucci's stage sprites */
+bool img_has(const char* key) { return stage_files || (!strstr(key, "_cmoon") && !strstr(key, "_heaven")); }
 int main(void) {
   memset(&B,0,sizeof B);
   B.player_trainer_visible=true;B.player_throw_ms=-1;
@@ -74,6 +76,16 @@ int main(void) {
     B.me_n=1;B.enemy_slide=-100;draw_me_intro();near(px,228-100+4);near(py,87);near(opts.scale_y,1);
     bv_me_intro(sp,0);before=draws;draw_me_intro();assert(draws==before);
   }
+  /* BEV_HEAVEN's sprite: Pucci's C-Moon look after his first faint, Made in Heaven's after his second; another trainer's key is left
+   * alone, and so is his when the pack has no stage file */
+  strcpy(B.setup.trainer_keys[0],"images/trainer/custom/pucci");
+  heaven_sprite(1);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/custom/pucci_cmoon"));
+  heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/custom/pucci_heaven"));
+  heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/custom/pucci_heaven"));
+  stage_files=false;strcpy(B.setup.trainer_keys[0],"images/trainer/custom/pucci");
+  heaven_sprite(1);heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/custom/pucci"));
+  stage_files=true;strcpy(B.setup.trainer_keys[0],"images/trainer/rival_m");
+  heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/rival_m"));
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;
 }

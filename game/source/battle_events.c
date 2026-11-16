@@ -469,6 +469,9 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           }else PUT(.type=BEV_ABILITY,.battler=b,.a=ev->id,.b=ev->value);
         }
         break;
+      case PR_EV_MADE_IN_HEAVEN:
+        PUT(.type = BEV_HEAVEN, .battler = b, .a = ev->value);
+        break;
       case PR_EV_FAINT:
         if (!single || seen[b].fainted) break;
         /* the damage that made it faint isn't always an event of its own (Disguise busting): drain the bar */
