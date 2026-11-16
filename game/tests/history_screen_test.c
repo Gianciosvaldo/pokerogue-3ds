@@ -64,12 +64,24 @@ void ui_play_select(void) { n_select++; }
 void ui_play_error(void) { n_error++; }
 
 static int g_which; /* 0 top, 1 bottom */
+static ui_space_id g_space = UI_PHYS_TOP;
 bool ui_space(ui_space_id sp) {
   const bool top = sp == UI_FIELD || sp == UI_FIELD_UI || sp == UI_TOP_CANVAS || sp == UI_TOP_CANVAS_UI || sp == UI_PHYS_TOP;
-  return top == (g_which == 0);
+  if (top != (g_which == 0)) return false;
+  g_space = sp;
+  return true;
 }
 void ui_window(float x, float y, float w, float h, win_variant v) { (void)x, (void)y, (void)w, (void)h, (void)v; }
-void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
+typedef struct {
+  float x, y, w, h;
+  rr_color c;
+  ui_space_id space;
+} rect_t;
+static rect_t g_rects[128];
+static int n_rects;
+void rr_rect(float x, float y, float w, float h, rr_color c) {
+  if (n_rects < 128) g_rects[n_rects++] = (rect_t){x, y, w, h, c, g_space};
+}
 void clip_to_screen(void) {}
 void clip_off(void) {}
 bool img_has(const char* key) {
@@ -88,9 +100,16 @@ const char* gm_enum_lower(gm_enum e, int value, char* out, int n) {
 }
 static int n_icons;
 static rsv_mon g_icons[32];
+typedef struct {
+  float x, y, scale;
+  ui_space_id space;
+} icon_t;
+static icon_t g_icon_at[32];
 void pi_draw(const rsv_mon* m, float x, float y, float scale) {
-  (void)x, (void)y, (void)scale;
-  if (n_icons < 32) g_icons[n_icons] = *m;
+  if (n_icons < 32) {
+    g_icons[n_icons] = *m;
+    g_icon_at[n_icons] = (icon_t){x, y, scale, g_space};
+  }
   n_icons++;
 }
 static int n_summaries;
@@ -121,9 +140,26 @@ const char* rt_money(double v, char* out, int n) {
 typedef struct {
   float x, y;
   char text[200];
+  text_style style;
+  int font_px;       /* the canvas px it was drawn at: the options' or, with none, the style's */
+  float wrap_w;
+  ui_space_id space;
 } drawn_t;
 static drawn_t g_drawn[512];
 static int n_drawn;
+
+/* upstream's family and canvas px of the styles history_screen.c draws with (ui_text.c's table: emerald 96 px = 16 logical px, the pixel font 48 = 8) */
+static bool pixel_style(text_style st) { return st == TS_PARTY || st == TS_PARTY_RED || st == TS_PARTY_CANCEL_BUTTON || st == TS_INSTRUCTIONS_TEXT || st == TS_MOVE_LABEL; }
+static int style_px(text_style st) {
+  switch (st) {
+    case TS_WINDOW: case TS_WINDOW_ALT: case TS_SUMMARY: case TS_SUMMARY_STATS: case TS_SUMMARY_STATS_BLUE: case TS_SUMMARY_STATS_PINK:
+    case TS_HEADER_LABEL:
+      return 96;
+    case TS_MONEY: return 72;
+    case TS_PARTY: case TS_INSTRUCTIONS_TEXT: return 48;
+    default: printf("style_px: add style %d to the test's table\n", (int)st); exit(2);
+  }
+}
 text_opts text_defaults(void) {
   text_opts o;
   memset(&o, 0, sizeof o);
@@ -131,14 +167,28 @@ text_opts text_defaults(void) {
   return o;
 }
 float text_draw(text_style st, float x, float y, const char* s, const text_opts* o) {
-  (void)st, (void)o;
   if (n_drawn < 512) {
     drawn_t* d = &g_drawn[n_drawn++];
     d->x = x;
     d->y = y;
     snprintf(d->text, sizeof d->text, "%s", s);
+    d->style = st;
+    d->font_px = o && o->font_px ? o->font_px : style_px(st);
+    d->wrap_w = o ? o->wrap_w : 0;
+    d->space = g_space;
   }
   return 6.0f * (float)strlen(s);
+}
+
+/* the fakes' lines: 6 px a character, wrapped at the options' width */
+int text_lines(text_style st, const char* s, const text_opts* o) {
+  (void)st;
+  const float w = 6.0f * (float)strlen(s);
+  return o && o->wrap_w > 0 ? (int)((w + o->wrap_w - 1) / o->wrap_w) : 1;
+}
+float text_line_pitch(text_style st, const text_opts* o) {
+  (void)o;
+  return pixel_style(st) ? 11.83f : 14.83f;
 }
 
 float text_width(text_style st, const char* s, const text_opts* o) {
@@ -329,7 +379,7 @@ static void open_screen(rh_status st) {
 }
 static bool press(ui_button b) { return ui_top()->input(ui_top(), b); }
 static void draw(int which) {
-  n_drawn = n_icons = n_summaries = n_type_icons = 0;
+  n_drawn = n_icons = n_summaries = n_type_icons = n_rects = 0;
   g_which = which == RR_BOTTOM ? 1 : 0;
   for (int d = 0; d < g_depth; d++) g_stack[d]->draw(g_stack[d], which == RR_BOTTOM ? RR_BOTTOM : RR_TOP);
   g_which = 0;
@@ -464,6 +514,79 @@ int main(void) {
   CHECK(n_type_icons == 2, "its two types (%d)", n_type_icons);
   CHECK(find_prefix("Ability: Ability41") != NULL, "its ability (%s)", find_prefix("Ability") ? find_prefix("Ability")->text : "-");
 
+
+  /* ---- the info page at sizes the 3DS can show (lorenzo 2026-11-16: "text and image size in run history -> run info need to be fixed as they are
+   * currently way too small"): the top screen is laid out on the whole 400 x 240 in physical px, the words are emerald at 16 px or more (emerald
+   * smears below about 12), the fine print is the 8 px pixel font, the party icons are 1.0 and the wild Pokemon that won 2.0, and the
+   * highlighted Pokemon's icon on the bottom screen is 2.0 */
+  draw(RR_TOP);
+  {
+    bool all_phys = n_drawn > 0, sized = true, inside = true;
+    for (int i = 0; i < n_drawn; i++) {
+      const drawn_t* d = &g_drawn[i];
+      if (d->space != UI_PHYS_TOP) all_phys = false;
+      if (pixel_style(d->style) ? d->font_px < 48 : d->font_px < 96) {
+        sized = false;
+        printf("  too small: \"%s\" style %d at %d px\n", d->text, (int)d->style, d->font_px);
+      }
+      if (d->x < 0 || d->x >= 400 || d->y < 0 || d->y >= 240) inside = false;
+    }
+    CHECK(all_phys, "the info page's top screen draws its texts in physical px (UI_PHYS_TOP), not on upstream's 320 x 180 field");
+    CHECK(sized, "no emerald text under 16 px and no pixel-font text under 8 px on the top screen");
+    CHECK(inside, "every text starts on the 400 x 240 screen");
+    CHECK(n_rects >= 1 && g_rects[0].w == 400 && g_rects[0].h == 240 && g_rects[0].x == 0 && g_rects[0].y == 0, "the first thing drawn is the 400 x 240 background");
+    int rows = 0, prev_bottom = 0;
+    bool rows_ok = true;
+    for (int i = 0; i < n_rects; i++) {
+      if (g_rects[i].c != RR_RGBA(0x10, 0x30, 0x38, 255)) continue;
+      rows++;
+      if (g_rects[i].y < prev_bottom || g_rects[i].x < 0 || g_rects[i].x + g_rects[i].w > 400 || g_rects[i].y + g_rects[i].h > 240) rows_ok = false;
+      prev_bottom = (int)(g_rects[i].y + g_rects[i].h);
+    }
+    CHECK(rows == E[1].n_party && rows_ok, "the party's rows (%d) are on the screen and do not overlap", rows);
+    bool outline_ok = true;
+    int yellow = 0;
+    for (int i = 0; i < n_rects; i++) {
+      if (g_rects[i].c != RR_RGBA(0xf8, 0xe8, 0x58, 255)) continue;
+      yellow++;
+      if (g_rects[i].x < 0 || g_rects[i].y < 0 || g_rects[i].x + g_rects[i].w > 400 || g_rects[i].y + g_rects[i].h > 240) outline_ok = false;
+    }
+    CHECK(yellow == 4 && outline_ok, "the highlighted row's outline (%d bars) is on the screen", yellow);
+    /* icons: the party at 1.0, the two wild Pokemon that won at 2.0, nothing smaller */
+    int party_icons = 0, enemy_icons = 0;
+    bool icon_ok = n_icons == 4;
+    for (int i = 0; i < n_icons && i < 32; i++) {
+      if (g_icon_at[i].space != UI_PHYS_TOP || g_icon_at[i].scale < 1.0f) icon_ok = false;
+      if (g_icons[i].species == 200 || g_icons[i].species == 201) {
+        enemy_icons++;
+        if (g_icon_at[i].scale != 2.0f) icon_ok = false;
+      } else {
+        party_icons++;
+        if (g_icon_at[i].scale != 1.0f || g_icon_at[i].x < 152) icon_ok = false;
+      }
+    }
+    CHECK(icon_ok && party_icons == 2 && enemy_icons == 2, "party icons at 1.0 in the rows, the wild Pokemon at 2.0 (%d + %d of %d)", party_icons, enemy_icons, n_icons);
+    const drawn_t* mode = find("Mode: Endless");
+    const drawn_t* money = find("P500");
+    const drawn_t* luck = find_prefix("Luck: ");
+    CHECK(mode && money && luck && mode->y < money->y && money->y < luck->y && luck->y + 16 <= 240, "mode, money and luck follow each other down the left column");
+    const drawn_t* lv = find("Lv44");
+    CHECK(lv && lv->y > 60 && lv->y + 16 <= 240, "a wild Pokemon's level sits under its icon (y %.0f)", lv ? lv->y : -1.0f);
+  }
+  draw(RR_BOTTOM);
+  {
+    bool all_phys = n_drawn > 0, sized = true;
+    for (int i = 0; i < n_drawn; i++) {
+      const drawn_t* d = &g_drawn[i];
+      if (d->space != UI_PHYS_BOTTOM) all_phys = false;
+      if (pixel_style(d->style) ? d->font_px < 48 : d->font_px < 96) sized = false;
+    }
+    CHECK(all_phys && sized, "the bottom screen's texts are physical px, at 16 px (the hints are the 8 px pixel font)");
+    CHECK(n_icons == 1 && g_icon_at[0].scale == 2.0f && g_icon_at[0].space == UI_PHYS_BOTTOM, "the highlighted Pokemon's icon is drawn at 2.0 (%d icons)", n_icons);
+    const drawn_t* ab = find_prefix("Ability: ");
+    CHECK(ab && ab->y > g_icon_at[0].y + 32 * 2 - 24, "the ability line is below the icon (y %.0f)", ab ? ab->y : -1.0f);
+  }
+
   /* the info page of a win has its name in the header */
   press(BTN_CANCEL);
   CHECK(ui_top() == g_screen && n_exit == 0, "B on the info goes back to the list");
@@ -537,6 +660,32 @@ int main(void) {
   draw(RR_BOTTOM);
   CHECK(find("Defeated"), "... in the list too");
 
+  /* a trainer whose line does not fit in four lines of the words is drawn in the pixel font, whole; a short one stays in the words */
+  press(BTN_CANCEL);
+  n_entries = 2;
+  E[0].defeat = RH_DEFEAT_TRAINER;
+  E[0].victory = false;
+  snprintf(E[0].trainer, sizeof E[0].trainer, "Team Galactic Commander Cyrus and Team Magma Leader Maxie of Hoenn");
+  E[1].defeat = RH_DEFEAT_TRAINER;
+  snprintf(E[1].trainer, sizeof E[1].trainer, "Finn");
+  open_screen(RH_OK);
+  press(BTN_ACTION);
+  draw(RR_TOP);
+  {
+    const drawn_t* t = find_prefix("Team Galactic Commander Cyrus");
+    CHECK(t && pixel_style(t->style) && !strcmp(t->text, "Team Galactic Commander Cyrus and Team Magma Leader Maxie of Hoenn would like to battle!"),
+          "a long trainer line drops to the pixel font and keeps its end (%s)", t ? t->text : "-");
+  }
+  press(BTN_CANCEL);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  draw(RR_TOP);
+  {
+    const drawn_t* t = find_prefix("Finn would");
+    CHECK(t && !pixel_style(t->style) && t->font_px == 96, "a short one stays in the words");
+  }
+  press(BTN_CANCEL);
+
   /* B on the list leaves, once */
   CHECK(press(BTN_CANCEL) && n_exit == 1, "B on the list leaves");
 
@@ -594,7 +743,7 @@ int main(void) {
     draw(RR_BOTTOM);
     CHECK(find("A: Summary") && find("B: Back"), "the info page's bottom screen has the hints");
     CHECK(find("A: Summary")->x == 16 && find("B: Back")->x == 16 + 60 + 18, "(each one after the last: x %.0f and %.0f)", find("A: Summary")->x, find("B: Back")->x);
-    CHECK(!sc->touch(sc, 100, 100) && !sc->touch(sc, 100, 60) && !sc->touch(sc, 300, 230) && n_summary_open == base && ui_top() == sc, "between the name and the hints, and beyond the hints, a tap takes nothing");
+    CHECK(!sc->touch(sc, 100, 100) && !sc->touch(sc, 100, 76) && !sc->touch(sc, 300, 230) && n_summary_open == base && ui_top() == sc, "between the name and the hints, and beyond the hints, a tap takes nothing");
     CHECK(sc->touch(sc, 30, 30), "a tap on the Pokemon's name goes on to the next one of the run");
     CHECK(sc->touch(sc, 20, 230) && n_summary_open == base + 1 && g_sum_args.index == 1 && g_sum_args.n == 2, "a tap on A: Summary opens the Summary screen at it (index %d)", g_sum_args.index);
     CHECK(!strcmp(ui_top()->name, "history-summary"), "over the info page");
@@ -613,7 +762,7 @@ int main(void) {
     /* the name's tap goes DOWN the party, wrapping: four Pokemon in the run that is the fourth row now (the list has scrolled by one) */
     CHECK(sc->touch(sc, 100, 130) && sc->touch(sc, 100, 130), "(the info page of the run at y 130)");
     for (int k = 1; k <= 4; k++) {
-      CHECK(sc->touch(sc, 30, 59), "a tap on the name at its lowest pixel counts");
+      CHECK(sc->touch(sc, 30, 75), "a tap on the name block at its lowest pixel counts");
       sc->touch(sc, 20, 230);
       const int want = k % 4;
       CHECK(g_sum_args.n == 4 && g_sum_args.index == want, "tap %d: Pokemon %d of 4 (index %d)", k, want, g_sum_args.index);

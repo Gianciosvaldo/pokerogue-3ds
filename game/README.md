@@ -54,8 +54,9 @@ the two screens show and none of the run's state: result, mode, wave, biome, sco
 as it ended with what the Summary page needs (moves, ability, nature, stats, ivs, luck), and for a defeat what beat the run (the wild Pokemon, or
 the trainer's name as game-core hands it out, `history_record.c`). The list is on the bottom screen (four runs in view, newest first: result,
 mode and wave, the time, the party's icons with their levels) and the top screen shows the highlighted run in full (`run_summary.c`); A opens the
-run's **info page** (the result, the trainer that won, mode, money and luck, the six party rows on the top screen; the highlighted Pokemon's
-stats and moves on the bottom one, UP / DOWN picks the Pokemon), and A there opens the **Summary** page (the same `menus/summary.c` the party
+run's **info page** (the result, the trainer that won, mode, money and luck, the six party rows on the top screen, laid out on the whole 400 x 240
+with 16 px words, the 8 px pixel font for nature and ability, 1.0 party icons and 2.0 icons for the wild Pokemon that won; the highlighted Pokemon's
+stats and moves on the bottom one with its icon at 2.0, UP / DOWN picks the Pokemon), and A there opens the **Summary** page (the same `menus/summary.c` the party
 screen hosts), B goes back. An empty history says "Empty". A history file that does not decode is never overwritten: the screen says it can't be
 read and a run that ends meanwhile says it was not added (`on_run_end`). Differences from upstream: no browser session data (upstream keeps the
 whole session of every finished run and rebuilds the Pokemon from it), so the entry has no run length, no player and held items, no Hall of Fame or
