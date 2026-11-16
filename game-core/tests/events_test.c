@@ -5,7 +5,8 @@
  * Sections (run with a name to run one, no argument for all):
  *   shiny : the enemy's shiny roll. The shiny test is (E ^ F) < threshold with E from the trainer and secret ids and F from the enemy's own
  *           id, so a run whose ids are chosen to put E ^ F just below or just above 64 * multiplier shows the multiplier exactly; the
- *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output. */
+ *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output.
+ *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,10 +153,58 @@ static void shiny_section(void)
     CHECK_EQ(gc_event_effects_now(&run).luck_boost, 14);
 }
 
+
+/* a party of three whose luck sums to `sum`, on a seeded Classic run with the source installed */
+static int party_luck(const gc_event_source *src, int sum)
+{
+    static const char seed[] = "events-luck";
+    memset(&run, 0, sizeof run);
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    gc_run_set_events(&run, src);
+    gc_starter team[3];
+    memset(team, 0, sizeof team);
+    const int species[3] = {SPECIES_ID_BULBASAUR, SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
+    for (int i = 0; i < 3; i++) {
+        team[i].species = (uint16_t)species[i];
+        team[i].tera_type = -1;
+        for (int k = 0; k < 6; k++) team[i].ivs[k] = 15;
+    }
+    const char *why = "";
+    CHECK(gc_run_set_starters(&run, team, 3, &why));
+    CHECK_EQ(run.n_party, 3);
+    for (int i = 0; i < 3; i++) run.party[i].luck = (int8_t)(sum > 0 && i == 0 ? sum : 0);
+    return gc_party_luck(&run);
+}
+
+static void luck_section(void)
+{
+    memset(&open_now, 0, sizeof open_now);
+    CHECK_EQ(party_luck(NULL, 0), 0);
+    CHECK_EQ(party_luck(NULL, 5), 5);
+    CHECK_EQ(party_luck(&SRC, 5), 5);                 /* a source with nothing open */
+    open_now.luck_boost = 1;
+    CHECK_EQ(party_luck(&SRC, 0), 1);                 /* +1 on an unlucky party */
+    CHECK_EQ(party_luck(&SRC, 5), 6);
+    CHECK_EQ(party_luck(&SRC, 13), 14);
+    CHECK_EQ(party_luck(&SRC, 14), 14);               /* the cap of 14 holds */
+    open_now.luck_boost = 3;
+    CHECK_EQ(party_luck(&SRC, 12), 14);
+    CHECK_EQ(party_luck(&SRC, 2), 5);
+    open_now.luck_boost = 200;                        /* a wrong source is held at the cap */
+    CHECK_EQ(party_luck(&SRC, 0), 14);
+    /* the shop's luck is the same value: asked when the options are made, so an hour that closes is not remembered */
+    open_now.luck_boost = 1;
+    CHECK_EQ(party_luck(&SRC, 4), 5);
+    open_now.luck_boost = 0;
+    CHECK_EQ(gc_party_luck(&run), 4);
+    CHECK_EQ(party_luck(NULL, 4), 4);
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
     if (!only || !strcmp(only, "shiny")) shiny_section();
+    if (!only || !strcmp(only, "luck")) luck_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;
 }
