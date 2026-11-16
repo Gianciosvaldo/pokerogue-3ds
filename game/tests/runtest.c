@@ -344,8 +344,28 @@ static void snd_start(const char* key) {
   M.starts++;
 }
 
-/* what upstream's Battle.getBgmOverride / the biome's music gives for the run as it is now (bgm_choose, not the app's scene code) */
+/* The JoJo themes (bgm.h, bgm_set_foe_source): the fake pack has none, as a builder with an empty extra-audio folder makes it, unless
+ * RUNTEST_THEMES is set; then it has custom/<id> for every character except the three Pillar Men, who share custom/pillar_men. */
+static bool themes;
+static bool pack_has(const char* key) {
+  if (strncmp(key, "audio/bgm/custom/", 17)) return true;
+  if (!themes) return false;
+  const char* id = key + 17;
+  return strcmp(id, "esidisi") && strcmp(id, "wamuu") && strcmp(id, "kars");
+}
+static const char* theme_of(const gc_run* r, char buf[BGM_NAME_LEN]) {
+  const cc_jojo_char* j = themes ? cr_jojo_foe(r) : NULL;
+  if (!j) return NULL;
+  if (!strcmp(j->id, "esidisi") || !strcmp(j->id, "wamuu") || !strcmp(j->id, "kars")) snprintf(buf, BGM_NAME_LEN, "custom/pillar_men");
+  else snprintf(buf, BGM_NAME_LEN, "custom/%s", j->id);
+  return buf;
+}
+static int theme_scenes;
+
+/* what upstream's Battle.getBgmOverride / the biome's music gives for the run as it is now (bgm_choose, not the app's scene code); a JoJo
+ * trainer's theme when the pack has it */
 static const char* expect_track(const gc_run* r, int biome, bool started, char buf[BGM_NAME_LEN]) {
+  if (theme_of(r, buf)) return buf;
   bgm_scene sc;
   memset(&sc, 0, sizeof sc);
   sc.wave = r->wave;
@@ -404,6 +424,7 @@ static void music_scene(int scene_biome) {
   M.trainer = r->battle_type == BATTLE_TYPE_TRAINER ? r->trainer_type : -2;
   M.have = true;
   M.scenes++;
+  if (!strncmp(first, "custom/", 7)) theme_scenes++;
   if (strcmp(first, battle)) M.encounter_scenes++;
   music_seen(first);
 }
@@ -416,7 +437,8 @@ void __real_bgm_on_mystery(int type);
 void __wrap_bgm_on_mystery(int type) { me_seen_type = type; __real_bgm_on_mystery(type); }
 static const char* me_music_now(const gc_run* r) {
   if (r->battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER && !r->me_battle) return NULL;
-  const char* t = bgm_mystery_track(r->mystery_type >= 0 ? r->mystery_type : me_seen_type, true);
+  const int type = r->mystery_type >= 0 ? r->mystery_type : me_seen_type;
+  const char* t = themes && type == GC_ME_PILLAR_MEN ? "custom/pillar_men" : bgm_mystery_track(type, true);
   if (t) bgm_tick(1000);
   return t;
 }
@@ -2185,6 +2207,8 @@ int main(int argc, char** argv) {
     cr_settle_owed();
   }
   SND.on_start = snd_start;
+  themes = getenv("RUNTEST_THEMES") != NULL;
+  SND.has = pack_has;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -2397,6 +2421,9 @@ int main(int argc, char** argv) {
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);
+  printf("JoJo themes: %s, %d scenes under a character's theme\n", themes ? "in the pack" : "not in the pack", theme_scenes);
+  if (themes && custom_strong && runs >= 100 && !theme_scenes) BAD("RUNTEST_THEMES: no JoJo fight played its theme");
+  if (!themes && theme_scenes) BAD("%d scenes played a theme the pack does not have", theme_scenes);
   if (M.scenes != st->waves+st->mystery_trainers) BAD("%d scenes set up, the driver counted %d waves and %d same-wave mystery trainer scenes", M.scenes, st->waves,st->mystery_trainers);
   if(n_mystery_trainer_scenes<st->mystery_trainers)BAD("a mystery trainer scene was not rebuilt with trainer art");
   if (n_me_intro_calls != n_me_scenes - (me_scene_open ? 1 : 0)) BAD("%d encounter scenes, %d intro sprite calls", n_me_scenes, n_me_intro_calls);

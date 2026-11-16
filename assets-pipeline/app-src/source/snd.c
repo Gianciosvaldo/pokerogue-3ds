@@ -182,6 +182,11 @@ static void bgm_mix(void) {
   ndspChnSetMix(BGM_CH0 + 1, r);
 }
 
+bool snd_bgm_has(const char* key) {
+  pak_entry e;
+  return g_ready && pak_find(NULL, key, &e) && e.codec == 0 && e.type == PAK_SND;
+}
+
 bool snd_bgm_play_from(const char* key, bool loop, float loop_seconds) {
   if (!g_ready) return false;
   pak_entry e;
