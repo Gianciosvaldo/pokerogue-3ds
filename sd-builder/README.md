@@ -15,16 +15,18 @@ re-runs the pictures step (the longest step with the music). Tested by `assets-p
 
 ## Your own music (JoJo themes)
 
-The JoJo themes are copyrighted music, so neither the repo nor the zip carries them (the zip's upstream-content check still
-refuses any .mp3/.ogg/.m4a/.wav outside extra-images). The user puts them in `files/extra-audio/` next to `builder.py`, laid out
+lorenzo's own files for the JoJo themes and DIO's time stop sounds live in `sd-builder/extra-audio/` (added 2026-11-16 at his request,
+once the repo was private; the zip's upstream-content check refuses any .mp3/.ogg/.m4a/.wav outside extra-images and extra-audio), and
+`make-zip.sh` copies them into the zip's `files/extra-audio/`. More can be added there by hand, laid out
 like upstream's `audio/bgm/` folder: `files/extra-audio/custom/jotaro.mp3` becomes the track `custom/jotaro`, which the game
 plays for the whole of a fight against that JoJo trainer (`game/source/bgm.c`); `custom/pillar_men` plays in the Pillar Men
 encounter and in Esidisi's, Wamuu's and Kars's fights unless one has his own. A character with no track keeps the usual music.
 An optional `<name>.loop` text file holds the loop point in seconds (default: from the start). A file named like an upstream
 track replaces it. Its `se/` folder holds sound effects instead, which go into `snd.pak` as `audio/se/<name>`: DIO's time stop
 plays `se/the_world` as the inverted circle starts and waits for it to end (at most 6 s past the circle), and `se/the_world_resume`
-as the colour comes back (`game/source/battle_view.c`, BEV_WORLD; without the files it is silent). The zip holds only
+as the colour comes back (`game/source/battle_view.c`, BEV_WORLD; without the files it is silent). The zip holds those files and
 `files/extra-audio/custom/PUT-MUSIC-HERE.txt` (from `sd-builder/extra-audio-README.txt`) and the same note as `files/extra-audio/se/PUT-SOUNDS-HERE.txt`.
+Shipped: custom/ pillar_men, dio, josuke, jotaro, johnny, jolyne, giorno (no Joseph theme); se/ the_world, the_world_resume.
 The tracks are part of the music step's recipe only (`recipe("bgm")`) and the sounds of the sounds step's (`recipe("snd")`), so
 adding one redoes that step, not the pictures; with none every recipe is the old one. Tested by `assets-pipeline/tests/extra_audio_test.py`, `sd-builder/tests/recipe_test.py` and `game/tests/the_world_sound_test.c`.
 

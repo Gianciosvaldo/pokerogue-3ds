@@ -131,7 +131,28 @@ int main(void)
     for(unsigned i=0;i<22;++i)assert(career()->roster.lineup[i]==i); /* the picks are the lineup: nothing was assigned afterwards */
     /* The lineup can still be changed from the round hub. */
     press(BTN_CANCEL);assert(career()->phase==FB_CAREER_LINEUP);
-    uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);draw_both();press(BTN_RIGHT);draw_both();assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
+    /* A position is picked up with A and put down on another with A, which swaps the two Pokemon. Nothing moves while the cursor travels
+     * over the others (it used to swap with every Pokemon it scrolled past), B puts it back, and A on the same position puts it back too. */
+    {
+        unsigned moves=0;
+        press(BTN_ACTION);draw_both();assert(on_bottom("Swap ") && on_bottom("A: swap") && on_bottom("Moving"));
+        for(unsigned i=0;i<5;++i){press(BTN_DOWN);draw_both();assert(on_bottom("Swap "));unsigned rows=0;for(unsigned k=0;k<fake.text_count;++k)rows+=!strcmp(fake.texts[k].text,"Swap");assert(rows==1);} /* the header, and one row to swap with */
+        press(BTN_RIGHT);draw_both();press(BTN_LEFT);draw_both(); /* paging keeps the hold and moves nothing either */
+        for(unsigned i=0;i<22;++i)moves+=career()->roster.lineup[i]!=i;
+        assert(moves==0 && career()->phase==FB_CAREER_LINEUP);
+        press(BTN_ACTION);draw_both();
+        for(unsigned i=0;i<22;++i)assert(career()->roster.lineup[i]==(i==0?5u:i==5?0u:i)); /* only the two positions swapped */
+        assert(!on_bottom("Swap "));
+        press(BTN_ACTION);press(BTN_CANCEL);draw_both(); /* pick up position 5 and take it back */
+        assert(career()->phase==FB_CAREER_LINEUP && !on_bottom("Swap ") && career()->roster.lineup[5]==0 && career()->roster.lineup[0]==5);
+        press(BTN_ACTION);press(BTN_ACTION);draw_both(); /* A on the same position puts it back too */
+        assert(career()->roster.lineup[5]==0 && !on_bottom("Swap "));
+        press(BTN_ACTION);for(unsigned i=0;i<5;++i)press(BTN_UP);press(BTN_ACTION); /* swap them back */
+        for(unsigned i=0;i<22;++i)assert(career()->roster.lineup[i]==i);
+        press(BTN_ACTION);assert(game_screen->touch);game_screen->touch(game_screen,40,FM_FOOT_Y+10);draw_both(); /* the left button lets go of a held position */
+        assert(!on_bottom("Swap ") && career()->phase==FB_CAREER_LINEUP);
+        press(BTN_CANCEL);
+    }
     assert(career()->phase==FB_CAREER_READY);press(BTN_ACTION);tick();assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL && loads==22);
     assert(match_music==1 && music_round==1 && !title_music); /* the match's music started with the kickoff screen, once */
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */
@@ -369,7 +390,7 @@ int main(void)
         w->stone_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
     }
     {
-        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 13","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Achievement!","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","+1 Egg Voucher Premium","Egg Voucher Premium earned","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
+        static const char *const seen[]={"Pick your ","Lineup","Swap ","Playoffs","Round 5 / 13","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Achievement!","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","+1 Egg Voucher Premium","Egg Voucher Premium earned","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }

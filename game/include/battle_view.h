@@ -144,6 +144,11 @@ typedef enum {
                     * coloured fringes, then the field drains to a grey blue; a = 0 time moves again: "Time has begun to move again.", he slides
                     * out while the colour comes back. Only the background, the platforms and the player's side are touched: DIO, his
                     * Pokemon, the move animations and the boxes keep their colours */
+  BEV_PERFECT,     /* Kars's Perfect Being (lorenzo's JoJo content, PR_EV_PERFECT_BEING): a = 1 the faint that leaves his last Pokemon: his
+                    * second sprite (images/trainer/custom/<id>_perfect, else his own) slides in beside his Pokemon like DIO's and stays,
+                    * then "<trainer> has become the Ultimate Life Form!"; a = 2 a physical move did nothing to the Pokemon at battler:
+                    * "<it>'s flesh flowed aside like water!", "The attack did nothing!"; a = 3 a special move's damage was halved:
+                    * "<it>'s perfect body softened the blow!". When the defeated trainer comes back, it is with that sprite. */
 } bev_type;
 /* BEV_ABILITY's a for Made in Heaven (battle-core's PR_ABILITY_SHOW_MADE_IN_HEAVEN): a red box at the top left of the top screen in
  * place of the ability bar */

@@ -64,7 +64,7 @@ static void test_table(void)
         CHECK_EQ(c->biome, BIOME_OF[i]);
         CHECK(c->n_members >= 1 && c->n_members <= CC_JOJO_MAX_MEMBERS);
         if (c->biome >= 0) pool++;
-        if (c->passive >= 0 || c->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN || c->passive == CC_JOJO_PASSIVE_THE_WORLD) passive++;
+        if (c->passive >= 0 || c->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN || c->passive == CC_JOJO_PASSIVE_THE_WORLD || c->passive == CC_JOJO_PASSIVE_PERFECT_BEING) passive++;
         for (unsigned j = 0; j < i; j++) CHECK(strcmp(c->id, cc_jojo_chars[j].id) != 0);
         for (unsigned m = 0; m < c->n_members; m++) {
             const cc_jojo_member *mm = &c->member[m];
@@ -87,7 +87,7 @@ static void test_table(void)
         }
     }
     CHECK_EQ(pool, 31u);       /* the Pillar Men are not in a biome pool */
-    CHECK_EQ(passive, 2u);     /* Pucci and DIO */
+    CHECK_EQ(passive, 3u);     /* Pucci, DIO and Kars */
     CHECK_EQ(members, 168u);
     CHECK_EQ(cc_jojo_find("kira"), 3);
     CHECK_EQ(cc_jojo_find("stroheim"), 16);
@@ -98,6 +98,7 @@ static void test_table(void)
     CHECK_EQ(cc_jojo_find(NULL), CC_JOJO_NONE);
     CHECK_EQ(cc_jojo_chars[4].passive, CC_JOJO_PASSIVE_MADE_IN_HEAVEN);   /* Pucci: Made in Heaven (lorenzo, 2026-11-16) */
     CHECK_EQ(cc_jojo_chars[cc_jojo_find("dio")].passive, CC_JOJO_PASSIVE_THE_WORLD);   /* DIO: The World (lorenzo, 2026-11-16) */
+    CHECK_EQ(cc_jojo_chars[cc_jojo_find("kars")].passive, CC_JOJO_PASSIVE_PERFECT_BEING);   /* Kars: Perfect Being (lorenzo, 2026-11-16) */
     /* a Ditto has only Transform */
     CHECK_EQ(cc_jojo_chars[0].member[1].species, 132);
     CHECK_EQ(cc_jojo_chars[0].member[1].moves[1], 0);

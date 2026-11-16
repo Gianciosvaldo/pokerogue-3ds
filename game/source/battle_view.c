@@ -142,6 +142,14 @@ static struct {
     float hold;           /* ms the grey stage waits past its own 300 for the time-stop sound to end */
     char key[64];         /* his sprite */
   } world;
+  struct {                /* BEV_PERFECT (Kars's Perfect Being) */
+    int stage;
+    float t;
+    bool on;              /* his second sprite is drawn beside his Pokemon */
+    float slide;          /* 0 off screen at the right .. 1 beside his Pokemon */
+    char key[64];         /* his sprite */
+    char line[160];       /* the line on screen */
+  } perfect;
   float ko_wait;
   bool blink;
   float fps;
@@ -844,24 +852,32 @@ static void draw_opening_ball(void) {
  * 140 px further right, off the screen */
 #define WORLD_FOE_X 284.0f
 #define WORLD_SLIDE_PX 140.0f
-static void world_dio_pos(float* x, float* y) {
+static void stand_pos(float slide, float* x, float* y) {
   const float z = field_zoom_on;   /* the field's zoom, whether or not it is on right now */
-  *x = 160 + (WORLD_FOE_X - 160) * z + (1 - B.world.slide) * WORLD_SLIDE_PX;
+  *x = 160 + (WORLD_FOE_X - 160) * z + (1 - slide) * WORLD_SLIDE_PX;
   *y = 132 + (80 - foe_raise() - 132) * z;
 }
-static void draw_world_dio(void) {
-  if (!B.world.on || !B.world.key[0]) return;
-  const rr_frame* f = img_anim_frame(B.world.key, 0);
+static void world_dio_pos(float* x, float* y) { stand_pos(B.world.slide, x, y); }
+
+/* a trainer's second sprite at the stand position (DIO's The World, Kars's Perfect Being), 1:1 whatever the field's zoom */
+static void draw_stand_sprite(const char* key, float slide) {
+  const rr_frame* f = img_anim_frame(key, 0);
   if (!f) return;
   rr_draw_opts o = RR_DEFAULT_OPTS;
   o.origin_x = 0.5f;
   o.origin_y = 1;
   float x, y;
-  world_dio_pos(&x, &y);
+  stand_pos(slide, &x, &y);
   const float z = field_zoom_cur;
   if (z != 1) rr_set_zoom(1, 160, 132);
   rr_draw(f, x, y, &o);
   if (z != 1) rr_set_zoom(z, 160, 132);
+}
+static void draw_perfect_kars(void) {
+  if (B.perfect.on && B.perfect.key[0]) draw_stand_sprite(B.perfect.key, B.perfect.slide);
+}
+static void draw_world_dio(void) {
+  if (B.world.on && B.world.key[0]) draw_stand_sprite(B.world.key, B.world.slide);
 }
 
 /* The time stop's look on what is already drawn (the touched layers): the inverted circle with its colour fringes (each channel is
@@ -928,6 +944,7 @@ static void draw_field_foes(void) {
   draw_trainers();
   draw_me_intro();
   draw_world_dio();
+  draw_perfect_kars();
   for(int i=0;i<2;i++){
     side *foe=&B.s[1+2*i];draw_sprite(foe,false);draw_sparkle(foe,false);
     if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
@@ -1383,17 +1400,30 @@ static void draw_heaven_box(void) {
 #define WORLD_HOLD_MAX_MS 6000.0f
 
 /* BEV_WORLD's sprite: <id>_world next to the trainer's (dio -> dio_world) if the pack has it, else his own */
-static void world_key(void) {
+static void stand_key(char* out, size_t size, const char* suffix) {
   const char* k = B.setup.trainer_keys[0];
-  B.world.key[0] = 0;
+  out[0] = 0;
   if (strncmp(k, "images/trainer/custom/", 22)) return;
-  const size_t n = strlen(k);
-  if (n + 6 < sizeof B.world.key) {
-    memcpy(B.world.key, k, n);
-    memcpy(B.world.key + n, "_world", 7);
-    if (img_has(B.world.key)) return;
+  const size_t n = strlen(k), m = strlen(suffix);
+  if (n + m < size) {
+    memcpy(out, k, n);
+    memcpy(out + n, suffix, m + 1);
+    if (img_has(out)) return;
   }
-  snprintf(B.world.key, sizeof B.world.key, "%s", k);
+  snprintf(out, size, "%s", k);
+}
+static void world_key(void) { stand_key(B.world.key, sizeof B.world.key, "_world"); }
+/* BEV_PERFECT's sprite: <id>_perfect (kars -> kars_perfect) if the pack has it, else his own */
+static void perfect_key(void) { stand_key(B.perfect.key, sizeof B.perfect.key, "_perfect"); }
+
+/* BEV_PERFECT's lines (lorenzo picked them, 2026-11-16); "" for no line */
+static void perfect_line(int a, int part, int battler, char* out, size_t size) {
+  out[0] = 0;
+  if (a == 1 && part == 0)
+    snprintf(out, size, "%s has become the Ultimate Life Form!", B.setup.trainer_name[0] ? B.setup.trainer_name : "Kars");
+  else if (a == 2 && part == 0) snprintf(out, size, "%s's flesh flowed aside like water!", name_with_affix(battler));
+  else if (a == 2 && part == 1) snprintf(out, size, "The attack did nothing!");
+  else if (a == 3 && part == 0) snprintf(out, size, "%s's perfect body softened the blow!", name_with_affix(battler));
 }
 
 /* BEV_HEAVEN's sprite: the stage's own file next to the trainer's (pucci -> pucci_cmoon / pucci_heaven), if the pack has it */
@@ -2381,8 +2411,49 @@ static void run_event(float dt) {
       break;
     }
 
+    case BEV_PERFECT: {
+      /* lorenzo 2026-11-16. a = 1: Kars's second sprite slides in beside his Pokemon (750 ms) and stays, then his line; a = 2, 3: the
+       * lines one after the other (stage 1 + n = line n). Each line is a plain message, 1.5 s or a press. */
+      if (e->a == 1 && !B.perfect.on) {
+        perfect_key();
+        B.perfect.on = true;
+        B.perfect.slide = 0;
+        B.perfect.t = 0;
+        B.perfect.stage = -1;
+      }
+      if (B.perfect.stage == -1) {
+        B.perfect.t += dt;
+        B.perfect.slide = ease(EASE_CUBIC_OUT, fminf(B.perfect.t / 750, 1));
+        if (B.perfect.t < 750) break;
+        B.perfect.stage = 0;
+        B.step = 0;
+      }
+      for (;;) {
+        if (B.step == 0) {
+          perfect_line(e->a, B.perfect.stage, e->battler, B.perfect.line, sizeof B.perfect.line);
+          if (!B.perfect.line[0]) {
+            B.perfect.stage = 0;
+            finish_event();
+            break;
+          }
+          msgbox_show(&B.msg, B.perfect.line, -1, false);
+          B.msg.wait_ms = 1500;
+          B.step = 1;
+        }
+        if (!msgbox_done(&B.msg)) break;
+        B.perfect.stage++;
+        B.step = 0;
+      }
+      break;
+    }
+
     case BEV_TRAINER_SHOW:
       /* showEnemyTrainer: the sprite is back on the platform and moves in from 16 px up and right, fading in, over 750 ms */
+      if (B.step == 0 && B.perfect.on) {
+        /* Kars comes back as the Ultimate Life Form: his second sprite moves onto the platform (lorenzo's JoJo content) */
+        if (B.perfect.key[0]) snprintf(B.setup.trainer_keys[0], sizeof B.setup.trainer_keys[0], "%s", B.perfect.key);
+        B.perfect.on = false;
+      }
       if (B.step == 0) {
         B.trainer_visible = B.setup.trainer;
         B.trainer_show_ms = 1;
