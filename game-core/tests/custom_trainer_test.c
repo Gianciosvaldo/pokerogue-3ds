@@ -285,7 +285,7 @@ static void test_the_world(void)
  * picks Tackle (physical) and Water Gun (special) in turn. Played through the battle-core events, and the halving checked on the
  * simulated damage of the battle as it stands. */
 static int pb_wake, pb_wake_battler_bad, pb_block, pb_soft, pb_early, pb_bad, pb_dmg_after_block, pb_phys_hits_after, pb_spec_hits_after;
-static int pb_last_move;           /* the player's move the last animation played, 0 = none since a block */
+static int pb_last_move, pb_multi_spec_hits;           /* the player's move the last animation played, 0 = none since a block */
 static bool pb_awake, pb_blocked_now;
 static void pb_events(const gc_event *e)
 {
@@ -296,22 +296,23 @@ static void pb_events(const gc_event *e)
             if (v->battler < 2) pb_bad++;
             if (v->value == 1) { if (pb_awake) pb_bad++; pb_awake = true; pb_wake++; if (!v->field[v->battler].fainted && v->field[v->battler].hp > 0) pb_wake_battler_bad++; }
             else if (v->value == 2) { if (!pb_awake) pb_early++; pb_block++; pb_blocked_now = true; }
-            else if (v->value == 3) { if (!pb_awake) pb_early++; pb_soft++; if (pb_last_move != MOVE_ID_WATER_GUN) pb_bad++; }
+            else if (v->value == 3) { if (!pb_awake) pb_early++; pb_soft++; if (pb_last_move != MOVE_ID_WATER_GUN && pb_last_move != MOVE_ID_WATER_SHURIKEN) pb_bad++; }
             else pb_bad++;
         }
         if (v->type == PR_EV_MOVE_ANIM && v->battler < 2) {
             pb_blocked_now = false;
             pb_last_move = v->id;
             if (pb_awake && v->target >= 2) {
-                if (v->id == MOVE_ID_TACKLE) pb_phys_hits_after++;
-                if (v->id == MOVE_ID_WATER_GUN) pb_spec_hits_after++;
+                if (v->id == MOVE_ID_TACKLE || v->id == MOVE_ID_BULLET_SEED) pb_phys_hits_after++;
+                if (v->id == MOVE_ID_WATER_SHURIKEN) pb_multi_spec_hits++;
+                if (v->id == MOVE_ID_WATER_GUN || v->id == MOVE_ID_WATER_SHURIKEN) pb_spec_hits_after++;
             }
         }
         if (v->type == PR_EV_MOVE_ANIM && v->battler >= 2) pb_blocked_now = false;
         if (v->type == PR_EV_DAMAGE && v->battler >= 2 && pb_blocked_now) pb_dmg_after_block++;
     }
 }
-static int pb_total_block, pb_total_soft, pb_total_sim;
+static int pb_total_block, pb_total_soft, pb_total_sim, pb_total_multi;
 static void perfect_being_once(const char *seed)
 {
     make_team();
@@ -346,9 +347,13 @@ static void perfect_being_once(const char *seed)
         m->b.n_moves = 0;
         gc_mon_set_move(m, 0, MOVE_ID_TACKLE);
         gc_mon_set_move(m, 1, MOVE_ID_WATER_GUN);
+        gc_mon_set_move(m, 2, MOVE_ID_BULLET_SEED);      /* physical, 2-5 hits: stopped on the first */
+        gc_mon_set_move(m, 3, MOVE_ID_WATER_SHURIKEN);   /* special, 2-5 hits: each one halved */
     }
     pb_wake = pb_wake_battler_bad = pb_block = pb_soft = pb_early = pb_bad = pb_dmg_after_block = pb_phys_hits_after = pb_spec_hits_after = 0;
     pb_last_move = 0;
+    pb_multi_spec_hits = 0;
+    bot_move = 3;
     pb_awake = pb_blocked_now = false;
     on_event = pb_events;
     int halved_checked = 0, halved_bad = 0, phys_sim_bad = 0, lone_checked = 0;
@@ -385,7 +390,7 @@ static void perfect_being_once(const char *seed)
                     if (phys.damage <= 0) phys_sim_bad++;
                 }
             }
-            bot_move = bot_move == 0 ? 1 : 0;   /* Tackle, then Water Gun, in turn */
+            bot_move = (bot_move + 1) % 4;   /* Tackle, Water Gun, Bullet Seed, Water Shuriken in turn */
         }
         if (!bot_step(&run, false)) break;
     }
@@ -401,6 +406,7 @@ static void perfect_being_once(const char *seed)
     CHECK(pb_phys_hits_after == 0);              /* ... and never hit once it was awake */
     CHECK(pb_spec_hits_after == pb_soft);        /* every Water Gun hit after it was softened */
     CHECK(halved_checked >= 1 && halved_bad == 0 && phys_sim_bad == 0 && lone_checked >= 1);
+    pb_total_multi += pb_multi_spec_hits;
     pb_total_block += pb_block;
     pb_total_soft += pb_soft;
     pb_total_sim += halved_checked;
@@ -408,12 +414,13 @@ static void perfect_being_once(const char *seed)
 static void test_perfect_being(void)
 {
     enum { PB_SEEDS = 8 };
-    pb_total_block = pb_total_soft = pb_total_sim = 0;
+    pb_total_block = pb_total_soft = pb_total_sim = pb_total_multi = 0;
     for (int s = 0; s < PB_SEEDS; s++) {
         char seed[32];
         snprintf(seed, sizeof seed, "perfect-being-%d", s);
         perfect_being_once(seed);
     }
+    CHECK(pb_total_multi > 0);   /* a special multi-hit move hit after it woke, each hit softened (pb_spec_hits_after == pb_soft) */
     printf("perfect being: %d blocked, %d softened, %d simulated checks over %d battles\n", pb_total_block, pb_total_soft, pb_total_sim, PB_SEEDS);
 }
 
