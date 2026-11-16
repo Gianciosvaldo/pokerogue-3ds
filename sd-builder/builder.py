@@ -47,6 +47,7 @@ PIPELINE = os.path.join(FILES, "pipeline")
 RUNTIME = os.path.join(FILES, "runtime")
 DOWNLOADS = os.path.join(FILES, "downloads")
 EXTRA_IMAGES = os.path.join(FILES, "extra-images")  # optional: PNGs laid out like images/ (trainer/custom/kira.png), packed into gfx.pak
+EXTRA_AUDIO = os.path.join(FILES, "extra-audio")  # optional, never in the zip: your own tracks laid out like audio/bgm/ (custom/jotaro.mp3), packed into bgm.pak
 BUILD = os.path.join(FILES, "build")  # build_sd.py's --out; its reports and our markers stay here
 PACK_DIR = os.path.join(BUILD, "3ds", "pokerogue")
 GAME = os.path.join(FILES, "game")  # the game app (pokerogue.3dsx, .elf, .smdh), its banner and makerom's spec
@@ -433,8 +434,9 @@ PACKS_SIZE = int(0.87 * GB)
 # ---------------------------------------------------------------- building
 
 
-def recipe():
-    """What the packs depend on: upstream pins and the pipeline's own code. A change rebuilds them."""
+def recipe(stage=None):
+    """What the packs depend on: upstream pins and the pipeline's own code. A change rebuilds them. The music (stage "bgm") also depends on
+    the tracks in extra-audio and the sounds (stage "snd") on its se/ folder, and only they do: adding a track doesn't redo the pictures."""
     h = hashlib.sha256()
     for k in ("assets", "locales", "game"):
         h.update(json.dumps(PINS[k], sort_keys=True).encode())
@@ -448,6 +450,16 @@ def recipe():
             for f in sorted(files):
                 if f.endswith(".png"):
                     h.update(f.encode() + open(os.path.join(dirpath, f), "rb").read())
+    if stage in ("bgm", "snd") and os.path.isdir(EXTRA_AUDIO):
+        for dirpath, dirs, files in os.walk(EXTRA_AUDIO):
+            dirs.sort()
+            in_se = os.path.relpath(dirpath, EXTRA_AUDIO).replace(os.sep, "/").split("/")[0] == "se"
+            if in_se != (stage == "snd"):
+                continue
+            for f in sorted(files):
+                if f.lower().endswith((".mp3", ".m4a", ".wav", ".ogg", ".loop")):
+                    h.update(os.path.relpath(os.path.join(dirpath, f), EXTRA_AUDIO).replace(os.sep, "/").encode()
+                             + open(os.path.join(dirpath, f), "rb").read())
     return h.hexdigest()
 
 
@@ -462,10 +474,9 @@ STAGE_TEXT = {
 
 def pending_stages():
     """The packs that have to be made: missing, stopped halfway, or made by other pins or pipeline code."""
-    want = recipe()
     return [s for s in PINS["packs"]
             if not (os.path.exists(os.path.join(PACK_DIR, f"{s}.pak")) and os.path.exists(os.path.join(PACK_DIR, f".{s}.done"))
-                    and open(os.path.join(PACK_DIR, f".{s}.done")).read() == want)]
+                    and open(os.path.join(PACK_DIR, f".{s}.done")).read() == recipe(s))]
 
 
 def build(assets, locales, game, lib, ffmpeg):
@@ -478,7 +489,6 @@ def build(assets, locales, game, lib, ffmpeg):
     env["PYTHONPATH"] = os.pathsep.join(p for p in (lib, PIPELINE) if p)
     if ffmpeg:
         env["PATH"] = ffmpeg + os.pathsep + env.get("PATH", "")
-    want = recipe()
     stages = PINS["packs"]
     todo = pending_stages()
     for n, stage in enumerate(stages, 1):
@@ -497,13 +507,16 @@ def build(assets, locales, game, lib, ffmpeg):
                "--encoder", encoder]
         if stage == "gfx" and os.path.isdir(EXTRA_IMAGES):
             cmd += ["--extra-images", EXTRA_IMAGES]
+        if stage in ("bgm", "snd") and os.path.isdir(EXTRA_AUDIO):
+            cmd += ["--extra-audio", EXTRA_AUDIO]
+        want = recipe(stage)  # before the run: a track added while it runs is for the next one
         log("run " + " ".join(cmd))
         t0 = time.time()
         _run_quietly(cmd, env, stage, t0)
         report = json.load(open(os.path.join(PACK_DIR, "build-report.json"), encoding="utf-8")).get(stage, {})
         errors = report.get("errors", [])
         expect = PINS.get("expect", {}).get(stage)
-        got = report.get("entries", report.get("fonts")) or 0
+        got = (report.get("entries", report.get("fonts")) or 0) - report.get("extra", 0)  # the pinned count is upstream's
         if errors:
             log(f"{stage} errors: {json.dumps(errors)[:4000]}")
         if expect is not None and got != expect:

@@ -96,6 +96,40 @@ def main():
         assert builder.pending_stages() == [], builder.pending_stages()
         open(os.path.join(builder.PACK_DIR, ".gfx.done"), "w").write("an older recipe")
         assert builder.pending_stages() == ["gfx"], builder.pending_stages()
+        for s in pins["packs"]:
+            open(os.path.join(builder.PACK_DIR, f".{s}.done"), "w").write(builder.recipe(s))
+        assert builder.pending_stages() == [], builder.pending_stages()
+
+        # your own music (files/extra-audio, never in the zip): only the music step depends on it. With no folder, or one without tracks,
+        # every stage's recipe is the old one, so a builder updated over an old folder redoes nothing.
+        assert all(builder.recipe(s) == base for s in pins["packs"]), "a stage's recipe differs with no extra-audio folder"
+        own = os.path.join(files, "extra-audio", "custom")
+        os.makedirs(own)
+        open(os.path.join(own, "readme.txt"), "w").write("not a track")
+        assert builder.recipe("bgm") == base, "a file that is not a track changed the music's recipe"
+        track = os.path.join(own, "jotaro.mp3")
+        open(track, "wb").write(b"ID3 a made-up track")
+        assert builder.pending_stages() == ["bgm"], builder.pending_stages()
+        assert builder.recipe("gfx") == base and builder.recipe() == base, "a music track changed another stage's recipe"
+        with_track = builder.recipe("bgm")
+        open(os.path.join(own, "jotaro.loop"), "w").write("12.5")
+        assert builder.recipe("bgm") != with_track, "recipe() ignores a loop point file"
+        os.remove(os.path.join(own, "jotaro.loop"))
+        os.rename(track, os.path.join(own, "dio.mp3"))
+        assert builder.recipe("bgm") not in (with_track, base), "recipe() ignores a renamed track"
+        os.rename(os.path.join(own, "dio.mp3"), track)
+        assert builder.recipe("bgm") == with_track, "recipe() did not come back after undoing the rename"
+        open(os.path.join(builder.PACK_DIR, ".bgm.done"), "w").write(with_track)
+        assert builder.pending_stages() == [], builder.pending_stages()
+        os.remove(track)
+        assert builder.pending_stages() == ["bgm"], "a removed track did not redo the music"
+        open(os.path.join(builder.PACK_DIR, ".bgm.done"), "w").write(builder.recipe("bgm"))
+        # a sound effect (extra-audio/se, DIO's time stop) redoes the sounds only
+        se = os.path.join(files, "extra-audio", "se")
+        os.makedirs(se)
+        open(os.path.join(se, "the_world.mp3"), "wb").write(b"ID3 a made-up sound")
+        assert builder.pending_stages() == ["snd"], builder.pending_stages()
+        assert builder.recipe("bgm") == base and builder.recipe("gfx") == base, "a sound changed another stage's recipe"
         builder._log.close()
     print("recipe_test: OK")
 

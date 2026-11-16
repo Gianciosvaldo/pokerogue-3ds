@@ -13,6 +13,21 @@ The JoJo challengers' sprites (third-party art of unclear licence, committed at 
 the same name as an upstream picture replaces it. The folder's files are part of the packs' recipe, so adding or changing one
 re-runs the pictures step (the longest step with the music). Tested by `assets-pipeline/tests/extra_images_test.py`.
 
+## Your own music (JoJo themes)
+
+The JoJo themes are copyrighted music, so neither the repo nor the zip carries them (the zip's upstream-content check still
+refuses any .mp3/.ogg/.m4a/.wav outside extra-images). The user puts them in `files/extra-audio/` next to `builder.py`, laid out
+like upstream's `audio/bgm/` folder: `files/extra-audio/custom/jotaro.mp3` becomes the track `custom/jotaro`, which the game
+plays for the whole of a fight against that JoJo trainer (`game/source/bgm.c`); `custom/pillar_men` plays in the Pillar Men
+encounter and in Esidisi's, Wamuu's and Kars's fights unless one has his own. A character with no track keeps the usual music.
+An optional `<name>.loop` text file holds the loop point in seconds (default: from the start). A file named like an upstream
+track replaces it. Its `se/` folder holds sound effects instead, which go into `snd.pak` as `audio/se/<name>`: DIO's time stop
+plays `se/the_world` as the inverted circle starts and waits for it to end (at most 6 s past the circle), and `se/the_world_resume`
+as the colour comes back (`game/source/battle_view.c`, BEV_WORLD; without the files it is silent). The zip holds only
+`files/extra-audio/custom/PUT-MUSIC-HERE.txt` (from `sd-builder/extra-audio-README.txt`) and the same note as `files/extra-audio/se/PUT-SOUNDS-HERE.txt`.
+The tracks are part of the music step's recipe only (`recipe("bgm")`) and the sounds of the sounds step's (`recipe("snd")`), so
+adding one redoes that step, not the pictures; with none every recipe is the old one. Tested by `assets-pipeline/tests/extra_audio_test.py`, `sd-builder/tests/recipe_test.py` and `game/tests/the_world_sound_test.c`.
+
 ## What is in a build, and updating
 
 Each builder zip says what its game contains in [`WHATS-NEW.txt`](WHATS-NEW.txt) (also in the zip, next to `READ-ME-FIRST.txt`), including what has not been seen on a real console. Write it again for each refresh, and say there when the converted files (the five packs) change: the builder redoes them whenever the pipeline scripts, the encoder, the upstream pins or `extra-images/` differ from what made the packs it already has, and says "Converting" when it does. The game revision is in `files/VERSION.txt`; the builder prints it when it starts and writes it to `build-log.txt`.
