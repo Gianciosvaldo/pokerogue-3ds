@@ -1,4 +1,6 @@
 /* custom-core: timed events (see cc/tevents.h). Pure: no clock; the time is always an argument. */
+#include <string.h>
+
 #include "cc/tevents.h"
 
 #define MINUTE 60ll
@@ -58,6 +60,46 @@ cc_status cc_tevent_effects_validate(const cc_tevent_effects *f)
     if (f->candy_mult > CC_TEVENT_MULT_MAX) return CC_E_RANGE;
     if (f->luck_boost > CC_TEVENT_LUCK_MAX) return CC_E_RANGE;
     if (f->upgrade_vouchers > 1) return CC_E_RANGE;
+    if (f->flags & ~CC_TFX_ALL) return CC_E_RANGE;
+    /* the lists: used slots first, then only empty ones; every used slot valid; no duplicates */
+    int ended = 0;
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX; i++) {
+        const cc_tevent_reward *r = &f->rewards[i];
+        if (r->wave == 0) {
+            if (r->item) return CC_E_RANGE;
+            ended = 1;
+            continue;
+        }
+        if (ended) return CC_E_RANGE;
+        if (r->wave > CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;
+        if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT) return CC_E_RANGE;
+        for (unsigned j = 0; j < i; j++)
+            if (f->rewards[j].wave == r->wave && f->rewards[j].item == r->item) return CC_E_DUPLICATE;
+    }
+    ended = 0;
+    for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX; i++) {
+        const uint16_t sp = f->luck_species[i];
+        if (sp == 0) {
+            ended = 1;
+            continue;
+        }
+        if (ended) return CC_E_RANGE;
+        if (sp > CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;
+        for (unsigned j = 0; j < i; j++)
+            if (f->luck_species[j] == sp) return CC_E_DUPLICATE;
+    }
+    ended = 0;
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX; i++) {
+        const uint8_t it = f->delibirdy_buff[i];
+        if (it == CC_TITEM_NONE) {
+            ended = 1;
+            continue;
+        }
+        if (ended) return CC_E_RANGE;
+        if (it >= CC_TITEM_COUNT) return CC_E_RANGE;
+        for (unsigned j = 0; j < i; j++)
+            if (f->delibirdy_buff[j] == it) return CC_E_DUPLICATE;
+    }
     return CC_OK;
 }
 
@@ -76,7 +118,7 @@ cc_status cc_tevent_validate(const cc_tevent *e)
     st = cc_tevent_effects_validate(&e->fx);
     if (st != CC_OK) return st;
     if (!e->fx.shiny_encounter_mult && !e->fx.shiny_catch_mult && !e->fx.candy_mult && !e->fx.luck_boost && !e->fx.trainer_shiny_chance &&
-        !e->fx.upgrade_vouchers)
+        !e->fx.upgrade_vouchers && !e->fx.rewards[0].wave && !e->fx.luck_species[0] && !e->fx.delibirdy_buff[0] && !e->fx.flags)
         return CC_E_CONSISTENCY;
     return CC_OK;
 }
@@ -134,7 +176,9 @@ uint32_t cc_tevents_active_in(const cc_tevent *ev, unsigned count, int64_t local
 
 cc_tevent_effects cc_tevents_effects_in(const cc_tevent *ev, unsigned count, int64_t local_s)
 {
-    cc_tevent_effects out = {0, 0, 0, 0, 0, 0};
+    cc_tevent_effects out;
+    memset(&out, 0, sizeof out);
+    unsigned n_rewards = 0, n_species = 0, n_buff = 0;
     const uint32_t mask = cc_tevents_active_in(ev, count, local_s);
     for (unsigned i = 0; i < count && i < CC_TEVENTS_MAX; i++) {
         if (!(mask >> i & 1u)) continue;
@@ -145,6 +189,27 @@ cc_tevent_effects cc_tevents_effects_in(const cc_tevent *ev, unsigned count, int
         if (f->luck_boost > out.luck_boost) out.luck_boost = f->luck_boost;
         if (f->trainer_shiny_chance > out.trainer_shiny_chance) out.trainer_shiny_chance = f->trainer_shiny_chance;
         if (f->upgrade_vouchers > out.upgrade_vouchers) out.upgrade_vouchers = f->upgrade_vouchers;
+        out.flags |= f->flags;
+        /* the lists are joined in table order without duplicates; a list that would pass its maximum keeps the first entries (the event
+         * table is checked by tests so that this cannot happen with the shipped events) */
+        for (unsigned k = 0; k < CC_TEVENT_REWARDS_MAX && f->rewards[k].wave; k++) {
+            int dup = 0;
+            for (unsigned j = 0; j < n_rewards; j++)
+                if (out.rewards[j].wave == f->rewards[k].wave && out.rewards[j].item == f->rewards[k].item) dup = 1;
+            if (!dup && n_rewards < CC_TEVENT_REWARDS_MAX) out.rewards[n_rewards++] = f->rewards[k];
+        }
+        for (unsigned k = 0; k < CC_TEVENT_SPECIES_MAX && f->luck_species[k]; k++) {
+            int dup = 0;
+            for (unsigned j = 0; j < n_species; j++)
+                if (out.luck_species[j] == f->luck_species[k]) dup = 1;
+            if (!dup && n_species < CC_TEVENT_SPECIES_MAX) out.luck_species[n_species++] = f->luck_species[k];
+        }
+        for (unsigned k = 0; k < CC_TEVENT_BUFF_MAX && f->delibirdy_buff[k]; k++) {
+            int dup = 0;
+            for (unsigned j = 0; j < n_buff; j++)
+                if (out.delibirdy_buff[j] == f->delibirdy_buff[k]) dup = 1;
+            if (!dup && n_buff < CC_TEVENT_BUFF_MAX) out.delibirdy_buff[n_buff++] = f->delibirdy_buff[k];
+        }
     }
     return out;
 }

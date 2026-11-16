@@ -38,7 +38,8 @@ python3 custom-core/tools/mutations.py -k nemesis   # a subset of the mutations
 
 lorenzo's own events (2026-11-16): short repeating windows on the 3DS clock, shorter the more an event gives (daily, every two or three
 days, one hour a day), with effects taken from upstream's own events (shiny odds, shiny catch rate, luck, candy rate, trainer shiny chance,
-voucher upgrade). `include/cc/tevents.h` holds the model and the rules (time is always an argument, local wall-clock seconds; overlapping events
+voucher upgrade). A second round adds lists and flags: items given after a Classic wave, luck-boosted species, bonus items of the Delibird-y
+encounter, boosted fusions, a COMMON Delibird-y and snow in Town (lists are joined without duplicates, flags are OR-ed). `include/cc/tevents.h` holds the model and the rules (time is always an argument, local wall-clock seconds; overlapping events
 take the strongest value of each field and never stack). `src/tevents_table.c` is a DRAFT list for lorenzo to cut. This module only decides:
 the game reads `cc_tevents_effects()` at the moment of each roll in later PRs.
 

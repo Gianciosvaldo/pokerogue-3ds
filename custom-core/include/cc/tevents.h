@@ -30,7 +30,15 @@
  *   candy_mult             getClassicFriendshipMultiplier(): Classic candy friendship multiplier. Non-event value CLASSIC_CANDY_FRIENDSHIP_MULTIPLIER = 3.
  *   luck_boost             getEventLuckBoost(): added to the party luck before the clamp to 14. Non-event value 0.
  *   trainer_shiny_chance   getClassicTrainerShinyChance(): a trainer Pokemon's shiny threshold out of 65536 (6554 = 1 in 10). Non-event value 0.
- *   upgrade_vouchers       getUpgradeUnlockedVouchers(): defeated bosses give the upgraded voucher again. Non-event value false. */
+ *   upgrade_vouchers       getUpgradeUnlockedVouchers(): defeated bosses give the upgraded voucher again. Non-event value false.
+ *   rewards                getFixedBattleEventRewards(wave) (upstream's classicWaveRewards): items given in a Classic run after the wave's battle,
+ *                          before the shop. Several events' lists are joined without duplicates. Non-event value: none.
+ *   luck_species           getEventLuckBoostedSpecies(): each party member of one of these species adds 1 to the luck sum. Lists are joined.
+ *   delibirdy_buff         getDelibirdyBuff(): items the Delibird-y encounter hands out as a bonus (one at random among those not at their maximum
+ *                          stack; a Voucher when all are). Lists are joined.
+ *   flags                  CC_TFX_BOOST_FUSIONS: areFusionsBoosted() (a fusion feeds its candy bars 1/1.5 each instead of 1/2).
+ *                          CC_TFX_DELIBIRDY_COMMON: the Delibird-y encounter is a COMMON one instead of GREAT (mysteryEncounterTierChanges).
+ *                          CC_TFX_TOWN_SNOW: the Town biome's weather is always snow (weather: {TOWN: {SNOW: 1}}). Flags are the OR. */
 #ifndef CC_TEVENTS_H
 #define CC_TEVENTS_H
 
@@ -43,6 +51,11 @@
 #define CC_TEVENT_NAME_MAX 24u        /* characters of the shown name (one title-screen line) */
 #define CC_TEVENT_MULT_MAX 10u        /* the largest multiplier an event may ask for */
 #define CC_TEVENT_LUCK_MAX 14u        /* the game's luck cap */
+#define CC_TEVENT_REWARDS_MAX 8u      /* wave rewards of one event, and of all the open events together */
+#define CC_TEVENT_SPECIES_MAX 12u     /* luck-boosted species of one event, and of all the open events together */
+#define CC_TEVENT_BUFF_MAX 6u         /* Delibird-y bonus items of one event, and of all the open events together */
+#define CC_TEVENT_REWARD_WAVE_MAX 199u   /* a Classic run's last wave is 200: its reward is the win, not a shop wave */
+#define CC_TEVENT_SPECIES_ID_MAX 10000u  /* a species id, as upstream's SpeciesId (forms included) */
 #define CC_TEVENT_TIME_MAX 253402300799ll   /* local_s beyond 9999-12-31 23:59:59 (or before its negative) is refused: no arithmetic can overflow */
 
 typedef struct {
@@ -52,6 +65,31 @@ typedef struct {
     uint16_t length_minutes;  /* 1..period_days*1440 */
 } cc_tevent_schedule;
 
+/* The items an event can hand out (cc_tevent_reward.item, cc_tevent_effects.delibirdy_buff): upstream's modifierTypes keys. 0 = no item. */
+typedef enum {
+    CC_TITEM_NONE = 0,
+    CC_TITEM_SHINY_CHARM,
+    CC_TITEM_ABILITY_CHARM,
+    CC_TITEM_CATCHING_CHARM,
+    CC_TITEM_EXP_CHARM,
+    CC_TITEM_SUPER_EXP_CHARM,
+    CC_TITEM_HEALING_CHARM,
+    CC_TITEM_CANDY_JAR,
+    CC_TITEM_MEGA_BRACELET,
+    CC_TITEM_DYNAMAX_BAND,
+    CC_TITEM_COUNT
+} cc_titem;
+
+#define CC_TFX_BOOST_FUSIONS 1u
+#define CC_TFX_DELIBIRDY_COMMON 2u
+#define CC_TFX_TOWN_SNOW 4u
+#define CC_TFX_ALL (CC_TFX_BOOST_FUSIONS | CC_TFX_DELIBIRDY_COMMON | CC_TFX_TOWN_SNOW)
+
+typedef struct {
+    uint16_t wave;           /* 1..CC_TEVENT_REWARD_WAVE_MAX; 0 = an unused slot (the list ends at the first unused slot) */
+    uint8_t item;            /* a cc_titem other than CC_TITEM_NONE */
+} cc_tevent_reward;
+
 typedef struct {
     uint8_t shiny_encounter_mult;    /* 0 = no change, else 1..CC_TEVENT_MULT_MAX */
     uint8_t shiny_catch_mult;        /* 0 = no change, else 1..CC_TEVENT_MULT_MAX */
@@ -59,6 +97,11 @@ typedef struct {
     uint8_t luck_boost;              /* 0..CC_TEVENT_LUCK_MAX */
     uint16_t trainer_shiny_chance;   /* 0 = no change, else the threshold out of 65536 */
     uint8_t upgrade_vouchers;        /* 0 or 1 */
+    /* second round (appended, so a six-value initializer still means the first six) */
+    cc_tevent_reward rewards[CC_TEVENT_REWARDS_MAX];     /* the list ends at the first slot with wave 0; nothing may follow it */
+    uint16_t luck_species[CC_TEVENT_SPECIES_MAX];        /* species ids, the list ends at the first 0; no duplicates */
+    uint8_t delibirdy_buff[CC_TEVENT_BUFF_MAX];          /* cc_titem, the list ends at the first CC_TITEM_NONE; no duplicates */
+    uint8_t flags;                                       /* CC_TFX_* */
 } cc_tevent_effects;
 
 typedef struct {
