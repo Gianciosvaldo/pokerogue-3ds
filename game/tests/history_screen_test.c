@@ -397,6 +397,11 @@ static const drawn_t* find_prefix(const char* s) {
     if (!strncmp(g_drawn[i].text, s, strlen(s))) return &g_drawn[i];
   return NULL;
 }
+static const drawn_t* find_contains(const char* s) {
+  for (int i = 0; i < n_drawn; i++)
+    if (strstr(g_drawn[i].text, s)) return &g_drawn[i];
+  return NULL;
+}
 static int count_prefix(const char* s) {
   int n = 0;
   for (int i = 0; i < n_drawn; i++)
@@ -623,7 +628,8 @@ int main(void) {
   press(BTN_DOWN); /* E[5]: six Pokemon, a defeat by a pair */
   press(BTN_ACTION);
   draw(RR_TOP);
-  CHECK(find_prefix("[double] Ace Trainer Sam"), "a pair of trainers: the double's line (%s)", find_prefix("[double]") ? find_prefix("[double]")->text : "-");
+  CHECK(find("Ace Trainer Sam"), "a pair of trainers: the name alone (%s)", find_prefix("Ace") ? find_prefix("Ace")->text : "-");
+  CHECK(!find_contains("would like to battle") && !find_contains("[double]"), "... without upstream's sentence, which belongs next to the trainer's sprite");
   for (int i = 0; i < 5; i++) press(BTN_DOWN);
   press(BTN_ACTION);
   CHECK(g_sum_args.index == 5 && g_sum_args.n == 6, "five DOWNs reach the sixth Pokemon");
@@ -643,12 +649,12 @@ int main(void) {
   press(BTN_UP);
   press(BTN_ACTION);
   draw(RR_TOP);
-  CHECK(find("Finn would like to battle!"), "the rival's name on the info page");
+  CHECK(find("Finn") && !find_contains("would like to battle"), "the rival's name on the info page, alone");
   press(BTN_CANCEL);
   press(BTN_DOWN);
   press(BTN_ACTION);
   draw(RR_TOP);
-  CHECK(find("Ivy would like to battle!"), "the female rival's name on the info page");
+  CHECK(find("Ivy") && !find_contains("would like to battle"), "the female rival's name on the info page, alone");
   press(BTN_CANCEL);
   press(BTN_DOWN);
   press(BTN_DOWN);
@@ -660,12 +666,12 @@ int main(void) {
   draw(RR_BOTTOM);
   CHECK(find("Defeated"), "... in the list too");
 
-  /* a trainer whose line does not fit in four lines of the words is drawn in the pixel font, whole; a short one stays in the words */
+  /* a trainer's name that does not fit in four lines of the words is drawn in the pixel font, whole; a short one stays in the words */
   press(BTN_CANCEL);
   n_entries = 2;
   E[0].defeat = RH_DEFEAT_TRAINER;
   E[0].victory = false;
-  snprintf(E[0].trainer, sizeof E[0].trainer, "Team Galactic Commander Cyrus and Team Magma Leader Maxie of Hoenn");
+  snprintf(E[0].trainer, sizeof E[0].trainer, "Team Galactic Commander Cyrus and Team Magma Leader Maxie and Team Aqua Leader Archie and Team Rocket Boss Giovanni");
   E[1].defeat = RH_DEFEAT_TRAINER;
   snprintf(E[1].trainer, sizeof E[1].trainer, "Finn");
   open_screen(RH_OK);
@@ -673,15 +679,14 @@ int main(void) {
   draw(RR_TOP);
   {
     const drawn_t* t = find_prefix("Team Galactic Commander Cyrus");
-    CHECK(t && pixel_style(t->style) && !strcmp(t->text, "Team Galactic Commander Cyrus and Team Magma Leader Maxie of Hoenn would like to battle!"),
-          "a long trainer line drops to the pixel font and keeps its end (%s)", t ? t->text : "-");
+    CHECK(t && pixel_style(t->style) && !strcmp(t->text, E[0].trainer), "a long trainer name drops to the pixel font and keeps its end (%s)", t ? t->text : "-");
   }
   press(BTN_CANCEL);
   press(BTN_DOWN);
   press(BTN_ACTION);
   draw(RR_TOP);
   {
-    const drawn_t* t = find_prefix("Finn would");
+    const drawn_t* t = find("Finn");
     CHECK(t && !pixel_style(t->style) && t->font_px == 96, "a short one stays in the words");
   }
   press(BTN_CANCEL);
