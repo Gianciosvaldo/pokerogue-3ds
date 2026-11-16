@@ -37,6 +37,7 @@ void ba_show(int battler){(void)battler;}
 void ba_draw(ba_layer layer,const ba_mon field[4]){(void)layer;(void)field;}
 bool ba_hidden(int battler){(void)battler;return false;}
 void ui_play_sound(const char *key){if(strstr(key,"Transform"))n_sound++;}
+float ui_sound_seconds(const char *key){(void)key;return 0;}
 static float cur_zoom=1;
 void rr_set_zoom(float z,float cx,float cy){(void)cx;(void)cy;cur_zoom=z;}
 void rr_rect(float x,float y,float w,float h,rr_color c){(void)x;(void)y;(void)w;(void)h;(void)c;}

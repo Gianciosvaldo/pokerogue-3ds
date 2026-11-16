@@ -154,13 +154,41 @@ def _sfx_job(args):
 AUDIO_EXT = (".mp3", ".m4a", ".wav", ".ogg")
 
 
-def build_bgm(assets, game, out_dir, jobs, encoder, report):
+def extra_audio(extra):
+    """(path, key, loop seconds or None) of every track under `extra`, laid out like assets/audio/bgm (custom/jotaro.mp3 is the track
+    "custom/jotaro"). A "<name>.loop" text file next to it holds the loop point in seconds; without one the track repeats from its start.
+    The se/ folder holds sound effects, not music (extra_sounds)."""
+    out = []
+    for d, ds, fs in os.walk(extra):
+        if d == extra and "se" in ds:
+            ds.remove("se")
+        ds.sort()
+        for f in sorted(fs):
+            if not f.lower().endswith(AUDIO_EXT):
+                continue
+            p = os.path.join(d, f)
+            key = os.path.splitext(os.path.relpath(p, extra).replace(os.sep, "/"))[0]
+            side = os.path.splitext(p)[0] + ".loop"
+            loop = float(open(side).read().strip()) if os.path.exists(side) else None
+            out.append((p, key, loop))
+    return out
+
+
+def build_bgm(assets, game, out_dir, jobs, encoder, report, extra=None):
     root = os.path.join(assets, "audio", "bgm")
     loops = audio.bgm_loop_points(game, assets)
     files = sorted(os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                    for d, _, fs in os.walk(root) for f in fs if f.lower().endswith(AUDIO_EXT))
     # keys keep subfolders: upstream plays e.g. "bw/evolution_fanfare"
-    todo = [(encoder, os.path.join(root, f), loops.get(os.path.splitext(f)[0])) for f in files]
+    jobs_in = [(os.path.join(root, f), os.path.splitext(f)[0], loops.get(os.path.splitext(f)[0])) for f in files]
+    if extra:  # the project's own tracks (the JoJo themes): a track named like an upstream one replaces it
+        own = extra_audio(extra)
+        names = {k for _, k, _ in own}
+        replaced = sum(t[1] in names for t in jobs_in)
+        jobs_in = [t for t in jobs_in if t[1] not in names] + own
+        print(f"  bgm: {len(own)} extra tracks from {extra}", flush=True)
+    todo = [(encoder, src, loop) for src, _, loop in jobs_in]
+    keys = [k for _, k, _ in jobs_in]
     w = rpak.Writer(os.path.join(out_dir, "bgm.pak"))
     st = {"entries": 0, "stored": 0, "errors": [], "snr_min": None, "with_loop": 0}
     t0 = time.time()
@@ -169,7 +197,7 @@ def build_bgm(assets, game, out_dir, jobs, encoder, report):
             if err:
                 st["errors"].append([src, err])
                 continue
-            key = "audio/bgm/" + os.path.splitext(os.path.relpath(src, root).replace(os.sep, "/"))[0]
+            key = "audio/bgm/" + keys[i]
             st["stored"] += w.add(key, data, rpak.TYPE_SND, compress=False)  # streamed: must stay raw
             st["entries"] += 1
             st["with_loop"] += todo[i][2] is not None
@@ -178,28 +206,51 @@ def build_bgm(assets, game, out_dir, jobs, encoder, report):
                 print(f"  bgm {i + 1}/{len(todo)} ({time.time() - t0:.0f} s)", flush=True)
     w.close()
     st["seconds"] = round(time.time() - t0, 1)
+    if extra:
+        st["extra"] = len(own) - replaced  # the tracks that are not upstream's (the pinned count is of upstream's)
     report["bgm"] = st
     print(f"bgm.pak: {st['entries']} tracks, {st['stored'] / 1e6:.1f} MB, {len(st['errors'])} errors, {st['seconds']} s")
 
 
-def build_snd(assets, out_dir, jobs, encoder, report):
+def extra_sounds(extra):
+    """(path, key) of every sound under `extra`/se, laid out like assets/audio/se (se/the_world.mp3 is the sound "audio/se/the_world")."""
+    root = os.path.join(extra, "se")
+    out = []
+    for d, ds, fs in os.walk(root):
+        ds.sort()
+        for f in sorted(fs):
+            if f.lower().endswith(AUDIO_EXT):
+                p = os.path.join(d, f)
+                out.append((p, "audio/se/" + os.path.splitext(os.path.relpath(p, root).replace(os.sep, "/"))[0]))
+    return out
+
+
+def build_snd(assets, out_dir, jobs, encoder, report, extra=None):
     todo = []
+    base = os.path.join(assets, "")
     for sub in ("se", "ui", "cry", "battle_anims"):
         root = os.path.join(assets, "audio", sub)
         for d, _, files in walk(root):
             for f in files:
                 if f.lower().endswith(AUDIO_EXT):
                     todo.append((encoder, os.path.join(d, f)))
+    keys = {src: os.path.splitext(os.path.relpath(src, base).replace(os.sep, "/"))[0] for _, src in todo}
+    own = extra_sounds(extra) if extra else []
+    if own:  # the project's own sounds (DIO's time stop): one named like an upstream sound replaces it
+        names = {k for _, k in own}
+        replaced = sum(keys[t[1]] in names for t in todo)
+        todo = [t for t in todo if keys[t[1]] not in names] + [(encoder, p) for p, _ in own]
+        keys.update({p: k for p, k in own})
+        print(f"  snd: {len(own)} extra sounds from {extra}", flush=True)
     w = rpak.Writer(os.path.join(out_dir, "snd.pak"))
     st = {"entries": 0, "stored": 0, "errors": [], "snr_min": None, "dupes": []}
-    base = os.path.join(assets, "")
     t0 = time.time()
     with ProcessPoolExecutor(jobs) as ex:
         for src, data, snr, err in ex.map(_sfx_job, todo, chunksize=8):
             if err:
                 st["errors"].append([src, err])
                 continue
-            key = os.path.splitext(os.path.relpath(src, base).replace(os.sep, "/"))[0]
+            key = keys[src]
             try:
                 st["stored"] += w.add(key, data, rpak.TYPE_SND)
             except ValueError as e:  # same name, different extension (e.g. .wav and .WAV)
@@ -209,6 +260,8 @@ def build_snd(assets, out_dir, jobs, encoder, report):
             st["snr_min"] = snr if st["snr_min"] is None else min(st["snr_min"], snr)
     w.close()
     st["seconds"] = round(time.time() - t0, 1)
+    if own:
+        st["extra"] = len(own) - replaced  # the sounds that are not upstream's (the pinned count is of upstream's)
     report["snd"] = st
     print(f"snd.pak: {st['entries']} sounds, {st['stored'] / 1e6:.1f} MB, {len(st['errors'])} errors, {st['seconds']} s")
 
@@ -306,6 +359,7 @@ def main():
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--encoder", help="path to a built tools/dspadpcm")
     ap.add_argument("--extra-images", help="folder laid out like assets/images whose PNGs go into gfx.pak too (the JoJo trainers' images/trainer/custom/<id>.png)")
+    ap.add_argument("--extra-audio", help="folder laid out like assets/audio/bgm whose tracks go into bgm.pak too (the JoJo themes, custom/<id>.mp3); its se/ folder holds sounds for snd.pak (se/the_world.mp3)")
     ap.add_argument("--locales", help="checkout of pokerogue-locales (default: GAME/locales)")
     a = ap.parse_args()
     only = set(a.only.split(","))
@@ -323,9 +377,9 @@ def main():
     if "snd" in only or "bgm" in only:
         enc = find_encoder(a.encoder)
         if "snd" in only:
-            build_snd(a.assets, out_dir, a.jobs, enc, report)
+            build_snd(a.assets, out_dir, a.jobs, enc, report, a.extra_audio)
         if "bgm" in only:
-            build_bgm(a.assets, a.game, out_dir, a.jobs, enc, report)
+            build_bgm(a.assets, a.game, out_dir, a.jobs, enc, report, a.extra_audio)
     json.dump(report, open(report_path, "w"), indent=1)
 
 

@@ -46,6 +46,18 @@ Steps
   6. Eject the SD card before taking it out: in File Explorer, right-click the card's drive
      and choose Eject. Put the card back in your 3DS.
 
+Your own music (the JoJo themes)
+  A JoJo character's fight can play his own theme instead of the usual music. The music isn't in
+  this zip: put the files yourself in files\extra-audio\custom (there's a note in there), named
+  after the character, for example jotaro.mp3, dio.mp3, giorno.mp3. pillar_men.mp3 plays in the
+  Pillar Men encounter and in all three of their fights. .mp3, .ogg, .m4a and .wav all work.
+  A track repeats from its start. To repeat from somewhere else, put the seconds in a text file
+  with the same name and .loop (jotaro.loop containing 12.5). Then double-click BUILD-SD-CARD:
+  it redoes only the music (about 2 minutes) and remakes the game file. A character with no file
+  keeps the usual music. Updating with a newer zip keeps the folder and its files.
+  DIO's time stop sound goes in files\extra-audio\se as the_world.mp3 (and, for when time moves
+  again, the_world_resume.mp3); then the builder redoes only the sounds.
+
 Updating to a newer build
   A new build comes as a new PokeRogue-SD-Builder.zip. You don't have to start over:
   1. Open the new zip (double-click it) and open the PokeRogue-SD-Builder folder inside it.

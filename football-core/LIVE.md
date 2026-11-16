@@ -460,6 +460,25 @@ clean); `live_art_test` keeps every pose, shake and draw inside bounds for every
 `FB_FX_TURN` (+1) says a positive angle tips a sprite clockwise on screen, which is how citro2d takes it as far as I know; it
 has not been seen on a console, and flipping that one number reverses every lean.
 
+## Sounds
+
+The match was silent but for its music. `football_sound.c` (`football-core/src`) is a watcher that the screen calls once per frame
+(`football_sound_scan`): it compares the match with what it saw the frame before and lists the sounds that frame earned, then the screen
+plays each with `ui_play_sound(football_sound_key(...))`. It only reads the match, so it cannot change a play, and a match gives the same
+sounds at any frame length (the order of two sounds inside one frame is the watcher's own: edges, then fx records, then the dead ball).
+What it hears: the snap of a scrimmage play; the ball leaving a hand (`pb_throw`) or a foot (`hit_strong`); every new fx record (juke, dive,
+tackle `hit`, sack `hit_strong`, fumble, catch, incomplete, interception, touchdown); and at each new dead ball a field goal, try, two-point
+play or safety (a rising sound when HOME scored, a falling one when AWAY did), a kick that is no good (the error sound), a blocked kick, a muff, a
+fair catch, a first down for HOME, a ball lost on downs or to a fumble (told by who holds it now), the end of a quarter, and the final whistle
+(`achv` for a win, `faint` for a loss). The human is always HOME, so "for" and "against" are told from HOME's side. Menus click on every move
+and choice and give the error sound when the game refuses one (a pick that does not fit, no cash, a kick out of range).
+
+Every key is one the app already plays from upstream's pack (battle hits, `pb_*`, level-up, stat up and down, achievement, faint), so none is a
+sound the pack is not known to hold. The pack has no crowd or whistle, so there are none: the stand-ins are in `football_sound_key`, one table, and
+each can be changed there. `tests/sound_test.c` (in `make test` and the sanitizer list) checks every change by hand, that sacks, interceptions and
+touchdowns heard over 60 whole games match the engine's own credits, that frames six times as long hear the same sounds, and which side a sound
+is told for; `live_screen_test` checks the clicks, the error sound and the snap and kick sounds through the real screen.
+
 ## Menus
 
 The menus are built from the classic game's own widgets (`game/source/football_menu.c`): the grey bevelled windows (`ui_window`),

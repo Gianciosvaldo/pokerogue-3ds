@@ -45,6 +45,20 @@ static int n_tracks;
 
 static const char* show(const char* s) { return s ? s : "(none)"; }
 static bool only_a(const char* key) { return !strcmp(key, "audio/bgm/a"); }
+
+/* the project's own tracks: the JoJo trainer on screen (bgm_set_foe_source), and which "custom/..." tracks the pack has (the rest of the pack is whole) */
+static const char* test_foe;
+static const char* foe_of(const gc_run* run) {
+  (void)run;
+  return test_foe;
+}
+static const char* custom_in_pack[4];
+static bool has_custom(const char* key) {
+  if (strncmp(key, "audio/bgm/custom/", 17)) return true;
+  for (int i = 0; i < 4; i++)
+    if (custom_in_pack[i] && !strcmp(key + 17, custom_in_pack[i])) return true;
+  return false;
+}
 static bool same(const char* a, const char* b) { return (!a && !b) || (a && b && !strcmp(a, b)); }
 
 /* every name the chooser returns is a track of the pack (when a track list was given) */
@@ -491,6 +505,71 @@ int main(int argc, char** argv) {
       starts = SND.starts;
       bgm_on_foe_sent_out(&R);
       CHECK(SND.starts == starts, "the send-out restarted the music of a trainer with no encounter music");
+
+      /* the JoJo themes (the builder's extra-audio folder, "custom/<id>") */
+      bgm_set_foe_source(foe_of);
+      SND.has = has_custom;
+      R.trainer_type = enc->trainer_type;
+      char want2[BGM_NAME_LEN];
+      snprintf(want2, sizeof want2, "encounter_%s", enc->encounter[0]);
+      struct { const char *foe, *pack0, *pack1, *want; } theme[] = {
+          {"jotaro", "jotaro", NULL, "custom/jotaro"},           /* his own track, from the wave's start to its end */
+          {"jotaro", NULL, NULL, want2},                         /* no track in the pack: the class's encounter music as always */
+          {"jotaro", "dio", "pillar_men", want2},                /* other characters' tracks, and the Pillar Men's, are not his */
+          {"wamuu", "pillar_men", NULL, "custom/pillar_men"},    /* the three Pillar Men share one */
+          {"esidisi", "pillar_men", "esidisi", "custom/esidisi"},/* unless one has a track of his own */
+          {"kars", "pillar_men", NULL, "custom/pillar_men"},
+          {"wamuu", NULL, NULL, want2},
+          {NULL, "jotaro", "pillar_men", want2},                 /* not a JoJo battle: tracks in the pack change nothing */
+      };
+      for (unsigned i = 0; i < sizeof theme / sizeof *theme; i++) {
+        test_foe = theme[i].foe;
+        custom_in_pack[0] = theme[i].pack0;
+        custom_in_pack[1] = theme[i].pack1;
+        bgm_stop();
+        bgm_on_wave_coming(&R, 30, BIOME_ID_PLAINS, BATTLE_TYPE_TRAINER);
+        bgm_tick(300);
+        bgm_on_wave(&R, 30, BIOME_ID_PLAINS, BATTLE_TYPE_TRAINER);
+        CHECK(!strcmp(bgm_current(), theme[i].want), "theme case %u (%s): %s, want %s", i, show(theme[i].foe), bgm_current(), theme[i].want);
+        starts = SND.starts;
+        bgm_on_foe_sent_out(&R);
+        if (theme[i].want[0] == 'c') CHECK(SND.starts == starts && !strcmp(bgm_current(), theme[i].want), "theme case %u: the send-out changed the theme", i);
+        else CHECK(!strcmp(bgm_current(), enc->mixed), "theme case %u: the send-out gave %s", i, bgm_current());
+        if (theme[i].want[0] == 'c') {
+          bgm_on_trainer_defeated(R.trainer_type);
+          CHECK(!strcmp(bgm_current(), bgm_trainer_victory(enc->trainer_type)), "theme case %u: victory music %s", i, bgm_current());
+        }
+      }
+      /* the second wave of the same character does not fade or restart the theme */
+      test_foe = "jotaro";
+      custom_in_pack[0] = "jotaro";
+      custom_in_pack[1] = NULL;
+      bgm_stop();
+      bgm_on_wave_coming(&R, 30, BIOME_ID_PLAINS, BATTLE_TYPE_TRAINER);
+      bgm_tick(300);
+      bgm_on_wave(&R, 30, BIOME_ID_PLAINS, BATTLE_TYPE_TRAINER);
+      starts = SND.starts;
+      bgm_on_wave_coming(&R, 30, BIOME_ID_PLAINS, BATTLE_TYPE_TRAINER);
+      bgm_tick(300);
+      CHECK(SND.starts == starts && SND.volume == 1.0f && !strcmp(bgm_current(), "custom/jotaro"), "the theme faded when asked for again");
+
+      /* the Pillar Men encounter (the offer screen), with and without the track */
+      custom_in_pack[0] = "pillar_men";
+      bgm_play("a");
+      bgm_on_mystery(GC_ME_PILLAR_MEN);
+      bgm_tick(300);
+      bgm_tick(600);
+      CHECK(!strcmp(bgm_current(), "custom/pillar_men"), "the Pillar Men offer plays %s", bgm_current());
+      custom_in_pack[0] = NULL;
+      bgm_play("a");
+      bgm_on_mystery(GC_ME_PILLAR_MEN);
+      bgm_tick(900);
+      CHECK(!strcmp(bgm_current(), "a"), "the Pillar Men offer without a track changed the music to %s", bgm_current());
+
+      bgm_set_foe_source(NULL);
+      SND.has = NULL;
+      test_foe = NULL;
+      custom_in_pack[0] = custom_in_pack[1] = NULL;
     }
 
     /* the Classic final boss */
