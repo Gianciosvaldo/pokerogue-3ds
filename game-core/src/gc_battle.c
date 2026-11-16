@@ -860,6 +860,8 @@ int gc_battle_run(gc_run *run, int pick)
     pr_battle *bt = &run->bt;
     gc_wallet_to_battle(run);
     balls_to_battle(run);
+    /* a timed event's shiny catch rate (gc/events.h), asked as the turn is played: the capture phase reads it from the battle */
+    bt->event_shiny_catch_mult = gc_event_effects_now(run).shiny_catch_mult;
     if (pick < -1) {
         gc_int(run)->at_save_point = false;
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
