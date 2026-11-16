@@ -9,7 +9,7 @@ static gc_mon *pm(gc_run *run, int idx) { return &run->party[idx]; }
 
 /* The battle is won: what VictoryPhase queues after the BattleEndPhase it pushes (battle-core's pr_continue
  * pushed that one, and the turn's rest ran before it). Reached when battle-core stops at that BattleEndPhase. */
-static void queue_battle_end(gc_run *run)
+void gc_queue_battle_end(gc_run *run)
 {
     gc_internal *in = gc_int(run);
     if (gc_rq_has(run, RP_TRAINER_VICTORY)) return;   /* upstream's "temporary hotfix": hasPhaseOfType("TrainerVictoryPhase") */
@@ -51,6 +51,7 @@ static void queue_battle_end(gc_run *run)
         if (classic && wave == 165) {
             gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
         }
+        if (classic) gc_event_queue_wave_rewards(run, wave);   /* timed events (gc/events.h): getFixedBattleEventRewards, before the shop */
         if (wave % 10) {
             gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
         } else if (mode == GAME_MODES_DAILY) {
@@ -140,7 +141,7 @@ static void after_stop(gc_run *run, int stop)
         /* after a VictoryPhase it is the victory's BattleEndPhase, followed by the wave's rewards */
         if (in->battle_won) {
             in->battle_won = false;
-            queue_battle_end(run);
+            gc_queue_battle_end(run);
             break;
         }
         /* else the wild Pokemon left the field (Roar, Whirlwind, Emergency Exit...): BattleEndPhase(false),
