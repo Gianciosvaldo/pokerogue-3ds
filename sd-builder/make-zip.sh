@@ -31,8 +31,10 @@ x86_64-w64-mingw32-gcc -O2 -static -s -Wl,--no-insert-timestamp -o "$D/files/pip
 for app in "$@"; do cp "$app" "$D/files/apps/"; done
 # The project's own pictures (the JoJo trainers' sprites): the builder packs them into gfx.pak (see README.md)
 cp -R "$HERE/extra-images" "$D/files/extra-images"
-# Your own music (the JoJo themes) goes in files/extra-audio/custom/; the zip holds only this note, never a track (see README.md)
+# The JoJo themes and DIO's sounds (lorenzo's own files, the repo is private): files/extra-audio/custom/ and se/, packed into bgm.pak and snd.pak;
+# more can be added there by hand (see README.md)
 mkdir -p "$D/files/extra-audio/custom" "$D/files/extra-audio/se"
+cp -R "$HERE/extra-audio/." "$D/files/extra-audio/"
 cp "$HERE/extra-audio-README.txt" "$D/files/extra-audio/custom/PUT-MUSIC-HERE.txt"
 cp "$HERE/extra-audio-README.txt" "$D/files/extra-audio/se/PUT-SOUNDS-HERE.txt"   # (zip -D stores no empty folders)
 
@@ -66,8 +68,8 @@ for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/WHATS-NEW.txt" "$D/fi
   python3 -c 'import sys; p=sys.argv[1]; b=open(p,"rb").read().replace(b"\r\n",b"\n").replace(b"\n",b"\r\n"); open(p,"wb").write(b)' "$f"
 done
 
-# Nothing from upstream may ever be in the zip
-if find "$D" -type f -not -path "$D/files/extra-images/*" \( -name '*.png' -o -name '*.pak' -o -name '*.ogg' -o -name '*.mp3' -o -name '*.m4a' \
+# Nothing from upstream may ever be in the zip (the project's own pictures and audio are the two folders above)
+if find "$D" -type f -not -path "$D/files/extra-images/*" -not -path "$D/files/extra-audio/*" \( -name '*.png' -o -name '*.pak' -o -name '*.ogg' -o -name '*.mp3' -o -name '*.m4a' \
      -o -name '*.wav' -o -name '*.ttf' -o -name '*.json' ! -name 'pins.json' \) | grep -q .; then
   echo "refusing: upstream content in the zip" >&2; exit 1
 fi
