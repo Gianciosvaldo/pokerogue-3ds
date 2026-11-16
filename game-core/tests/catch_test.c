@@ -657,6 +657,61 @@ static void shiny_catch_rate(void)
     CHECK(plain_failed >= 40);     /* the control: ~22% of 400 (about 88) fail, so the roll is live and this can fail */
 }
 
+
+/* A timed event's shiny catch multiplier (gc/events.h, Lucky Catch). The foe is a Charmander at 1 HP, asleep, hit by a plain Poke Ball: its
+ * modified rate is about 111 as it stands, 222 as a shiny (x2: below 255, so the shakes are rolled and a throw can fail) and 333 with an
+ * event's x3 (past 255: no shake roll, every throw catches). The same 400 seeds for each case, so the same rolls. */
+static gc_event_effects open_now;
+static void fake_effects(void *user, gc_event_effects *out) { (void)user; *out = open_now; }
+static const gc_event_source EVENT_SRC = {NULL, fake_effects};
+
+static int failed_throws(bool shiny, const gc_event_source *src, unsigned mult)
+{
+    int failed = 0;
+    for (int i = 0; i < 400; i++) {
+        char seed[48];
+        snprintf(seed, sizeof seed, "catch-event-rate-%d", i);
+        new_run(seed, false);
+        memset(&open_now, 0, sizeof open_now);
+        open_now.shiny_catch_mult = (uint8_t)mult;
+        open_now.shiny_encounter_mult = 7;   /* other effects ride along and change nothing here */
+        open_now.candy_mult = 9;
+        gc_run_set_events(&run, src);
+        gc_mon *foe = &run.enemy[0];
+        foe->b.species = SPECIES_ID_CHARMANDER;
+        foe->b.form = 0;
+        foe->b.hp = 1;
+        foe->b.status = STATUS_EFFECT_SLEEP;
+        foe->b.status_sleep_turns = 4;
+        foe->b.shiny = shiny;
+        run.pokeballs[POKEBALL_TYPE_POKEBALL] = 5;
+        clear_log();
+        const char *why;
+        CHECK(throw_ball(POKEBALL_TYPE_POKEBALL, &why));
+        settle();
+        const int caught = times("battle:pokemonCaught");
+        CHECK(caught == 0 || caught == 1);
+        if (!caught) failed++;
+    }
+    return failed;
+}
+
+static void event_catch_rate(void)
+{
+    const int base = failed_throws(true, NULL, 0);
+    printf("event catch rate: shiny, no source: %d of 400 failed\n", base);
+    CHECK(base >= 15);                                      /* the control: the shakes are rolled at 222, so throws fail */
+    CHECK(failed_throws(true, &EVENT_SRC, 0) == base);      /* a source with no event open is the same */
+    CHECK(failed_throws(true, &EVENT_SRC, 1) == base);      /* an event never lowers the non-event x2 */
+    CHECK(failed_throws(true, &EVENT_SRC, 2) == base);      /* equal to the non-event value */
+    CHECK(failed_throws(true, &EVENT_SRC, 3) == 0);         /* x3: 333, no shake roll */
+    CHECK(failed_throws(true, &EVENT_SRC, 10) == 0);
+    const int plain = failed_throws(false, NULL, 0);
+    CHECK(plain > base);                                    /* a plain target is harder than the shiny: rate 111 against 222 */
+    CHECK(failed_throws(false, &EVENT_SRC, 3) == plain);    /* the event is for shiny targets only */
+    CHECK(failed_throws(false, &EVENT_SRC, 10) == plain);
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
@@ -667,6 +722,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "dex")) dex_and_candy();
     if (!only || !strcmp(only, "save")) save_load();
     if (!only || !strcmp(only, "shiny")) shiny_catch_rate();
+    if (!only || !strcmp(only, "event")) event_catch_rate();
     printf("catch: %d checks, 0 failures\n", checks);
     return 0;
 }

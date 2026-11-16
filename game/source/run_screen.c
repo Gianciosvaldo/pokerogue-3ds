@@ -19,6 +19,7 @@
 #include "dream_anim.h"
 #include "combat_observer.h"
 #include "custom_run.h"
+#include "events_host.h"
 #include "achv_hooks.h"
 #include "achv_toast.h"
 #include "me_flow.h"
@@ -2072,6 +2073,7 @@ static bool new_run(bool from_black) {
   const int mode=G.cfg.custom?GAME_MODES_CLASSIC:(G.cfg.mode>=GAME_MODES_CLASSIC&&G.cfg.mode<=GAME_MODES_SPLICED_ENDLESS?G.cfg.mode:GAME_MODES_CLASSIC);
   gc_run_new(&G.run, mode, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   G.run.sys = G.cfg.sys;
+  eh_install(&G.run);   /* timed events: before the starters, the first wave's shiny roll asks the clock */
   G.run.ask_switch = G.cfg.ask_switch;   /* before the starters: the first wave's start is what asks */
   ach_reset();
   G.have_defeat = false;
@@ -2134,6 +2136,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   bes_bind(&G.run);
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  eh_install(&G.run);   /* timed events: game-core does not save the source */
   G.run.ask_switch = cfg->ask_switch;
   ach_reset_loaded();
   /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */

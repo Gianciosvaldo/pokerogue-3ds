@@ -189,6 +189,14 @@ void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
     ec->trainer_id = (uint16_t)run->trainer_id;
     ec->secret_id = (uint16_t)run->secret_id;
     ec->event_shiny_multiplier = 1;
+    /* timed events (gc/events.h), asked now: the shiny roll of every Pokemon this context makes. run-core applies them as upstream's
+     * trySetShiny does (a trainer's Pokemon take the larger of the event's trainer chance and the base odds, any other the multiplier) */
+    const gc_event_effects fx = gc_event_effects_now(run);
+    if (fx.shiny_encounter_mult || fx.trainer_shiny_chance) {
+        ec->event_active = true;
+        if (fx.shiny_encounter_mult) ec->event_shiny_multiplier = fx.shiny_encounter_mult;
+        ec->event_trainer_shiny_chance = fx.trainer_shiny_chance;
+    }
 }
 
 /* getPartyLuckValue(party) */
@@ -204,7 +212,8 @@ int gc_party_luck(gc_run *run)
         m[i].fusion_luck = run->party[i].fusion_luck;
         m[i].allowed = gc_mon_allowed(&run->party[i]);
     }
-    return pr_run_get_party_luck_value(&run->run, m, run->n_party, NULL, 0, 0);
+    /* getEventLuckBoost(): a timed event's luck (gc/events.h), asked now; the Daily Run's seeded luck has none */
+    return pr_run_get_party_luck_value(&run->run, m, run->n_party, NULL, 0, gc_event_effects_now(run).luck_boost);
 }
 
 /* regenerateModifierPoolThresholds(getEnemyField(), WILD or TRAINER) on the run's RNG, without the item rolls that follow it: each
