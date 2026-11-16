@@ -29,6 +29,13 @@ void ui_push_options(const char *const *o,int count,bool cancel,void(*done)(int,
 static unsigned match_music,title_music;static unsigned music_round;
 void bgm_on_football_match(unsigned seed,unsigned round){assert(seed);++match_music;music_round=round;}
 void bgm_on_title(void){++title_music;}
+/* every sound the screen asks for, by key */
+static char sounds[256][40];static unsigned sound_total;
+void ui_play_sound(const char *key){if(key && sound_total<256){snprintf(sounds[sound_total],sizeof sounds[0],"%s",key);++sound_total;}}
+void ui_play_select(void){ui_play_sound("ui/select");}void ui_play_error(void){ui_play_sound("ui/error");}
+static void sounds_clear(void){sound_total=0;}
+static unsigned heard(const char *key){unsigned n=0;for(unsigned i=0;i<sound_total;++i)n+=!strcmp(sounds[i],key);return n;}
+static bool last_sound_is(const char *key){return sound_total && !strcmp(sounds[sound_total-1],key);}
 void C3D_FrameSync(void){}
 bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 c){(void)x;(void)y;(void)z;(void)c;assert(w>0 && h>0);return true;}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
@@ -110,12 +117,14 @@ int main(void)
         for(unsigned i=0;i<22;++i){
             char want[64];snprintf(want,sizeof want,"Pick your %s",football_slot_titles[i]);tick();assert(on_bottom(want));
             snprintf(want,sizeof want,"%s  %u/22",football_slot_names[i],i);assert(on_top(want));
-            press(BTN_ACTION);assert(career()->roster.count==i+1 && career()->roster.lineup[i]==i);
+            sounds_clear();press(BTN_ACTION);assert(career()->roster.count==i+1 && career()->roster.lineup[i]==i);
+            assert(last_sound_is("ui/select") && sound_total==1); /* a pick clicks */
+            if(i==0){sounds_clear();press(BTN_ACTION);assert(career()->roster.count==1 && last_sound_is("ui/error") && sound_total==1);} /* the same species twice is refused */
             for(unsigned j=0;j<i;++j)assert(career()->roster.mon[j].b.species!=career()->roster.mon[i].b.species);
             if(i==2){ /* take the Wide receiver 1 back, then pick it again */
                 press(BTN_CANCEL);assert(career()->roster.count==2);tick();assert(on_bottom("Pick your Wide receiver 1"));press(BTN_ACTION);assert(career()->roster.count==3);
             }
-            if(i<21)press(BTN_DOWN);
+            if(i<21){sounds_clear();press(BTN_DOWN);assert(last_sound_is("ui/select") && sound_total==1);} /* the cursor clicks */
         }
     }
     assert(career()->phase==FB_CAREER_READY && career()->roster.count==22 && career()->roster.cost<=55);tick();assert(writes==1);
@@ -136,7 +145,9 @@ int main(void)
     game_screen->touch(game_screen,40,FM_FOOT_Y+10);tick();assert(career()->live.phase==FB_LIVE_CALL); /* the left button does the same */
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET);
     for(unsigned i=0;i<30;++i){tick();}
+    sounds_clear();
     game_screen->touch(game_screen,260,FM_FOOT_Y+10);tick();assert(career()->live.phase==FB_LIVE_PLAY); /* the right button snaps */
+    assert(heard("se/hit_weak")==1 && sound_total==1); /* the snap is heard once, and nothing else yet */
     assert(on_bottom("B: Juke") && !on_bottom("B: Change play"));
     /* A run starts with the ball on the QB: the human gets the runner when the handoff is done. */
     for(unsigned i=0;i<90 && career()->live.hand_to<22;++i){tick();}
@@ -172,14 +183,16 @@ int main(void)
     /* Special teams follow every offensive page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
     tick();for(unsigned p=0;p<(FB_PLAY_COUNT+3)/4;++p)press(BTN_RIGHT);tick();assert(special_cards==2);
-    press(BTN_DOWN);press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* out of range from the 25 */
+    sounds_clear();press(BTN_DOWN);press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* out of range from the 25 */
+    assert(sound_total==2 && !strcmp(sounds[0],"ui/select") && !strcmp(sounds[1],"ui/error")); /* the cursor clicks, the kick out of range is refused */
     press(BTN_UP);down=KEY_A;press(BTN_ACTION);tick();
     assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_PUNT && career()->live.controlled==0); /* the same press does not also snap */
     for(unsigned i=0;i<30;++i){tick();}
     assert(career()->live.phase==FB_LIVE_SET);
-    down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
+    sounds_clear();down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
     for(unsigned i=0;i<3000 && career()->live.phase==FB_LIVE_PLAY;++i)tick();
     assert(career()->live.phase==FB_LIVE_DEAD && career()->live.rules.offense==FB_AWAY && career()->live.event!=FB_EVENT_NONE);
+    assert(heard("se/hit_strong")>=1 && !heard("se/hit_weak")); /* the punt is heard leaving the foot, and a kick has no snap sound */
     /* The try after a touchdown: two cards, no page flipping, and either choice leaves the call without also snapping. */
     {
         FootballCareer *w=(FootballCareer *)career();
