@@ -3,6 +3,7 @@
 #define GC_INTERNAL_H
 #include "gc/run.h"
 #include "gc/custom.h"
+#include "gc/events.h"
 #include "gc/ports.h"
 #include "gc/data.h"
 #include "pr/ai.h"
@@ -115,6 +116,7 @@ typedef struct {
     char name_arg[3][GC_TNAME_COUNT_][72];
     /* custom content (gc/custom.h): the app's hooks (not saved, the app installs them again after a load) and the offer a wave is waiting on */
     const gc_custom_hooks *custom;
+    const gc_event_source *events;     /* timed events (gc/events.h): the app's source of the effects open now (not saved, the app installs it again after a load) */
     char custom_trainer_name[48];      /* a team's plain-text trainer name (not saved: gc_custom_set_trainer_name after a load) */
     bool custom_team_on;               /* the battle's party came from a team: enemy_items gives its members the team's items */
     gc_custom_team custom_team;
@@ -343,6 +345,7 @@ bool gc_custom_trainer(gc_run *run, const gc_custom_encounter *enc);            
 void gc_custom_team_items(gc_run *run);                                                   /* the team's items instead of the generated ones (enemy_items) */
 void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
 void gc_enemy_finish_party_me(gc_run *run);                          /* the same for an initBattleWithEnemyConfig without item configs: the item rolls, then updateModifiers' stats */
+gc_event_effects gc_event_effects_now(const gc_run *run);             /* gc/events.h: the effects open now, all zero without a source */
 void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scene addEnemyPokemon sees (run-core's context) */
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */

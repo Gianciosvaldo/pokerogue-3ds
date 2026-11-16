@@ -15,3 +15,5 @@
 #include "../../custom-core/src/scheduler.c"
 #include "../../custom-core/src/jojo.c"
 #include "../../custom-core/src/jojo_table.c"
+#include "../../custom-core/src/tevents.c"
+#include "../../custom-core/src/tevents_table.c"

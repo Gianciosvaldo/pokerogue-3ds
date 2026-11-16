@@ -358,6 +358,12 @@ void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int 
     if (sys) {
         int mode = run ? run->run.mode : 0;
         int mult = (mode == GAME_MODES_CLASSIC) ? 3 : 1;
+        /* getClassicFriendshipMultiplier(): CLASSIC_CANDY_FRIENDSHIP_MULTIPLIER (3), or a timed event's own (gc/events.h, asked now). An
+         * event here only gives: a value at or below 3 changes nothing. Classic only, as upstream's isClassic branch. */
+        if (run && mode == GAME_MODES_CLASSIC) {   /* with no run there is no event source to ask */
+            const int ev = gc_event_effects_now(run).candy_mult;
+            if (ev > mult) mult = ev;
+        }
         /* Pokemon.addFriendship: a fusion feeds the candy bar of each species' root, and the multiplier is halved for each
          * (/2; /1.5 while a timed event boosts fusions, which the port has no calendar for). floor(friendship * mult / 2), in
          * integers: the gain is positive here. The first root is fed before the second, as upstream's forEach does; a Pokemon
