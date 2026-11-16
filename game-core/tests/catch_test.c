@@ -620,6 +620,43 @@ static void save_load(void)
 }
 
 /* no argument: every fixture; or one of rules, balls, full, items, dex, save */
+/* The roll itself with a shiny target (AttemptCapturePhase: modifiedCatchRate x getShinyCatchMultiplier() when the target is shiny,
+ * and that is SHINY_CATCH_RATE_MULTIPLIER = 2 with no event running; a rate of 255 or more catches without a shake roll).
+ * A Charmander (catch rate 45) at 1 HP, asleep, in a Great Ball is a modified rate of about 164: the roll can fail. The same shiny
+ * target is about 328, past 255, so it is caught every time. The producer of the differential (tests/catch.producer.test.ts)
+ * keeps only throws the formula guarantees, so it cannot see this; the expectation here is derived from upstream's formula
+ * and the two constants, not from this port's output. */
+static void shiny_catch_rate(void)
+{
+    const int seeds = 400;
+    int plain_failed = 0, shiny_failed = 0;
+    for (int shiny = 0; shiny < 2; shiny++) {
+        for (int i = 0; i < seeds; i++) {
+            char seed[48];
+            snprintf(seed, sizeof seed, "catch-shiny-rate-%d", i);   /* the same seeds for both: the same rolls */
+            new_run(seed, false);
+            gc_mon *foe = &run.enemy[0];
+            foe->b.species = SPECIES_ID_CHARMANDER;
+            foe->b.form = 0;
+            foe->b.hp = 1;
+            foe->b.status = STATUS_EFFECT_SLEEP;
+            foe->b.status_sleep_turns = 4;
+            foe->b.shiny = shiny != 0;
+            run.pokeballs[POKEBALL_TYPE_GREAT_BALL] = 5;
+            clear_log();
+            const char *why;
+            CHECK(throw_ball(POKEBALL_TYPE_GREAT_BALL, &why));
+            settle();
+            const int caught = times("battle:pokemonCaught");
+            CHECK(caught == 0 || caught == 1);
+            if (!caught) { if (shiny) shiny_failed++; else plain_failed++; }
+        }
+    }
+    printf("shiny catch rate: %d seeds, plain failed %d, shiny failed %d\n", seeds, plain_failed, shiny_failed);
+    CHECK(shiny_failed == 0);      /* modified rate >= 255: no shake roll, every throw catches */
+    CHECK(plain_failed >= 40);     /* the control: ~22% of 400 (about 88) fail, so the roll is live and this can fail */
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
@@ -629,6 +666,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "items")) held_items();
     if (!only || !strcmp(only, "dex")) dex_and_candy();
     if (!only || !strcmp(only, "save")) save_load();
+    if (!only || !strcmp(only, "shiny")) shiny_catch_rate();
     printf("catch: %d checks, 0 failures\n", checks);
     return 0;
 }
