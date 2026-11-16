@@ -80,6 +80,7 @@ static void start(bv_event ev){B.ev[0]=ev;B.n_ev=1;B.cur=0;B.step=0;B.t=0;n_show
 static float place(float slide){float x,y;stand_pos(slide,&x,&y);return x;}
 int mui_reclaim_images(void) { return 0; }
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; }
+float ui_sound_seconds(const char *key){(void)key;return 0;}
 int main(void){
  memset(&B,0,sizeof B);B.field_scale=1;
  put(side_of(0),445);put(side_of(2),774);
