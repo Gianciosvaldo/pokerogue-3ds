@@ -606,6 +606,10 @@ typedef struct pr_battle {
     /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,
      * is the pin; differential harnesses never set them, game-core turns them on for real runs. */
     uint32_t deviations;
+    /* A timed event's getShinyCatchMultiplier() (activeEvent()?.shinyCatchMultiplier): 0 = no event value, the default and what every
+     * differential uses. A value above the non-event one (SHINY_CATCH_RATE_MULTIPLIER, 2) replaces it for a shiny target; one at or below it
+     * changes nothing (an event here only gives). The host sets it before each battle step, from the clock, so it is read live. Not saved. */
+    uint8_t event_shiny_catch_mult;
     /* The World (PR_CUSTOM_PASSIVE_THE_WORLD): time stops so far this battle, and whether this turn is one */
     uint8_t the_world_uses;
     bool the_world_active;
