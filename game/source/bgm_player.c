@@ -16,6 +16,13 @@ static struct {
 
 const char* bgm_current(void) { return P.name; }
 
+bool bgm_has(const char* name) {
+  if (!name || !*name) return false;
+  char key[BGM_NAME_LEN + 16];
+  snprintf(key, sizeof key, "audio/bgm/%s", name);
+  return snd_bgm_has(key);
+}
+
 static void stop_player(void) {
   P.fading = false;
   P.name[0] = 0;

@@ -581,6 +581,13 @@ build/final_boss_dialogue_playback_test: final_boss_dialogue_playback_test.c ../
 final_boss_dialogue_playback_test: build/final_boss_dialogue_playback_test
 .PHONY: final_boss_dialogue_playback_test
 
+# DIO's time stop and its sounds (se/the_world, se/the_world_resume): the real BEV_WORLD steps
+build/the_world_sound_test: the_world_sound_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections the_world_sound_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
+the_world_sound_test: build/the_world_sound_test
+.PHONY: the_world_sound_test
+
 # the final boss' Eternamax change on the battle screen: the white tween and the field zoom that keeps the 1.5x sprite inside the screen
 build/final_boss_form_anim_test: final_boss_form_anim_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build

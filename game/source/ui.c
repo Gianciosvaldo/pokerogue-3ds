@@ -306,6 +306,12 @@ void ui_play_sound(const char* key) {
   snprintf(k, sizeof k, "audio/%s", key);
   snd_sfx_play(k);
 }
+float ui_sound_seconds(const char* key) {
+  if (!key || !snd_ready()) return 0;
+  char k[96];
+  snprintf(k, sizeof k, "audio/%s", key);
+  return snd_sfx_seconds(k);
+}
 void ui_play_select(void) { ui_play_sound("ui/select"); }
 void ui_play_error(void) { ui_play_sound("ui/error"); }
 
