@@ -4,9 +4,9 @@
  * run_screen.c calls ach_on_screen with every screen the run reaches. On the first COMMAND screen of a wave the hook notes the battle (which
  * JoJo challenger is on the field, if any, and how many of the party have fainted); the first screen after it that is not a COMMAND is the
  * battle's end. When the battle was a challenger's and the party is still alive, the hook reports the win to the profile, lets game-core
- * unlock what is met (gc_achv_evaluate gives the rewards) and queues one message for each: "Achievement unlocked: <name>!" and "You received
- * <reward>!". The driver says them one at a time (ach_take_message) before it handles the screen, and writes the profile when ach_on_screen
- * returned true.
+ * unlock what is met (gc_achv_evaluate gives the rewards) and queues the id of each. The driver takes them (ach_take_unlock) before it handles the
+ * screen and gives each to the achievement bar (achv_toast.h: upstream's AchvBar, which takes no input and no time from the run), and writes the
+ * profile when ach_on_screen returned true.
  *
  * Group B (the runs) uses the same calls in every run: the waves reached, and the end of the run (a won run's feats: six Pokemon that can
  * still evolve, only one Pokemon ever on the field at a command screen, no Poke Ball thrown). Only a Bizarre run has JoJo challengers. Approximations, said here: a Pokemon revived mid-battle and one that
@@ -35,10 +35,10 @@ void ach_on_ball(void);
  * whole run (Lone Hero, Ball-Free). */
 void ach_reset_loaded(void);
 
-/* The next queued message, or NULL. The text stays valid until the next call. */
-const char* ach_take_message(void);
+/* The id (GC_ACHV_*, an index of gc_achv_defs) of the next achievement unlocked and not yet taken, or -1 when there is none. */
+int ach_take_unlock(void);
 
-/* Forgets the battle being tracked and the queued messages (a new run starts or loads). */
+/* Forgets the battle being tracked and the queued unlocks (a new run starts or loads). */
 void ach_reset(void);
 
 #ifdef __cplusplus

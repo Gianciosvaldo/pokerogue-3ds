@@ -49,6 +49,7 @@
 #include "starter_data.h"
 #include "battle_view.h"
 #include "gm_item_ui.h"
+#include "achv_toast.h"
 #include "ball_menu.h"
 #include "combat_observer.h"
 #include "custom_run.h"
@@ -305,6 +306,10 @@ void ba_preload_move(int move) { (void)move; }
 void ba_drop_moves(void) {}
 void img_drop_prefix(const char* prefix) { (void)prefix; }
 bool img_has(const char* key) { return !strncmp(key, "images/trainer/custom/", 22); }   /* the host has only the JoJo sprites: the pack of the SD card holds them */
+/* the achievement bar (achv_toast.h): the run driver gives it the unlocks; the test counts them (what each says is achv_toast_test's) */
+static unsigned n_toast_pushes;
+void atoast_push(const tv_info* t, bool brisk) { (void)t, (void)brisk; n_toast_pushes++; }
+
 int ui_depth(void) { return W.begun ? 1 : 0; }
 bool ui_busy(void) { return false; }
 /* one postponed step at most (run_screen.c keeps one): it runs when the fake player next steps */

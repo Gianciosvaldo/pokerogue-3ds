@@ -31,6 +31,7 @@
 #include "radar_screen.h"
 #include "history_screen.h"
 #include "achv_screen.h"
+#include "achv_toast.h"
 #include "result_screen.h"
 #include "run_history.h"
 #include "run_saves.h"
@@ -186,6 +187,18 @@ static int n_achv;
 void achv_screen_open(const achv_args* a) {
   AV = *a;
   n_achv++;
+}
+
+/* the achievement bar: what the app asked it to tell (achv_toast.h) */
+static int n_toasts;
+static char toast_title[8][96];
+static bool toast_brisk[8];
+void atoast_push(const tv_info* t, bool brisk) {
+  if (n_toasts < 8) {
+    snprintf(toast_title[n_toasts], sizeof toast_title[0], "%s", t->title);
+    toast_brisk[n_toasts] = brisk;
+  }
+  n_toasts++;
 }
 
 static result_args R;
@@ -475,9 +488,21 @@ int main(void) {
   /* the title's Achievements opens the list over the player's profile, and B comes back to the title */
   T.on_choose(TITLE_ACHIEVEMENTS, T.arg);
   CHECK(n_achv == 1 && AV.sys == sysd_get() && AV.on_exit, "Achievements opens the list over the profile");
+  CHECK(n_toasts == 0, "nothing new was unlocked, so no bar (%d)", n_toasts);
   AV.on_exit(AV.arg);
   CHECK(n_title == 3, "leaving it shows the title again");
   n_title--;
+
+  /* an egg hatched outside the list's own screen counts when it opens: the unlock is told with the achievement bar (First Hatch), once */
+  sysd_get()->stats.total_hatches = 1;
+  T.on_choose(TITLE_ACHIEVEMENTS, T.arg);
+  CHECK(n_achv == 2 && n_toasts == 1 && !strcmp(toast_title[0], "First Hatch") && toast_brisk[0], "a hatch unlocks First Hatch and its bar is asked for (%d, %s)", n_toasts, toast_title[0]);
+  AV.on_exit(AV.arg);
+  T.on_choose(TITLE_ACHIEVEMENTS, T.arg);
+  CHECK(n_achv == 3 && n_toasts == 1, "opened again it is not told again (%d)", n_toasts);
+  AV.on_exit(AV.arg);
+  CHECK(n_title == 4, "leaving shows the title again");
+  n_title -= 2;
 
   /* ---- a second run: the debug config is not used again, and its randomness differs */
   frames += 357;
