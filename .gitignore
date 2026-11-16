@@ -47,3 +47,5 @@ tools/azahar-libretro/*
 !tools/azahar-libretro/README.md
 __pycache__/
 !sd-builder/extra-images/**/*.png
+# lorenzo's own audio for the JoJo themes and DIO's time stop (2026-11-16, repo private): packed by the SD builder
+!sd-builder/extra-audio/**/*.mp3
