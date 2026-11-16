@@ -42,6 +42,7 @@ typedef enum {
     PH_FORM_CHANGE, PH_END_EVOLUTION, /* appended: nonquiet scene form changes */
     PH_ME_START_CLEANUP,       /* appended: MysteryEncounterBattleStartCleanupPhase */
     PH_MADE_IN_HEAVEN,         /* appended, custom content only (no upstream phase): emits PR_EV_MADE_IN_HEAVEN */
+    PH_THE_WORLD,              /* appended, custom content only (no upstream phase): emits PR_EV_THE_WORLD (value in anim) */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA

@@ -52,6 +52,8 @@ typedef struct{const rr_frame* f;float x,y;rr_color tint;rr_blend blend;float sc
 static draw_call calls[32];static int nc;static rr_blend blend_now;
 void rr_set_blend(rr_blend b){blend_now=b;}
 void rr_set_tone(int r,int g,int b){}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o){
     assert(nc<32);calls[nc++]=(draw_call){f,x,y,o?o->tint:0xffffffff,blend_now,o?o->scale_x:1};
 }

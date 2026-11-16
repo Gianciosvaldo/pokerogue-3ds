@@ -222,7 +222,7 @@ bool gc_custom_team_check(const gc_custom_team *team, const char **why)
     if (!team) { *why = "no team"; return false; }
     if (!team->name || !team->name[0] || strlen(team->name) >= sizeof((gc_internal *)0)->custom_trainer_name) { *why = "trainer name"; return false; }
     if (team->n < 1 || team->n > GC_CUSTOM_MAX_TEAM) { *why = "team size"; return false; }
-    if ((team->passive < -1 && team->passive != GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN) || team->passive >= PR_ABILITY_COUNT) { *why = "unknown passive"; return false; }
+    if ((team->passive < -1 && team->passive != GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN && team->passive != GC_CUSTOM_PASSIVE_THE_WORLD) || team->passive >= PR_ABILITY_COUNT) { *why = "unknown passive"; return false; }
     for (int e = 0; e < team->n; e++) {
         const gc_custom_team_member *t = &team->member[e];
         const pr_species *sp = gc_species(t->species);
@@ -305,6 +305,7 @@ bool gc_custom_build_trainer(gc_run *run, const gc_custom_team *team)
         for (int k = 0; k < GC_CUSTOM_MAX_MOVES; k++) if (t->moves[k]) gc_mon_set_move(m, slot++, t->moves[k]);
         if (team->passive >= 0) { m->b.custom_passive = team->passive; m->b.passive_flag = true; }
         else if (team->passive == GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN) m->b.custom_passive = PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN;   /* no passive_flag */
+        else if (team->passive == GC_CUSTOM_PASSIVE_THE_WORLD) m->b.custom_passive = PR_CUSTOM_PASSIVE_THE_WORLD;   /* no passive_flag */
     }
     for (int e = 0; e < team->n; e++) run->enemy[e] = built[e];
     run->n_enemy = team->n;

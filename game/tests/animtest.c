@@ -39,6 +39,8 @@ bool snd_sfx_play_ex(const char* key, float v, float r) { g_sounds++; return tru
 float snd_sfx_seconds(const char* key) { return 0.5f; }
 void rr_set_blend(rr_blend b) {}
 void rr_set_tone(int r, int g, int b) {}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o) { g_draws++; }
 void rr_rect(float x, float y, float w, float h, rr_color c) { g_draws++; }
 const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, 0xFFFFFFFFu};

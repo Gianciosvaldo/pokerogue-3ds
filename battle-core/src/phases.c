@@ -635,10 +635,13 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
 }
 
 static void made_in_heaven_turn_start(pr_battle *bt, pr_engine *e);
+static void the_world_turn_start(pr_battle *bt, pr_engine *e);
+static void the_world_phase(pr_battle *bt, pr_engine *e, int battler, int value, bool unshift);
 
 static void turn_start(pr_battle *bt, pr_engine *e)
 {
     made_in_heaven_turn_start(bt, e);
+    the_world_turn_start(bt, e);
     /* getCommandOrder: the active field, player side first; commands other than FIGHT go first
      * (the comparator keeps the original order otherwise, so this is a stable partition) */
     int order[4], n = 0;
@@ -680,6 +683,10 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         pr_pokemon *mon = bt->field[b];
         struct pr_turn_command *c = &bt->commands[b];
         if (c->command < 0 || c->skip) continue;
+        if (c->command == COMMAND_FIGHT && bt->the_world_active && b < 2) {
+            the_world_phase(bt, e, b, 2, false);   /* time is stopped: no MovePhase for the player's Pokemon */
+            continue;
+        }
         if (c->command == COMMAND_FIGHT) mon->order = (int8_t)k;
         switch (c->command) {
         case COMMAND_FIGHT: handle_fight_command(bt, e, mon, b); break;
@@ -714,6 +721,7 @@ static void turn_start(pr_battle *bt, pr_engine *e)
     push_new(bt, e, PH_BERRY, -1);
     push_new(bt, e, PH_CHECK_STATUS_EFFECT, -1);
     push_new(bt, e, PH_TURN_END, -1);
+    if (bt->the_world_active) the_world_phase(bt, e, -1, 0, false);
 }
 
 /* ---------------------------------------------------------------- MovePhase */
@@ -3101,6 +3109,43 @@ static void made_in_heaven_turn_start(pr_battle *bt, pr_engine *e)
     }
 }
 
+/* ---------------------------------------------------------------- The World (custom content, PR_CUSTOM_PASSIVE_THE_WORLD) */
+
+static void the_world_phase(pr_battle *bt, pr_engine *e, int battler, int value, bool unshift)
+{
+    int ph = pr_phase_new(e, PH_THE_WORLD, (int8_t)battler);
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+    e->pool[ph].anim = (uint16_t)value;
+    if (unshift) pr_phase_unshift(bt, e, ph); else pr_phase_push(bt, e, ph);
+}
+
+/* TurnStartPhase, before anything of the turn runs: does time stop this turn? Only with a The World foe on the field and a player's
+ * Pokemon that chose a move; the battle seed is rolled only then, and not on the forced stop (no stop yet, the foe's side down to one). */
+static void the_world_turn_start(pr_battle *bt, pr_engine *e)
+{
+    bt->the_world_active = false;
+    if (bt->the_world_uses >= PR_THE_WORLD_MAX) return;
+    int foe = -1;
+    for (int b = 2; b < 4 && foe < 0; b++) {
+        const pr_pokemon *p = bt->field[b];
+        if (is_active(p) && p->custom_passive == PR_CUSTOM_PASSIVE_THE_WORLD && !p->switch_out_status) foe = b;
+    }
+    if (foe < 0) return;
+    bool fight = false;
+    for (int b = 0; b < 2; b++) {
+        const struct pr_turn_command *c = &bt->commands[b];
+        if (is_active(bt->field[b]) && c->command == COMMAND_FIGHT && !c->skip) fight = true;
+    }
+    if (!fight) return;
+    int left = 0;
+    for (int k = 0; k < bt->n_party[1]; k++) if (is_active(bt->party[1][k])) left++;
+    const bool forced = bt->the_world_uses == 0 && left <= 1;
+    if (!forced && pr_battle_rand_seed_int(bt, 100, 0) >= PR_THE_WORLD_PERCENT) return;
+    bt->the_world_uses++;
+    bt->the_world_active = true;
+    the_world_phase(bt, e, foe, 1, true);
+}
+
 static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *f = PH(ph);
@@ -4370,6 +4415,10 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_MADE_IN_HEAVEN: pr_event_add(bt, e, PR_EV_MADE_IN_HEAVEN, PH(ph)->battler, -1, 0, PH(ph)->anim, NULL); break;
+    case PH_THE_WORLD:
+        if (PH(ph)->anim == 0) bt->the_world_active = false;
+        pr_event_add(bt, e, PR_EV_THE_WORLD, PH(ph)->battler, -1, 0, PH(ph)->anim, NULL);
+        break;
     case PH_FORM_CHANGE: form_change_phase(bt, e, ph); break;
     case PH_END_EVOLUTION: break; /* UI force-message transition, no battle state */
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;

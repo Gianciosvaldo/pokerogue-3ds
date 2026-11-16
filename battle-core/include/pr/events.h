@@ -84,6 +84,10 @@ typedef enum {
                                 * still able to fight; value = 1 for the side's first faint (C-Moon: shown only), 2 for its second (Made
                                 * in Heaven wakes). battler = the fainted Pokemon's field position. Comes after its
                                 * fainted text (and the exp it gives), before the trainer's next Pokemon is sent out */
+    PR_EV_THE_WORLD,           /* lorenzo's JoJo content (PR_CUSTOM_PASSIVE_THE_WORLD): value 1 = time stops (battler = the foe on the field
+                                * that has it), at the start of the turn, before anything of it; value 2 = a player's Pokemon that chose a move
+                                * cannot move (battler = its field position), where its move would have come; value 0 = time moves again
+                                * (battler = -1), after the turn's TurnEndPhase */
     PR_EV_COUNT_
 } pr_event_type;
 
