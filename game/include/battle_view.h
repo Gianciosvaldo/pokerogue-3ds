@@ -137,7 +137,7 @@ typedef enum {
                     * (upstream moves it right after the faint) */
   BEV_HEAVEN,      /* Pucci's stand (lorenzo's JoJo content, PR_EV_MADE_IN_HEAVEN): a = 1 C-Moon (his first faint), 2 Made in Heaven (his
                     * second). He slides back in with the stage's sprite (images/trainer/custom/<id>_cmoon, <id>_heaven; without the file his
-                    * sprite stays), shouts its name in the name box and, for Made in Heaven, the field fades to the space arena */
+                    * sprite stays), speaks his line in the name box (Made in Heaven: the introduction, then "MADE IN HEAVEN" in a box of its own) and, for Made in Heaven, the field fades to the space arena */
 } bev_type;
 /* BEV_ABILITY's a for Made in Heaven (battle-core's PR_ABILITY_SHOW_MADE_IN_HEAVEN): a red box at the top left of the top screen in
  * place of the ability bar */
