@@ -120,7 +120,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := me_fake.c ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_event_store.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := me_fake.c ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/events_host.c ../source/battle_event_store.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -Wl,--wrap=gc_ev_battle -Wl,--wrap=gc_ev_battle_chunk -Wl,--wrap=bgm_on_mystery -lm -o $@
@@ -580,3 +580,11 @@ build/final_boss_form_anim_test: final_boss_form_anim_test.c ../source/battle_vi
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_form_anim_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
 final_boss_form_anim_test: build/final_boss_form_anim_test
 .PHONY: final_boss_form_anim_test
+
+# the app's timed-events source (source/events_host.c): the console's clock as the module's seconds, and the shipped table's effects; make events_host_test && build/events_host_test
+EVH_SRCS := events_host_test.c ../source/events_host.c ../source/custom_core_build.c
+build/events_host_test: $(EVH_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(EVH_SRCS) -lm -o $@
+events_host_test: build/events_host_test
+.PHONY: events_host_test

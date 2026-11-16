@@ -47,6 +47,7 @@
 #include "gc/reward.h"
 #include "../../game-core/src/internal.h"   /* gc_mon_recalc, for the strong party of RUNTEST_CUSTOM=strong */
 #include "starter_data.h"
+#include "events_host.h"
 #include "battle_view.h"
 #include "gm_item_ui.h"
 #include "ball_menu.h"
@@ -2106,6 +2107,9 @@ int main(int argc, char** argv) {
    * 300-run corpus reaches a wave-10 boss at all depended on the hour (2026-11-04 00:00-03:00 UTC had none, so main looked red).
    * 2026-11-03 12:00 UTC, the time those corpora were last green on */
   ss_clock_override_ms = 1793707200000ull;
+  /* timed events (events_host.h): the app's runs ask the console's clock for open events, which would change every run's shiny rolls and
+   * so the corpus with the date. No event is ever open here. */
+  eh_use_fixed_clock(-1);
   int runs = argc > 1 ? atoi(argv[1]) : 20;
   int first = argc > 2 ? atoi(argv[2]) : 0;
   if (runs < 1) runs = 1;
