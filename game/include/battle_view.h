@@ -136,8 +136,9 @@ typedef enum {
                     * it comes after the events of the turn it ends: lorenzo wants the lone Pokemon to stay where it is until the turn is over
                     * (upstream moves it right after the faint) */
   BEV_HEAVEN,      /* Pucci's stand (lorenzo's JoJo content, PR_EV_MADE_IN_HEAVEN): a = 1 C-Moon (his first faint), 2 Made in Heaven (his
-                    * second). He slides back in with the stage's sprite (images/trainer/custom/<id>_cmoon, <id>_heaven; without the file his
-                    * sprite stays), speaks his line in the name box (Made in Heaven: the introduction, then "MADE IN HEAVEN" in a box of its own) and, for Made in Heaven, the field fades to the space arena */
+                    * second). He slides back in with the C-Moon sprite (images/trainer/custom/<id>_cmoon; Made in Heaven: <id>_heaven from the fade on; without the file his
+                    * sprite stays), speaks his line in the name box. Made in Heaven: the introduction, then the field fades to the space arena while
+                    * his sprite becomes Made in Heaven, then "MADE IN HEAVEN" in a box of its own */
 } bev_type;
 /* BEV_ABILITY's a for Made in Heaven (battle-core's PR_ABILITY_SHOW_MADE_IN_HEAVEN): a red box at the top left of the top screen in
  * place of the ability bar */

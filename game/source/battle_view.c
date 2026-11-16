@@ -2134,9 +2134,12 @@ static void run_event(float dt) {
       break;
 
     case BEV_HEAVEN: {
+      /* lorenzo 2026-11-16. C-Moon (a = 1): he slides back in with the C-Moon look and speaks. Made in Heaven (a = 2): he slides back in still
+       * as C-Moon and introduces his new Stand; the field goes dark, the arena becomes space and his look becomes Made in Heaven, it comes
+       * back, and only then he names it. "$" starts a new box. */
       const bool mih = e->a >= 2;
-      if (B.heaven.stage == 0) {               /* he slides back in with the stage's look (BEV_TRAINER_SHOW's 750 ms) */
-        heaven_sprite(e->a);
+      if (B.heaven.stage == 0) {               /* he slides back in (BEV_TRAINER_SHOW's 750 ms) */
+        heaven_sprite(1);
         B.trainer_visible = true;
         B.trainer_show_ms = 1;
         B.heaven.stage = 1;
@@ -2148,25 +2151,33 @@ static void run_event(float dt) {
         B.step = 0;
         B.heaven.stage = 2;
       }
-      if (B.heaven.stage == 2) {               /* the shout, in the name box (lorenzo 2026-11-16; "$" starts a new box) */
-        const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .text = mih ? "Allow me to introduce you to my new Stand!$My gift to humanity! I shall call my Stand...$MADE IN HEAVEN"
-                                               : "59, 61, 67...$Damn it, the filthy frogs are clinging to my 800 dollar pants$C-MOON!",
-                            .name = B.setup.trainer_name[0] ? B.setup.trainer_name : NULL};
+      const char* who = B.setup.trainer_name[0] ? B.setup.trainer_name : NULL;
+      if (B.heaven.stage == 2) {
+        const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .name = who,
+                            .text = mih ? "Allow me to introduce you to my new Stand!$My gift to humanity! I shall call my Stand..."
+                                        : "59, 61, 67...$Damn it, the filthy frogs are clinging to my 800 dollar pants$C-MOON!"};
         if (!step_dialogue(&d, dt)) break;
         if (!mih) { B.heaven.stage = 0; finish_event(); break; }
         B.heaven.stage = 3;
         B.heaven.t = 0;
         B.heaven.swapped = false;
       }
-      /* the field goes dark (500 ms), the arena becomes space, it comes back (500 ms) */
-      B.heaven.t += dt;
-      B.heaven_dark = B.heaven.t < 500 ? B.heaven.t / 500 : B.heaven.t < 1000 ? 1 - (B.heaven.t - 500) / 500 : 0;
-      if (B.heaven.t >= 500 && !B.heaven.swapped) {
-        snprintf(B.biome, sizeof B.biome, "space");
-        B.heaven.swapped = true;
-      }
-      if (B.heaven.t >= 1000) {
+      if (B.heaven.stage == 3) {               /* dark (500 ms), space and Made in Heaven, back (500 ms) */
+        B.heaven.t += dt;
+        B.heaven_dark = B.heaven.t < 500 ? B.heaven.t / 500 : B.heaven.t < 1000 ? 1 - (B.heaven.t - 500) / 500 : 0;
+        if (B.heaven.t >= 500 && !B.heaven.swapped) {
+          snprintf(B.biome, sizeof B.biome, "space");
+          heaven_sprite(2);
+          B.heaven.swapped = true;
+        }
+        if (B.heaven.t < 1000) break;
         B.heaven_dark = 0;
+        B.step = 0;
+        B.heaven.stage = 4;
+      }
+      if (B.heaven.stage == 4) {
+        const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .name = who, .text = "MADE IN HEAVEN"};
+        if (!step_dialogue(&d, dt)) break;
         B.heaven.stage = 0;
         finish_event();
       }
