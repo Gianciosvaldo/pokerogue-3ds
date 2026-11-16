@@ -498,7 +498,7 @@ static void trainer_victory(gc_run *run)
     const int n_funcs = c ? c->n_reward_funcs : 0;
     pr_reward_trainer_victory tv;
     const bool unlocked = gc_system_has_voucher_unlock(run->sys, run->trainer_type);
-    if (pr_reward_trainer_victory_rewards(run->trainer_type, unlocked, false, &tv) != 0 || tv.n_items < n_funcs) {
+    if (pr_reward_trainer_victory_rewards(run->trainer_type, unlocked, gc_event_effects_now(run).upgrade_vouchers != 0, &tv) != 0 || tv.n_items < n_funcs) {
         if (n_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
         tv.voucher_type = -1;
         tv.n_items = 0;
@@ -511,7 +511,8 @@ static void trainer_victory(gc_run *run)
     /* The boss voucher: Object.hasOwn(vouchers, key) && !globalScene.validateVoucher(voucher) && config.isBoss.
      * validateVoucher unlocks the voucher now and counts it (the first win of a boss: unlocked, +1 of the voucher's
      * own type, no reward) and returns true, so the ModifierRewardPhase is queued only on a later win, when it was
-     * unlocked already. Without system data (sys NULL = no system updates) nothing unlocks and no voucher is given. */
+     * unlocked already. Without system data (sys NULL = no system updates) nothing unlocks and no voucher is given.
+     * getUpgradeUnlockedVouchers(): a timed event's (gc/events.h, asked now) gives the upgraded voucher of the table. */
     if (tv.voucher_type >= 0) {
         if (tv.unlock_voucher) {
             gc_system_unlock_voucher(run->sys, run->trainer_type, tv.voucher_type);
