@@ -6,6 +6,7 @@
  *   shiny : the enemy's shiny roll. The shiny test is (E ^ F) < threshold with E from the trainer and secret ids and F from the enemy's own
  *           id, so a run whose ids are chosen to put E ^ F just below or just above 64 * multiplier shows the multiplier exactly; the
  *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output.
+ *   candy : the Classic candy friendship multiplier (getClassicFriendshipMultiplier(): 3, or an event's when higher; Classic only).
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
 #include <stdio.h>
@@ -200,11 +201,83 @@ static void luck_section(void)
     CHECK_EQ(party_luck(NULL, 4), 4);
 }
 
+/* the starter bars' friendship points a Pokemon's gain of 3 feeds, in a run of `mode` with the source installed. A fused Pokemon feeds each root's bar. */
+static int friendship_points(int mode, const gc_event_source *src, bool fused, int *second_root)
+{
+    static const char seed[] = "events-candy";
+    static gc_system sys;
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, mode, seed, 7);
+    gc_run_set_events(&run, src);
+    gc_starter team[3];
+    memset(team, 0, sizeof team);
+    const int species[3] = {SPECIES_ID_BULBASAUR, SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
+    for (int i = 0; i < 3; i++) {
+        team[i].species = (uint16_t)species[i];
+        team[i].tera_type = -1;
+        for (int k = 0; k < 6; k++) team[i].ivs[k] = 15;
+    }
+    const char *why = "";
+    CHECK(gc_run_set_starters(&run, team, 3, &why));
+    run.sys = &sys;   /* after the starters, as catch_test does: with system data the starters must be unlocked */
+    gc_mon *m = &run.party[0];
+    CHECK_EQ(m->b.species, SPECIES_ID_BULBASAUR);
+    if (fused) m->b.fusion_species = SPECIES_ID_SQUIRTLE;
+    const uint16_t r1 = gc_species_root_id(m->b.species);
+    const uint16_t r2 = fused ? gc_species_root_id(m->b.fusion_species) : r1;
+    CHECK(r1 != r2 || !fused);
+    const int b1 = sys.starters[r1].friendship, b2 = sys.starters[r2].friendship;
+    gc_system_add_friendship(&sys, &run, m, 3, false);
+    if (second_root) *second_root = sys.starters[r2].friendship - b2;
+    return sys.starters[r1].friendship - b1;
+}
+
+static void candy_section(void)
+{
+    memset(&open_now, 0, sizeof open_now);
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, NULL, false, NULL), 9);        /* 3 x the non-event 3 */
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 9);        /* nothing open */
+    open_now.candy_mult = 4;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 12);       /* Sweet Tooth: x4 */
+    open_now.candy_mult = 10;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 30);
+    open_now.candy_mult = 3;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 9);        /* equal to the non-event value */
+    open_now.candy_mult = 2;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 9);        /* an event never lowers it */
+    open_now.candy_mult = 1;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, NULL), 9);
+    /* the other modes have no Classic multiplier: x1 whatever the event says */
+    open_now.candy_mult = 4;
+    CHECK_EQ(friendship_points(GAME_MODES_ENDLESS, NULL, false, NULL), 3);
+    CHECK_EQ(friendship_points(GAME_MODES_ENDLESS, &SRC, false, NULL), 3);
+    /* a fusion feeds each root with half: floor(3 x mult / 2) */
+    int second = 0;
+    memset(&open_now, 0, sizeof open_now);
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 4);      /* floor(9 / 2) */
+    CHECK_EQ(second, 4);
+    open_now.candy_mult = 4;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 6);      /* 12 / 2 */
+    CHECK_EQ(second, 6);
+    /* no run behind the gain (a caller with none): there is no source to ask, no crash, and the gain is what it was before events (a
+     * missing run counts as Classic's x3) */
+    static gc_system sys2;
+    gc_system_init_defaults(&sys2);
+    const int before = sys2.starters[SPECIES_ID_BULBASAUR].friendship;
+    gc_mon m;
+    memset(&m, 0, sizeof m);
+    m.b.species = SPECIES_ID_BULBASAUR;
+    gc_system_add_friendship(&sys2, NULL, &m, 3, false);
+    CHECK_EQ(sys2.starters[SPECIES_ID_BULBASAUR].friendship - before, 9);
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
     if (!only || !strcmp(only, "shiny")) shiny_section();
     if (!only || !strcmp(only, "luck")) luck_section();
+    if (!only || !strcmp(only, "candy")) candy_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;
 }
