@@ -573,6 +573,7 @@ void rr_target(rr_screen s, rr_color clear) {
   C2D_TargetClear(g_targets[s], __builtin_bswap32(clear)); /* citro2d wants 0xAABBGGRR */
   C2D_SceneBegin(g_targets[s]);
   rr_set_blend(RR_BLEND_NORMAL);
+  rr_set_grey(0);
   rr_set_tone(0, 0, 0);
   rr_set_zoom(1, 0, 0);
 }
@@ -586,6 +587,10 @@ void rr_set_blend(rr_blend b) {
   g_blend = b;
   if (b == RR_BLEND_ADD)
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE, GPU_ZERO, GPU_ONE);
+  else if (b == RR_BLEND_INVERT)
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE_MINUS_DST_COLOR, GPU_ONE_MINUS_SRC_COLOR, GPU_ZERO, GPU_ONE);
+  else if (b == RR_BLEND_MULTIPLY)
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_DST_COLOR, GPU_ZERO, GPU_ZERO, GPU_ONE);
   else /* citro3d's default */
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA,
                    GPU_ONE_MINUS_SRC_ALPHA);
@@ -593,10 +598,42 @@ void rr_set_blend(rr_blend b) {
 
 static int clamp255(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 
+static int g_grey;
+static void apply_tone(void);
+
+/* Grey takes the tone's stages: 4 maps the colour to 0.5 + c / 2 (MULTIPLY_ADD with 0.5 twice), 5 is DOT3_RGB against 0.5 + w / 2,
+ * which gives 4 * sum((c / 2) * (w / 2)) = sum(w * c), the luma, in every channel; its alpha is the alpha times the constant's. */
+void rr_set_grey(int alpha) {
+  alpha = clamp255(alpha);
+  if (alpha == g_grey) return;
+  C2D_Flush();
+  g_grey = alpha;
+  if (!alpha) { apply_tone(); return; }
+  C3D_TexEnv* env = C3D_GetTexEnv(4);
+  C3D_TexEnvInit(env);
+  C3D_TexEnvSrc(env, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, GPU_CONSTANT);
+  C3D_TexEnvFunc(env, C3D_RGB, GPU_MULTIPLY_ADD);
+  C3D_TexEnvColor(env, 0x00808080u);
+  C3D_TexEnv* env5 = C3D_GetTexEnv(5);
+  C3D_TexEnvInit(env5);
+  C3D_TexEnvSrc(env5, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, 0);
+  C3D_TexEnvFunc(env5, C3D_RGB, GPU_DOT3_RGB);
+  C3D_TexEnvSrc(env5, C3D_Alpha, GPU_PREVIOUS, GPU_CONSTANT, 0);
+  C3D_TexEnvFunc(env5, C3D_Alpha, GPU_MODULATE);
+  /* 0.5 + w / 2 for w = 0.299, 0.587, 0.114 */
+  const u32 wr = 128 + 38, wg = 128 + 75, wb = 128 + 15;
+  C3D_TexEnvColor(env5, wr | wg << 8 | wb << 16 | (u32)alpha << 24);
+}
+
 void rr_set_tone(int r, int g, int b) {
   if (r == g_tone[0] && g == g_tone[1] && b == g_tone[2]) return;
-  C2D_Flush();
+  if (!g_grey) C2D_Flush();
   g_tone[0] = r, g_tone[1] = g, g_tone[2] = b;
+  if (!g_grey) apply_tone();
+}
+
+static void apply_tone(void) {
+  const int r = g_tone[0], g = g_tone[1], b = g_tone[2];
   /* citro2d uses texenv 0..3 for its image modes, keeps 4 as a no-op and 5 for its fade (unused
    * here). The tone takes 4 (add the positive part) and 5 (subtract the negative part). */
   C3D_TexEnv* env = C3D_GetTexEnv(4);
@@ -737,6 +774,12 @@ void rr_rect(float x, float y, float w, float h, rr_color c) {
     w *= g_zoom, h *= g_zoom;
   }
   C2D_DrawRectSolid(x + g_origin[g_cur][0], y + g_origin[g_cur][1], 0.0f, w, h, to_c2d(c));
+}
+
+void rr_circle(float x, float y, float r, rr_color c) {
+  if (g_zoom != 1) x = g_zoom_x + (x - g_zoom_x) * g_zoom, y = g_zoom_y + (y - g_zoom_y) * g_zoom, r *= g_zoom;
+  if (r <= 0) return;
+  C2D_DrawCircleSolid(x + g_origin[g_cur][0], y + g_origin[g_cur][1], 0.0f, r, to_c2d(c));
 }
 
 void rr_nineslice(const rr_frame* f, float x, float y, float w, float h, int b) {

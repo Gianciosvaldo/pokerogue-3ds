@@ -131,6 +131,16 @@ static struct {
   float heaven_box_t;     /* ms the Made in Heaven box stays up (its text is ability_text) */
   struct { int stage; float t; bool swapped; } heaven;   /* BEV_HEAVEN's own steps (step_dialogue owns B.step) */
   float heaven_dark;      /* 0..1: the field fades to black and back while the arena becomes space */
+  struct {                /* BEV_WORLD (DIO's time stop) */
+    int stage;            /* the event's own steps (step_dialogue owns B.step) */
+    float t;
+    bool on;              /* DIO's second sprite is drawn */
+    float slide;          /* 0 off screen at the right .. 1 beside his Pokemon */
+    float inv_r;          /* the inverted circle's radius (field px), 0 = none */
+    float bulge;          /* the background's extra zoom about DIO while the circle grows */
+    float grey;           /* 0..1: the touched layers in grey blue */
+    char key[64];         /* his sprite */
+  } world;
   float ko_wait;
   bool blink;
   float fps;
@@ -740,8 +750,10 @@ static float fit_zoom(float z) {
   return z;
 }
 static float field_zoom_cur = 1;   /* the zoom field_zoom set last (draw_trainers draws a JoJo challenger without it) */
+static float field_zoom_on = FIELD_ZOOM;   /* the field's zoom when it was last on */
 static void field_zoom(bool on) {
   field_zoom_cur = on ? fit_zoom(B.field_scale * FIELD_ZOOM) : 1;
+  if (on) field_zoom_on = field_zoom_cur;
   rr_set_zoom(field_zoom_cur, 160, 132);
 }
 
@@ -827,9 +839,59 @@ static void draw_opening_ball(void) {
   rr_draw(f,36+64*t/650,y,&o);
 }
 
-static void draw_field(void) {
+/* BEV_WORLD: DIO's feet beside his Pokemon (field x 284 against the trainer's 228), drawn 1:1 like a JoJo trainer; slide 0 puts him
+ * 140 px further right, off the screen */
+#define WORLD_FOE_X 284.0f
+#define WORLD_SLIDE_PX 140.0f
+static void world_dio_pos(float* x, float* y) {
+  const float z = field_zoom_on;   /* the field's zoom, whether or not it is on right now */
+  *x = 160 + (WORLD_FOE_X - 160) * z + (1 - B.world.slide) * WORLD_SLIDE_PX;
+  *y = 132 + (80 - foe_raise() - 132) * z;
+}
+static void draw_world_dio(void) {
+  if (!B.world.on || !B.world.key[0]) return;
+  const rr_frame* f = img_anim_frame(B.world.key, 0);
+  if (!f) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = 0.5f;
+  o.origin_y = 1;
+  float x, y;
+  world_dio_pos(&x, &y);
+  const float z = field_zoom_cur;
+  if (z != 1) rr_set_zoom(1, 160, 132);
+  rr_draw(f, x, y, &o);
+  if (z != 1) rr_set_zoom(z, 160, 132);
+}
+
+/* The time stop's look on what is already drawn (the touched layers): the inverted circle with its colour fringes (each channel is
+ * inverted inside its own circle: red 3 px wider, blue 3 px narrower), then the grey blue's tint. */
+static void draw_world_filters(void) {
+  if (B.world.inv_r > 0) {
+    float x, y;
+    world_dio_pos(&x, &y);
+    y -= 40;
+    rr_set_blend(RR_BLEND_INVERT);
+    rr_circle(x, y, B.world.inv_r + 3, RR_RGBA(255, 0, 0, 255));
+    rr_circle(x, y, B.world.inv_r, RR_RGBA(0, 255, 0, 255));
+    rr_circle(x, y, B.world.inv_r - 3, RR_RGBA(0, 0, 255, 255));
+    rr_set_blend(RR_BLEND_NORMAL);
+  }
+  if (B.world.grey > 0) {
+    const float g = B.world.grey;
+    rr_set_blend(RR_BLEND_MULTIPLY);
+    rr_rect(-40, -30, 400, 240, RR_RGBA((int)(255 - 60 * g), (int)(255 - 44 * g), 255, 255));
+    rr_set_blend(RR_BLEND_NORMAL);
+  }
+}
+
+static void draw_field_back(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
+  if (B.world.bulge > 0) {   /* the time stop's warp: the background swells about DIO */
+    float x, y;
+    world_dio_pos(&x, &y);
+    rr_set_zoom(1 + B.world.bulge, x, y - 40);
+  }
   if (img_has(k))
     img_draw(k, NULL, 0, 0, 0, 0);
   else
@@ -843,23 +905,10 @@ static void draw_field(void) {
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
   field_zoom(false);
-  field_zoom(true);
-  ba_mon field[4];
-  anim_field(field);
-  ba_draw(BA_LAYER_BELOW_ENEMY, field);
-  /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
-  side *en = &B.s[1], *pl = &B.s[0];
-  if (B.ball.behind) draw_ball();
-  draw_trainers();
-  draw_me_intro();
-  for(int i=0;i<2;i++){
-    side *foe=&B.s[1+2*i];draw_sprite(foe,false);draw_sparkle(foe,false);
-    if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
-    if(i&&foe->present&&foe->tint_on)draw_sub(foe,false,true);
-  }
-  if (en->present && en->sub_on) draw_sub(en, false, false);
-  if (en->present && en->tint_on) draw_sub(en, false, true);
-  ba_draw(BA_LAYER_MID, field);
+}
+
+static void draw_field_player(void) {
+  side *pl = &B.s[0];
   draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
@@ -870,6 +919,54 @@ static void draw_field(void) {
   if(ally->present&&ally->tint_on&&!ally->tint_above)draw_sub(ally,true,true);
   draw_sprite(ally,true);draw_sparkle(ally,true);
   if(ally->present&&ally->tint_on&&ally->tint_above)draw_sub(ally,true,true);
+}
+
+static void draw_field_foes(void) {
+  side *en = &B.s[1];
+  if (B.ball.behind) draw_ball();
+  draw_trainers();
+  draw_me_intro();
+  draw_world_dio();
+  for(int i=0;i<2;i++){
+    side *foe=&B.s[1+2*i];draw_sprite(foe,false);draw_sparkle(foe,false);
+    if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
+    if(i&&foe->present&&foe->tint_on)draw_sub(foe,false,true);
+  }
+  if (en->present && en->sub_on) draw_sub(en, false, false);
+  if (en->present && en->tint_on) draw_sub(en, false, true);
+}
+
+static void draw_field(void) {
+  ba_mon field[4];
+  anim_field(field);
+  if (!B.world.on && B.world.inv_r <= 0 && B.world.grey <= 0) {
+    draw_field_back();
+    field_zoom(true);
+    ba_draw(BA_LAYER_BELOW_ENEMY, field);
+    /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
+    draw_field_foes();
+    ba_draw(BA_LAYER_MID, field);
+    draw_field_player();
+  } else {
+    /* DIO's time stop (lorenzo, 2026-11-16): the background, the platforms and the player's side first, in grey blue (drawn in colour and
+     * again in grey over it while the colour drains or comes back) and under the inverted circle; then, untouched, DIO, his Pokemon and
+     * every animation. While it lasts an animation of the middle layer is drawn over the player's Pokemon. */
+    const int grey = (int)(B.world.grey * 255 + 0.5f);
+    for (int pass = grey >= 255 ? 1 : 0; pass < (grey > 0 ? 2 : 1); pass++) {
+      rr_set_grey(pass ? grey : 0);
+      draw_field_back();
+      field_zoom(true);
+      draw_field_player();
+      field_zoom(false);
+    }
+    rr_set_grey(0);
+    rr_set_zoom(1, 0, 0);
+    draw_world_filters();
+    field_zoom(true);
+    ba_draw(BA_LAYER_BELOW_ENEMY, field);
+    draw_field_foes();
+    ba_draw(BA_LAYER_MID, field);
+  }
   ba_draw(BA_LAYER_TOP, field);
   if (!B.ball.behind) draw_ball();
   draw_opening_ball();
@@ -1270,6 +1367,26 @@ static void draw_heaven_box(void) {
   rr_rect(4, 4, w, 22, RR_RGBA(0x50, 0x00, 0x08, 255));
   rr_rect(5, 5, w - 2, 20, RR_RGBA(0xc8, 0x10, 0x20, 255));
   text_draw(TS_MOVE_LABEL, 12, 11, B.ability_text, NULL);
+}
+
+/* BEV_WORLD's timings and sizes */
+#define WORLD_GROW_MS 700.0f
+#define WORLD_DRAIN_MS 300.0f
+#define WORLD_MAX_R 440.0f   /* past the farthest corner of the 400 x 240 screen from DIO */
+#define WORLD_BULGE 0.06f
+
+/* BEV_WORLD's sprite: <id>_world next to the trainer's (dio -> dio_world) if the pack has it, else his own */
+static void world_key(void) {
+  const char* k = B.setup.trainer_keys[0];
+  B.world.key[0] = 0;
+  if (strncmp(k, "images/trainer/custom/", 22)) return;
+  const size_t n = strlen(k);
+  if (n + 6 < sizeof B.world.key) {
+    memcpy(B.world.key, k, n);
+    memcpy(B.world.key + n, "_world", 7);
+    if (img_has(B.world.key)) return;
+  }
+  snprintf(B.world.key, sizeof B.world.key, "%s", k);
 }
 
 /* BEV_HEAVEN's sprite: the stage's own file next to the trainer's (pucci -> pucci_cmoon / pucci_heaven), if the pack has it */
@@ -2179,6 +2296,76 @@ static void run_event(float dt) {
         const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .name = who, .text = "MADE IN HEAVEN"};
         if (!step_dialogue(&d, dt)) break;
         B.heaven.stage = 0;
+        finish_event();
+      }
+      break;
+    }
+
+    case BEV_WORLD: {
+      /* lorenzo 2026-11-16. a = 1: DIO's second sprite slides in beside his Pokemon (750 ms), "THE WORLD!", the inverted circle grows from
+       * him over the field while the background swells (700 ms), then the inversion snaps off and the colour drains to grey blue (300 ms).
+       * a = 0: "Time has begun to move again.", he slides out while the colour comes back (750 ms). */
+      const char* who = B.setup.trainer_name[0] ? B.setup.trainer_name : NULL;
+      if (e->a == 1) {
+        if (B.world.stage == 0) {
+          world_key();
+          B.world.on = true;
+          B.world.slide = 0;
+          B.world.t = 0;
+          B.world.stage = 1;
+        }
+        if (B.world.stage == 1) {
+          B.world.t += dt;
+          B.world.slide = ease(EASE_CUBIC_OUT, fminf(B.world.t / 750, 1));
+          if (B.world.t < 750) break;
+          B.step = 0;
+          B.world.stage = 2;
+        }
+        if (B.world.stage == 2) {
+          const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .name = who, .text = "THE WORLD!"};
+          if (!step_dialogue(&d, dt)) break;
+          B.world.t = 0;
+          B.world.stage = 3;
+        }
+        if (B.world.stage == 3) {
+          B.world.t += dt;
+          const float k = fminf(B.world.t / WORLD_GROW_MS, 1);
+          B.world.inv_r = WORLD_MAX_R * ease(EASE_SINE_IN, k);
+          B.world.bulge = WORLD_BULGE * sinf(3.14159265f * k);
+          if (B.world.t < WORLD_GROW_MS) break;
+          B.world.inv_r = 0;
+          B.world.bulge = 0;
+          B.world.t = 0;
+          B.world.stage = 4;
+        }
+        if (B.world.stage == 4) {
+          B.world.t += dt;
+          B.world.grey = fminf(B.world.t / WORLD_DRAIN_MS, 1);
+          if (B.world.t < WORLD_DRAIN_MS) break;
+          B.world.stage = 0;
+          finish_event();
+        }
+        break;
+      }
+      if (B.world.stage == 0) {
+        B.step = 0;
+        B.world.stage = 1;
+      }
+      if (B.world.stage == 1) {
+        const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .name = who, .text = "Time has begun to move again."};
+        if (!step_dialogue(&d, dt)) break;
+        B.world.t = 0;
+        B.world.stage = 2;
+      }
+      if (B.world.stage == 2) {
+        B.world.t += dt;
+        const float k = fminf(B.world.t / 750, 1);
+        B.world.slide = 1 - ease(EASE_CUBIC_IN, k);
+        if (B.world.grey > 0) B.world.grey = 1 - k;
+        if (B.world.t < 750) break;
+        B.world.on = false;
+        B.world.grey = 0;
+        B.world.stage = 0;
         finish_event();
       }
       break;

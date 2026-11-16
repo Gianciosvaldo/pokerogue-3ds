@@ -26,7 +26,7 @@ void rr_set_zoom(float z,float cx,float cy) { (void)z;(void)cx;(void)cy; } /* dr
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 static bool stage_files = true;   /* whether the pack has Pucci's stage sprites */
-bool img_has(const char* key) { return stage_files || (!strstr(key, "_cmoon") && !strstr(key, "_heaven")); }
+bool img_has(const char* key) { return stage_files || (!strstr(key, "_cmoon") && !strstr(key, "_heaven") && !strstr(key, "_world")); }
 int main(void) {
   memset(&B,0,sizeof B);
   B.player_trainer_visible=true;B.player_throw_ms=-1;
@@ -86,6 +86,18 @@ int main(void) {
   heaven_sprite(1);heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/custom/pucci"));
   stage_files=true;strcpy(B.setup.trainer_keys[0],"images/trainer/rival_m");
   heaven_sprite(2);assert(!strcmp(B.setup.trainer_keys[0],"images/trainer/rival_m"));
+  /* BEV_WORLD: DIO's second sprite (dio_world when the pack has it, else his own; nothing for a trainer that is not a JoJo one), 1:1 with
+   * his feet beside his Pokemon (field x 284 through the field's zoom), 140 px further right when it has not slid in */
+  strcpy(B.setup.trainer_keys[0],"images/trainer/custom/dio");
+  world_key();assert(!strcmp(B.world.key,"images/trainer/custom/dio_world"));
+  stage_files=false;world_key();assert(!strcmp(B.world.key,"images/trainer/custom/dio"));stage_files=true;
+  strcpy(B.setup.trainer_keys[0],"images/trainer/rival_m");world_key();assert(!B.world.key[0]);
+  strcpy(B.setup.trainer_keys[0],"images/trainer/custom/dio");world_key();
+  const float z=field_zoom_on;assert(z==FIELD_ZOOM);
+  B.world.on=true;B.world.slide=1;before=draws;draw_world_dio();assert(draws==before+1);
+  assert(!strcmp(atlas,"images/trainer/custom/dio_world"));near(px,160+124*z);near(py,132-52*z);near(opts.origin_y,1);
+  B.world.slide=0;draw_world_dio();near(px,160+124*z+140);
+  B.world.on=false;before=draws;draw_world_dio();assert(draws==before);
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;
 }

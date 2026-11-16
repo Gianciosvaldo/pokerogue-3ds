@@ -35,6 +35,8 @@ static rr_frame icon;static bool icon_missing;
 const rr_frame* img_frame(const char* key,const char* frame){return !icon_missing&&!strcmp(key,"images/ui/icon_tera")?&icon:NULL;}
 static int tone[3],draws;static float dx,dy,dscale;static int tone_at_draw[3];static rr_color dtint;
 void rr_set_tone(int r,int g,int b){tone[0]=r;tone[1]=g;tone[2]=b;}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o){
     if(f!=&icon)return;
     draws++;dx=x;dy=y;dscale=o->scale_x;dtint=o->tint;memcpy(tone_at_draw,tone,sizeof tone);
