@@ -128,6 +128,9 @@ static struct {
   float reason_ms;
   char ability_text[96];
   float ability_t;
+  float heaven_box_t;     /* ms the Made in Heaven box stays up (its text is ability_text) */
+  struct { int stage; float t; bool swapped; } heaven;   /* BEV_HEAVEN's own steps (step_dialogue owns B.step) */
+  float heaven_dark;      /* 0..1: the field fades to black and back while the arena becomes space */
   float ko_wait;
   bool blink;
   float fps;
@@ -1260,6 +1263,30 @@ static void draw_move_details(void) {
   text_draw(TS_WINDOW, 8, -48 - 52 + 4, s, &o);
 }
 
+/* Made in Heaven's box: red, top left of the top screen (physical px, over the 30 px top band), in place of the ability bar */
+static void draw_heaven_box(void) {
+  if (B.heaven_box_t <= 0) return;
+  const float w = text_width(TS_MOVE_LABEL, B.ability_text, NULL) + 16;
+  rr_rect(4, 4, w, 22, RR_RGBA(0x50, 0x00, 0x08, 255));
+  rr_rect(5, 5, w - 2, 20, RR_RGBA(0xc8, 0x10, 0x20, 255));
+  text_draw(TS_MOVE_LABEL, 12, 11, B.ability_text, NULL);
+}
+
+/* BEV_HEAVEN's sprite: the stage's own file next to the trainer's (pucci -> pucci_cmoon / pucci_heaven), if the pack has it */
+static void heaven_sprite(int stage) {
+  char *k = B.setup.trainer_keys[0];
+  if (strncmp(k, "images/trainer/custom/", 22)) return;
+  char alt[sizeof B.setup.trainer_keys[0]];
+  snprintf(alt, sizeof alt, "%s", k);
+  char* u = strrchr(alt, '_');
+  if (u && (!strcmp(u, "_cmoon") || !strcmp(u, "_heaven"))) *u = 0;
+  const char* suffix = stage >= 2 ? "_heaven" : "_cmoon";
+  const size_t n = strlen(alt);
+  if (n + strlen(suffix) >= sizeof alt) return;
+  memcpy(alt + n, suffix, strlen(suffix) + 1);
+  if (img_has(alt)) memcpy(B.setup.trainer_keys[0], alt, sizeof alt);
+}
+
 static void draw_ability_bar(void) {
   if (B.ability_t <= 0) return;
   float w = text_width(TS_WINDOW, B.ability_text, NULL) + 16;
@@ -2106,6 +2133,45 @@ static void run_event(float dt) {
       finish_event();
       break;
 
+    case BEV_HEAVEN: {
+      const bool mih = e->a >= 2;
+      if (B.heaven.stage == 0) {               /* he slides back in with the stage's look (BEV_TRAINER_SHOW's 750 ms) */
+        heaven_sprite(e->a);
+        B.trainer_visible = true;
+        B.trainer_show_ms = 1;
+        B.heaven.stage = 1;
+      }
+      if (B.heaven.stage == 1) {
+        B.trainer_show_ms += dt;
+        if (B.trainer_show_ms < 750) break;
+        B.trainer_show_ms = 0;
+        B.step = 0;
+        B.heaven.stage = 2;
+      }
+      if (B.heaven.stage == 2) {               /* the shout, in the name box */
+        const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .text = mih ? "MADE IN HEAVEN!" : "C-MOON!",
+                            .name = B.setup.trainer_name[0] ? B.setup.trainer_name : NULL};
+        if (!step_dialogue(&d, dt)) break;
+        if (!mih) { B.heaven.stage = 0; finish_event(); break; }
+        B.heaven.stage = 3;
+        B.heaven.t = 0;
+        B.heaven.swapped = false;
+      }
+      /* the field goes dark (500 ms), the arena becomes space, it comes back (500 ms) */
+      B.heaven.t += dt;
+      B.heaven_dark = B.heaven.t < 500 ? B.heaven.t / 500 : B.heaven.t < 1000 ? 1 - (B.heaven.t - 500) / 500 : 0;
+      if (B.heaven.t >= 500 && !B.heaven.swapped) {
+        snprintf(B.biome, sizeof B.biome, "space");
+        B.heaven.swapped = true;
+      }
+      if (B.heaven.t >= 1000) {
+        B.heaven_dark = 0;
+        B.heaven.stage = 0;
+        finish_event();
+      }
+      break;
+    }
+
     case BEV_TRAINER_SHOW:
       /* showEnemyTrainer: the sprite is back on the platform and moves in from 16 px up and right, fading in, over 750 ms */
       if (B.step == 0) {
@@ -2416,12 +2482,14 @@ static void run_event(float dt) {
     case BEV_ABILITY:
       if (B.step == 0) {
         char s[64];
-        snprintf(s, sizeof s, "%s", i18n_ability_name(e->a));
+        const bool heaven = e->a == BV_ABILITY_MADE_IN_HEAVEN;
+        snprintf(s, sizeof s, "%s", heaven ? "Made in Heaven" : i18n_ability_name(e->a));
         i18n_t(B.ability_text, sizeof B.ability_text, "fightUiHandler:abilityFlyInText", "pokemonName",
                e->text&&*e->text?e->text:sd->mon.name, "passive", "", "abilityName", s, NULL);
         for (char* p = B.ability_text; *p; p++)
           if (*p == '\n') *p = ' ';
-        B.ability_t = 1500;
+        if (heaven) { B.heaven_box_t = 1500; B.ability_t = 0; }
+        else { B.ability_t = 1500; B.heaven_box_t = 0; }
         B.step = 1;
       }
       if (B.t >= 500) finish_event();
@@ -2765,6 +2833,7 @@ static void bv_update(ui_screen* s, float dt) {
   msgbox_update(&B.msg, dt);
   chs_update(dt);
   if (B.ability_t > 0) B.ability_t -= dt;
+  if (B.heaven_box_t > 0) B.heaven_box_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
   if (!tween_done(&B.field_tw)) {
     tween_update(&B.field_tw, dt);
@@ -2843,6 +2912,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD)) {
       draw_field();
+      if (B.heaven_dark > 0) rr_rect(-40, -30, 400, 240, RR_RGBA(0, 0, 0, (int)(B.heaven_dark * 255)));
       if (B.overlay > 0) rr_rect(0, 0, 320, 132, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
       chs_draw();
     }
@@ -2857,6 +2927,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_TOP_CANVAS)) dream_draw();   /* Weird Dream: over the field and its boxes, under the message strip */
     if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     if (ui_space(UI_PHYS_TOP)) draw_top_bar();
+    if (ui_space(UI_PHYS_TOP)) draw_heaven_box();
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
@@ -2910,6 +2981,8 @@ void bv_begin(const bv_setup* setup) {
   chs_reset();
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
+  if (setup->heaven > 0) heaven_sprite(setup->heaven);           /* a reloaded battle: the stage Pucci had reached */
+  if (setup->heaven >= 2) snprintf(B.biome, sizeof B.biome, "space");
   set_mon(&B.s[0], &setup->player, true);
   set_mon(&B.s[1], &setup->enemy, false);
   set_mon(&B.s[2],&setup->player_ally,true);

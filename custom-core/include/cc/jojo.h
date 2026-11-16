@@ -42,12 +42,17 @@ typedef struct {
     cc_jojo_item items[CC_JOJO_MAX_ITEMS];
 } cc_jojo_member;
 
+/* cc_jojo_char.passive: Pucci's Made in Heaven (not an AbilityId; lorenzo, 2026-11-16). No passive at first; his first faint is the
+ * C-Moon stage (a new look, no effect), his second wakes Made in Heaven: Speed +1 at the start of every turn for his Pokemon on the
+ * field, up to +6. game-core's GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN, battle-core's PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN. */
+#define CC_JOJO_PASSIVE_MADE_IN_HEAVEN (-2)
+
 typedef struct {
     const char *id;             /* "kira": the sprite is images/trainer/custom/<id> */
     const char *name;           /* "Yoshikage Kira" */
     const char *line;           /* the iconic line */
     int16_t biome;              /* BiomeId, -1 = none (the Pillar Men) */
-    int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none */
+    int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none, CC_JOJO_PASSIVE_MADE_IN_HEAVEN = Pucci's */
     uint8_t n_members;          /* 1..CC_JOJO_MAX_MEMBERS */
     cc_jojo_member member[CC_JOJO_MAX_MEMBERS];
 } cc_jojo_char;

@@ -64,7 +64,7 @@ static void test_table(void)
         CHECK_EQ(c->biome, BIOME_OF[i]);
         CHECK(c->n_members >= 1 && c->n_members <= CC_JOJO_MAX_MEMBERS);
         if (c->biome >= 0) pool++;
-        if (c->passive >= 0) passive++;
+        if (c->passive >= 0 || c->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN) passive++;
         for (unsigned j = 0; j < i; j++) CHECK(strcmp(c->id, cc_jojo_chars[j].id) != 0);
         for (unsigned m = 0; m < c->n_members; m++) {
             const cc_jojo_member *mm = &c->member[m];
@@ -96,7 +96,7 @@ static void test_table(void)
     CHECK_EQ(cc_jojo_find("kir"), CC_JOJO_NONE);
     CHECK_EQ(cc_jojo_find("kiraa"), CC_JOJO_NONE);
     CHECK_EQ(cc_jojo_find(NULL), CC_JOJO_NONE);
-    CHECK_EQ(cc_jojo_chars[4].passive, 3);   /* Pucci: Speed Boost */
+    CHECK_EQ(cc_jojo_chars[4].passive, CC_JOJO_PASSIVE_MADE_IN_HEAVEN);   /* Pucci: Made in Heaven (lorenzo, 2026-11-16) */
     /* a Ditto has only Transform */
     CHECK_EQ(cc_jojo_chars[0].member[1].species, 132);
     CHECK_EQ(cc_jojo_chars[0].member[1].moves[1], 0);

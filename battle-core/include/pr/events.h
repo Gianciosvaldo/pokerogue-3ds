@@ -80,6 +80,10 @@ typedef enum {
                                 * Also SummonPhase.summon's own position for a player's Pokemon sent out in a double (id = 1, battler = the slot,
                                 * at once, before its PR_EV_SWITCH_IN): RIGHT in slot 1, in slot 0 CENTER when it is the only Pokemon of the party
                                 * able to fight (value 1) and LEFT otherwise (value 0) */
+    PR_EV_MADE_IN_HEAVEN,      /* lorenzo's JoJo content (PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN): a faint on a Made in Heaven side with members
+                                * still able to fight; value = 1 for the side's first faint (C-Moon: shown only), 2 for its second (Made
+                                * in Heaven wakes). battler = the fainted Pokemon's field position. Comes after its
+                                * fainted text (and the exp it gives), before the trainer's next Pokemon is sent out */
     PR_EV_COUNT_
 } pr_event_type;
 

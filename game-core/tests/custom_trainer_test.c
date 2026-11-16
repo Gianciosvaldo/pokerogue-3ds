@@ -154,6 +154,64 @@ static void make_team(void)
     c->items[0] = (gc_custom_team_item){"ATTACK_TYPE_BOOSTER", 0, 1};
 }
 
+/* Made in Heaven (Pucci, lorenzo 2026-11-16): no passive at first; his first faint shows the C-Moon stage (no effect), his second wakes Made
+ * in Heaven; then, at the start of every turn, his Pokemon on the field gets its box and Speed +1. Played through the battle-core events. */
+static int mih_stage1, mih_stage2, mih_shows, mih_shows_early, mih_speed, mih_bad;
+static bool mih_last_show;
+static void mih_events(const gc_event *e)
+{
+    if (e->kind != GC_EV_BATTLE) return;
+    for (int j = e->a; j < e->a + e->b; j++) {
+        const pr_event *v = &run.battle_events[j];
+        if (v->type == PR_EV_MADE_IN_HEAVEN) {
+            if (v->battler < 2) mih_bad++;
+            if (v->value == 1) { if (mih_stage2) mih_bad++; mih_stage1++; }
+            else if (v->value == 2) { if (!mih_stage1) mih_bad++; mih_stage2++; }
+            else mih_bad++;
+        }
+        if (v->type == PR_EV_ABILITY_SHOW && v->id == PR_ABILITY_SHOW_MADE_IN_HEAVEN) {
+            if (v->battler < 2) mih_bad++;
+            if (!mih_stage2) mih_shows_early++;
+            mih_shows++;
+        }
+        if (v->type == PR_EV_ABILITY_SHOW && v->id == ABILITY_ID_SPEED_BOOST && v->battler >= 2) mih_bad++;   /* the old stand-in */
+        if (v->type == PR_EV_STAT_STAGES && mih_last_show && v->battler >= 2 && (v->value & (1 << STAT_SPD)) && v->id == 1
+            && v->stat_stages_applied[STAT_SPD - 1] == 1) mih_speed++;
+        if (v->type == PR_EV_ABILITY_SHOW) mih_last_show = v->id == PR_ABILITY_SHOW_MADE_IN_HEAVEN;
+        else if (v->type != PR_EV_STAT_STAGES) mih_last_show = false;
+    }
+}
+static void test_made_in_heaven(void)
+{
+    make_team();
+    the_team.name = "Enrico Pucci";
+    the_team.passive = GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN;
+    answer_yes = true;
+    calls = accepted_calls = 0;
+    on_event = NULL;
+    new_run_in(&run, &sys, "trainer-team-1", &(gc_custom_hooks){NULL, NULL, NULL, NULL, NULL, h_trainer});
+    int steps = 0;
+    while (!accepted_calls && steps++ < 4000) CHECK(bot_step(&run, false));
+    CHECK(accepted_calls == 1 && run.n_enemy == 3);
+    const int wave = run.wave;
+    for (int i = 0; i < 3; i++) {
+        CHECK(run.enemy[i].b.custom_passive == PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN);
+        CHECK(!run.enemy[i].b.passive_flag && run.enemy[i].b.passive == 0);
+    }
+    mih_stage1 = mih_stage2 = mih_shows = mih_shows_early = mih_speed = mih_bad = 0;
+    mih_last_show = false;
+    on_event = mih_events;
+    for (int i = 0; i < 200 && run.wave == wave && !(run.screen.kind == GC_SCREEN_REWARD); i++) if (!bot_step(&run, false)) break;
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) mih_events(&e);
+    on_event = NULL;
+    for (int i = 0; i < 3; i++) CHECK(run.enemy[i].b.hp <= 0);   /* the battle was won: all three fainted */
+    CHECK(mih_bad == 0);
+    CHECK(mih_stage1 == 1 && mih_stage2 == 1);   /* one C-Moon, one Made in Heaven; the last faint (nobody left) shows neither */
+    CHECK(mih_shows_early == 0);                 /* nothing before the second faint */
+    CHECK(mih_shows >= 1 && mih_speed == mih_shows);   /* each box comes with Speed +1 */
+}
+
 static uint64_t play_hash(const char *seed, const gc_custom_hooks *hooks, int steps, int *waves)
 {
     new_run_in(&run, &sys, seed, hooks);
@@ -495,7 +553,8 @@ static void test_check(void)
     t = the_team; t.name = "012345678901234567890123456789012345678901234567"; CHECK(!gc_custom_team_check(&t, &why));   /* 48 characters */
     t = the_team; t.name = "01234567890123456789012345678901234567890123456"; CHECK(gc_custom_team_check(&t, &why));     /* 47 characters */
     t = the_team; t.passive = PR_ABILITY_COUNT; CHECK(!gc_custom_team_check(&t, &why));
-    t = the_team; t.passive = -2; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = -3; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN; CHECK(gc_custom_team_check(&t, &why));   /* Pucci's (2026-11-16) */
     t = the_team; t.member[0].species = 0; CHECK(!gc_custom_team_check(&t, &why));
     t = the_team; t.member[0].form = 40; CHECK(!gc_custom_team_check(&t, &why));
     t = the_team; t.member[0].ability_slot = 3; CHECK(!gc_custom_team_check(&t, &why));
@@ -523,6 +582,7 @@ int main(void)
     test_levels();
     test_save_load();
     test_refused();
+    test_made_in_heaven();
     printf("custom_trainer_test: %d checks, 0 failed\n", checks);
     return 0;
 }

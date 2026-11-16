@@ -135,7 +135,13 @@ typedef enum {
                     * places a Pokemon as it is sent out). The foes are not moved. Nothing happens on a screen that is already there. After a faint
                     * it comes after the events of the turn it ends: lorenzo wants the lone Pokemon to stay where it is until the turn is over
                     * (upstream moves it right after the faint) */
+  BEV_HEAVEN,      /* Pucci's stand (lorenzo's JoJo content, PR_EV_MADE_IN_HEAVEN): a = 1 C-Moon (his first faint), 2 Made in Heaven (his
+                    * second). He slides back in with the stage's sprite (images/trainer/custom/<id>_cmoon, <id>_heaven; without the file his
+                    * sprite stays), shouts its name in the name box and, for Made in Heaven, the field fades to the space arena */
 } bev_type;
+/* BEV_ABILITY's a for Made in Heaven (battle-core's PR_ABILITY_SHOW_MADE_IN_HEAVEN): a red box at the top left of the top screen in
+ * place of the ability bar */
+#define BV_ABILITY_MADE_IN_HEAVEN 0xFFFE
 #define BV_DIALOGUE_TEXT 2048
 
 typedef struct {
@@ -172,6 +178,8 @@ typedef struct {
   bool trainer;          /* trainer sprites appear during the encounter intro */
   bool player_female;    /* avatar; defaults to the current app's male player */
   char trainer_keys[2][64]; /* gfx.pak atlas keys, optional partner */
+  char trainer_name[48];  /* BEV_HEAVEN's name box (a JoJo trainer's name), "" = none */
+  int heaven;             /* a battle reloaded after BEV_HEAVEN: the stage it had reached (1 C-Moon sprite, 2 also the space arena), 0 = none */
   bool player_present;   /* the player's lead is already out (it stays out between wild waves): its sprite
                           * and info box are there from the start, with no summon. Its platform stays too: only the enemy side
                           * slides in (upstream's NextEncounterPhase / NewBiomeEncounterPhase; the player's platform slides in

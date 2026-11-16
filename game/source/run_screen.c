@@ -519,6 +519,15 @@ static void wave_black(void* arg) {
     if (img_has(key)) {
       snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);   /* (a JoJo battle is a single one: no partner key) */
     }
+    snprintf(s.trainer_name, sizeof s.trainer_name, "%s", jojo->name);
+    /* Pucci's stand (PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN): a battle reloaded after his first or second faint shows the stage he reached */
+    int heaven_faints = 0;
+    bool heaven = false;
+    for (int k = 0; k < G.run.n_enemy; k++) {
+      if (G.run.enemy[k].b.custom_passive == PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN) heaven = true;
+      if (G.run.enemy[k].b.hp <= 0) heaven_faints++;
+    }
+    if (heaven) s.heaven = heaven_faints >= PR_MADE_IN_HEAVEN_FAINTS ? 2 : heaven_faints;
   }
   /* When only the old right ally survives, the next encounter promotes it to
    * the lead. Carry its already-visible sprite into slot 0 rather than duplicating

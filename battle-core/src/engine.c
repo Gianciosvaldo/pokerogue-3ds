@@ -29,7 +29,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase", [PH_SELECT_BIOME] = "SelectBiomePhase",
     [PH_SUMMON] = "SummonPhase", [PH_INIT_ENCOUNTER] = "InitEncounterPhase", [PH_CHECK_SWITCH] = "CheckSwitchPhase",
     [PH_NEW_BATTLE] = "NewBattlePhase",
-    [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase", [PH_ILLUSION_BREAK] = "IllusionBreakPhase",
+    [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase", [PH_ILLUSION_BREAK] = "IllusionBreakPhase", [PH_MADE_IN_HEAVEN] = "MadeInHeavenPhase",
     [PH_REVIVAL_BLESSING] = "RevivalBlessingPhase",
 };
 
@@ -582,6 +582,17 @@ void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
                                    : p->ability;
         /* ShowAbilityPhase caches no name when its field lookup has no Pokemon. */
         if (b < 0) e->pool[ph].anim = -1;
+    }
+    pr_phase_unshift(bt, e, ph);
+}
+
+void pr_queue_ability_display_id(pr_battle *bt, pr_engine *e, const pr_pokemon *p, uint16_t id)
+{
+    int b = pr_battler_index(bt, p);
+    int ph = pr_phase_new(e, PH_SHOW_ABILITY, (int8_t)b);
+    if (ph >= 0) {
+        e->pool[ph].anim_result = true;
+        e->pool[ph].anim = b < 0 ? (uint16_t)-1 : id;
     }
     pr_phase_unshift(bt, e, ph);
 }
