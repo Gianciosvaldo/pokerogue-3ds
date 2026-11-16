@@ -451,6 +451,8 @@ static int default_battler(pr_battle *bt)
 
 /* ---------------------------------------------------------------- AttemptCapturePhase */
 
+#define PR_SHINY_CATCH_RATE_MULTIPLIER 2.0   /* SHINY_CATCH_RATE_MULTIPLIER, src/data/balance/rates.ts */
+
 static double get_pokeball_catch_multiplier(int pokeball_type)
 {
     switch (pokeball_type) {
@@ -533,7 +535,11 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
     double catch_rate = fm ? fm->catch_rate : 255;
     double pokeball_mult = get_pokeball_catch_multiplier(pokeball_type);
     double status_mult = get_status_effect_catch_rate_multiplier(pokemon->status);
-    double shiny_mult = 1.0;
+    /* pokemon.isShiny() ? timedEventManager.getShinyCatchMultiplier() : 1, and that is
+     * activeEvent()?.shinyCatchMultiplier ?? SHINY_CATCH_RATE_MULTIPLIER (src/data/balance/rates.ts: 2), so a shiny
+     * target is twice as easy to catch with no event running. No event value is passed in yet. pr_pokemon.shiny is
+     * isShiny(true); it equals isShiny() while Illusion stays unimplemented upstream. */
+    double shiny_mult = pokemon->shiny ? PR_SHINY_CATCH_RATE_MULTIPLIER : 1.0;
 
     double modified_catch_rate_float = (((_3m - _2h) * catch_rate * pokeball_mult) / _3m) * status_mult * shiny_mult;
     /* Master Ball uses a -1 multiplier upstream. That deliberately makes the intermediate

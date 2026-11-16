@@ -2,7 +2,7 @@
 """Mutation check for custom-core: the unit tests must be able to fail.
 
 Each mutation is a single textual change to one source or header file. For every mutation this script copies
-include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test, commit_test, scheduler_test and jojo_test
+include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test, commit_test, scheduler_test, jojo_test and tevents_test
 from that copy and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
 when both tests still pass. The script exits nonzero if
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENUMS = ROOT.parent / "battle-core" / "gen" / "out" / "pr_enums.h"
 CFLAGS = ["-O0", "-g", "-w", "-std=c99", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
 SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c",
-           "src/codec.c", "src/commit.c", "src/scheduler.c", "src/jojo.c", "src/jojo_table.c"]
+           "src/codec.c", "src/commit.c", "src/scheduler.c", "src/jojo.c", "src/jojo_table.c", "src/tevents.c", "src/tevents_table.c"]
 BUILD_TIMEOUT = 120
 RUN_TIMEOUT = 30
 
@@ -1149,12 +1149,115 @@ mut(JT, '"What did you just say about my hair?!", 1 /* Plains */, -1, 5,', '"Wha
 mut(JT, '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 5,', '"I, Giorno Giovanna, have a dream!", 2 /* Grass */, -1, 4,', "Giorno loses a member")
 mut(JT, '"My spirit is unbending! Witness the ultimate Zeppeli technique!", 20 /* Dojo */, -1, 4,', '"My spirit is unbending! Witness the ultimate Zeppeli technique!", 20 /* Dojo */, -1, 5,', "Caesar gains a member that does not exist")
 
+# ---------------------------------------------------------------- tevents.c and tevents_table.c (the timed events)
+TE, TH, TT = "src/tevents.c", "include/cc/tevents.h", "src/tevents_table.c"
+for old, new in [
+    ("#define CC_TEVENTS_MAX 16u", "#define CC_TEVENTS_MAX 17u"),
+    ("#define CC_TEVENTS_MAX 16u", "#define CC_TEVENTS_MAX 15u"),
+    ("#define CC_TEVENT_PERIOD_MAX 28u", "#define CC_TEVENT_PERIOD_MAX 29u"),
+    ("#define CC_TEVENT_PERIOD_MAX 28u", "#define CC_TEVENT_PERIOD_MAX 27u"),
+    ("#define CC_TEVENT_NAME_MAX 24u", "#define CC_TEVENT_NAME_MAX 25u"),
+    ("#define CC_TEVENT_NAME_MAX 24u", "#define CC_TEVENT_NAME_MAX 23u"),
+    ("#define CC_TEVENT_MULT_MAX 10u", "#define CC_TEVENT_MULT_MAX 11u"),
+    ("#define CC_TEVENT_MULT_MAX 10u", "#define CC_TEVENT_MULT_MAX 9u"),
+    ("#define CC_TEVENT_LUCK_MAX 14u", "#define CC_TEVENT_LUCK_MAX 15u"),
+    ("#define CC_TEVENT_LUCK_MAX 14u", "#define CC_TEVENT_LUCK_MAX 13u"),
+    ("#define CC_TEVENT_TIME_MAX 253402300799ll", "#define CC_TEVENT_TIME_MAX 253402300800ll"),
+    ("#define CC_TEVENT_TIME_MAX 253402300799ll", "#define CC_TEVENT_TIME_MAX 2534023007990ll"),
+]:
+    mut(TH, old, new)
+mut(TE, "if (a % b != 0 && a < 0) q--;", "", "floor_div truncates toward zero")
+mut(TE, "return t >= -CC_TEVENT_TIME_MAX && t <= CC_TEVENT_TIME_MAX;", "return t <= CC_TEVENT_TIME_MAX;", "time_ok: no lower limit")
+mut(TE, "return t >= -CC_TEVENT_TIME_MAX && t <= CC_TEVENT_TIME_MAX;", "return t >= -CC_TEVENT_TIME_MAX && t < CC_TEVENT_TIME_MAX;", "time_ok: the upper limit is exclusive")
+mut(TE, "return t >= -CC_TEVENT_TIME_MAX && t <= CC_TEVENT_TIME_MAX;", "return t > -CC_TEVENT_TIME_MAX && t <= CC_TEVENT_TIME_MAX;", "time_ok: the lower limit is exclusive")
+mut(TE, "while (n <= max && s[n]) n++;", "while (n < max && s[n]) n++;", "bounded_len stops one early")
+mut(TE, "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "(c >= 'a' && c <= 'z') || c == '_'", "ids lose the digits")
+mut(TE, "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')", "ids lose the underscore")
+mut(TE, "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "(c >= 'b' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "ids lose the letter a")
+mut(TE, "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "(c >= 'a' && c <= 'y') || (c >= '0' && c <= '9') || c == '_'", "ids lose the letter z")
+mut(TE, "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'", "(c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || (c >= 'A' && c <= 'Z')", "ids accept upper case")
+mut(TE, "return *a == *b;", "return !*a;", "same_string: a prefix is the same string")
+mut(TE, "if (s->period_days < 1 || s->period_days > CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "if (s->period_days < 1 || s->period_days >= CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "the longest period refused")
+mut(TE, "if (s->phase_day >= s->period_days) return CC_E_RANGE;", "if (s->phase_day > s->period_days) return CC_E_RANGE;", "phase == period accepted")
+mut(TE, "if (s->phase_day >= s->period_days) return CC_E_RANGE;", "", "any phase accepted")
+mut(TE, "if (s->start_minute >= MINUTES_PER_DAY) return CC_E_RANGE;", "if (s->start_minute > MINUTES_PER_DAY) return CC_E_RANGE;", "start minute 1440 accepted")
+mut(TE, "if (s->start_minute >= MINUTES_PER_DAY) return CC_E_RANGE;", "if (s->start_minute >= MINUTES_PER_DAY - 1) return CC_E_RANGE;", "start minute 1439 refused")
+mut(TE, "if (s->length_minutes < 1 || s->length_minutes > s->period_days * MINUTES_PER_DAY) return CC_E_RANGE;", "if (s->length_minutes > s->period_days * MINUTES_PER_DAY) return CC_E_RANGE;", "length 0 accepted")
+mut(TE, "if (s->length_minutes < 1 || s->length_minutes > s->period_days * MINUTES_PER_DAY) return CC_E_RANGE;", "if (s->length_minutes < 1 || s->length_minutes >= s->period_days * MINUTES_PER_DAY) return CC_E_RANGE;", "a window as long as its period refused")
+mut(TE, "if (s->length_minutes < 1 || s->length_minutes > s->period_days * MINUTES_PER_DAY) return CC_E_RANGE;", "if (s->length_minutes < 1) return CC_E_RANGE;", "a window longer than its period accepted")
+for field, limit in [("shiny_encounter_mult", "CC_TEVENT_MULT_MAX"), ("shiny_catch_mult", "CC_TEVENT_MULT_MAX"), ("candy_mult", "CC_TEVENT_MULT_MAX"), ("luck_boost", "CC_TEVENT_LUCK_MAX")]:
+    mut(TE, f"if (f->{field} > {limit}) return CC_E_RANGE;", f"if (f->{field} >= {limit}) return CC_E_RANGE;", f"{field}: the limit itself refused")
+    mut(TE, f"if (f->{field} > {limit}) return CC_E_RANGE;", "", f"{field}: no limit")
+mut(TE, "if (f->upgrade_vouchers > 1) return CC_E_RANGE;", "", "upgrade_vouchers: any value accepted")
+mut(TE, "if (f->upgrade_vouchers > 1) return CC_E_RANGE;", "if (f->upgrade_vouchers > 2) return CC_E_RANGE;", "upgrade_vouchers: 2 accepted")
+mut(TE, "if (!e->id || !e->name) return CC_E_NULL;", "if (!e->id) return CC_E_NULL;", "a NULL name is read")
+mut(TE, "if (idlen == 0 || idlen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "if (idlen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "an empty id accepted")
+mut(TE, "if (idlen == 0 || idlen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "if (idlen == 0) return CC_E_RANGE;", "a long id accepted")
+mut(TE, "if (namelen == 0 || namelen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "if (namelen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "an empty name accepted")
+mut(TE, "if (namelen == 0 || namelen > CC_TEVENT_NAME_MAX) return CC_E_RANGE;", "if (namelen == 0) return CC_E_RANGE;", "a long name accepted")
+mut(TE, "if (!id_char_ok(e->id[i])) return CC_E_RANGE;", ";", "id characters unchecked")
+mut(TE, "cc_status st = cc_tevent_schedule_validate(&e->when);", "cc_status st = CC_OK;", "the schedule of an event unchecked")
+mut(TE, "    st = cc_tevent_effects_validate(&e->fx);\n    if (st != CC_OK) return st;\n", "", "the effects of an event unchecked")
+for term in ["!e->fx.shiny_encounter_mult && ", "!e->fx.shiny_catch_mult && ", "!e->fx.candy_mult && ", "!e->fx.luck_boost && "]:
+    mut(TE, term, "", f"an event whose only effect is {term.strip('! &').split('.')[-1]} counts as changing nothing")
+mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers)", "!e->fx.upgrade_vouchers)", "an event whose only effect is trainer_shiny_chance counts as changing nothing")
+mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers)", "!e->fx.trainer_shiny_chance)", "an event whose only effect is upgrade_vouchers counts as changing nothing")
+mut(TE, "        return CC_E_CONSISTENCY;\n    return CC_OK;\n}\n\ncc_status cc_tevents_validate_in", "        return CC_OK;\n    return CC_OK;\n}\n\ncc_status cc_tevents_validate_in", "an event that changes nothing accepted")
+mut(TE, "if (count > CC_TEVENTS_MAX) return CC_E_COUNT;", "if (count >= CC_TEVENTS_MAX) return CC_E_COUNT;", "a full table refused")
+mut(TE, "if (count > CC_TEVENTS_MAX) return CC_E_COUNT;", "", "no limit on the table")
+mut(TE, "if (same_string(ev[i].id, ev[j].id)) return CC_E_DUPLICATE;", ";", "duplicate ids accepted")
+mut(TE, "for (unsigned j = 0; j < i; j++)\n            if (same_string", "for (unsigned j = 1; j < i; j++)\n            if (same_string", "the first id is never compared")
+mut(TE, "if (cc_tevent_schedule_validate(s) != CC_OK || !time_ok(local_s)) return CC_E_RANGE;", "if (!time_ok(local_s)) return CC_E_RANGE;", "window: an invalid schedule is used")
+mut(TE, "if (cc_tevent_schedule_validate(s) != CC_OK || !time_ok(local_s)) return CC_E_RANGE;", "if (cc_tevent_schedule_validate(s) != CC_OK) return CC_E_RANGE;", "window: a time out of range is used")
+mut(TE, "((int64_t)s->length_minutes + MINUTES_PER_DAY - 1) / MINUTES_PER_DAY", "(int64_t)s->length_minutes / MINUTES_PER_DAY", "window: no lookback for a window shorter than a day")
+mut(TE, "const int64_t from = today - back;", "const int64_t from = today - back + 1;", "window: one day too little lookback")
+mut(TE, "int64_t d = from + floor_mod((int64_t)s->phase_day - from, period);", "int64_t d = from + floor_mod(from - (int64_t)s->phase_day, period);", "window: the phase runs backwards")
+mut(TE, "int64_t d = from + floor_mod((int64_t)s->phase_day - from, period);", "int64_t d = from;", "window: the phase is ignored")
+mut(TE, "guard++, d += period)", "guard++, d += 1)", "window: every day is an opening day")
+mut(TE, "guard < back / period + 3", "guard < 1", "window: only one opening is looked at")
+mut(TE, "const int64_t b = d * DAY + off_s, e = b + len_s;", "const int64_t b = d * DAY + off_s, e = b + len_s + MINUTE;", "window: one minute too long")
+mut(TE, "const int64_t b = d * DAY + off_s, e = b + len_s;", "const int64_t b = d * DAY + off_s, e = b + len_s - 1;", "window: one second too short")
+mut(TE, "const int64_t b = d * DAY + off_s, e = b + len_s;", "const int64_t b = d * DAY, e = b + len_s;", "window: the start minute is ignored")
+mut(TE, "if (local_s < e) {", "if (local_s <= e) {", "window: the closing second is still open")
+mut(TE, "*active = local_s >= b;", "*active = local_s > b;", "window: the opening second is still closed")
+mut(TE, "const int64_t today = floor_div(local_s, DAY);", "const int64_t today = local_s / DAY;", "window: the day of a negative time truncates")
+mut(TE, "if (cc_tevent_window(&ev[i].when, local_s, &active, &b, &e) == CC_OK && active) mask |= 1u << i;", "if (cc_tevent_window(&ev[i].when, local_s, &active, &b, &e) == CC_OK) mask |= 1u << i;", "active: a closed event is listed")
+mut(TE, "if (cc_tevent_window(&ev[i].when, local_s, &active, &b, &e) == CC_OK && active) mask |= 1u << i;", "if (cc_tevent_window(&ev[i].when, local_s, &active, &b, &e) == CC_OK && active) mask |= 1u;", "active: every event is bit 0")
+mut(TE, "if (cc_tevents_validate_in(ev, count) != CC_OK || !time_ok(local_s)) return 0;", "if (!time_ok(local_s)) return 0;", "active: an invalid table is used")
+mut(TE, "if (!(mask >> i & 1u)) continue;", "", "effects: a closed event counts")
+for field in ["shiny_encounter_mult", "shiny_catch_mult", "candy_mult", "luck_boost", "trainer_shiny_chance", "upgrade_vouchers"]:
+    mut(TE, f"if (f->{field} > out.{field}) out.{field} = f->{field};", f"out.{field} += f->{field};", f"effects: {field} stacks")
+    mut(TE, f"if (f->{field} > out.{field}) out.{field} = f->{field};", f"if (f->{field} < out.{field}) out.{field} = f->{field};", f"effects: {field} takes the smaller")
+equiv(TE, "if (a % b != 0 && a < 0) q--;", "if (a % b != 0) q--;", "window only uses floor_div for the day it starts scanning from; one day too early adds an opening that has already closed (skipped) and the loop bound still reaches the next opening, so every answer is the same")
+equiv(TE, "return m < 0 ? m + b : m;", "return m;", "window only uses floor_mod for the first opening day on or after `from`; a negative remainder starts at most period-1 days earlier on the same phase, which the loop bound still covers, so every answer is the same")
+equiv(TE, "if (s->period_days < 1 || s->period_days > CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "if (s->period_days > CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "period 0 is refused by the next check anyway (phase_day >= 0 is always true), with the same status")
+equiv(TE, "if (cc_tevents_validate_in(ev, count) != CC_OK || !time_ok(local_s)) return 0;", "if (cc_tevents_validate_in(ev, count) != CC_OK) return 0;", "cc_tevent_window refuses a time out of range, so no event is listed and the mask is 0 either way")
+equiv(TE, "while (n <= max && s[n]) n++;", "while (s[n]) n++;", "bounded_len's bound only keeps a runaway string short; every string the module reads is terminated, so the length (and the checks on it) is the same")
+equiv(TE, "for (unsigned i = 0; i < count && i < CC_TEVENTS_MAX; i++) {", "for (unsigned i = 0; i < count; i++) {", "a count over CC_TEVENTS_MAX makes the mask 0 first, so the loop bound is never what stops it")
+for old, new in [
+    ('{"lucky_catch", "Lucky Catch", {1, 0, 0, 1440}, {0, 3, 0, 0, 0, 0}}', '{"lucky_catch", "Lucky Catch", {1, 0, 0, 1440}, {0, 2, 0, 0, 0, 0}}'),
+    ('{"sweet_tooth", "Sweet Tooth", {1, 0, 0, 1440}, {0, 0, 4, 0, 0, 0}}', '{"sweet_tooth", "Sweet Tooth", {1, 0, 0, 1440}, {0, 0, 3, 0, 0, 0}}'),
+    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {2, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}'),
+    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {3, 1, 0, 1440}, {2, 0, 0, 0, 0, 0}}'),
+    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {3, 0, 0, 0, 0, 0}}'),
+    ('{"voucher_plus_day", "Voucher Plus Day", {2, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}', '{"voucher_plus_day", "Voucher Plus Day", {2, 0, 0, 1440}, {0, 0, 0, 0, 0, 1}}'),
+    ('{"voucher_plus_day", "Voucher Plus Day", {2, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}', '{"voucher_plus_day", "Voucher Plus Day", {3, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}'),
+    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 781, 60}, {0, 0, 0, 0, 6554, 0}}'),
+    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 61}, {0, 0, 0, 0, 6554, 0}}'),
+    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6555, 0}}'),
+    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1201, 60}, {0, 0, 0, 1, 0, 0}}'),
+    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1200, 59}, {0, 0, 0, 1, 0, 0}}'),
+    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 2, 0, 0}}'),
+    ('{"lucky_catch", "Lucky Catch"', '{"lucky_catch2", "Lucky Catch"'),
+]:
+    mut(TT, old, new)
+
 
 def build_and_run(workdir: Path):
     """Returns (stage, detail): stage is 'ok' when all tests pass, else where it failed."""
     exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c",
             "codec_test": "tests/codec_test.c", "commit_test": "tests/commit_test.c",
-            "scheduler_test": "tests/scheduler_test.c", "jojo_test": "tests/jojo_test.c"}
+            "scheduler_test": "tests/scheduler_test.c", "jojo_test": "tests/jojo_test.c", "tevents_test": "tests/tevents_test.c"}
     objs = []
     for src in SOURCES:
         obj = src.replace("/", "_")[:-2] + ".o"

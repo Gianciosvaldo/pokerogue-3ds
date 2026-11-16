@@ -17,7 +17,8 @@ The contract, its limits, the audit it rests on and every choice still open for 
 | `include/cc/model.h` | validators, record lifecycle, identifier allocators, ledger, checked size arithmetic |
 | `include/cc/reducer.h` | C02: the reducer (`cc_reduce`), its state and result, per-turn totals |
 | `src/` | the implementation; C99, no allocation, no I/O, no globals except the constant window table |
-| `tests/` | model, reducer, codec, scheduling and policy checks; layout checks cover wire sizes, budgets and generated ID ceilings |
+| `include/cc/tevents.h`, `src/tevents.c`, `src/tevents_table.c` | timed events: the schedule model (daily / every N days / an hour a day on the console's local clock), the combination of overlapping events and the draft event table; nothing reads the effects yet |
+| `tests/` | model, reducer, codec, scheduling, policy and timed-event checks; layout checks cover wire sizes, budgets and generated ID ceilings |
 | `tools/mutations.py` | the mutation check: each listed single change to the sources must make a test fail |
 
 ## Run
@@ -32,6 +33,14 @@ python3 custom-core/tools/mutations.py -k nemesis   # a subset of the mutations
 ```
 
 `.github/workflows/custom-content.yml` runs the same targets.
+
+## Timed events
+
+lorenzo's own events (2026-11-16): short repeating windows on the 3DS clock, shorter the more an event gives (daily, every two or three
+days, one hour a day), with effects taken from upstream's own events (shiny odds, shiny catch rate, luck, candy rate, trainer shiny chance,
+voucher upgrade). `include/cc/tevents.h` holds the model and the rules (time is always an argument, local wall-clock seconds; overlapping events
+take the strongest value of each field and never stack). `src/tevents_table.c` is a DRAFT list for lorenzo to cut. This module only decides:
+the game reads `cc_tevents_effects()` at the moment of each roll in later PRs.
 
 ## Integration and boundaries
 
