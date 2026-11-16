@@ -46,6 +46,8 @@ typedef struct{float x,y,zoom;}rr_call;
 static rr_call draws[64];static int nd;
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)o;if(nd<64){draws[nd].x=x;draws[nd].y=y;draws[nd].zoom=cur_zoom;nd++;}}
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 void rr_set_blend(rr_blend b){(void)b;}
 int rr_frame_alpha(const rr_frame *f,int x,int y){(void)f;(void)x;(void)y;return 255;}
 float ui_now(void){return 0;}

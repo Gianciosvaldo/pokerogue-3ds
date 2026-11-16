@@ -98,6 +98,9 @@ typedef struct {
 /* gc_custom_team.passive: Made in Heaven (battle-core's PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN): the members get no passive; it wakes after the
  * team's second faint. */
 #define GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN (-2)
+/* gc_custom_team.passive: The World (battle-core's PR_CUSTOM_PASSIVE_THE_WORLD): the members get no passive; time stops on one or two
+ * turns a battle. */
+#define GC_CUSTOM_PASSIVE_THE_WORLD (-3)
 
 /* A trainer's team in place of the ordinary party. Built through game-core's own construction, stat, passive, item and AI paths: the levels
  * are the ordinary party's (the team's last members take the highest ones), the IVs, nature and ids come from the ordinary party's members,
@@ -105,7 +108,7 @@ typedef struct {
  * ones are not given to its members. */
 typedef struct {
     const char *name;            /* the trainer's name as plain text, at most 47 characters; copied */
-    int16_t passive;             /* an AbilityId every member has as its passive, -1 = none, GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN = Pucci's */
+    int16_t passive;             /* an AbilityId every member has as its passive, -1 = none, GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN = Pucci's, GC_CUSTOM_PASSIVE_THE_WORLD = DIO's */
     uint8_t n;                   /* 1..GC_CUSTOM_MAX_TEAM */
     gc_custom_team_member member[GC_CUSTOM_MAX_TEAM];
 } gc_custom_team;

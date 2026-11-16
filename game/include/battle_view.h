@@ -139,6 +139,11 @@ typedef enum {
                     * second). He slides back in with the C-Moon sprite (images/trainer/custom/<id>_cmoon; Made in Heaven: <id>_heaven from the fade on; without the file his
                     * sprite stays), speaks his line in the name box. Made in Heaven: the introduction, then the field fades to the space arena while
                     * his sprite becomes Made in Heaven, then "MADE IN HEAVEN" in a box of its own */
+  BEV_WORLD,       /* DIO's stand (lorenzo's JoJo content, PR_EV_THE_WORLD): a = 1 time stops: his second sprite (images/trainer/custom/<id>_world,
+                    * else his own) slides in beside his Pokemon, "THE WORLD!", a circle of inverted colour grows from him over the field with
+                    * coloured fringes, then the field drains to a grey blue; a = 0 time moves again: "Time has begun to move again.", he slides
+                    * out while the colour comes back. Only the background, the platforms and the player's side are touched: DIO, his
+                    * Pokemon, the move animations and the boxes keep their colours */
 } bev_type;
 /* BEV_ABILITY's a for Made in Heaven (battle-core's PR_ABILITY_SHOW_MADE_IN_HEAVEN): a red box at the top left of the top screen in
  * place of the ability bar */

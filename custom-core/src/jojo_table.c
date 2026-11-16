@@ -2,7 +2,7 @@
  * Caesar to Giorno) and edited by hand; see jojo.h).
  *
  * One row per character: id, display name, iconic line, biome (BiomeId; -1 = not in a biome pool: the Pillar Men), the background
- * passive (an AbilityId; -1 = none; CC_JOJO_PASSIVE_MADE_IN_HEAVEN for Pucci) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
+ * passive (an AbilityId; -1 = none; CC_JOJO_PASSIVE_MADE_IN_HEAVEN for Pucci, CC_JOJO_PASSIVE_THE_WORLD for DIO) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
  * form's abilities, 2 = hidden), shiny (0/1) and its variant tier (0..2, 0 unless the species has variant palettes), four move ids and
  * the held items {modifierTypes key, argument, stack}. The comments name the species, form and moves. Held items upstream does not have
  * were dropped (lorenzo, 2026-10-18: no substitutions); stacks are capped as upstream caps them. The ids are checked against
@@ -75,7 +75,7 @@ const cc_jojo_char cc_jojo_chars[] = {
         {212, 1, 0, 0, 0, {418, 14, 369, 370}, 1, {{"ATTACK_TYPE_BOOSTER", 8, 1}}}, /* Scizor (mega); Bullet Punch, Swords Dance, U-turn, Close Combat */
         {395, 0, 0, 0, 0, {56, 430, 58, 355}, 3, {{"ATTACK_TYPE_BOOSTER", 10, 1}, {"ATTACK_TYPE_BOOSTER", 8, 1}, {"LEFTOVERS", -1, 1}}}, /* Empoleon; Hydro Pump, Flash Cannon, Ice Beam, Roost */
     }},
-    {"dio", "DIO", "You thought your first kiss would be JoJo, but it was I, DIO!", 19 /* Graveyard */, -1, 6, {
+    {"dio", "DIO", "You thought your first kiss would be JoJo, but it was I, DIO!", 19 /* Graveyard */, CC_JOJO_PASSIVE_THE_WORLD, 6, {
         {1000, 0, 0, 0, 0, {874, 247, 417, 105}, 2, {{"ATTACK_TYPE_BOOSTER", 7, 1}, {"ATTACK_TYPE_BOOSTER", 8, 1}}}, /* Gholdengo; Make It Rain, Shadow Ball, Nasty Plot, Recover */
         {534, 0, 0, 0, 0, {409, 183, 282, 263}, 2, {{"FLAME_ORB", -1, 1}, {"ATTACK_TYPE_BOOSTER", 1, 1}}}, /* Conkeldurr; Drain Punch, Mach Punch, Knock Off, Facade */
         {169, 0, 0, 1, 1, {413, 440, 355, 369}, 2, {{"ATTACK_TYPE_BOOSTER", 2, 1}, {"ATTACK_TYPE_BOOSTER", 3, 1}}}, /* Crobat; Brave Bird, Cross Poison, Roost, U-turn */

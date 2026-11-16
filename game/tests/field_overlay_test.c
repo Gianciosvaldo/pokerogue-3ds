@@ -26,6 +26,8 @@ void img_draw_opts(const char *key,const char *frame,float x,float y,const rr_dr
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)w;(void)h;(void)o;}
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)o;}
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 void rr_set_zoom(float z,float cx,float cy){(void)z;(void)cx;(void)cy;}
 float text_draw(text_style st,float x,float y,const char *s,const text_opts *o){(void)st;(void)x;(void)y;(void)o;return (float)strlen(s)*4;}
 float text_width(text_style st,const char *s,const text_opts *o){(void)st;(void)o;return (float)strlen(s)*4;}

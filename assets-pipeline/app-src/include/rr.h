@@ -133,8 +133,15 @@ void rr_rect(float x, float y, float w, float h, rr_color c);
 /* Blending for what is drawn next, until changed (reset to NORMAL at each rr_target):
  * NORMAL is alpha blending, ADD adds the source (times its alpha) to what is there
  * (Phaser's BlendModes.ADD). */
-typedef enum { RR_BLEND_NORMAL, RR_BLEND_ADD } rr_blend;
+/* INVERT turns what is there into its negative in the channels the drawn colour has at 255 (src * (1 - dst) + dst * (1 - src));
+ * MULTIPLY multiplies what is there by the drawn colour. Both ignore the drawn alpha. */
+typedef enum { RR_BLEND_NORMAL, RR_BLEND_ADD, RR_BLEND_INVERT, RR_BLEND_MULTIPLY } rr_blend;
 void rr_set_blend(rr_blend b);
+/* Draws everything next in grey (its luma, Rec. 601 weights), its alpha times alpha / 255, until called with 0 (reset at each rr_target).
+ * While it is on, the tone is off. */
+void rr_set_grey(int alpha);
+/* A filled circle about (x, y) (origin and zoom as rr_rect). */
+void rr_circle(float x, float y, float r, rr_color c);
 /* A signed colour (-255..255 per channel) added to every drawn pixel's RGB before blending,
  * until changed (reset to 0 at each rr_target): upstream's sprite shader "tone" (rgb part). */
 void rr_set_tone(int r, int g, int b);

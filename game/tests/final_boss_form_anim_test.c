@@ -43,6 +43,8 @@ void rr_rect(float x,float y,float w,float h,rr_color c){(void)x;(void)y;(void)w
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)w;(void)h;(void)o;}
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)o;}
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
+void rr_set_grey(int a){(void)a;}
+void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
 int rr_frame_alpha(const rr_frame *f,int x,int y){(void)f;(void)x;(void)y;return 255;}
 float ui_now(void){return 0;}
 void chs_show(const char *a,const char *v){(void)a;(void)v;}

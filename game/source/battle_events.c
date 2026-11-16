@@ -472,6 +472,18 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       case PR_EV_MADE_IN_HEAVEN:
         PUT(.type = BEV_HEAVEN, .battler = b, .a = ev->value);
         break;
+      case PR_EV_THE_WORLD:
+        if (ev->value != 2) { PUT(.type = BEV_WORLD, .battler = b, .a = ev->value); break; }
+        /* a player's Pokemon that chose a move, in DIO's stopped time (lorenzo's JoJo content; the line is ours) */
+        if (b < 0 || b > 3 || nt >= TXT_MAX) break;
+        {
+          const char *name = current[view_slot(b)].name;
+          if (!*name) name = i18n_species_name(ev->field[b].species);
+          snprintf(g_txt[nt], sizeof g_txt[nt], "%s is frozen in time and can't move!", name);
+          PUT(.type = BEV_MESSAGE, .battler = -1, .text = g_txt[nt]);
+          nt++;
+        }
+        break;
       case PR_EV_FAINT:
         if (!single || seen[b].fainted) break;
         /* the damage that made it faint isn't always an event of its own (Disguise busting): drain the bar */

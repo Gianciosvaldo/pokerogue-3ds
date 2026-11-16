@@ -212,6 +212,72 @@ static void test_made_in_heaven(void)
     CHECK(mih_shows >= 1 && mih_speed == mih_shows);   /* each box comes with Speed +1 */
 }
 
+/* The World (DIO, lorenzo 2026-11-16): on one or two turns a battle in which the player picked a move, time stops: his Pokemon act, the
+ * player's skip their move. Played through the battle-core events over several seeds. */
+static int tw_open, tw_close, tw_frozen, tw_frozen_out, tw_foe_moves_in, tw_player_moves_in, tw_player_moves_out, tw_bad;
+static bool tw_in;
+static void tw_events(const gc_event *e)
+{
+    if (e->kind != GC_EV_BATTLE) return;
+    for (int j = e->a; j < e->a + e->b; j++) {
+        const pr_event *v = &run.battle_events[j];
+        if (v->type == PR_EV_THE_WORLD) {
+            if (v->value == 1) { if (tw_in || v->battler < 2) tw_bad++; tw_in = true; tw_open++; }
+            else if (v->value == 0) { if (!tw_in || v->battler != -1) tw_bad++; tw_in = false; tw_close++; }
+            else if (v->value == 2) { if (v->battler < 0 || v->battler > 1) tw_bad++; if (tw_in) tw_frozen++; else tw_frozen_out++; }
+            else tw_bad++;
+        }
+        if (v->type == PR_EV_MOVE_ANIM || v->type == PR_EV_CHARGE_ANIM) {
+            if (v->battler < 2) { if (tw_in) tw_player_moves_in++; else tw_player_moves_out++; }
+            else if (tw_in) tw_foe_moves_in++;
+        }
+    }
+}
+static void test_the_world(void)
+{
+    enum { TW_SEEDS = 24 };
+    int total_open = 0, twice = 0, foe_moves = 0;
+    for (int s = 0; s < TW_SEEDS; s++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "the-world-%d", s);
+        make_team();
+        the_team.name = "DIO";
+        the_team.passive = GC_CUSTOM_PASSIVE_THE_WORLD;
+        answer_yes = true;
+        calls = accepted_calls = 0;
+        on_event = NULL;
+        new_run_in(&run, &sys, seed, &(gc_custom_hooks){NULL, NULL, NULL, NULL, NULL, h_trainer});
+        int steps = 0;
+        while (!accepted_calls && steps++ < 4000) CHECK(bot_step(&run, false));
+        CHECK(accepted_calls == 1 && run.n_enemy == 3);
+        const int wave = run.wave;
+        for (int i = 0; i < 3; i++) {
+            CHECK(run.enemy[i].b.custom_passive == PR_CUSTOM_PASSIVE_THE_WORLD);
+            CHECK(!run.enemy[i].b.passive_flag && run.enemy[i].b.passive == 0);
+        }
+        tw_open = tw_close = tw_frozen = tw_frozen_out = tw_foe_moves_in = tw_player_moves_in = tw_player_moves_out = tw_bad = 0;
+        tw_in = false;
+        on_event = tw_events;
+        for (int i = 0; i < 300 && run.wave == wave && !(run.screen.kind == GC_SCREEN_REWARD); i++) if (!bot_step(&run, false)) break;
+        gc_event e;
+        while (gc_run_next_event(&run, &e)) tw_events(&e);
+        on_event = NULL;
+        for (int i = 0; i < 3; i++) CHECK(run.enemy[i].b.hp <= 0);   /* the battle was won */
+        CHECK(tw_bad == 0);
+        CHECK(tw_open >= 1 && tw_open <= PR_THE_WORLD_MAX);   /* at least once, at most twice */
+        CHECK(tw_close == tw_open && !tw_in);                 /* every stop ends after its turn */
+        CHECK(tw_frozen >= tw_open && tw_frozen_out == 0);    /* the player's Pokemon could not move, only while time stood still */
+        CHECK(tw_player_moves_in == 0);                       /* ... and no move of the player's played */
+        CHECK(tw_player_moves_out > 0);                       /* while the player's moves play on the other turns */
+        total_open += tw_open;
+        foe_moves += tw_foe_moves_in;
+        if (tw_open == 2) twice++;
+    }
+    CHECK(foe_moves > 0);                                     /* his Pokemon moved while time stood still */
+    CHECK(total_open >= TW_SEEDS && twice > 0);
+    printf("the world: %d stops over %d battles, %d battles with two\n", total_open, TW_SEEDS, twice);
+}
+
 static uint64_t play_hash(const char *seed, const gc_custom_hooks *hooks, int steps, int *waves)
 {
     new_run_in(&run, &sys, seed, hooks);
@@ -553,7 +619,8 @@ static void test_check(void)
     t = the_team; t.name = "012345678901234567890123456789012345678901234567"; CHECK(!gc_custom_team_check(&t, &why));   /* 48 characters */
     t = the_team; t.name = "01234567890123456789012345678901234567890123456"; CHECK(gc_custom_team_check(&t, &why));     /* 47 characters */
     t = the_team; t.passive = PR_ABILITY_COUNT; CHECK(!gc_custom_team_check(&t, &why));
-    t = the_team; t.passive = -3; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = -4; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = GC_CUSTOM_PASSIVE_THE_WORLD; CHECK(gc_custom_team_check(&t, &why));   /* DIO's The World */
     t = the_team; t.passive = GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN; CHECK(gc_custom_team_check(&t, &why));   /* Pucci's (2026-11-16) */
     t = the_team; t.member[0].species = 0; CHECK(!gc_custom_team_check(&t, &why));
     t = the_team; t.member[0].form = 40; CHECK(!gc_custom_team_check(&t, &why));
@@ -583,6 +650,7 @@ int main(void)
     test_save_load();
     test_refused();
     test_made_in_heaven();
+    test_the_world();
     printf("custom_trainer_test: %d checks, 0 failed\n", checks);
     return 0;
 }

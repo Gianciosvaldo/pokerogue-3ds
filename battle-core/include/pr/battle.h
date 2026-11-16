@@ -256,6 +256,17 @@ typedef struct pr_illusion {
 #define PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN (-2)
 #define PR_MADE_IN_HEAVEN_FAINTS 2
 #define PR_ABILITY_SHOW_MADE_IN_HEAVEN 0xFFFEu   /* PR_EV_ABILITY_SHOW id: not an AbilityId (the app names it) */
+
+/* The World (lorenzo's JoJo content, DIO's team; not an upstream ability, 2026-11-16). A member with custom_passive set to this has no
+ * passive of its own. At the start of a turn in which a player's Pokemon on the field chose FIGHT and such a member is on the field
+ * with HP left, time stops: never more than PR_THE_WORLD_MAX times a battle, PR_THE_WORLD_PERCENT % of such turns on the battle seed,
+ * and for sure on the first such turn with no stop yet while the member on the field is its side's last with HP. During that turn
+ * every player's FIGHT command is dropped (no MovePhase, no PP, no history: PR_EV_THE_WORLD value 2 in its place) while the foes act;
+ * PR_EV_THE_WORLD value 1 opens it before anything of the turn runs, value 0 closes it after TurnEndPhase. The count lives in
+ * pr_battle.the_world_uses (no save field: a battle is only saved before its first turn). */
+#define PR_CUSTOM_PASSIVE_THE_WORLD (-3)
+#define PR_THE_WORLD_MAX 2
+#define PR_THE_WORLD_PERCENT 25
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -282,7 +293,7 @@ typedef struct pr_pokemon {
     int32_t ability_override;  /* summonData.ability (-1 = undefined); ability follows it while set */
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
-    int16_t custom_passive;    /* customPokemonData.passive, -1 = none; PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN (custom content) */
+    int16_t custom_passive;    /* customPokemonData.passive, -1 = none; PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN, PR_CUSTOM_PASSIVE_THE_WORLD (custom content) */
     int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
     /* customPokemonData.types and fusionCustomPokemonData.types: a slot is 0 when null/absent (the form's own type shows
      * through, getBaseTypes' `??`), else PokemonType + 1. Only the regular types 0..17 can be stored. */
@@ -595,6 +606,9 @@ typedef struct pr_battle {
     /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,
      * is the pin; differential harnesses never set them, game-core turns them on for real runs. */
     uint32_t deviations;
+    /* The World (PR_CUSTOM_PASSIVE_THE_WORLD): time stops so far this battle, and whether this turn is one */
+    uint8_t the_world_uses;
+    bool the_world_active;
     /* PR_DEV_ILLUSION: a wild Illusion user's disguise (arena.randomSpecies in the source's draft); NULL = none */
     bool (*illusion_species)(struct pr_battle *bt, const pr_pokemon *p, void *ctx, uint16_t *species, uint8_t *form);
     void *illusion_species_ctx;
