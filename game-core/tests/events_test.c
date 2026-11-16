@@ -11,6 +11,7 @@
  *           the tier ball a full stack turns into. Expected tiers are read from upstream's init-modifier-pools.ts (CANDY_JAR, EXP_CHARM
  *           ULTRA; CATCHING_CHARM, ABILITY_CHARM, SUPER_EXP_CHARM, MEGA_BRACELET, DYNAMAX_BAND ROGUE; SHINY_CHARM, HEALING_CHARM MASTER) and
  *           max stacks from modifier.ts / modifier-type.ts, not from the port's tables.
+ *   voucher: the voucher a defeated boss gives (TrainerVictoryPhase): upgraded while an event says getUpgradeUnlockedVouchers().
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
 #include <stdio.h>
@@ -433,6 +434,63 @@ static void rewards_section(void)
     CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &carried, 1, true), "end,egg,ROGUE_BALL,shop,new"));
 }
 
+/* a boss defeated through the real TrainerVictoryPhase: the voucher reward it queues ("" when none) */
+static const char *voucher_reward(int tt, int unlocked_before, const gc_event_source *src, char *out, size_t n)
+{
+    static gc_system sys;
+    gc_system_init_defaults(&sys);
+    sys.voucher_unlocks[tt] = (uint8_t)unlocked_before;
+    memset(&run, 0, sizeof run);
+    run.sys = &sys;
+    run.trainer_type = tt;
+    run.run.mode = GAME_MODES_CLASSIC;
+    gc_run_set_events(&run, src);
+    gc_internal *in = gc_int(&run);
+    gc_rq_reset(&in->rq);
+    gc_rphase start = gc_rp(RP_TRAINER_VICTORY, 0, 0, 0);
+    gc_phase_start(&run, &start);
+    gc_event ev;
+    while (gc_run_next_event(&run, &ev)) {}
+    out[0] = 0;
+    gc_rphase q;
+    while (gc_rq_next(&in->rq, &q))
+        if (q.type == RP_MODIFIER_REWARD && q.key && !strncmp(q.key, "VOUCHER", 7)) snprintf(out, n, "%s", q.key);
+    return out;
+}
+
+static void voucher_section(void)
+{
+    /* TrainerVictoryPhase's table by VoucherType (REGULAR, PLUS, PREMIUM, GOLDEN): the plain one, and the one an event that upgrades the
+     * unlocked vouchers gives (getUpgradeUnlockedVouchers) */
+    static const char *const plain[4] = {"VOUCHER", "VOUCHER", "VOUCHER_PLUS", "VOUCHER_PREMIUM"};
+    static const char *const upgraded[4] = {"VOUCHER_PLUS", "VOUCHER_PLUS", "VOUCHER_PLUS", "VOUCHER_PREMIUM"};
+    int bosses = 0, by_type[4] = {0, 0, 0, 0};
+    char got[48];
+    for (int tt = 0; tt < pr_reward_trainer_count && tt < 512; tt++) {
+        const pr_reward_trainer *t = &pr_reward_trainers[tt];
+        if (!t->has_config || !t->is_boss || t->voucher_type < 0 || t->voucher_type > 3) continue;
+        bosses++;
+        by_type[t->voucher_type]++;
+        memset(&open_now, 0, sizeof open_now);
+        CHECK(!strcmp(voucher_reward(tt, 1, NULL, got, sizeof got), plain[t->voucher_type]));       /* no source */
+        CHECK(!strcmp(voucher_reward(tt, 1, &SRC, got, sizeof got), plain[t->voucher_type]));       /* nothing open */
+        open_now.shiny_encounter_mult = 2;
+        open_now.luck_boost = 1;
+        CHECK(!strcmp(voucher_reward(tt, 1, &SRC, got, sizeof got), plain[t->voucher_type]));       /* other effects change nothing */
+        open_now.upgrade_vouchers = 1;
+        CHECK(!strcmp(voucher_reward(tt, 1, &SRC, got, sizeof got), upgraded[t->voucher_type]));    /* Voucher Plus Day */
+        /* the first win only unlocks the voucher: no reward, with or without the event */
+        CHECK(!strcmp(voucher_reward(tt, 0, &SRC, got, sizeof got), ""));
+        CHECK(!strcmp(voucher_reward(tt, 0, NULL, got, sizeof got), ""));
+    }
+    /* every boss of the table (152 at the pin: 136 with a Plus voucher, 16 with a Premium one; none has a Regular or Golden one, so those
+     * two rows of the tables are not reachable through a trainer) */
+    CHECK_EQ(bosses, 152);
+    CHECK_EQ(by_type[1], 136);
+    CHECK_EQ(by_type[2], 16);
+    CHECK_EQ(by_type[0] + by_type[3], 0);
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
@@ -440,6 +498,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "luck")) luck_section();
     if (!only || !strcmp(only, "candy")) candy_section();
     if (!only || !strcmp(only, "rewards")) rewards_section();
+    if (!only || !strcmp(only, "voucher")) voucher_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;
 }

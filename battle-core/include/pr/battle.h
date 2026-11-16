@@ -267,6 +267,14 @@ typedef struct pr_illusion {
 #define PR_CUSTOM_PASSIVE_THE_WORLD (-3)
 #define PR_THE_WORLD_MAX 2
 #define PR_THE_WORLD_PERCENT 25
+
+/* Perfect Being (lorenzo's JoJo content, Kars's team; not an upstream ability, 2026-11-16). A member with custom_passive set to this has
+ * no passive of its own. Once it is its side's last member with HP (Kars has six: after the fifth faint), it is awake: a physical move
+ * aimed at it by another Pokemon does nothing (no damage and no effect, like an immunity, checked after the type immunities and before
+ * accuracy; PR_EV_PERFECT_BEING value 2 where "It doesn't affect" would come), and a special move's damage is halved (after the
+ * Multiscale-like reductions, before Sturdy-like endures; at least 1; value 3 after the hit). The faint that wakes it shows value 1.
+ * Not an ability: Mold Breaker and ability suppression do not touch it. No state of its own: "awake" is read from the party's HP. */
+#define PR_CUSTOM_PASSIVE_PERFECT_BEING (-4)
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -293,7 +301,7 @@ typedef struct pr_pokemon {
     int32_t ability_override;  /* summonData.ability (-1 = undefined); ability follows it while set */
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
-    int16_t custom_passive;    /* customPokemonData.passive, -1 = none; PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN, PR_CUSTOM_PASSIVE_THE_WORLD (custom content) */
+    int16_t custom_passive;    /* customPokemonData.passive, -1 = none; PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN, PR_CUSTOM_PASSIVE_THE_WORLD, PR_CUSTOM_PASSIVE_PERFECT_BEING (custom content) */
     int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
     /* customPokemonData.types and fusionCustomPokemonData.types: a slot is 0 when null/absent (the form's own type shows
      * through, getBaseTypes' `??`), else PokemonType + 1. Only the regular types 0..17 can be stored. */
@@ -1056,7 +1064,11 @@ double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int mo
 
 /* damage is a double like upstream's: it isn't capped by the target's HP here, and with
  * the enemy's damage tokens (up to 999 stacks of x1.05 in endless) it can pass 2^63. */
-typedef struct { bool cancelled; int result /* HitResult */; double damage; } pr_damage_result;
+typedef struct { bool cancelled; int result /* HitResult */; double damage; bool softened /* Perfect Being halved it */; } pr_damage_result;
+/* Perfect Being (PR_CUSTOM_PASSIVE_PERFECT_BEING): p has it and is its side's last member with HP, with at least one fainted */
+bool pr_perfect_being_awake(const pr_battle *bt, const pr_pokemon *p);
+/* ... and src's move, as it would be used against def, is a physical one: it does nothing */
+bool pr_perfect_being_blocks(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 /* simulated=true: random factor is 1 and no RNG is consumed, as upstream. */
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated);

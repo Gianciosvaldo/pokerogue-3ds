@@ -50,13 +50,17 @@ typedef struct {
  * player picked a move: his Pokemon acts, the player's cannot. game-core's GC_CUSTOM_PASSIVE_THE_WORLD, battle-core's
  * PR_CUSTOM_PASSIVE_THE_WORLD. */
 #define CC_JOJO_PASSIVE_THE_WORLD (-3)
+/* cc_jojo_char.passive: Kars's Perfect Being (not an AbilityId; lorenzo, 2026-11-16). After his fifth Pokemon is knocked out he becomes
+ * the Ultimate Life Form: his last Pokemon takes nothing from physical moves and half from special ones. game-core's
+ * GC_CUSTOM_PASSIVE_PERFECT_BEING, battle-core's PR_CUSTOM_PASSIVE_PERFECT_BEING. */
+#define CC_JOJO_PASSIVE_PERFECT_BEING (-4)
 
 typedef struct {
     const char *id;             /* "kira": the sprite is images/trainer/custom/<id> */
     const char *name;           /* "Yoshikage Kira" */
     const char *line;           /* the iconic line */
     int16_t biome;              /* BiomeId, -1 = none (the Pillar Men) */
-    int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none, CC_JOJO_PASSIVE_MADE_IN_HEAVEN = Pucci's, CC_JOJO_PASSIVE_THE_WORLD = DIO's */
+    int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none, CC_JOJO_PASSIVE_MADE_IN_HEAVEN = Pucci's, CC_JOJO_PASSIVE_THE_WORLD = DIO's, CC_JOJO_PASSIVE_PERFECT_BEING = Kars's */
     uint8_t n_members;          /* 1..CC_JOJO_MAX_MEMBERS */
     cc_jojo_member member[CC_JOJO_MAX_MEMBERS];
 } cc_jojo_char;
