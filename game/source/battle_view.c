@@ -2150,7 +2150,7 @@ static void run_event(float dt) {
       }
       if (B.heaven.stage == 2) {               /* the shout, in the name box (lorenzo 2026-11-16; "$" starts a new box) */
         const bv_event d = {.type = BEV_DIALOGUE, .battler = -1, .text = mih ? "Allow me to introduce you to my new Stand! My gift to humanity! I shall call my Stand...$MADE IN HEAVEN"
-                                               : "C-MOON!",
+                                               : "59, 61, 67... Damn it, the filthy frogs are clinging to my 800 dollar pants$C-MOON!",
                             .name = B.setup.trainer_name[0] ? B.setup.trainer_name : NULL};
         if (!step_dialogue(&d, dt)) break;
         if (!mih) { B.heaven.stage = 0; finish_event(); break; }
