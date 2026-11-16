@@ -294,20 +294,19 @@ static void draw_info_top(const rh_entry* e) {
       text_draw(TS_WINDOW, cx, y + 58, buf, &o);
     }
   } else if (!e->victory && (e->defeat == RH_DEFEAT_TRAINER || e->defeat == RH_DEFEAT_RIVAL)) {
-    char who[160], line[256];
+    /* upstream shows "<name> would like to battle!" here (battle:trainerAppeared), beside the trainer's sprite; this page has no sprite, so
+     * the sentence alone reads oddly under "Defeated" (lorenzo, 2026-11-16): just the name, trainerAppeared's {{trainerName}} */
+    char who[160];
     trainer_text(e, who, sizeof who);
-    i18n_t(line, sizeof line, e->trainer_double ? "battle:trainerAppearedDouble" : "battle:trainerAppeared", "trainerName", who, NULL);
-    for (char* c = line; *c; c++)
-      if (*c == '\n') *c = ' ';
     o = text_defaults();
     o.wrap_w = IT_TEXT_W;
-    /* four lines of the words fit; a longer name drops to the pixel font rather than lose "would like to battle!" */
-    if (text_lines(TS_WINDOW, line, &o) <= 4) {
+    /* four lines of the words fit; a longer name drops to the pixel font rather than be cut */
+    if (text_lines(TS_WINDOW, who, &o) <= 4) {
       o.max_lines = 4;
-      text_draw(TS_WINDOW, IT_TEXT_X, y, line, &o);
+      text_draw(TS_WINDOW, IT_TEXT_X, y, who, &o);
     } else {
       o.max_lines = 8;
-      text_draw(TS_INSTRUCTIONS_TEXT, IT_TEXT_X, y, line, &o);
+      text_draw(TS_INSTRUCTIONS_TEXT, IT_TEXT_X, y, who, &o);
     }
   }
   /* the info window: mode (a long name wraps to a second line), money, luck */
