@@ -532,6 +532,13 @@ build/lone_player_layout_test: lone_player_layout_test.c ../source/battle_view.c
 lone_player_layout_test: build/lone_player_layout_test
 .PHONY: lone_player_layout_test
 
+# the grey behind a dialogue's portrait (showFieldOverlay) covers the whole 400x240 top screen, bands included
+build/field_overlay_test: field_overlay_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections field_overlay_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+field_overlay_test: build/field_overlay_test
+.PHONY: field_overlay_test
+
 # the foes' side of a double battle on the top screen: platform raised (up) with the foes, trainer and doll on their marks, smaller field
 build/doubles_layout_test: doubles_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build

@@ -2831,6 +2831,13 @@ static void draw_border(void) {
   field_border_draw(k);
 }
 
+/* showFieldOverlay: the grey (0x424242) the field is darkened with behind a dialogue's portrait. Upstream's covers its 320x132 above the message
+ * strip; here it covers the whole 400x240 top screen, the bands around the field as well (lorenzo, 2026-11-16: "does not fit the whole screen").
+ * The message strip and the item bar come after it and are opaque, so the screen looks the same under them as upstream's does. */
+static void draw_field_overlay(void) {
+  if (B.overlay > 0 && ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
+}
+
 static void bv_release(ui_screen *s,ui_button b){
   (void)s;if(b==BTN_STATS){B.stats_shown=false;tween_start(&B.stats_tw,B.stats_alpha,0,125,EASE_SINE_IN_OUT);}
 }
@@ -2841,11 +2848,9 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     /* the field's Pokemon, platforms and animations are drawn bigger than upstream's 320x180 field (FIELD_ZOOM) and run across the
      * border, so the border goes under the field */
     if (ui_space(UI_PHYS_TOP)) draw_border();
-    if (ui_space(UI_FIELD)) {
-      draw_field();
-      if (B.overlay > 0) rr_rect(0, 0, 320, 132, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
-      chs_draw();
-    }
+    if (ui_space(UI_FIELD)) draw_field();
+    draw_field_overlay();
+    if (ui_space(UI_FIELD)) chs_draw();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);

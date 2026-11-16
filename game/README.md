@@ -85,7 +85,7 @@ difference to the result screen).
 **Trainer dialogue** (upstream: `EncounterPhase`, `TrainerVictoryPhase`, `CharSprite`, `showFieldOverlay`): `run_screen.c` turns `GC_EV_DIALOGUE` into `BEV_DIALOGUE`
 (text from the locale key, speaker from the event's name argument, a portrait atlas only for the rivals). The speaker and the victory music's trainer
 come from the events, not from the run: a win on a wave with no reward screen (a gym leader, the Champion) is played after the next wave has started. Before a fight the intro slides in with no message
-(`BEV_INTRO_WILD` b=1), then the field darkens (0x424242, alpha .5, 500 ms), the portrait slides in (750 ms), the pages play with the name box at (12, -55)
+(`BEV_INTRO_WILD` b=1), then the field darkens (0x424242, alpha .5, 500 ms; over the whole 400x240 top screen, the bands around the field included, `tests/field_overlay_test.c`), the portrait slides in (750 ms), the pages play with the name box at (12, -55)
 on whichever screen shows the message, the portrait goes out and the field clears (250 ms), and then "X would like to battle!" follows. After a win the
 defeated trainer slides back onto the platform (`BEV_TRAINER_SHOW`, 750 ms) and says its line. `@c{expression}` markers drive the portrait. Not done: the
 "skip seen dialogue" setting. `runtest` checks the order of these events on every trainer wave; `trainer_render_test` the slide back.
