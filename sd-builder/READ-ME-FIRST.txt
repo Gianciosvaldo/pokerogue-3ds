@@ -47,9 +47,11 @@ Steps
      and choose Eject. Put the card back in your 3DS.
 
 Your own music (the JoJo themes)
-  A JoJo character's fight can play his own theme instead of the usual music. The music isn't in
-  this zip: put the files yourself in files\extra-audio\custom (there's a note in there), named
-  after the character, for example jotaro.mp3, dio.mp3, giorno.mp3. pillar_men.mp3 plays in the
+  A JoJo character's fight plays his own theme instead of the usual music. This zip already has
+  the Pillar Men's, DIO's, Josuke's, Jotaro's, Johnny's, Jolyne's and Giorno's themes and DIO's
+  two time stop sounds in files\extra-audio. To add or swap one, put the file in
+  files\extra-audio\custom (there's a note in there), named after the character, for example
+  joseph.mp3. pillar_men.mp3 plays in the
   Pillar Men encounter and in all three of their fights. .mp3, .ogg, .m4a and .wav all work.
   A track repeats from its start. To repeat from somewhere else, put the seconds in a text file
   with the same name and .loop (jotaro.loop containing 12.5). Then double-click BUILD-SD-CARD:

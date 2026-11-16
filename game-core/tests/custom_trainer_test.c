@@ -64,6 +64,7 @@ static void heal_party_in(gc_run *r)
 
 /* One answer of the plain bot, the same as custom_hooks_test's. `fn` sees every event. */
 static void (*on_event)(const gc_event *e);
+static int bot_move = -1;   /* the move slot the bot picks when it can, -1 = the first usable */
 static bool bot_step(gc_run *r, bool hashing)
 {
     gc_event e;
@@ -78,6 +79,7 @@ static bool bot_step(gc_run *r, bool hashing)
         c.kind = GC_CH_FIGHT;
         c.b = -1;
         for (int i = 0; i < 4; i++) if (s->move_ok[i]) { c.a = (int16_t)i; break; }
+        if (bot_move >= 0 && bot_move < 4 && s->move_ok[bot_move]) c.a = (int16_t)bot_move;
         break;
     case GC_SCREEN_TARGET: c.kind = GC_CH_TARGET; c.a = -1; for (int k = 2; k < 4; k++) if (s->target_ok[k]) { c.a = k; break; } if (c.a < 0) for (int k = 0; k < 2; k++) if (s->target_ok[k]) { c.a = k; break; } break;
     case GC_SCREEN_SWITCH:
@@ -276,6 +278,150 @@ static void test_the_world(void)
     CHECK(foe_moves > 0);                                     /* his Pokemon moved while time stood still */
     CHECK(total_open >= TW_SEEDS && twice > 0);
     printf("the world: %d stops over %d battles, %d battles with two\n", total_open, TW_SEEDS, twice);
+}
+
+/* Perfect Being (Kars, lorenzo 2026-11-16): once his last Pokemon is the only one with HP (after the fifth faint of his six; here the second
+ * of three), it takes nothing from physical moves (no hit, its own line) and half from special ones (its own line after the hit). The bot
+ * picks Tackle (physical) and Water Gun (special) in turn. Played through the battle-core events, and the halving checked on the
+ * simulated damage of the battle as it stands. */
+static int pb_wake, pb_wake_battler_bad, pb_block, pb_soft, pb_early, pb_bad, pb_dmg_after_block, pb_phys_hits_after, pb_spec_hits_after;
+static int pb_last_move, pb_multi_spec_hits;           /* the player's move the last animation played, 0 = none since a block */
+static bool pb_awake, pb_blocked_now;
+static void pb_events(const gc_event *e)
+{
+    if (e->kind != GC_EV_BATTLE) return;
+    for (int j = e->a; j < e->a + e->b; j++) {
+        const pr_event *v = &run.battle_events[j];
+        if (v->type == PR_EV_PERFECT_BEING) {
+            if (v->battler < 2) pb_bad++;
+            if (v->value == 1) { if (pb_awake) pb_bad++; pb_awake = true; pb_wake++; if (!v->field[v->battler].fainted && v->field[v->battler].hp > 0) pb_wake_battler_bad++; }
+            else if (v->value == 2) { if (!pb_awake) pb_early++; pb_block++; pb_blocked_now = true; }
+            else if (v->value == 3) { if (!pb_awake) pb_early++; pb_soft++; if (pb_last_move != MOVE_ID_WATER_GUN && pb_last_move != MOVE_ID_WATER_SHURIKEN) pb_bad++; }
+            else pb_bad++;
+        }
+        if (v->type == PR_EV_MOVE_ANIM && v->battler < 2) {
+            pb_blocked_now = false;
+            pb_last_move = v->id;
+            if (pb_awake && v->target >= 2) {
+                if (v->id == MOVE_ID_TACKLE || v->id == MOVE_ID_BULLET_SEED) pb_phys_hits_after++;
+                if (v->id == MOVE_ID_WATER_SHURIKEN) pb_multi_spec_hits++;
+                if (v->id == MOVE_ID_WATER_GUN || v->id == MOVE_ID_WATER_SHURIKEN) pb_spec_hits_after++;
+            }
+        }
+        if (v->type == PR_EV_MOVE_ANIM && v->battler >= 2) pb_blocked_now = false;
+        if (v->type == PR_EV_DAMAGE && v->battler >= 2 && pb_blocked_now) pb_dmg_after_block++;
+    }
+}
+static int pb_total_block, pb_total_soft, pb_total_sim, pb_total_multi;
+static void perfect_being_once(const char *seed)
+{
+    make_team();
+    the_team.name = "Kars";
+    the_team.passive = GC_CUSTOM_PASSIVE_PERFECT_BEING;
+    for (int i = 0; i < 3; i++) {   /* no move of theirs hurts themselves or heals */
+        gc_custom_team_member *m = &the_team.member[i];
+        memset(m->moves, 0, sizeof m->moves);
+        m->moves[0] = MOVE_ID_GROWL;
+        m->n_items = 0;
+    }
+    the_team.member[2].species = SPECIES_ID_SNORLAX;
+    answer_yes = true;
+    calls = accepted_calls = 0;
+    on_event = NULL;
+    new_run_in(&run, &sys, seed, &(gc_custom_hooks){NULL, NULL, NULL, NULL, NULL, h_trainer});
+    int steps = 0;
+    while (!accepted_calls && steps++ < 4000) CHECK(bot_step(&run, false));
+    CHECK(accepted_calls == 1 && run.n_enemy == 3);
+    const int wave = run.wave;
+    for (int i = 0; i < 3; i++) {
+        CHECK(run.enemy[i].b.custom_passive == PR_CUSTOM_PASSIVE_PERFECT_BEING);
+        CHECK(!run.enemy[i].b.passive_flag && run.enemy[i].b.passive == 0);
+    }
+    /* the player's side: Tackle and Water Gun only, weak enough (level 20) for the last one to take several hits */
+    for (int i = 0; i < run.n_party; i++) {
+        gc_mon *m = &run.party[i];
+        m->b.level = 20;
+        gc_mon_recalc(&run, m);
+        m->b.hp = m->b.stats[0];
+        for (int k = 0; k < 4; k++) m->b.moves[k] = 0;
+        m->b.n_moves = 0;
+        gc_mon_set_move(m, 0, MOVE_ID_TACKLE);
+        gc_mon_set_move(m, 1, MOVE_ID_WATER_GUN);
+        gc_mon_set_move(m, 2, MOVE_ID_BULLET_SEED);      /* physical, 2-5 hits: stopped on the first */
+        gc_mon_set_move(m, 3, MOVE_ID_WATER_SHURIKEN);   /* special, 2-5 hits: each one halved */
+    }
+    pb_wake = pb_wake_battler_bad = pb_block = pb_soft = pb_early = pb_bad = pb_dmg_after_block = pb_phys_hits_after = pb_spec_hits_after = 0;
+    pb_last_move = 0;
+    pb_multi_spec_hits = 0;
+    bot_move = 3;
+    pb_awake = pb_blocked_now = false;
+    on_event = pb_events;
+    int halved_checked = 0, halved_bad = 0, phys_sim_bad = 0, lone_checked = 0;
+    for (int i = 0; i < 600 && run.wave == wave && !(run.screen.kind == GC_SCREEN_REWARD); i++) {
+        gc_event ev;
+        while (gc_run_next_event(&run, &ev)) pb_events(&ev);
+        if (run.screen.kind == GC_SCREEN_COMMAND) {
+            pr_pokemon *foe = run.bt.field[2], *me = run.bt.field[0];
+            /* the simulated damage with Perfect Being and without it, on the battle as it stands */
+            if (foe && me && foe->hp > 0 && me->hp > 0) {
+                const bool awake = pr_perfect_being_awake(&run.bt, foe);
+                if (!awake && foe == run.bt.party[1][0]) {   /* a team of one never wakes: it needs a fainted member */
+                    const int keep_n = run.bt.n_party[1];
+                    run.bt.n_party[1] = 1;
+                    if (pr_perfect_being_awake(&run.bt, foe)) pb_bad++;
+                    run.bt.n_party[1] = keep_n;
+                    lone_checked++;
+                }
+                if (awake != pb_awake) pb_bad++;
+                const pr_rng keep = run.bt.rng;
+                const pr_damage_result with = pr_get_attack_damage(&run.bt, foe, me, MOVE_ID_WATER_GUN, false, true);
+                const pr_damage_result phys = pr_get_attack_damage(&run.bt, foe, me, MOVE_ID_TACKLE, false, true);
+                foe->custom_passive = -1;
+                const pr_damage_result without = pr_get_attack_damage(&run.bt, foe, me, MOVE_ID_WATER_GUN, false, true);
+                foe->custom_passive = PR_CUSTOM_PASSIVE_PERFECT_BEING;
+                run.bt.rng = keep;
+                if (awake) {
+                    halved_checked++;
+                    const double want = floor(without.damage / 2) > 1 ? floor(without.damage / 2) : 1;
+                    if (with.damage != want || !with.softened) halved_bad++;
+                    if (phys.damage != 0 || phys.result != HIT_RESULT_NO_EFFECT) phys_sim_bad++;
+                } else {
+                    if (with.damage != without.damage || with.softened) halved_bad++;
+                    if (phys.damage <= 0) phys_sim_bad++;
+                }
+            }
+            bot_move = (bot_move + 1) % 4;   /* Tackle, Water Gun, Bullet Seed, Water Shuriken in turn */
+        }
+        if (!bot_step(&run, false)) break;
+    }
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) pb_events(&e);
+    on_event = NULL;
+    bot_move = -1;
+    for (int i = 0; i < 3; i++) CHECK(run.enemy[i].b.hp <= 0);   /* the battle was won with Water Gun */
+    CHECK(pb_bad == 0 && pb_early == 0 && pb_wake_battler_bad == 0);
+    CHECK(pb_wake == 1);                         /* the second faint of three wakes it, the last shows nothing */
+    CHECK(pb_block >= 1 && pb_soft >= 1);        /* both lines came */
+    CHECK(pb_dmg_after_block == 0);              /* a blocked Tackle did no damage */
+    CHECK(pb_phys_hits_after == 0);              /* ... and never hit once it was awake */
+    CHECK(pb_spec_hits_after == pb_soft);        /* every Water Gun hit after it was softened */
+    CHECK(halved_checked >= 1 && halved_bad == 0 && phys_sim_bad == 0 && lone_checked >= 1);
+    pb_total_multi += pb_multi_spec_hits;
+    pb_total_block += pb_block;
+    pb_total_soft += pb_soft;
+    pb_total_sim += halved_checked;
+}
+static void test_perfect_being(void)
+{
+    enum { PB_SEEDS = 8 };
+    pb_total_block = pb_total_soft = pb_total_sim = pb_total_multi = 0;
+    for (int s = 0; s < PB_SEEDS; s++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "perfect-being-%d", s);
+        perfect_being_once(seed);
+    }
+    CHECK(pb_total_multi > 0);   /* a special multi-hit move hit after it woke, each hit softened (pb_spec_hits_after == pb_soft) */
+    printf("perfect being: %d blocked, %d softened, %d simulated checks over %d battles\n", pb_total_block, pb_total_soft, pb_total_sim, PB_SEEDS);
 }
 
 static uint64_t play_hash(const char *seed, const gc_custom_hooks *hooks, int steps, int *waves)
@@ -619,7 +765,8 @@ static void test_check(void)
     t = the_team; t.name = "012345678901234567890123456789012345678901234567"; CHECK(!gc_custom_team_check(&t, &why));   /* 48 characters */
     t = the_team; t.name = "01234567890123456789012345678901234567890123456"; CHECK(gc_custom_team_check(&t, &why));     /* 47 characters */
     t = the_team; t.passive = PR_ABILITY_COUNT; CHECK(!gc_custom_team_check(&t, &why));
-    t = the_team; t.passive = -4; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = -5; CHECK(!gc_custom_team_check(&t, &why));
+    t = the_team; t.passive = GC_CUSTOM_PASSIVE_PERFECT_BEING; CHECK(gc_custom_team_check(&t, &why));   /* Kars's Perfect Being */
     t = the_team; t.passive = GC_CUSTOM_PASSIVE_THE_WORLD; CHECK(gc_custom_team_check(&t, &why));   /* DIO's The World */
     t = the_team; t.passive = GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN; CHECK(gc_custom_team_check(&t, &why));   /* Pucci's (2026-11-16) */
     t = the_team; t.member[0].species = 0; CHECK(!gc_custom_team_check(&t, &why));
@@ -651,6 +798,7 @@ int main(void)
     test_refused();
     test_made_in_heaven();
     test_the_world();
+    test_perfect_being();
     printf("custom_trainer_test: %d checks, 0 failed\n", checks);
     return 0;
 }

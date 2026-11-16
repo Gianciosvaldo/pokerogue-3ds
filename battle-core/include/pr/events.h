@@ -88,6 +88,11 @@ typedef enum {
                                 * that has it), at the start of the turn, before anything of it; value 2 = a player's Pokemon that chose a move
                                 * cannot move (battler = its field position), where its move would have come; value 0 = time moves again
                                 * (battler = -1), after the turn's TurnEndPhase */
+    PR_EV_PERFECT_BEING,       /* lorenzo's JoJo content (PR_CUSTOM_PASSIVE_PERFECT_BEING): value 1 = the faint that leaves a Perfect Being
+                                * side with one member with HP (battler = the fainted Pokemon's field position; after its fainted text and
+                                * exp, before the next send-out); value 2 = a physical move did nothing against it (battler = its field
+                                * position, where "It doesn't affect" would come); value 3 = a special move's damage was halved (battler =
+                                * its field position, after the hit and its critical-hit text) */
     PR_EV_COUNT_
 } pr_event_type;
 

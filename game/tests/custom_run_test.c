@@ -2078,6 +2078,7 @@ static void jojo_seen(void) {
     if (foe->passive >= 0 && (e->b.passive != foe->passive || e->b.custom_passive != foe->passive)) J.bad++;
     if (foe->passive == CC_JOJO_PASSIVE_MADE_IN_HEAVEN && (e->b.custom_passive != PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN || e->b.passive_flag || e->b.passive)) J.bad++;
     if (foe->passive == CC_JOJO_PASSIVE_THE_WORLD && (e->b.custom_passive != PR_CUSTOM_PASSIVE_THE_WORLD || e->b.passive_flag || e->b.passive)) J.bad++;
+    if (foe->passive == CC_JOJO_PASSIVE_PERFECT_BEING && (e->b.custom_passive != PR_CUSTOM_PASSIVE_PERFECT_BEING || e->b.passive_flag || e->b.passive)) J.bad++;
     if (foe->passive == -1 && e->b.custom_passive != -1) J.bad++;
     if (!e->b.has_trainer) J.bad++;
   }
@@ -2135,6 +2136,8 @@ static void test_pillar(void) {
     memset(&t, 0, sizeof t);
     CHECK(h->pillar(NULL, R, which, &t), "option %d hands in a team", which);
     CHECK(t.n >= 1 && t.name && !strcasecmp(t.name, ID[which]), "option %d is %s: %s", which, ID[which], t.name ? t.name : "?");
+    /* Kars's Perfect Being (lorenzo, 2026-11-16); Esidisi and Wamuu have no passive */
+    CHECK(t.passive == (which == 2 ? GC_CUSTOM_PASSIVE_PERFECT_BEING : -1), "option %d's passive: %d", which, t.passive);
     R->battle_type = BATTLE_TYPE_TRAINER;
     const cc_jojo_char* foe = cr_jojo_foe(R);
     CHECK(foe && !strcmp(foe->id, ID[which]), "option %d makes %s the live foe", which, ID[which]);

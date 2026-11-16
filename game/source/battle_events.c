@@ -484,6 +484,9 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           nt++;
         }
         break;
+      case PR_EV_PERFECT_BEING:   /* Kars (lorenzo's JoJo content); battle_view words the lines */
+        if (ev->value >= 1 && ev->value <= 3) PUT(.type = BEV_PERFECT, .battler = b, .a = ev->value);
+        break;
       case PR_EV_FAINT:
         if (!single || seen[b].fainted) break;
         /* the damage that made it faint isn't always an event of its own (Disguise busting): drain the bar */
