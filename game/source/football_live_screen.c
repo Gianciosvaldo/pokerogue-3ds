@@ -35,6 +35,7 @@ static struct {
     uint16_t catalog[PR_SPECIES_COUNT];unsigned catalog_count,cursor,member,play_page,preview,preview_after,ms;
     unsigned achv_ms;int achv_id; /* the football achievement being told in the header (achv_id -1 none), for achv_ms more milliseconds */
     int asset_offense;bool editing,save_bad,save_failed,leaving,ignore_keys;
+    unsigned held; /* the lineup screen: while editing is set, the position whose Pokemon was picked up (it moves only when A is pressed on another position) */
     float old_speed,remainder;
     unsigned pending;int receiver;
     uint64_t checkpoint;
@@ -274,7 +275,10 @@ static bool choose_current(void)
         /* Picks fill the slots in order (QB, RB, WR1 ...) and lineup[] starts as the identity, so each pick is already in its position. */
         if(!football_roster_add(&c->roster,L.scratch,&s,L.args.profile,&why)){snprintf(c->message,sizeof c->message,"%s",why?why:"Cannot draft this Pokemon.");return false;}
         else {c->message[0]=0;if(c->roster.count==22){c->phase=FB_CAREER_READY;L.cursor=0;}}break;}
-    case FB_CAREER_LINEUP:L.editing=!L.editing;break;
+    case FB_CAREER_LINEUP: /* pick a position up, then A on another one swaps the two Pokemon; nothing moves while the cursor travels */
+        if(!L.editing){L.editing=true;L.held=L.cursor;}
+        else{if(L.held!=L.cursor)football_roster_assign(&c->roster,L.held,c->roster.lineup[L.cursor]);L.editing=false;}
+        break;
     case FB_CAREER_READY:if(!football_career_start(c))return false;L.cursor=0;L.asset_offense=-1;L.camera.ready=false;break;
     case FB_CAREER_MATCH:
         if(c->live.phase==FB_LIVE_CALL){FootballPlayId id=(FootballPlayId)(L.play_page*4+L.cursor);if(c->live.rules.offense==FB_AWAY){if(!football_live_defend(&c->live,(FootballDefenseId)(L.play_page*4+L.cursor)))return false;}
@@ -308,8 +312,7 @@ static bool input(ui_screen *s,ui_button button)
     if(button==BTN_UP){L.cursor=(L.cursor+count-1)%count;ui_play_select();}
     else if(button==BTN_DOWN){L.cursor=(L.cursor+1)%count;ui_play_select();}
     else if(button==BTN_LEFT || button==BTN_RIGHT){int delta=button==BTN_RIGHT?1:-1;ui_play_select();
-        if(c->phase==FB_CAREER_LINEUP && L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+22+delta)%22);}
-        else if(c->phase==FB_CAREER_DRAFT)L.cursor=(L.cursor+count+(delta>0?FM_ROWS:count-FM_ROWS%count))%count;
+        if(c->phase==FB_CAREER_DRAFT || c->phase==FB_CAREER_LINEUP)L.cursor=(L.cursor+count+(delta>0?FM_ROWS:count-FM_ROWS%count))%count;
         else if(c->phase==FB_CAREER_READY)cycle_mega(delta);
         else if(c->phase==FB_CAREER_SHOP)L.member=(L.member+22+delta)%22;
         else if(c->phase==FB_CAREER_MATCH && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+pages()+(unsigned)delta)%pages();L.cursor=0;}
@@ -343,7 +346,7 @@ static bool touch(ui_screen *s,float x,float y)
     }
     if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_sound();}else if(y>=FM_FOOT_Y-2 && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+1)%pages();L.cursor=0;ui_play_select();}return true;}
     if(c->phase==FB_CAREER_READY){if(y>=124 && y<FM_FOOT_Y-4){cycle_mega(1);ui_play_select();}else if(y>=FM_FOOT_Y-4){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;ui_play_select();}else choose_sound();}return true;}
-    if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){ui_play_select();if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
+    if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){ui_play_select();if(x<160){if(L.editing)L.editing=false;else football_roster_autofill(&c->roster);}else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
     if(c->phase==FB_CAREER_SHOP && y>=FM_FOOT_Y-4){L.member=(L.member+1)%22;ui_play_select();return true;}
     int row=football_menu_row_at(x,y);
     if(row>=0){unsigned option=L.cursor/FM_ROWS*FM_ROWS+(unsigned)row;if(option<option_count()){L.cursor=option;if(c->phase==FB_CAREER_SHOP)c->message[0]=0;choose_sound();}}
@@ -417,7 +420,8 @@ static void list_menu(unsigned count)
             break;}
         case FB_CAREER_LINEUP:
             snprintf(row_label[n],sizeof row_label[n],"%s",name(c->roster.mon[c->roster.lineup[i]].b.species));r->tag=football_slot_names[i];
-            if(L.editing && i==L.cursor){r->value="< >";r->value_style=TS_SUMMARY_GOLD;}
+            if(L.editing && i==L.held){r->value="Moving";r->value_style=TS_SUMMARY_GOLD;}
+            else if(L.editing && i==L.cursor){r->value="Swap";r->value_style=TS_SUMMARY_GOLD;}
             break;
         case FB_CAREER_EVOLVE:snprintf(row_label[n],sizeof row_label[n],"%s",i<c->evolution_count?name(c->evolutions[i]):"Keep current Pokemon");break;
         case FB_CAREER_SHOP:
@@ -567,8 +571,9 @@ static void bottom_menu(void)
         snprintf(left,sizeof left,"A: pick for %s    B: undo    Left/Right: page",football_slot_names[draft_slot()]);
         football_menu_foot(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:left);break;
     case FB_CAREER_LINEUP:
-        football_menu_head(L.editing?"Pick a member for this slot":"Lineup",L.editing?"Left/Right: swap":"A: edit    B: ready");list_menu(22);
-        buttons(L.editing?"Previous":"Auto-assign",L.editing?"Next":"Ready",true);break;
+        if(L.editing){snprintf(left,sizeof left,"Swap %s with:",name(c->roster.mon[c->roster.lineup[L.held%22]].b.species));football_menu_head(left,"A: swap  B: cancel");}
+        else football_menu_head("Lineup","A: pick up    B: ready");
+        list_menu(22);buttons(L.editing?"Cancel":"Auto-assign","Ready",true);break;
     case FB_CAREER_READY:
         snprintf(right,sizeof right,"Round %u / %u",c->round,FB_CAREER_ROUNDS);football_menu_head("Playoffs",right);
         football_menu_panel(4,32,312,92);

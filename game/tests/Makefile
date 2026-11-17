@@ -120,7 +120,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := me_fake.c ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/events_host.c ../source/battle_event_store.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := me_fake.c ../source/achv_hooks.c ../source/achv_toast_text.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/events_host.c ../source/battle_event_store.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -Wl,--wrap=gc_ev_battle -Wl,--wrap=gc_ev_battle_chunk -Wl,--wrap=bgm_on_mystery -lm -o $@
@@ -160,7 +160,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_settings.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/achv_toast_text.c ../source/run_settings.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -222,7 +222,7 @@ observer_test: build/observer_test
 
 # the post-mortem screen and the result screen's way to it, over the real observer and reducer, with a fake drawing layer
 PM_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(GC)/include -I$(RC)/include -I../gen -I$(APP)/include
-PM_SRCS := postmortem_test.c ../source/postmortem_screen.c ../source/result_screen.c ../gen/gm_enum_names.c $(OBS_SRCS)
+PM_SRCS := postmortem_test.c ../source/postmortem_screen.c ../source/result_screen.c ../source/achv_toast.c ../gen/gm_enum_names.c $(OBS_SRCS)
 build/postmortem_test: $(PM_SRCS)
 	@mkdir -p build
 	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PM_SRCS) -lm -o $@
@@ -230,7 +230,7 @@ postmortem_test: build/postmortem_test
 .PHONY: postmortem_test
 
 # the result screen's pages and bars for what a Classic win gave (source/result_screen.c with win_gains.h's items), with a fake UI stack and drawing layer
-RG_SRCS := result_gains_test.c ../source/result_screen.c ../gen/gm_enum_names.c
+RG_SRCS := result_gains_test.c ../source/result_screen.c ../source/achv_toast.c ../gen/gm_enum_names.c
 build/result_gains_test: $(RG_SRCS)
 	@mkdir -p build
 	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(RG_SRCS) -lm -o $@
@@ -301,6 +301,14 @@ build/achv_hooks_test: $(HOOK_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(HOOK_SRCS) -lm -o $@
 achv_hooks_test: build/achv_hooks_test
 .PHONY: achv_hooks_test
+
+# the achievement bar (source/achv_toast.c, achv_toast_text.c): its queue and timing, and the words and art of the custom achievements' bars; make achv_toast_test && build/achv_toast_test
+TOAST_SRCS := achv_toast_test.c ../source/achv_toast.c ../source/achv_toast_text.c $(CORE_SRCS)
+build/achv_toast_test: $(TOAST_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(TOAST_SRCS) -lm -o $@
+achv_toast_test: build/achv_toast_test
+.PHONY: achv_toast_test
 
 # the capsule-machine presentation (source/capsule_model.c + capsule_screen.c) with a fake drawing layer; make capsule_test && build/capsule_test [fuzz sessions]
 CAPSULE_SRCS := capsule_test.c ../source/capsule_model.c ../source/capsule_screen.c
@@ -525,6 +533,13 @@ build/lone_player_events_test: $(LONE_EVENTS_SRCS)
 lone_player_events_test: build/lone_player_events_test
 .PHONY: lone_player_events_test
 
+PERFECT_EVENTS_SRCS := perfect_being_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/perfect_being_events_test: $(PERFECT_EVENTS_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(PERFECT_EVENTS_SRCS) -lm -o $@
+perfect_being_events_test: build/perfect_being_events_test
+.PHONY: perfect_being_events_test
+
 # a lone Pokemon of the player's in a double battle: centred platform + singles bar (BEV_PLAYER_CENTRE)
 build/lone_player_layout_test: lone_player_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build
@@ -587,6 +602,11 @@ build/final_boss_form_anim_test: final_boss_form_anim_test.c ../source/battle_vi
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_form_anim_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
 final_boss_form_anim_test: build/final_boss_form_anim_test
 .PHONY: final_boss_form_anim_test
+build/perfect_being_view_test: perfect_being_view_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections perfect_being_view_test.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
+perfect_being_view_test: build/perfect_being_view_test
+.PHONY: perfect_being_view_test
 
 # the app's timed-events source (source/events_host.c): the console's clock as the module's seconds, and the shipped table's effects; make events_host_test && build/events_host_test
 EVH_SRCS := events_host_test.c ../source/events_host.c ../source/custom_core_build.c

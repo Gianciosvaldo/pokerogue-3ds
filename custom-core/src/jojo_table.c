@@ -2,7 +2,7 @@
  * Caesar to Giorno) and edited by hand; see jojo.h).
  *
  * One row per character: id, display name, iconic line, biome (BiomeId; -1 = not in a biome pool: the Pillar Men), the background
- * passive (an AbilityId; -1 = none; CC_JOJO_PASSIVE_MADE_IN_HEAVEN for Pucci, CC_JOJO_PASSIVE_THE_WORLD for DIO) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
+ * passive (an AbilityId; -1 = none; CC_JOJO_PASSIVE_MADE_IN_HEAVEN for Pucci, CC_JOJO_PASSIVE_THE_WORLD for DIO, CC_JOJO_PASSIVE_PERFECT_BEING for Kars) and up to six members. A member is the species, the form index, the ability slot (0, 1 = the
  * form's abilities, 2 = hidden), shiny (0/1) and its variant tier (0..2, 0 unless the species has variant palettes), four move ids and
  * the held items {modifierTypes key, argument, stack}. The comments name the species, form and moves. Held items upstream does not have
  * were dropped (lorenzo, 2026-10-18: no substitutions); stacks are capped as upstream caps them. The ids are checked against
@@ -11,7 +11,7 @@
 #include "cc/jojo.h"
 
 const cc_jojo_char cc_jojo_chars[] = {
-    {"kars", "Kars", "I shall become the ultimate lifeform!", -1, -1, 6, {
+    {"kars", "Kars", "I shall become the ultimate lifeform!", -1, CC_JOJO_PASSIVE_PERFECT_BEING, 6, {
         {151, 0, 0, 1, 1, {144, 94, 396, 105}, 3, {{"BERRY", 1, 1}, {"FOCUS_BAND", -1, 1}, {"GOLDEN_EGG", -1, 1}}}, /* Mew; Transform, Psychic, Aura Sphere, Recover */
         {132, 0, 2, 0, 0, {144, 0, 0, 0}, 3, {{"RARE_SPECIES_STAT_BOOSTER", 2, 1}, {"RARE_SPECIES_STAT_BOOSTER", 3, 1}, {"REVIVER_SEED", -1, 1}}}, /* Ditto; Transform */
         {773, 16, 0, 0, 0, {718, 14, 575, 242}, 2, {{"ATTACK_TYPE_BOOSTER", 0, 1}, {"LEFTOVERS", -1, 1}}}, /* Silvally (dark); Multi-Attack, Swords Dance, Parting Shot, Crunch */

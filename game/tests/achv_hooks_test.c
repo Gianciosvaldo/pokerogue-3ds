@@ -1,4 +1,5 @@
-/* achv_hooks_test: what the run driver tells the achievements (source/achv_hooks.c) over a bare game-core run and real system data.
+/* achv_hooks_test: what the run driver tells the achievements (source/achv_hooks.c) over a bare game-core run and real system data. What an unlock
+ * says is the ids it queues (ach_take_unlock); their words and art are the achievement bar's (achv_toast_test).
  *
  *   make achv_hooks_test && build/achv_hooks_test
  *
@@ -50,8 +51,15 @@ static bool battle(int jojo, int end, int faint_during)
 static int drain(void)
 {
   int n = 0;
-  while (ach_take_message()) n++;
+  while (ach_take_unlock() >= 0) n++;
   return n;
+}
+
+/* the next unlock must be `id`: its name and its reward are those of the table */
+static bool next_is(int id, const char* name, const char* reward)
+{
+  const int got = ach_take_unlock();
+  return got == id && got >= 0 && !strcmp(gc_achv_defs[got].name, name) && !strcmp(gc_achv_reward_name(&gc_achv_defs[got]), reward);
 }
 
 int main(void)
@@ -64,14 +72,11 @@ int main(void)
   CHECK(battle(GC_JOJO_DIO, GC_SCREEN_REWARD, 0), "the win is reported");
   CHECK(gc_achv_unlocked(&S, GC_JOJO_DIO), "DIO is unlocked");
   CHECK(gc_achv_unlocked(&S, 29), "and so is Untouched (nobody fainted)");
-  const char* m = ach_take_message();
-  CHECK(m && strstr(m, "Achievement unlocked: DIO!") && strstr(m, "You received 1 Egg Voucher!"), "the first message names DIO and its reward: %s", m ? m : "(none)");
-  m = ach_take_message();
-  CHECK(m && strstr(m, "Untouched"), "the second names Untouched");
-  m = ach_take_message();
-  CHECK(m && strstr(m, "Flawless DIO") && strstr(m, "You received 2 Egg Vouchers!"), "the third is the clean win over DIO: %s", m ? m : "(none)");
+  CHECK(next_is(GC_JOJO_DIO, "DIO", "1 Egg Voucher"), "the first unlock is DIO with its reward");
+  CHECK(next_is(29, "Untouched", "1 Egg Voucher Plus"), "the second is Untouched");
+  CHECK(next_is(gc_achv_flawless_id(GC_JOJO_DIO), "Flawless DIO", "2 Egg Vouchers"), "the third is the clean win over DIO");
   CHECK(gc_achv_unlocked(&S, gc_achv_flawless_id(GC_JOJO_DIO)), "Flawless DIO is unlocked");
-  CHECK(ach_take_message() == NULL, "nothing more");
+  CHECK(ach_take_unlock() == -1, "nothing more");
   const uint32_t battles = S.achv.jojo_battles;
   CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_DIO, true) && S.achv.jojo_battles == battles, "the reward screen seen again counts nothing");
 
@@ -136,8 +141,7 @@ int main(void)
   CHECK(!ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && S.achv.best_wave == 49 && !gc_achv_unlocked(&S, 37), "wave 49 is kept, nothing unlocked");
   R.wave = 50;
   CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 37), "wave 50 unlocks Wave 50 and asks for a write");
-  m = ach_take_message();
-  CHECK(m && strstr(m, "Achievement unlocked: Wave 50!") && strstr(m, "2 Egg Vouchers"), "and says so: %s", m ? m : "(none)");
+  CHECK(next_is(37, "Wave 50", "2 Egg Vouchers"), "and queues it with its reward");
   R.wave = 20;
   ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
   CHECK(S.achv.best_wave == 50, "a lower wave in another run keeps the best");
@@ -216,8 +220,7 @@ int main(void)
       caught++;
     }
   CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 44), "ten new species unlock Collector when the wave starts");
-  m = ach_take_message();
-  CHECK(m && strstr(m, "Achievement unlocked: Collector!"), "and it is told: %s", m ? m : "(none)");
+  CHECK(next_is(44, "Collector", "1 Egg Voucher"), "and it is told");
   CHECK(!ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false), "the same wave asks for nothing more");
 
   /* group E: a Gym Leader, an Elite Four member or a Champion beaten sets the profile's voucher bit during the wave; the next wave's first
@@ -230,9 +233,8 @@ int main(void)
   S.voucher_unlocks[TRAINER_TYPE_BROCK] = 1;      /* the wave-20 Gym Leader falls */
   R.wave = 21;
   CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 68), "the next wave's command screen unlocks Gym Challenger and asks for a write");
-  m = ach_take_message();
-  CHECK(m && strstr(m, "Achievement unlocked: Gym Challenger!") && strstr(m, "1 Egg Voucher"), "and says so: %s", m ? m : "(none)");
-  CHECK(ach_take_message() == NULL, "one achievement, one message");
+  CHECK(next_is(68, "Gym Challenger", "1 Egg Voucher"), "and queues it with its reward");
+  CHECK(ach_take_unlock() == -1, "one achievement, one unlock");
   S.voucher_unlocks[TRAINER_TYPE_LORELEI] = 1;    /* an Elite Four member, then the Champion, before the run ends */
   S.voucher_unlocks[TRAINER_TYPE_BLUE] = 1;
   CHECK(ach_on_screen(&R, GC_SCREEN_CLEAR, -1, true), "the end of the run reads them too");

@@ -21,6 +21,7 @@
 #include "custom_run.h"
 #include "events_host.h"
 #include "achv_hooks.h"
+#include "achv_toast.h"
 #include "me_flow.h"
 #include "gm_item_ui.h"
 #include "i18n.h"
@@ -1962,15 +1963,12 @@ static void screen_step(void) {
       return;
     }
   }
-  /* achievements: a JoJo challenger beaten, a wave reached, a run won; what they unlock is told before the screen is handled */
+  /* achievements: a JoJo challenger beaten, a wave reached, a run won; what they unlock goes to the achievement bar (upstream's AchvBar slides in
+   * over the screen, with no text box and no input), and the screen is handled as it was */
   {
     const cc_jojo_char* foe = G.cfg.custom ? cr_jojo_foe(&G.run) : NULL;
     if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1, G.cfg.custom && cr_bizarre()) && G.cfg.save_sys) G.cfg.save_sys();
-    const char* ach = ach_take_message();
-    if (ach) {
-      say(ach);
-      return;
-    }
+    for (int id = ach_take_unlock(); id >= 0; id = ach_take_unlock()) atoast_push_achv(id);
   }
   if (s->kind == GC_SCREEN_CHECK_SWITCH && G.switch_question[0] && !G.question_last) {
     /* other text (the weather the biome set) came after the question: say it again, so the Yes / No is not under another line */

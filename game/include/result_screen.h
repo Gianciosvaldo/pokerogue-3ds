@@ -16,7 +16,8 @@
  * GameOverPhase queues it behind the EndCardPhase: one message after the other in the box, each waiting for A (the "<thing> has been
  * unlocked." of an unlock, the first ribbon of a species line with its Egg Voucher Plus, the Egg Voucher Premium of a win that is not the
  * first), then the post-mortem or the exit. The achievement and voucher bars slide in over the top screen one after the other from the
- * moment the screen opens (upstream's AchvBar: 0.5 s in, in place until 10 s after it began, 0.5 s out), whatever page the box is on.
+ * moment the screen opens (upstream's AchvBar: 0.5 s in, in place until 10 s after it began, 0.5 s out), whatever page the box is on. They are the app's achievement bar
+ * (achv_toast.h), which this screen only feeds: ui_tick draws it, and a bar still up when the screen is left stays up over the next one.
  *
  * A Classic win starts with the rival's ending dialogue (upstream's GameOverPhase: the screen fades in on the arena, she slides in from the
  * right of the field, one page of miscDialogue:ending per A with her expression changing as the text goes (@c{...}), a fade out, then the end

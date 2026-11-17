@@ -350,6 +350,34 @@ double pr_calculate_boss_segment_damage(double damage, double current_hp, double
     return adjusted;
 }
 
+bool pr_perfect_being_awake(const pr_battle *bt, const pr_pokemon *p)
+{
+    if (!p || p->custom_passive != PR_CUSTOM_PASSIVE_PERFECT_BEING || p->hp <= 0) return false;
+    const int side = p->is_player ? 0 : 1;
+    int down = 0;
+    for (int k = 0; k < bt->n_party[side]; k++) {
+        const pr_pokemon *q = bt->party[side][k];
+        if (!q || q == p) continue;
+        if (q->hp > 0) return false;
+        down++;
+    }
+    return down > 0;
+}
+
+bool pr_perfect_being_blocks(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move)
+{
+    return def != src && pr_perfect_being_awake(bt, def)
+           && pr_apply_variable_move_category(bt, src, def, move, pr_moves[move].category) == MOVE_CATEGORY_PHYSICAL;
+}
+
+/* Perfect Being: a special move's damage against an awake one, halved (at least 1) */
+static void perfect_being_soften(const pr_battle *bt, const pr_pokemon *def, int category, pr_damage_result *r, double *dmg)
+{
+    if (category != MOVE_CATEGORY_SPECIAL || !pr_perfect_being_awake(bt, def) || *dmg <= 0) return;
+    *dmg = to_dmg_value(*dmg / 2);
+    r->softened = true;
+}
+
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated)
 {
@@ -359,8 +387,12 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
 pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                          bool is_critical, bool simulated, double effectiveness)
 {
-    pr_damage_result r = {false, HIT_RESULT_EFFECTIVE, 0};
+    pr_damage_result r = {false, HIT_RESULT_EFFECTIVE, 0, false};
     int category = pr_apply_variable_move_category(bt, src, def, move, pr_moves[move].category);
+    if (category == MOVE_CATEGORY_PHYSICAL && def != src && pr_perfect_being_awake(bt, def)) {   /* Perfect Being (custom content) */
+        r.result = HIT_RESULT_NO_EFFECT;
+        return r;
+    }
 
     bool cancelled = false;
     /* `effectiveness ?? getMoveEffectiveness(...)`: the caller's value skips the calculation */
@@ -378,6 +410,7 @@ pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_poke
         double lens = 1;
         pr_apply_multi_hit_damage_modifiers(bt, src, move, &lens);
         fixed = to_dmg_value(fixed * lens);
+        perfect_being_soften(bt, def, category, &r, &fixed);
         /* the early return skips the rest, so Sturdy-like abilities get their chance here */
         if (def->hp >= pr_get_stat(def, STAT_HP, true)) {
             pr_ab_params ep = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &fixed};
@@ -477,6 +510,7 @@ pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_poke
     if (!def->is_player) pr_apply_enemy_damage_reducer_modifiers(bt, &dmg);
     pr_ab_params rp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &dmg};
     pr_apply_ab_attrs(bt, PR_AC_ReceivedMoveDamageMultiplierAbAttr, &rp);
+    perfect_being_soften(bt, def, category, &r, &dmg);
     /* Friend Guard: the defender's ally, when it's active on the field */
     const pr_pokemon *fg = bt->double_battle ? pr_get_ally(bt, def) : NULL;
     if (fg && fg->hp > 0 && fg->on_field && !fg->switch_out_status) {
