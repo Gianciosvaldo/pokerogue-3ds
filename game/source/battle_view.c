@@ -1826,7 +1826,7 @@ static bool sv_cmd_shown(void) { return sv() && cmd_shown() && !B.info_on; }
 /* the move screen is up (the fight menu in the standard view) */
 static bool sv_fight_shown(void) { return sv() && B.mode == M_FIGHT; }
 /* the bottom screen is the standard view's own (no strip at its bottom) */
-static bool sv_screen_shown(void) { return sv_cmd_shown() || sv_fight_shown(); }
+static bool sv_screen_shown(void) { return sv_cmd_shown() || sv_fight_shown() || (sv() && B.mode == M_TARGET); }
 
 static void sv_hex_fill(float x, float y, float w, float h, float p, rr_color c) {
   if (p > w / 2) p = w / 2;
@@ -2072,12 +2072,67 @@ static bool sv_move_touch(float x, float y) {
   return false;
 }
 
+/* The target screen (lorenzo's sketch, 2026-11-17: "opp 1, opp 2" over "poke 1, poke 2" and a back button): the four places as hexagons, foes
+ * on top and the player's side under them, left and right as the target choice's tiles have them (tg_tile's columns); each with its Pokemon's
+ * name, level and HP bar, red-outlined for a foe and blue for the player's; a place the move can't reach is greyed. The pointed one has the
+ * white frame (and flashes on the field). A tap points at a place, a tap on the pointed one picks it (the list screens' rule); Back is B. */
+static const sv_hex SV_TG_FOE[2] = {{6, 42, 148, 62, 14}, {166, 42, 148, 62, 14}};
+static const sv_hex SV_TG_ALLY[2] = {{6, 118, 148, 62, 14}, {166, 118, 148, 62, 14}};
+#define SV_TG_TITLE_Y 26.0f
+static const sv_hex* sv_tg_hex(int f) { return f >= 2 ? &SV_TG_FOE[f % 2] : &SV_TG_ALLY[f % 2]; }
+static void sv_draw_target(int f) {
+  const sv_hex* h = sv_tg_hex(f);
+  const side* sd = side_of(f);
+  const bool ok = B.tg.ok[f], on = B.tg.cursor == f;
+  if (on) sv_hex_draw(&(sv_hex){h->x - 2, h->y - 2, h->w + 4, h->h + 4, h->p + 1}, 2, RR_RGBA(0xf8, 0xf8, 0xf8, 255), RR_RGBA(0xf8, 0xf8, 0xf8, 255));
+  const rr_color edge = !ok ? RR_RGBA(0x60, 0x60, 0x68, 255) : f >= 2 ? sv_edge(0) : sv_edge(3);
+  sv_hex_draw(h, 3, edge, on ? RR_RGBA(0x48, 0x48, 0x58, 255) : RR_RGBA(0x28, 0x28, 0x30, 255));
+  if (!sd->present || sd->mon.species <= 0) return;
+  const bv_mon* m = &sd->mon;
+  draw_name(m, f < 2, h->x + h->p + 2, h->y + 10);
+  draw_level(h->x + h->w - h->p - 34, h->y + 13, m->level, false);
+  const float ratio = m->max_hp ? fmaxf(0, fminf(sd->hp_shown / m->max_hp, 1.0f)) : 0;
+  const float bx = h->x + h->p + 2, by = h->y + 40, bw = h->w - 2 * h->p - 4;
+  rr_rect(bx, by, bw, 6, RR_RGBA(0x10, 0x10, 0x18, 255));
+  const rr_color c = ratio > 0.5f ? RR_RGBA(0x50, 0xd0, 0x60, 255) : ratio > 0.25f ? RR_RGBA(0xf8, 0xc8, 0x30, 255) : RR_RGBA(0xf0, 0x50, 0x48, 255);
+  float w = floorf(bw * ratio + 0.5f);
+  if (w < 1 && sd->hp_shown > 0) w = 1;
+  if (w > 0) rr_rect(bx, by, w, 6, c);
+  if (!ok) sv_hex_fill(h->x + 3, h->y + 3, h->w - 6, h->h - 6, floorf(h->p * (h->h - 6) / h->h + 0.5f), RR_RGBA(0x10, 0x10, 0x18, 150));
+}
+static void sv_draw_targets(void) {
+  char t[96];
+  if (B.tg.title[0]) snprintf(t, sizeof t, "Choose a target for %s", B.tg.title);
+  else snprintf(t, sizeof t, "Choose a target");
+  text_draw(TS_MOVE_LABEL, 8, SV_TG_TITLE_Y, t, NULL);
+  for (int f = 0; f < 4; f++) sv_draw_target(f);
+  sv_hex_draw(&SV_BACK, 2, RR_RGBA(0xa0, 0xa0, 0xb0, 255), RR_RGBA(0x28, 0x28, 0x30, 255));
+  sv_label(&SV_BACK, "Back", 72, 0);
+}
+static bool target_input(ui_button b);
+static bool sv_target_touch(float x, float y) {
+  if (sv_hex_hit(&SV_BACK, x, y)) return target_input(BTN_CANCEL);
+  for (int f = 0; f < 4; f++) {
+    if (!sv_hex_hit(sv_tg_hex(f), x, y)) continue;
+    if (!B.tg.ok[f]) return false;
+    if (f == B.tg.cursor) return target_input(BTN_ACTION);
+    tg_set(f);
+    ui_play_select();
+    return true;
+  }
+  return false;
+}
+
 static void sv_draw(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   rr_rect(0, 0, 320, 240, RR_RGBA(0x20, 0x20, 0x28, 255));
   sv_draw_header();
   if (sv_fight_shown()) {
     sv_draw_moves();
+    return;
+  }
+  if (B.mode == M_TARGET) {
+    sv_draw_targets();
     return;
   }
   if (!sv_cmd_shown()) return;
@@ -3925,6 +3980,7 @@ static bool bv_touch(ui_screen* s, float px, float py) {
   /* the events play: a tap anywhere is A, for a message that waits for a button and for the level-up window (msgbox_input does
    * nothing while a message is still typing or not waiting) */
   if (B.mode == M_EVENTS) return bv_input(NULL, BTN_ACTION);
+  if (B.mode == M_TARGET && sv()) return sv_target_touch(px, py);
   if (B.mode == M_TARGET) return target_touch(x, y);
   if (B.mode == M_COMMAND && sv()) return sv_touch(px, py);
   if (B.mode == M_COMMAND) {

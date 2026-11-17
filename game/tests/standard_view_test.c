@@ -9,7 +9,9 @@
  *      START (the run menu); a tap on a point's empty corner is no button; the Tera button is not here (it is on the move screen)
  *   6  the item panel: the D-pad by cell (11 a row), L / R switch the bar, B / Items / "B: close" close it, a tap points at an item
  *   7  the move screen (his move-select mock-up): four type-outlined hexagons with PP, the Tera button between the columns (A chooses it for the
- *      move picked next, A again takes it back), power / accuracy / effect or the refusal's reason, balls and Back; D-pad, taps, B */
+ *      move picked next, A again takes it back), power / accuracy / effect or the refusal's reason, balls and Back; D-pad, taps, B
+ *   8  the target screen of a double (his sketch: opp 1 / opp 2 over poke 1 / poke 2 and back): hexagons with name, level and HP bar, a place
+ *      out of reach greyed; a tap points, a tap on the pointed one picks, Back answers -1 (the D-pad is target_select_test's) */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -102,6 +104,8 @@ static void start(const bv_command_opts* o){
  answers=0;answered=-9;menus=0;errors=0;bv_ask_command(o,on_command,NULL);
 }
 #define MV(i) (*sv_move_hex(i))
+static int tgt,tgts;
+static void on_t(int f,void* a){(void)a;tgt=f;tgts++;}
 static bool in(ui_button b){return bv_input(NULL,b);}
 static bool tap(float x,float y){return bv_touch(NULL,x,y);}
 static bool drawn(const char* s){for(int i=0;i<nt;i++)if(!strcmp(texts[i],s))return true;return false;}
@@ -282,6 +286,33 @@ int main(void){
  o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;B.mode=M_COMMAND;o.can_tera=false;bv_ask_command(&o,on_command,NULL);CHECK(B.move_cursor==0);
  o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;g_view=BV_VIEW_DEBUG;answers=0;in(BTN_ACTION);CHECK(B.move_cursor==0&&answers==1&&answered==0);
  g_view=BV_VIEW_STANDARD;
+
+ /* ---- 8: the target screen (a double) */
+ { memset(&B,0,sizeof B);B.begun=true;B.bar_sel=-1;B.setup.doubles=true;put(0,1);put(1,4);put(2,7);put(3,10);
+   side_of(3)->hp_shown=30;
+   tgts=0;tgt=-9;
+   bv_target_opts t={{false,true,true,true},0,"Tackle"};bv_ask_target(&t,on_t,NULL);
+   CHECK(B.mode==M_TARGET&&B.tg.cursor==2&&sv_screen_shown());
+   draw_bottom_screen();
+   CHECK(drawn("Choose a target for Tackle")&&drawn("Back")&&drawn("Mon7")&&drawn("Mon10")&&drawn("Mon4"));
+   CHECK(tri_frac==0);
+   CHECK(tris==2*2*5+2*2+2);                 /* four places and Back (edge and fill), the pointed one's frame, the unreachable one's shade */
+   { const sv_hex* h=sv_tg_hex(3);const float bw=h->w-2*h->p-4;bool half=false;
+     for(int i=0;i<nrc;i++){if(fabsf(rect_w[i]-floorf(bw*0.5f+0.5f))<.01f&&rect_c[i]==RR_RGBA(0xf8,0xc8,0x30,255))half=true;}
+     CHECK(half); } /* half HP: a yellow half bar */
+   CHECK(sv_tg_hex(2)==&SV_TG_FOE[0]&&sv_tg_hex(3)==&SV_TG_FOE[1]&&sv_tg_hex(0)==&SV_TG_ALLY[0]&&sv_tg_hex(1)==&SV_TG_ALLY[1]);
+   CHECK(SV_TG_FOE[0].y+SV_TG_FOE[0].h<=SV_TG_ALLY[0].y&&SV_TG_ALLY[0].y+SV_TG_ALLY[0].h<=SV_BACK.y&&SV_TG_TITLE_Y>SV_HDR_H);
+   const sv_hex* h3=sv_tg_hex(3);
+   CHECK(tap(h3->x+74,h3->y+31)&&B.tg.cursor==3&&tgts==0);    /* a tap points */
+   CHECK(tap(h3->x+74,h3->y+31)&&tgts==1&&tgt==3&&B.mode!=M_TARGET); /* on the pointed one it picks */
+   bv_ask_target(&t,on_t,NULL);
+   const sv_hex* h0=sv_tg_hex(0);
+   CHECK(!tap(h0->x+74,h0->y+31)&&tgts==1&&B.tg.cursor==3);   /* the user: no target */
+   CHECK(!tap(h3->x+1,h3->y+1)&&B.tg.cursor==3);               /* a point's empty corner */
+   const sv_hex* h1=sv_tg_hex(1);CHECK(tap(h1->x+74,h1->y+31)&&B.tg.cursor==1); /* the ally */
+   CHECK(tap(SV_BACK.x+33,SV_BACK.y+16)&&tgts==2&&tgt==-1);  /* Back */
+   g_view=BV_VIEW_DEBUG;bv_ask_target(&t,on_t,NULL);CHECK(!sv_screen_shown());g_view=BV_VIEW_STANDARD;in(BTN_CANCEL);
+ }
 
  printf("standard view: %d checks, %d failed\n",checks,failed);
  return failed?1:0;
