@@ -60,6 +60,7 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
     out->luck_boost = fx.luck_boost;
     out->trainer_shiny_chance = fx.trainer_shiny_chance;
     out->upgrade_vouchers = fx.upgrade_vouchers;
+    out->town_snow = (fx.flags & CC_TFX_TOWN_SNOW) != 0;
 }
 
 static void ask(void *user, gc_event_effects *out)

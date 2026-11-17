@@ -24,6 +24,7 @@ typedef struct gc_event_effects {
     uint8_t luck_boost;              /* added to the party luck (getLuckBoost), the cap of 14 still applies; 0 = none */
     uint16_t trainer_shiny_chance;   /* a trainer's Pokemon's shiny threshold out of 65536 (getClassicTrainerShinyChance); 0 = none */
     uint8_t upgrade_vouchers;        /* getUpgradeUnlockedVouchers: nonzero = a defeated boss gives the upgraded voucher */
+    uint8_t town_snow;               /* getWeather(): nonzero = the Town biome's weather pool is {SNOW: 1} (every new battle there is snowing) */
 } gc_event_effects;
 
 typedef struct gc_event_source {

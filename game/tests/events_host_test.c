@@ -104,6 +104,11 @@ int main(void)
     CHECK_EQ(fx_at(at(2026, 11, 18, 23, 59, 59)).shiny_encounter_mult, 2);
     CHECK_EQ(fx_at(at(2026, 11, 19, 0, 0, 0)).shiny_encounter_mult, 0);
     CHECK_EQ(fx_at(at(2026, 11, 18, 12, 0, 0)).upgrade_vouchers, 1);
+    /* Snowy Town is daily, all day: open at every instant the table is read, closed on a clock that cannot be read */
+    CHECK_EQ(fx_at(at(2026, 11, 16, 0, 0, 0)).town_snow, 1);
+    CHECK_EQ(fx_at(at(2026, 11, 17, 23, 59, 59)).town_snow, 1);
+    CHECK_EQ(fx_at(at(2027, 3, 4, 5, 6, 7)).town_snow, 1);
+    CHECK_EQ(fx_at(-1).town_snow, 0);
     /* a negative instant: nothing, even though two events are open all day */
     fx = fx_at(-1);
     CHECK_EQ(fx.shiny_catch_mult, 0);
