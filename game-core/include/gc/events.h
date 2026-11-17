@@ -17,6 +17,15 @@
 
 struct gc_run;
 
+#define GC_EVENT_REWARDS_MAX 8   /* wave rewards of all the open events together (custom-core's CC_TEVENT_REWARDS_MAX) */
+
+/* One item an event gives after a Classic wave's battle (upstream's classicWaveRewards entry). `key` is the item's modifierTypes key
+ * (reward-core's pr_item_keys: "SHINY_CHARM", "MEGA_BRACELET"...), a string that outlives the run. */
+typedef struct gc_event_reward {
+    uint16_t wave;           /* 1..199; 0 = an unused slot, the list ends at the first one */
+    const char *key;
+} gc_event_reward;
+
 typedef struct gc_event_effects {
     uint8_t shiny_encounter_mult;    /* a wild or trainer Pokemon's shiny odds x this (upstream getShinyEncounterMultiplier); 0 = x1 */
     uint8_t shiny_catch_mult;        /* a shiny target's catch-rate multiplier (getShinyCatchMultiplier); 0 = the non-event value */
@@ -24,6 +33,7 @@ typedef struct gc_event_effects {
     uint8_t luck_boost;              /* added to the party luck (getLuckBoost), the cap of 14 still applies; 0 = none */
     uint16_t trainer_shiny_chance;   /* a trainer's Pokemon's shiny threshold out of 65536 (getClassicTrainerShinyChance); 0 = none */
     uint8_t upgrade_vouchers;        /* getUpgradeUnlockedVouchers: nonzero = a defeated boss gives the upgraded voucher */
+    gc_event_reward rewards[GC_EVENT_REWARDS_MAX];   /* getFixedBattleEventRewards: given in a Classic run after the wave's battle, before the shop */
 } gc_event_effects;
 
 typedef struct gc_event_source {
