@@ -274,6 +274,7 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
     c->biome = run->biome;
     c->time_of_day = pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset);
     c->weather = run->bt.weather;
+    c->fusions_boosted = gc_event_effects_now(run).boost_fusions != 0;   /* areFusionsBoosted(): DNA Splicers move from the Rogue pool to the Great one in Classic */
     c->unlocked_eviolite = run->sys && run->sys->unlocks.eviolite;
     c->unlocked_mini_black_hole = run->sys && run->sys->unlocks.mini_black_hole;
     /* PR_DEV_FUSION_ABILITIES: Plates (Multitype) and Memories (RKS System) for a fusion's second species */
