@@ -93,6 +93,7 @@ static float box_y(int field){
 static int alpha_of(rr_color c){return (int)(c&0xff);} /* RR_RGBA: alpha is the low byte */
 
 int main(void){
+ g_view=BV_VIEW_DEBUG; /* the strip's tiles and hints (the standard view's hexagons are standard_view_test's) */
  frame96.src_w=frame96.w=96;frame96.src_h=frame96.h=96;
  /* ---- 1: where the cursor starts */
  field4();
@@ -172,7 +173,7 @@ int main(void){
   CHECK(bv_touch(NULL,TG_HINT_X+70,230)&&answers==1&&answered==-1);                     /* "B: back" */
   ask(0,false,true,true,true);CHECK(bv_touch(NULL,TG_HINT_X+5,230)&&answered==B.tg.last[0]);  /* "A: choose" */
   /* the tiles do not run into one another, into the debug lines at the top (physical y < 32) or into the strip */
-  /* the debug view (the default): two thin rows below its debug rows and the X / Y labels (physical y < 50); the standard view: the big tiles
+  /* the debug view: two thin rows below its debug rows and the X / Y labels (physical y < 50); the standard view: the big tiles
    * and their heading below the labels */
   for(int v=0;v<2;v++){
    g_view=v?BV_VIEW_STANDARD:BV_VIEW_DEBUG;

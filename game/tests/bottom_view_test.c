@@ -66,8 +66,9 @@ static bool has_drawn(const char* text){for(int i=0;i<n_drawn;i++)if(!strcmp(dra
 static void draw_extras(void){n_drawn=0;debug_rows=0;draw_bottom_extras();}
 
 int main(void){
-    /* the debug view is the one the screen starts in: nothing changes until X is pressed */
-    assert(g_view==BV_VIEW_DEBUG&&!g_view_held&&!g_speed_held);
+    /* the standard view (lorenzo's Black 2 design, 2026-11-17) is the one the screen starts in: nothing changes until X is pressed */
+    assert(g_view==BV_VIEW_STANDARD&&!g_view_held&&!g_speed_held);
+    g_view=BV_VIEW_DEBUG; /* the rest of this test is the debug view's strip */
 
     /* X cycles the views in every mode, takes the key, plays the select sound, and moves nothing else */
     static const mode MODES[5]={M_IDLE,M_EVENTS,M_COMMAND,M_FIGHT,M_TARGET};
@@ -80,9 +81,10 @@ int main(void){
     /* the level-up window (inside the events) does not keep X */
     fresh(M_EVENTS);g_view=BV_VIEW_DEBUG;B.lvl.on=true;
     assert(tap(BTN_CYCLE_TERA)&&g_view==BV_VIEW_STANDARD&&B.lvl.on);
-    /* with the item bar focused X still cycles it (the bar's own keys are L and R) */
-    fresh(M_COMMAND);g_view=BV_VIEW_DEBUG;B.bar_sel=0;
-    assert(tap(BTN_CYCLE_TERA)&&g_view==BV_VIEW_STANDARD&&B.bar_sel==0);
+    /* with the item bar focused X still cycles (the bar's own keys are L and R); the cursor leaves the bar, which the standard view does not show
+     * (its items are a panel of its own) */
+    fresh(M_COMMAND);g_view=BV_VIEW_DEBUG;B.bar_sel=0;B.bar_open=true;
+    assert(tap(BTN_CYCLE_TERA)&&g_view==BV_VIEW_STANDARD&&B.bar_sel==-1&&!B.bar_open&&!B.items_on);
 
     /* a held X repeats: the repeats do nothing (and play nothing) until it is released */
     fresh(M_COMMAND);g_view=BV_VIEW_DEBUG;
@@ -128,21 +130,23 @@ int main(void){
     assert(tap(BTN_CYCLE_SHINY)&&B.bar==bar);
     assert(!tap(BTN_CYCLE_GENDER)&&!tap(BTN_CYCLE_ABILITY)&&g_view==BV_VIEW_DEBUG); /* ZL and ZR stay free */
 
-    /* the bottom screen: the debug rows in the debug view only, what X does in both, what Y does when there is a hook */
+    /* the bottom screen: the debug rows and what X and Y do, in the debug view only (lorenzo, 2026-11-17: no controls text in the standard
+     * view's screens); what Y does when there is a hook */
     speed=2;speed_hook=hook;fresh(M_COMMAND);
     g_view=BV_VIEW_DEBUG;draw_extras();
     assert(debug_rows==3);assert(has_drawn("X  Screen: Debug")&&has_drawn("Y  Speed: settings:gameSpeedFast"));
-    g_view=BV_VIEW_STANDARD;draw_extras();
-    assert(debug_rows==0);assert(has_drawn("X  Screen: Standard")&&has_drawn("Y  Speed: settings:gameSpeedFast"));
-    /* one line from the left edge, X then Y (lorenzo, 2026-11-17: the stacked right-aligned labels were out of place): at the top in the standard
-     * view, under the debug rows (physical y 2..31) in the debug one; Y starts after X's text */
-    assert(n_drawn==2&&!strcmp(drawn[0],"X  Screen: Standard")&&drawn_x[0]==8&&drawn_y[0]==6&&drawn_y[1]==6&&drawn_x[1]==8+8*strlen(drawn[0])+18);
+    /* one line from the left edge, X then Y (lorenzo, 2026-11-17: the stacked right-aligned labels were out of place), under the debug rows
+     * (physical y 2..31); Y starts after X's text */
+    assert(n_drawn==3&&drawn_x[0]==8&&drawn_y[0]==34&&drawn_y[1]==34&&drawn_x[1]==8+8*strlen(drawn[0])+18);
+    assert(!strcmp(drawn[2],"Hold SELECT: Stat changes")&&drawn_x[2]==8&&drawn_y[2]==43); /* under it, in the command and fight menus */
+    B.mode=M_EVENTS;draw_extras();assert(n_drawn==2);B.mode=M_COMMAND;
     for(int i=0;i<n_drawn;i++)assert(drawn_origin[i]==0);
-    g_view=BV_VIEW_DEBUG;draw_extras();assert(n_drawn==2&&drawn_y[0]==34&&drawn_y[1]==34);g_view=BV_VIEW_STANDARD;
+    static const mode ALL[5]={M_IDLE,M_EVENTS,M_COMMAND,M_FIGHT,M_TARGET};
+    g_view=BV_VIEW_STANDARD;for(int m=0;m<5;m++){B.mode=ALL[m];draw_extras();assert(debug_rows==0&&n_drawn==0);}B.mode=M_COMMAND;
+    g_view=BV_VIEW_DEBUG;
     speed=3;draw_extras();assert(has_drawn("Y  Speed: settings:gameSpeedTurbo")); /* the label follows the speed */
     speed_hook=NULL;draw_extras();
-    assert(has_drawn("X  Screen: Standard")&&n_drawn==1); /* no hook: no Y line */
-    g_view=BV_VIEW_DEBUG;draw_extras();assert(debug_rows==3&&n_drawn==1&&has_drawn("X  Screen: Debug"));
+    assert(debug_rows==3&&n_drawn==2&&has_drawn("X  Screen: Debug")&&!has_drawn("Y  Speed: settings:gameSpeedTurbo")); /* no hook: no Y line */
     /* drawn only where the bottom screen is */
     space_ok=false;speed_hook=hook;draw_extras();assert(!debug_rows&&!n_drawn);space_ok=true;
 
