@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "battle_anim.h"
+#include "custom_texts.h"
 #include "fused_name.h"
 #include "i18n.h"
 #include "pak.h"
@@ -45,6 +46,9 @@ static const char* loc_file(const char* lang, const char* file, size_t* len) {
 
 static const char* text_get(void* ctx, const char* file, int fallback, size_t* len) {
   (void)ctx;
+  /* lorenzo's own encounters have no file in the pack: their text is compiled in and is the same in every language */
+  const char* own = custom_text_file(file, len);
+  if (own) return fallback == 0 ? own : NULL;
   /* upstream fallbackLng: es-419 -> es-ES -> en; everything else -> en */
   const char* lang = i18n_language();
   const char* chain[3];

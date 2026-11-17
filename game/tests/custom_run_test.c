@@ -2124,6 +2124,19 @@ static void jojo_play(const char* seed, int salt, bool interrupt, bool custom, i
   J.on = false;
 }
 
+/* how often the selection draws `type` over many waves of the run (the party is the run's three starters, the wave and the seed of each draw are the
+ * test's, so only the Bizarre gate differs between the callers) */
+static int times_drawn(int type, int waves) {
+  int drawn = 0;
+  for (int i = 0; i < waves; i++) {
+    int t, tier;
+    R->wave = 20 + i % 100;
+    pr_run_reset_seed(&R->run, R->wave + 1000 * (i / 100));
+    if (gc_mystery_select(R, &t, &tier) && t == type) drawn++;
+  }
+  return drawn;
+}
+
 /* the Pillar Men's hook: offered in a custom run only, each option hands in its fighter's team and makes him the live foe, and the roll state
  * with a live Pillar Man still saves and loads (a live character must be a dealt one) */
 static void test_pillar(void) {
@@ -2144,6 +2157,8 @@ static void test_pillar(void) {
   }
   gc_custom_team t;
   CHECK(!h->pillar(NULL, R, 3, &t), "no fourth fighter");
+  /* the Stand Arrow and every encounter after the Pillar Men ride on the same hook: a Bizarre run is dealt them */
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) > 0 && times_drawn(GC_ME_STAND_ARROW, 400) > 0, "a Bizarre run draws the Pillar Men and the Stand Arrow");
   R->battle_type = BATTLE_TYPE_WILD;
   CHECK(cr_save(slot_used, R) == RSV_SAVED, "a run with a Pillar Man dealt saves");
   char why[RSV_WHY_LEN];
@@ -2164,6 +2179,7 @@ static void test_classic_plain(void) {
   gc_custom_team t;
   memset(&t, 0, sizeof t);
   CHECK(!h->pillar(NULL, R, 0, &t), "and no Pillar Man hands in a team");
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) == 0 && times_drawn(GC_ME_STAND_ARROW, 400) == 0, "a plain Classic run is never dealt the Pillar Men or the Stand Arrow");
   const gc_custom_encounter e = {.wave = 5, .biome = 14 /* Desert: Gyro's */, .kind = GC_ENC_TRAINER, .flags = GC_ENF_RANDOM_TRAINER, .level = 20, .species = 1};
   for (int i = 0; i < 400; i++) CHECK(!h->trainer(NULL, R, &e, &t), "an eligible trainer wave never becomes a JoJo trainer (%d)", i);
   CHECK(cr_stats_get()->jojo_waves == 0, "the roll was not even asked");

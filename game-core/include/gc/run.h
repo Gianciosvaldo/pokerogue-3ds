@@ -296,8 +296,11 @@ enum gc_mystery_type {
     GC_ME_TELEPORTING_HIJINKS, GC_ME_BUG_TYPE_SUPERFAN, GC_ME_FUN_AND_GAMES,
     GC_ME_UNCOMMON_BREED, GC_ME_GLOBAL_TRADE_SYSTEM, GC_ME_THE_EXPERT_POKEMON_BREEDER,
     GC_ME_PILLAR_MEN,   /* custom content only (gc/custom.h, pillar): not an upstream encounter */
+    GC_ME_STAND_ARROW,  /* custom content only (Bizarre runs, the same hook): not an upstream encounter */
     GC_ME_COUNT
 };
+/* every encounter from here on is lorenzo's own and is offered only when the app's pillar hook says the run is a Bizarre one (gc/custom.h) */
+#define GC_ME_UPSTREAM_COUNT GC_ME_PILLAR_MEN
 enum gc_mystery_tier { GC_ME_COMMON = 0, GC_ME_GREAT, GC_ME_ULTRA, GC_ME_ROGUE };
 
 #define GC_MAX_MYSTERY_HISTORY 48

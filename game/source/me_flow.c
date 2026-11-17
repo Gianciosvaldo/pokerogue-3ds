@@ -47,6 +47,7 @@ static const char* const NS[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM] = "globalTradeSystem",
     [GC_ME_THE_EXPERT_POKEMON_BREEDER] = "theExpertPokemonBreeder",
     [GC_ME_PILLAR_MEN] = "pillarMen",
+    [GC_ME_STAND_ARROW] = "standArrow",   /* lorenzo's own: its dialogue is compiled in (custom_texts.h) */
 };
 
 /* The Pillar Men are lorenzo's own encounter (custom runs): no upstream locale file, so their texts are here. The three silhouettes are

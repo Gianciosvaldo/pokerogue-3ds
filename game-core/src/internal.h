@@ -594,6 +594,21 @@ void gc_chest_execute(gc_run *run, int option);
 /* the Pillar Men (src/gc_pillar.c, custom runs) */
 bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
 void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */
+/* D'Arby the Gambler's hand (src/gc_darby.c, Bizarre runs only, lorenzo's spec) */
+#define GC_DARBY_DECK 6
+typedef struct { uint16_t species; uint8_t form; } gc_darby_card;
+int gc_darby_base_speed(const gc_darby_card *c);
+int gc_darby_score4(const gc_darby_card *a, const gc_darby_card *b);     /* max-STAB effectiveness of a against b, in quarters (4 = 1x) */
+int gc_darby_compare(const gc_darby_card *a, const gc_darby_card *b);    /* +1 a wins, -1 b wins, 0 a tie down to the base Speed */
+int gc_darby_reveal(const gc_darby_card deck[GC_DARBY_DECK], int fair, const gc_darby_card *player, pr_rng *r, bool *cheated);
+bool gc_darby_player_wins(const gc_darby_card *player, const gc_darby_card *darby, pr_rng *r);
+/* the Stand Arrow (src/gc_arrow.c, Bizarre runs only) */
+void gc_arrow_execute(gc_run *run, int option, int member);   /* the option chosen; member = the party index the first option picked */
+bool gc_arrow_pick_ok(const gc_run *run, int idx);           /* the party screen's filter of the first option: not fainted */
+bool gc_arrow_pierce_ok(const gc_run *run);                  /* the first option is open: a second Pokemon can still fight if the Arrow takes one */
+int gc_arrow_awaken_percent(void);                           /* the odds of the first option, for the texts */
+int gc_arrow_lose_percent(void);
+int gc_arrow_result(int roll);                               /* 0 awakens, 1 nothing, 2 rejects, for a draw of 0..99 (tests) */
 void gc_mc_execute(gc_run *run, int option);                /* its option chosen: the fight starts (victory is gc_pillar_victory) */
 void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */
 void gc_me_end_with_shop(gc_run *run);                      /* the shop in me_custom, then on to the next wave (end_mystery_encounter_shop) */

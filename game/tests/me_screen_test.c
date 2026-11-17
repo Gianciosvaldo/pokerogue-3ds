@@ -183,11 +183,14 @@ static const char* const POKEMON = "{\"pikachu\":\"Pikachu\",\"lapras\":\"Lapras
 static const char* const MOVE = "{\"surf\":{\"name\":\"Surf\"},\"fly\":{\"name\":\"Fly\"}}";
 
 #include "fixtures/mystery-encounters-en.inc"
+#include "../source/custom_texts.h"
 static bool use_source_locales;
 
 static const char* locale_get(void* ctx, const char* file, int fallback, size_t* len) {
   (void)ctx;
   const char* r = NULL;
+  const char* own = custom_text_file(file, len);   /* lorenzo's own encounters: compiled in, as battle_events.c's text source does */
+  if (own) return fallback ? NULL : own;
   if (fallback) return NULL;
   if (use_source_locales)
     for (size_t i = 0; i < sizeof source_locales / sizeof *source_locales; i++)
@@ -454,6 +457,45 @@ int main(void) {
   CHECK(n_got == 1 && got.option == 2 && got.b == 0 && got.c == 1, "the dance move: %d %d %d", got.option, got.b, got.c);
   CHECK(strstr(got.selected, "Pikachu") && strstr(got.selected, "shows off swordsDance"), "the move is named (the fake locale has no move names, so by its key): %s", got.selected);
   use_source_locales = false;
+
+  /* the Stand Arrow: lorenzo's own text (custom_texts.h) with the core's odds as tokens, the party screen on the first option only, and the texts each
+   * option says when picked */
+  run_at(GC_ME_STAND_ARROW, 3);
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  R.screen.me_args[0] = pr_arg_int("awakenPercent", 60);
+  R.screen.me_args[1] = pr_arg_int("losePercent", 10);
+  R.screen.n_me_args = 2;
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(!strcmp(intro, "A strange arrowhead lies in the dust, glowing faintly."), "arrow intro: %s", intro);
+  CHECK(me_flow_open(&R, chosen, NULL), "arrow question opens");
+  draw(0);
+  CHECK(has_text(0, "The Stand Arrow") && has_text(0, "What will you do?"), "arrow: title and query");
+  draw(1);
+  CHECK(has_text(1, "Pierce your Pokemon") && has_text(1, "Pierce a wild Pokemon") && has_text(1, "Leave it"), "arrow: the three labels");
+  CHECK(has_text(1, "60% to awaken") && has_text(1, "10% to lose") && !find_text(1, "{{"), "arrow: the odds are the core's tokens, no raw token");
+  press(BTN_ACTION);   /* the party screen: pick Pikachu */
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 0 && got.b == 0 && !strcmp(got.selected, "The Arrow pierces Pikachu!"), "arrow: pierce %d %d '%s'", got.option, got.b, got.selected);
+  g_depth = n_got = 0;
+  CHECK(me_flow_open(&R, chosen, NULL), "arrow reopens");
+  press(BTN_DOWN);
+  press(BTN_ACTION);   /* no party screen: the wild one answers at once */
+  CHECK(n_got == 1 && got.option == 1 && !strcmp(got.selected, "The Arrow flies into the grass and something howls!"), "arrow: wild %d '%s'", got.option, got.selected);
+  g_depth = n_got = 0;
+  CHECK(me_flow_open(&R, chosen, NULL), "arrow reopens again");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && !strcmp(got.selected, "You leave the Arrow where it lies."), "arrow: leave %d '%s'", got.option, got.selected);
+  g_depth = n_got = 0;
+  R.screen.option_ok[0] = false;   /* shut without a second fighter: its own tooltip, and the option cannot be taken */
+  CHECK(me_flow_open(&R, chosen, NULL), "arrow reopens with the first option shut");
+  press(BTN_UP);   /* the cursor starts on the first row that can be taken: go back up to the shut one */
+  draw(1);
+  CHECK(has_text(1, "second Pokemon"), "arrow: the shut option says why");
+  press(BTN_ACTION);
+  CHECK(n_got == 0 && g_depth == 1, "arrow: a shut option is not taken");
+  g_depth = 0;
 
   /* the Pillar Men: their own texts, three plain options, and three black silhouettes of the fighters on the top screen */
   run_at(GC_ME_PILLAR_MEN, 3);
