@@ -1,5 +1,5 @@
 /* The battle screen's two hotkeys (lorenzo, 2026-11-16): X cycles what the bottom screen shows (the debug view, which is the screen as it was, and the
- * standard one), Y steps the game speed through the app's hook. Both work in every mode (the events play with them too), neither moves a cursor,
+ * standard one), Y steps the game speed through the app's hook. Both work in every mode (the events play with them too, and the target pad), neither moves a cursor,
  * a held key's repeats are swallowed until its release, the view outlives the battle (bv_begin clears B, not the view), without a speed hook Y is
  * not taken, and the bottom screen draws the debug rows only in the debug view and the state of both keys in both. */
 #include <assert.h>
@@ -70,8 +70,8 @@ int main(void){
     assert(g_view==BV_VIEW_DEBUG&&!g_view_held&&!g_speed_held);
 
     /* X cycles the views in every mode, takes the key, plays the select sound, and moves nothing else */
-    static const mode MODES[4]={M_IDLE,M_EVENTS,M_COMMAND,M_FIGHT};
-    for(int m=0;m<4;m++){
+    static const mode MODES[5]={M_IDLE,M_EVENTS,M_COMMAND,M_FIGHT,M_TARGET};
+    for(int m=0;m<5;m++){
         fresh(MODES[m]);g_view=BV_VIEW_DEBUG;B.cmd_cursor=2;B.move_cursor=1;
         assert(tap(BTN_CYCLE_TERA)&&g_view==BV_VIEW_STANDARD&&selects==1);
         assert(tap(BTN_CYCLE_TERA)&&g_view==BV_VIEW_DEBUG&&selects==2);
@@ -99,13 +99,13 @@ int main(void){
 
     /* Y steps the speed through the hook in every mode, once per press, and moves nothing else */
     speed=1;steps=0;speed_hook=hook;
-    for(int m=0;m<4;m++){
+    for(int m=0;m<5;m++){
         fresh(MODES[m]);B.cmd_cursor=3;B.move_cursor=2;const int before=steps,sel=selects;
         assert(tap(BTN_CYCLE_NATURE)&&steps==before+1&&selects==sel+1);
         assert(B.mode==MODES[m]&&B.cmd_cursor==3&&B.move_cursor==2&&!answers);
     }
-    assert(steps==4&&speed==1); /* four presses from Normal: Fast, Turbo, Slow, Normal */
-    fresh(M_EVENTS);B.lvl.on=true;assert(tap(BTN_CYCLE_NATURE)&&B.lvl.on&&steps==5&&speed==2);
+    assert(steps==5&&speed==2); /* five presses from Normal: Fast, Turbo, Slow, Normal, Fast */
+    fresh(M_EVENTS);B.lvl.on=true;assert(tap(BTN_CYCLE_NATURE)&&B.lvl.on&&steps==6&&speed==3);
     /* a held Y repeats: once */
     fresh(M_COMMAND);steps=0;
     assert(bv_input(NULL,BTN_CYCLE_NATURE)&&bv_input(NULL,BTN_CYCLE_NATURE)&&bv_input(NULL,BTN_CYCLE_NATURE)&&steps==1&&selects==1);

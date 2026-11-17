@@ -560,6 +560,13 @@ build/field_overlay_test: field_overlay_test.c ../source/battle_view.c ../source
 field_overlay_test: build/field_overlay_test
 .PHONY: field_overlay_test
 
+# the target choice of a single-target move in a double: the cursor's start, the D-pad, the flash and the bob on the top screen, the tiles' taps
+build/target_select_test: target_select_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections target_select_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+target_select_test: build/target_select_test
+.PHONY: target_select_test
+
 # the foes' side of a double battle on the top screen: platform raised (up) with the foes, trainer and doll on their marks, smaller field
 build/doubles_layout_test: doubles_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build
