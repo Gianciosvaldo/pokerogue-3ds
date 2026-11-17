@@ -73,9 +73,7 @@ static struct {
   /* what the battle screen shows */
   bool present[4];              /* a Pokemon of each side is out */
   int shown_ally;
-  int target_values[4],target_count,ball_target;
-  char target_labels[4][96];
-  const char *target_options[4];
+  int ball_target;
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
   bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
   bool next_encounter;          /* this wave is the next one of the same biome: no fade, the enemy side slides in over the old one */
@@ -1937,17 +1935,18 @@ static void on_check_switch_answer(int yes, void* arg) {
   answer(&c);
 }
 
-static void target_done(int row,void *arg){
-  (void)arg;gc_choice c={.kind=row<0?GC_CH_CANCEL:GC_CH_TARGET,.a=row>=0&&row<G.target_count?G.target_values[row]:-1};answer(&c);
+/* GC_SCREEN_TARGET: the battle screen's own target choice (the field flashes the pointed Pokemon, TargetSelectUiHandler) */
+static void on_target(int field,void *arg){
+  (void)arg;gc_choice c={.kind=field<0?GC_CH_CANCEL:GC_CH_TARGET,.a=(int16_t)field};answer(&c);
 }
 static void ask_target(void){
-  G.target_count=0;
-  for(int field=0;field<4;field++)if(G.run.screen.target_ok[field]){
-    int i=G.target_count++;G.target_values[i]=field;const pr_pokemon *p=G.run.bt.field[field];
-    snprintf(G.target_labels[i],sizeof G.target_labels[i],"%s %s: %s",field<2?"Ally":"Foe",field%2?"right":"left",p?i18n_species_name(pr_shown_form(&G.run.bt,p)->species):"?");
-    G.target_options[i]=G.target_labels[i];
-  }
-  ui_push_options(G.target_options,G.target_count,true,target_done,NULL);
+  const gc_screen *s=gc_run_screen(&G.run);
+  bv_target_opts o;memset(&o,0,sizeof o);
+  for(int f=0;f<4;f++)o.ok[f]=s->target_ok[f];
+  o.slot=s->slot;
+  const int move=G.run.bt.commands[s->slot&1].move;
+  o.title=move>0&&move<PR_MOVE_COUNT?i18n_move_name(move):NULL;
+  bv_ask_target(&o,on_target,NULL);
 }
 
 static void screen_step(void) {
