@@ -7,6 +7,10 @@
  *           id, so a run whose ids are chosen to put E ^ F just below or just above 64 * multiplier shows the multiplier exactly; the
  *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output.
  *   candy : the Classic candy friendship multiplier (getClassicFriendshipMultiplier(): 3, or an event's when higher; Classic only).
+ *   rewards: the items an event gives after a Classic wave (getFixedBattleEventRewards): which phases VictoryPhase queues, in which order, and
+ *           the tier ball a full stack turns into. Expected tiers are read from upstream's init-modifier-pools.ts (CANDY_JAR, EXP_CHARM
+ *           ULTRA; CATCHING_CHARM, ABILITY_CHARM, SUPER_EXP_CHARM, MEGA_BRACELET, DYNAMAX_BAND ROGUE; SHINY_CHARM, HEALING_CHARM MASTER) and
+ *           max stacks from modifier.ts / modifier-type.ts, not from the port's tables.
  *   voucher: the voucher a defeated boss gives (TrainerVictoryPhase): upgraded while an event says getUpgradeUnlockedVouchers().
  *   fusion: Fusion Day also changes the shop: DNA Splicers' weights per tier (init-modifier-pools.ts), asked of reward-core's own weight function.
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
@@ -330,6 +334,163 @@ static void candy_section(void)
     CHECK_EQ(sys2.starters[SPECIES_ID_BULBASAUR].friendship - before, 9);
 }
 
+/* the phases a won wave queues after its BattleEndPhase, as text: "egg,LOCK_CAPSULE,SHINY_CHARM,shop". `have` is a list of {key, stack}. */
+typedef struct { const char *key; int stack; int tier; } have_t;
+static const char *wave_queue(int mode, int wave, const gc_event_source *src, const have_t *have, int n_have, bool wave_asked_check)
+{
+    static char out[512];
+    static const char seed[] = "events-rewards";
+    memset(&run, 0, sizeof run);
+    gc_run_new(&run, mode, seed, 7);
+    gc_run_set_events(&run, src);
+    gc_starter team[3];
+    memset(team, 0, sizeof team);
+    const int species[3] = {SPECIES_ID_BULBASAUR, SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
+    for (int i = 0; i < 3; i++) {
+        team[i].species = (uint16_t)species[i];
+        team[i].tera_type = -1;
+        for (int k = 0; k < 6; k++) team[i].ivs[k] = 15;
+    }
+    const char *why = "";
+    CHECK(gc_run_set_starters(&run, team, 3, &why));
+    for (int i = 0; i < n_have; i++) {
+        gc_item_add(&run, have[i].key, -1, 0, have[i].stack);
+        if (have[i].tier) run.items[run.n_items - 1].type_tier = (uint8_t)have[i].tier;
+    }
+    run.wave = wave;
+    gc_rq_reset(&gc_int(&run)->rq);
+    const int before = asked;
+    gc_queue_battle_end(&run);
+    if (wave_asked_check) CHECK(asked > before);   /* the source is asked at the moment of the victory, never cached */
+    gc_rqueue *q = &gc_int(&run)->rq;
+    out[0] = 0;
+    for (int l = 0; l < q->n_levels; l++)
+        for (int k = 0; k < q->n[l]; k++) {
+            const gc_rphase *ph = &q->q[l][k];
+            const char *t = ph->type == RP_MODIFIER_REWARD ? ph->key : ph->type == RP_SELECT_MODIFIER ? "shop" : ph->type == RP_EGG_LAPSE ? "egg"
+                          : ph->type == RP_BATTLE_END ? "end" : ph->type == RP_TRAINER_VICTORY ? "trainer" : ph->type == RP_NEW_BATTLE ? "new" : ph->type == RP_GAME_OVER ? "over" : ph->type == RP_SELECT_BIOME ? "biome" : "?";
+            if (out[0]) strcat(out, ",");
+            strcat(out, t);
+        }
+    return out;
+}
+
+static gc_event_effects charm_hour(void)
+{
+    gc_event_effects fx;
+    memset(&fx, 0, sizeof fx);
+    fx.rewards[0] = (gc_event_reward){8, "SHINY_CHARM"};
+    fx.rewards[1] = (gc_event_reward){8, "ABILITY_CHARM"};
+    fx.rewards[2] = (gc_event_reward){8, "CATCHING_CHARM"};
+    fx.rewards[3] = (gc_event_reward){25, "SHINY_CHARM"};
+    return fx;
+}
+
+static void rewards_section(void)
+{
+    memset(&open_now, 0, sizeof open_now);
+    /* no event: the wave's queue is upstream's own (a wave not a multiple of 10: the egg lapse, then the shop) */
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, NULL, NULL, 0, false), "end,egg,shop,new"));
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, NULL, 0, true), "end,egg,shop,new"));
+    open_now = charm_hour();
+    /* the rewards come after the egg lapse and before the shop, in the list's order; other waves get none */
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, NULL, 0, true), "end,egg,SHINY_CHARM,ABILITY_CHARM,CATCHING_CHARM,shop,new"));
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 25, &SRC, NULL, 0, true), "end,egg,SHINY_CHARM,shop,new"));
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 7, &SRC, NULL, 0, true), "end,egg,shop,new"));
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 9, &SRC, NULL, 0, true), "end,egg,shop,new"));
+    /* Classic only, and never the last wave */
+    CHECK(!strcmp(wave_queue(GAME_MODES_ENDLESS, 8, &SRC, NULL, 0, false), "end,egg,shop,new"));
+    CHECK(!strcmp(wave_queue(GAME_MODES_SPLICED_ENDLESS, 8, &SRC, NULL, 0, false), "end,egg,shop,new"));
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){200, "SHINY_CHARM"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 200, &SRC, NULL, 0, false), "end,over"));   /* the final wave: only the BattleEndPhase */
+    /* the Lock Capsule of wave 165 comes first (upstream's switch is before the event loop) */
+    open_now.rewards[0] = (gc_event_reward){165, "EXP_CHARM"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 165, &SRC, NULL, 0, true), "end,egg,LOCK_CAPSULE,EXP_CHARM,shop,new"));
+    /* Waiting Room: both items on wave 115, in order */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){115, "MEGA_BRACELET"};
+    open_now.rewards[1] = (gc_event_reward){115, "DYNAMAX_BAND"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 115, &SRC, NULL, 0, true), "end,egg,MEGA_BRACELET,DYNAMAX_BAND,shop,new"));
+    /* a wave that is a multiple of 10 has no shop: the event's reward still comes first, then the wave's own charm and ball */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){100, "CANDY_JAR"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 100, &SRC, NULL, 0, true), "end,egg,CANDY_JAR,EXP_CHARM,GOLDEN_POKEBALL,biome,new"));
+    /* a list ends at its first empty slot, a NULL or unknown key is skipped */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){8, "SHINY_CHARM"};
+    open_now.rewards[1] = (gc_event_reward){0, "ABILITY_CHARM"};
+    open_now.rewards[2] = (gc_event_reward){8, "CATCHING_CHARM"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, NULL, 0, true), "end,egg,SHINY_CHARM,shop,new"));
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){8, NULL};
+    open_now.rewards[1] = (gc_event_reward){8, "NOT_AN_ITEM"};
+    open_now.rewards[2] = (gc_event_reward){8, "CANDY_JAR"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, NULL, 0, true), "end,egg,CANDY_JAR,shop,new"));
+
+    /* a full stack: the reward is the ball of the item's tier (existingItem.getStackCount() + 1 > getMaxStackCount()) */
+    static const struct { const char *key; int max; const char *ball; } full[] = {
+        {"SHINY_CHARM", 4, "MASTER_BALL"},     {"HEALING_CHARM", 5, "MASTER_BALL"},
+        {"ABILITY_CHARM", 4, "ROGUE_BALL"},    {"CATCHING_CHARM", 3, "ROGUE_BALL"},  {"SUPER_EXP_CHARM", 30, "ROGUE_BALL"},
+        {"MEGA_BRACELET", 1, "ROGUE_BALL"},    {"DYNAMAX_BAND", 1, "ROGUE_BALL"},
+        {"CANDY_JAR", 99, "ULTRA_BALL"},       {"EXP_CHARM", 99, "ULTRA_BALL"},
+    };
+    for (unsigned i = 0; i < sizeof full / sizeof *full; i++) {
+        memset(&open_now, 0, sizeof open_now);
+        open_now.rewards[0] = (gc_event_reward){8, full[i].key};
+        char want[128];
+        have_t h = {full[i].key, full[i].max, 0};
+        snprintf(want, sizeof want, "end,egg,%s,shop,new", full[i].ball);
+        CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &h, 1, true), want));
+        if (full[i].max > 1) {   /* one below the maximum: the item itself */
+            h.stack = full[i].max - 1;
+            snprintf(want, sizeof want, "end,egg,%s,shop,new", full[i].key);
+            CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &h, 1, true), want));
+        }
+    }
+    /* an item that is no modifier (Rare Candy, a consumable) has no stack to fill: given as it is */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){8, "RARE_CANDY"};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, NULL, 0, true), "end,egg,RARE_CANDY,shop,new"));
+    /* an item with no tier in any pool that is full stops the loop (upstream: console.warn, break): the rewards after it are lost */
+    int no_tier = -1;
+    for (int it = 0; it < PR_ITEM_COUNT_ && no_tier < 0; it++) {
+        if (!(pr_items[it].flags & PR_ITEMF_PERSISTENT) || pr_items[it].max_stack < 1 || pr_items[it].max_stack > 5) continue;
+        bool in_pool = false;
+        for (int t = 0; t < 6; t++)
+            for (int k = 0; k < pr_player_pool[t].n; k++) in_pool |= pr_player_pool_entries[pr_player_pool[t].start + k].item == it;
+        if (!in_pool) no_tier = it;
+    }
+    CHECK(no_tier >= 0);
+    if (no_tier >= 0) {
+        memset(&open_now, 0, sizeof open_now);
+        open_now.rewards[0] = (gc_event_reward){8, pr_item_keys[no_tier]};
+        open_now.rewards[1] = (gc_event_reward){8, "CANDY_JAR"};
+        have_t fullone = {pr_item_keys[no_tier], pr_items[no_tier].max_stack, 0};
+        CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &fullone, 1, true), "end,egg,shop,new"));
+        fullone.stack = pr_items[no_tier].max_stack - 1 > 0 ? pr_items[no_tier].max_stack - 1 : 1;
+        if (pr_items[no_tier].max_stack > 1) {
+            char want[128];
+            snprintf(want, sizeof want, "end,egg,%s,CANDY_JAR,shop,new", pr_item_keys[no_tier]);
+            CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &fullone, 1, true), want));
+        }
+    }
+    /* another item's stack does not matter, and an item the player lacks is given */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){8, "SHINY_CHARM"};
+    have_t other = {"ABILITY_CHARM", 4, 0};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &other, 1, true), "end,egg,SHINY_CHARM,shop,new"));
+    /* the stack is read when the phases are queued: two rewards of one wave both see 3 of 4 */
+    open_now.rewards[1] = (gc_event_reward){8, "SHINY_CHARM"};
+    have_t three = {"SHINY_CHARM", 3, 0};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &three, 1, true), "end,egg,SHINY_CHARM,SHINY_CHARM,shop,new"));
+    /* the tier the held item's type already carries wins over the pool's: a Shiny Charm from a ROGUE roll (tier 3, stored +1) */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.rewards[0] = (gc_event_reward){8, "SHINY_CHARM"};
+    have_t carried = {"SHINY_CHARM", 4, 4};
+    CHECK(!strcmp(wave_queue(GAME_MODES_CLASSIC, 8, &SRC, &carried, 1, true), "end,egg,ROGUE_BALL,shop,new"));
+}
+
 /* a boss defeated through the real TrainerVictoryPhase: the voucher reward it queues ("" when none) */
 static const char *voucher_reward(int tt, int unlocked_before, const gc_event_source *src, char *out, size_t n)
 {
@@ -437,6 +598,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "luck")) luck_section();
     if (!only || !strcmp(only, "candy")) candy_section();
     if (!only || !strcmp(only, "fusion")) fusion_section();
+    if (!only || !strcmp(only, "rewards")) rewards_section();
     if (!only || !strcmp(only, "voucher")) voucher_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;

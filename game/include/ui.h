@@ -54,7 +54,7 @@ typedef enum {
  *   START -> MENU      SELECT -> STATS           Y -> CYCLE_NATURE   X -> CYCLE_TERA
  *   L -> CYCLE_FORM    R -> CYCLE_SHINY          ZL -> CYCLE_GENDER  ZR -> CYCLE_ABILITY (New 3DS only)
  * Held direction and action buttons repeat every 250 ms, as upstream's inputs-controller does;
- * MENU and STATS never repeat. */
+ * MENU and STATS never repeat. The battle screen takes X (the bottom screen's view) and Y (the game speed) for its own hotkeys. */
 const char* ui_button_name(ui_button b);
 
 /* ---- screens ---- */
