@@ -1636,18 +1636,25 @@ void bv_set_info(const char* name, const char* desc) {
 #define TG_H 56.0f
 #define TG_FOE_Y (-192.0f)
 #define TG_ALLY_Y (-128.0f)
+/* the debug view (X) keeps its rows and the X / Y labels (physical y 2..48) clear: no heading, and two thin rows just above the strip with the name
+ * and the HP bar alone (lorenzo, 2026-11-17: "the double battle ui should be kept to a minimum") */
+#define TG_MINI_H 24.0f
+#define TG_MINI_FOE_Y (-110.0f)
+#define TG_MINI_ALLY_Y (-82.0f)
+static bool tg_mini(void) { return g_view == BV_VIEW_DEBUG; }
+static float tg_h(void) { return tg_mini() ? TG_MINI_H : TG_H; }
 #define TG_HINT_X 12.0f
 #define TG_HINT_Y (-29.0f)
 static const char* const TG_HINTS[2] = {"A: choose", "B: back"};
 static void tg_tile(int f, float* x, float* y) {
   *x = TG_X0 + (f % 2) * (TG_W + TG_GAP);
-  *y = f >= 2 ? TG_FOE_Y : TG_ALLY_Y;
+  *y = tg_mini() ? (f >= 2 ? TG_MINI_FOE_Y : TG_MINI_ALLY_Y) : f >= 2 ? TG_FOE_Y : TG_ALLY_Y;
 }
 static int tg_tile_at(float x, float y) {
   for (int f = 0; f < 4; f++) {
     float tx, ty;
     tg_tile(f, &tx, &ty);
-    if (x >= tx && x < tx + TG_W && y >= ty && y < ty + TG_H) return f;
+    if (x >= tx && x < tx + TG_W && y >= ty && y < ty + tg_h()) return f;
   }
   return -1;
 }
@@ -1655,31 +1662,35 @@ static void draw_target_tile(int f) {
   const side* sd = side_of(f);
   float x, y;
   tg_tile(f, &x, &y);
-  ui_window(x, y, TG_W, TG_H, WIN_NORMAL);
+  const bool mini = tg_mini();
+  const float h = tg_h();
+  ui_window(x, y, TG_W, h, mini ? WIN_THIN : WIN_NORMAL);
   if (sd->present && sd->mon.species > 0) {
     const bv_mon* m = &sd->mon;
-    draw_name(m, f < 2, x + 10, y + 12);
-    draw_level(x + TG_W - 42, y + 15, m->level, false);
+    bv_mon shown = *m;
+    if (mini) shown.status = 0;                               /* (its icon would go under the thin row) */
+    draw_name(&shown, f < 2, x + 8, y + (mini ? 8 : 12));
+    if (!mini) draw_level(x + TG_W - 42, y + 15, m->level, false);
     const float ratio = m->max_hp ? fmaxf(0, fminf(sd->hp_shown / m->max_hp, 1.0f)) : 0;
-    const float bar_x = x + 26, bar_y = y + 37, bar_w = TG_W - 38;
-    img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bar_x - 2, bar_y - 1, 1, 0);
+    const float bar_x = mini ? x + 92 : x + 26, bar_y = mini ? y + 10 : y + 37, bar_w = mini ? TG_W - 100 : TG_W - 38;
+    if (!mini) img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bar_x - 2, bar_y - 1, 1, 0);
     rr_rect(bar_x, bar_y, bar_w, 5, RR_RGBA(0x30, 0x30, 0x38, 255));
     const rr_color c = ratio > 0.5f ? RR_RGBA(0x50, 0xd0, 0x60, 255) : ratio > 0.25f ? RR_RGBA(0xf8, 0xc8, 0x30, 255) : RR_RGBA(0xf0, 0x50, 0x48, 255);
     float w = floorf(bar_w * ratio + 0.5f);
     if (w < 1 && sd->hp_shown > 0) w = 1;
     if (w > 0) rr_rect(bar_x, bar_y, w, 5, c);
   }
-  if (!B.tg.ok[f]) rr_rect(x + 2, y + 2, TG_W - 4, TG_H - 4, RR_RGBA(0x10, 0x10, 0x18, 160));
+  if (!B.tg.ok[f]) rr_rect(x + 2, y + 2, TG_W - 4, h - 4, RR_RGBA(0x10, 0x10, 0x18, 160));
   if (f == B.tg.cursor) {
-    draw_cursor_frame(x, y, TG_W, TG_H);
-    draw_cursor_frame(x + 1, y + 1, TG_W - 2, TG_H - 2);
+    draw_cursor_frame(x, y, TG_W, h);
+    draw_cursor_frame(x + 1, y + 1, TG_W - 2, h - 2);
   }
 }
 static void draw_target_pad(void) {
   char t[96];
   if (B.tg.title[0]) snprintf(t, sizeof t, "Choose a target for %s", B.tg.title);
   else snprintf(t, sizeof t, "Choose a target");
-  text_draw(TS_MOVE_LABEL, TG_X0, TG_FOE_Y - 12, t, NULL); /* under the debug lines (physical y 2..30) */
+  if (!tg_mini()) text_draw(TS_MOVE_LABEL, TG_X0, TG_FOE_Y - 12, t, NULL); /* the standard view: no debug rows above it */
   for (int f = 0; f < 4; f++) draw_target_tile(f);
   for (int i = 0; i < 2; i++) text_draw(TS_INSTRUCTIONS_TEXT, hint_x(TS_INSTRUCTIONS_TEXT, TG_HINT_X, TG_HINTS, i), TG_HINT_Y, TG_HINTS[i], NULL);
 }
@@ -1688,11 +1699,15 @@ static void draw_target_pad(void) {
  * It is drawn twice: on the bottom screen, where the touch-free controls live, and on the top screen over the field's last 48 rows,
  * where upstream puts it (it covers the lower part of the player's Pokemon, as upstream's does). `top` leaves out what upstream
  * draws elsewhere: the move description (MoveInfoOverlay) and the ability bar. */
+static bool strip_fight(bool top) { return B.mode == M_FIGHT || (top && B.mode == M_TARGET); }
 static void draw_bottom(bool top) {
   /* the strip's background: bg frame <window style> at (0,0), origin (0,1) */
   char fr[4];
   snprintf(fr, sizeof fr, "%d", ui_window_style());
-  if (B.mode != M_FIGHT) {
+  /* the top screen's strip keeps the fight menu, the move just picked under the cursor, while its target is chosen (lorenzo, 2026-11-17: not an
+   * empty grey bar); the bottom strip has the target choice's hints */
+  const bool fight = strip_fight(top);
+  if (!fight) {
     if (top)
       ui_window(-TOP_EXTRA, -48, 320 + 2 * TOP_EXTRA, 48, WIN_NORMAL); /* across the whole screen */
     else if (img_frame("images/ui/bg", fr))
@@ -1705,7 +1720,7 @@ static void draw_bottom(bool top) {
   const bool info = bar_info || summary_info;
   if (cmd_shown() && !info) draw_command_menu(top);
   if (cmd_shown() && !info) draw_tera_button();
-  if (B.mode == M_FIGHT) {
+  if (fight) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
   } else if (bar_info) {
@@ -1745,20 +1760,23 @@ static void draw_debug(void) {
   rr_text_sys(2, 22, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
 }
 
-/* What the bottom screen shows besides the strip: in the debug view the debug rows, and in both what X and Y do now (right, under the rows and above the target pad's tiles, which start at y 48) */
+/* What the bottom screen shows besides the strip: in the debug view the debug rows, and in both what X and Y do now, on one line from the left
+ * edge (lorenzo, 2026-11-17: the two labels stacked at the right edge were "out of place"): under the debug rows in the debug view, at the top in
+ * the standard one. The target choice's tiles start below it in both views. */
+#define BV_KEYS_X 8.0f
+#define BV_KEYS_GAP 18.0f
+static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : 6.0f; }
 static void draw_bottom_extras(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   if (g_view == BV_VIEW_DEBUG) draw_debug();
-  text_opts o = text_defaults();
-  o.origin_x = 1;
-  char s[80], name[40];
+  char x_label[48], y_label[80], name[40];
+  snprintf(x_label, sizeof x_label, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");
+  text_draw(TS_MOVE_LABEL, BV_KEYS_X, bv_keys_y(), x_label, NULL);
   if (speed_hook) {
     i18n_t(name, sizeof name, speed_hook(false), NULL);
-    snprintf(s, sizeof s, "Y  Speed: %s", name);
-    text_draw(TS_MOVE_LABEL, 316, 31, s, &o);
+    snprintf(y_label, sizeof y_label, "Y  Speed: %s", name);
+    text_draw(TS_MOVE_LABEL, BV_KEYS_X + text_width(TS_MOVE_LABEL, x_label, NULL) + BV_KEYS_GAP, bv_keys_y(), y_label, NULL);
   }
-  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");
-  text_draw(TS_MOVE_LABEL, 316, 40, s, &o);
 }
 
 /* ------------------------------------------------------------------ events */
@@ -3059,6 +3077,16 @@ static bool undo_command(ui_button b){
   return true;
 }
 
+/* The column a place stands in on the field: 0 left, 1 right (a player's Pokemon keeps its column through a mid-turn swap, player_right) */
+static int tg_col(int f) { return f >= 2 ? f % 2 : player_right(side_of(f)) ? 1 : 0; }
+/* UP / DOWN: the target straight across on the other side when there is one, else that side's first (upstream always takes the first, which from
+ * the right-hand ally is the foe on the left: lorenzo, 2026-11-17, "it moves diagonally") */
+static int tg_across(int c, bool foes) {
+  for (int f = foes ? 2 : 0; f < (foes ? 4 : 2); f++)
+    if (B.tg.ok[f] && tg_col(f) == tg_col(c)) return f;
+  return tg_first(foes);
+}
+
 /* TargetSelectUiHandler.processInput: A and B answer (and are remembered for the slot's next turn), the D-pad moves by place */
 static bool target_input(ui_button b) {
   const int c = B.tg.cursor;
@@ -3075,10 +3103,10 @@ static bool target_input(ui_button b) {
       return true;
     }
     case BTN_UP:
-      if (c < 2) to = tg_first(true);
+      if (c < 2) to = tg_across(c, true);
       break;
     case BTN_DOWN:
-      if (c >= 2) to = tg_first(false);
+      if (c >= 2) to = tg_across(c, false);
       break;
     case BTN_LEFT:
       if (c % 2 && B.tg.ok[c - 1]) to = c - 1;
@@ -3419,7 +3447,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
-      text_draw(TS_MOVE_LABEL,8,6,"Hold SELECT: Stat changes",NULL);
+      text_draw(TS_MOVE_LABEL,BV_KEYS_X,bv_keys_y()+9,"Hold SELECT: Stat changes",NULL); /* under the X / Y line (it sat on the debug rows) */
     draw_bottom_extras();
   }
 }
