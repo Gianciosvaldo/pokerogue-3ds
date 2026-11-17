@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "achv_toast.h"
 #include "char_sprite.h"
 #include "dialogue_view.h"
 #include "field_border.h"
@@ -271,6 +272,7 @@ static void draw_top(void) {
   g_fade_top = 0;
   g_fade_top_n = 0;
   g_top->draw(g_top, RR_TOP);
+  atoast_draw(); /* the bars are the app's (ui_tick draws them after the screens) */
 }
 static void draw_bottom(void) {
   g_which = 1;
@@ -278,7 +280,10 @@ static void draw_bottom(void) {
   g_name[0] = 0;
   g_top->draw(g_top, RR_BOTTOM);
 }
-static void tick(float ms) { g_top->update(g_top, ms); }
+static void tick(float ms) {
+  g_top->update(g_top, ms);
+  atoast_update(ms); /* and ui_tick updates them */
+}
 /* time passing a frame of 10 ms at a time (a stage ends on the frame that reaches its time; the next one is looked at on the next frame) */
 static void run(float ms) {
   for (float t = 0; t < ms; t += 10) tick(10);
@@ -291,6 +296,7 @@ static rsv_info run_info(int wave) {
 }
 
 static result_args args(bool victory, const wg_gains* g, const co_report* rep) {
+  atoast_reset(); /* each opening is a screen of its own: a bar left up by the one before is not part of it */
   result_args a;
   memset(&a, 0, sizeof a);
   a.victory = victory;
@@ -455,6 +461,7 @@ int main(void) {
     CHECK(n_pm == 0 && n_done == 0, "the post-mortem is not opened before the last message");
     press(BTN_ACTION);
     CHECK(n_pm == 1, "after the last message A opens the post-mortem");
+    run(21000); /* the two bars of the first time have had their turns (the bars are the app's: they run on while the screens change) */
     const int before_sounds = n_sounds;
     g_pm.on_exit(PM_BACK, g_pm.arg);
     CHECK(n_sounds == before_sounds, "B from the post-mortem comes back without the bars or the fanfares again (%d)", n_sounds - before_sounds);

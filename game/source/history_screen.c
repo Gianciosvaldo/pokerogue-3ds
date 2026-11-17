@@ -21,7 +21,6 @@
 #define PITCH 56.0f     /* a run's window plus the gap (RunEntryContainer: slotId * 56) */
 #define ROW_W 304
 #define ROW_H 52
-#define PARTY_ROW 26    /* the info page's party rows: (180 - 23) / 6 */
 
 #define YELLOW RR_RGBA(0xf8, 0xe8, 0x58, 255)
 #define WHITE RR_RGBA(0xf8, 0xf8, 0xf8, 255)
@@ -234,91 +233,122 @@ static int luck_of(const rh_entry* e) {
 
 static const char* const LUCK[] = {"D", "C", "C+", "B-", "B", "B+", "A-", "A", "A+", "A++", "S", "S+", "SS", "SS+", "SSS"};
 
+/* The info page's top screen is upstream's layout (the header, the result window and the info window in a column on the left, the six party
+ * rows on the right) laid out again on the whole 400 x 240 in physical px, not on the 320 x 180 field: upstream's 9 to 11 px words smear on
+ * the 3DS (emerald is crisp at 16 px and from about 12 px up), so the words are 16 px, the fine print is the 8 px pixel font and the icons
+ * are 1.0 (a 0.75 icon drops every fourth pixel row). Nothing was dropped to make room. */
+#define IT_HEAD_H 24    /* the header window, the full width */
+#define IT_SIDE_W 148   /* the column of the result window and the info window */
+#define IT_RESULT_H 124 /* the result window (the info window has what is left of the 240) */
+#define IT_TEXT_X 10    /* text inside those windows, 8 px frame plus 2 */
+#define IT_TEXT_W 128   /* ... and its wrap width (the window's width less both frames) */
+#define IT_ROW_X 152    /* the party rows: the right edge of the screen is 400, the highlight is 2 px outside the row */
+#define IT_ROW_W 244
+#define IT_ROW_Y 27
+#define IT_ROW_PITCH 35
+#define IT_ROW_H 33
+#define IT_ROW_TEXT 44  /* the row's words start this far from its left edge, after a 32 px icon */
+
 static void draw_info_top(const rh_entry* e) {
-  if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
-  if (!ui_space(UI_FIELD)) return;
-  rr_rect(0, 0, 320, 180, RR_RGBA(0x00, 0x68, 0x60, 255)); /* gameStatsBg 0x006860 */
+  if (!ui_space(UI_PHYS_TOP)) return;
+  rr_rect(0, 0, 400, 240, RR_RGBA(0x00, 0x68, 0x60, 255)); /* gameStatsBg 0x006860 */
   char buf[200], a[96], lvl[48];
   text_opts o = text_defaults();
+  const float step = text_line_pitch(TS_WINDOW, NULL) + 2; /* one line of the words to the next */
   /* the header: "Run Info" and the run's name */
-  ui_window(1, 1, 318, 24, WIN_NORMAL);
+  ui_window(0, 0, 400, IT_HEAD_H, WIN_NORMAL);
   i18n_t(buf, sizeof buf, "runHistory:runInfo", NULL);
-  const float hw = text_draw(TS_HEADER_LABEL, 9, 5, buf, &o);
+  const float hw = text_draw(TS_HEADER_LABEL, IT_TEXT_X, 4, buf, &o);
   if (e->name[0]) {
-    o.wrap_w = 318 - 9 - hw - 24;
+    o.wrap_w = 400 - IT_TEXT_X - hw - 10 - 14;
     o.max_lines = 1;
-    text_draw(TS_WINDOW, 9 + hw + 8, 5, e->name, &o);
+    text_draw(TS_WINDOW, IT_TEXT_X + hw + 10, 4, e->name, &o);
   }
-  /* the result window: (1, 25), 95 x 65 */
-  ui_window(1, 25, 95, 65, WIN_NORMAL);
+  /* the result window: the result, the wave, then who won */
+  ui_window(0, IT_HEAD_H, IT_SIDE_W, IT_RESULT_H, WIN_NORMAL);
+  float y = IT_HEAD_H + 8;
   o = text_defaults();
-  o.font_px = 66;
-  result_text(e, buf, sizeof buf);
   if (e->victory) {
+    result_text(e, buf, sizeof buf);
     o.color = RR_RGBA(0x78, 0xc8, 0xf0, 255);
-    text_draw(TS_WINDOW, 7, 30, buf, &o);
   } else {
     i18n_t(buf, sizeof buf, "runHistory:defeated", NULL);
     o.color = RR_RGBA(0xf8, 0x58, 0x58, 255);
-    text_draw(TS_WINDOW, 7, 30, buf, &o);
   }
-  o = text_defaults();
-  o.font_px = 66;
+  text_draw(TS_WINDOW, IT_TEXT_X, y, buf, &o);
+  y += step;
   i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:wave", NULL);
   snprintf(a, sizeof a, "%s %d", lvl, e->wave);
-  text_draw(TS_WINDOW, 7, 42, a, &o);
+  text_draw(TS_WINDOW, IT_TEXT_X, y, a, NULL);
+  y += step;
   if (!e->victory && e->defeat == RH_DEFEAT_WILD) {
-    draw_enemies(e, 9, 58);
+    /* the wild Pokemon that won: 2.0 icons (a crisp doubling) side by side, filling the window's width, their levels centred under them */
+    for (int i = 0; i < e->n_enemy; i++) {
+      const rsv_mon m = rsv_of(&e->enemy[i]);
+      const float cx = IT_TEXT_X + 32 + 64 * i;
+      pi_draw(&m, cx, y, 2.0f);
+      i18n_t(a, sizeof a, "saveSlotSelectUiHandler:lv", NULL);
+      snprintf(buf, sizeof buf, "%s%u", a, (unsigned)e->enemy[i].level);
+      o = text_defaults();
+      o.origin_x = 0.5f;
+      text_draw(TS_WINDOW, cx, y + 58, buf, &o);
+    }
   } else if (!e->victory && (e->defeat == RH_DEFEAT_TRAINER || e->defeat == RH_DEFEAT_RIVAL)) {
-    char who[160], line[256];
+    /* upstream shows "<name> would like to battle!" here (battle:trainerAppeared), beside the trainer's sprite; this page has no sprite, so
+     * the sentence alone reads oddly under "Defeated" (lorenzo, 2026-11-16): just the name, trainerAppeared's {{trainerName}} */
+    char who[160];
     trainer_text(e, who, sizeof who);
-    i18n_t(line, sizeof line, e->trainer_double ? "battle:trainerAppearedDouble" : "battle:trainerAppeared", "trainerName", who, NULL);
-    for (char* c = line; *c; c++)
-      if (*c == '\n') *c = ' ';
     o = text_defaults();
-    o.font_px = 54;
-    o.wrap_w = 82;
-    o.max_lines = 4;
-    text_draw(TS_WINDOW, 7, 55, line, &o);
+    o.wrap_w = IT_TEXT_W;
+    /* four lines of the words fit; a longer name drops to the pixel font rather than be cut */
+    if (text_lines(TS_WINDOW, who, &o) <= 4) {
+      o.max_lines = 4;
+      text_draw(TS_WINDOW, IT_TEXT_X, y, who, &o);
+    } else {
+      o.max_lines = 8;
+      text_draw(TS_INSTRUCTIONS_TEXT, IT_TEXT_X, y, who, &o);
+    }
   }
-  /* the info window: (1, 90), 95 x 90 */
-  ui_window(1, 90, 95, 90, WIN_NORMAL);
+  /* the info window: mode (a long name wraps to a second line), money, luck */
+  const float iy = IT_HEAD_H + IT_RESULT_H;
+  ui_window(0, iy, IT_SIDE_W, 240 - iy, WIN_NORMAL);
+  y = iy + 8;
   o = text_defaults();
-  o.font_px = 60;
-  o.wrap_w = 83;
+  o.wrap_w = IT_TEXT_W;
   char mode[96], md[48];
   i18n_t(md, sizeof md, "runHistory:mode", NULL);
   rt_mode_name(e->mode, mode, sizeof mode);
   snprintf(buf, sizeof buf, "%s: %s", md, mode);
-  text_draw(TS_WINDOW, 7, 96, buf, &o);
-  o.wrap_w = 0;
-  i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:lv", NULL);
-  text_draw(TS_MONEY, 7, 126, rt_money((double)e->money, a, sizeof a), &o);
+  text_draw(TS_WINDOW, IT_TEXT_X, y, buf, &o);
+  y += text_lines(TS_WINDOW, buf, &o) * text_line_pitch(TS_WINDOW, NULL) + 2;
+  o = text_defaults();
+  o.font_px = 96; /* TS_MONEY's colours at the same size as the words around it */
+  text_draw(TS_MONEY, IT_TEXT_X, y, rt_money((double)e->money, a, sizeof a), &o);
+  y += step;
   i18n_t(md, sizeof md, "runHistory:luck", NULL);
   snprintf(buf, sizeof buf, "%s: %s", md, LUCK[luck_of(e)]);
-  text_draw(TS_WINDOW, 7, 162, buf, &o);
-  /* the party: six rows from x = 100 */
+  text_draw(TS_WINDOW, IT_TEXT_X, y, buf, NULL);
+  /* the party: six rows, the highlighted one outlined */
+  i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:lv", NULL);
   for (int i = 0; i < e->n_party; i++) {
     const rh_mon* m = &e->party[i];
-    const float y = 25 + i * PARTY_ROW;
-    rr_rect(100, y, 219, PARTY_ROW - 2, RR_RGBA(0x10, 0x30, 0x38, 255));
-    if (i == H.mon) outline(100, y, 219, PARTY_ROW - 2);
+    const float ry = IT_ROW_Y + i * IT_ROW_PITCH;
+    rr_rect(IT_ROW_X, ry, IT_ROW_W, IT_ROW_H, RR_RGBA(0x10, 0x30, 0x38, 255));
+    if (i == H.mon) outline(IT_ROW_X, ry, IT_ROW_W, IT_ROW_H);
     const rsv_mon rm = rsv_of(m);
-    pi_draw(&rm, 100 + 18, y - 2, 0.75f);
+    pi_draw(&rm, IT_ROW_X + 22, ry + 1, 1.0f);
     o = text_defaults();
-    o.font_px = 60;
+    o.wrap_w = IT_ROW_W - IT_ROW_TEXT - 6;
+    o.max_lines = 1;
     char nm[96], nat[64], ab[96];
     snprintf(nm, sizeof nm, "%s", i18n_species_name(m->species));
     snprintf(buf, sizeof buf, "%s  %s%u", nm, lvl, (unsigned)m->level);
-    text_draw(TS_SUMMARY, 100 + 38, y + 3, buf, &o);
-    o.font_px = 54;
+    text_draw(TS_SUMMARY, IT_ROW_X + IT_ROW_TEXT, ry + 1, buf, &o);
     snprintf(a, sizeof a, "nature:%s", m->nature < PR_NATURE_COUNT ? menu_nature_keys[m->nature] : "hardy");
     i18n_t(nat, sizeof nat, a, NULL);
     snprintf(ab, sizeof ab, "%s", i18n_ability_name(m->ability));
     snprintf(buf, sizeof buf, "%s - %s", nat, ab);
-    o.wrap_w = 176;
-    o.max_lines = 1;
-    text_draw(TS_SUMMARY, 100 + 38, y + 14, buf, &o);
+    text_draw(TS_INSTRUCTIONS_TEXT, IT_ROW_X + IT_ROW_TEXT, ry + 21, buf, &o);
   }
 }
 
@@ -340,6 +370,11 @@ static void draw_stat(int i, float x, float y, const rh_mon* m) {
 static const char* const INFO_HINTS[2] = {"A: Summary", "B: Back"};
 #define INFO_HINT_X 16
 #define INFO_HINT_Y 224
+/* The Pokemon's block at the top (icon, name, nature, types) is 76 px tall: a tap on it goes on to the next Pokemon of the run */
+#define INFO_NAME_H 76
+#define IB_ICON_X 48 /* the icon is drawn at 2.0, a crisp doubling of the 32 px icon: centre x and top y */
+#define IB_ICON_Y 8
+#define IB_TEXT_X 92 /* name, nature and types beside it */
 
 /* the highlighted Pokemon's stats and moves, on the bottom screen */
 static void draw_info_bottom(const rh_entry* e) {
@@ -350,30 +385,30 @@ static void draw_info_bottom(const rh_entry* e) {
   const rh_mon* m = &e->party[H.mon];
   char buf[160], nat[64], a[96], lvl[48], ab[96];
   const rsv_mon rm = rsv_of(m);
-  pi_draw(&rm, 36, 12, 1.0f);
+  pi_draw(&rm, IB_ICON_X, IB_ICON_Y, 2.0f);
   i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:lv", NULL);
   snprintf(buf, sizeof buf, "%s  %s%u", i18n_species_name(m->species), lvl, (unsigned)m->level);
-  text_draw(TS_WINDOW, 60, 14, buf, NULL);
+  text_draw(TS_WINDOW, IB_TEXT_X, 14, buf, NULL);
   snprintf(a, sizeof a, "nature:%s", m->nature < PR_NATURE_COUNT ? menu_nature_keys[m->nature] : "hardy");
   i18n_t(nat, sizeof nat, a, NULL);
-  text_draw(TS_WINDOW, 60, 34, nat, NULL);
-  /* types, ability and passive */
+  text_draw(TS_WINDOW, IB_TEXT_X, 34, nat, NULL);
+  /* types (beside the icon, bottom edge at y 70), ability and passive */
   for (int i = 0; i < 2; i++) {
     if (m->types[i] < 0 || m->types[i] >= PR_TYPE_COUNT + 1 || !menu_type_frames[m->types[i]]) continue;
-    img_draw("images/types", menu_type_frames[m->types[i]], 20 + 34 * i, 66, 0, 1);
+    img_draw("images/types", menu_type_frames[m->types[i]], IB_TEXT_X + 34 * i, 70, 0, 1);
   }
   i18n_t(lvl, sizeof lvl, "starterSelectUiHandler:ability", NULL);
   snprintf(ab, sizeof ab, "%s", i18n_ability_name(m->ability));
   snprintf(buf, sizeof buf, "%s %s", lvl, ab);
-  text_draw(TS_WINDOW, 16, 72, buf, NULL);
+  text_draw(TS_WINDOW, 16, 78, buf, NULL);
   if (m->has_passive) {
     i18n_t(lvl, sizeof lvl, "starterSelectUiHandler:passive", NULL);
     snprintf(ab, sizeof ab, "%s", i18n_ability_name(m->passive));
     snprintf(buf, sizeof buf, "%s %s", lvl, ab);
-    text_draw(TS_WINDOW, 16, 90, buf, NULL);
+    text_draw(TS_WINDOW, 16, 96, buf, NULL);
   }
   /* the six stats in two columns */
-  for (int i = 0; i < 6; i++) draw_stat(i, 16 + (i / 3) * 150, 116 + (i % 3) * 16, m);
+  for (int i = 0; i < 6; i++) draw_stat(i, 16 + (i / 3) * 150, 118 + (i % 3) * 16, m);
   /* the moves, two columns of two */
   for (int i = 0; i < 4; i++) {
     const float x = 16 + (i % 2) * 150, y = 172 + (i / 2) * 26;
@@ -541,7 +576,7 @@ static bool hs_touch(ui_screen* s, float x, float y) {
       const int h = hint_at(TS_INSTRUCTIONS_TEXT, INFO_HINT_X, INFO_HINTS, 2, x);
       return h < 0 ? false : hs_input(s, h == 0 ? BTN_ACTION : BTN_CANCEL);
     }
-    return y < 60 ? hs_input(s, BTN_DOWN) : false;
+    return y < INFO_NAME_H ? hs_input(s, BTN_DOWN) : false;
   }
   for (int i = 0; i < H.n; i++) {
     const float top = 8 + i * PITCH - H.scroll;

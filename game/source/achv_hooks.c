@@ -7,8 +7,7 @@
 #include "gc/achv.h"
 #include "gc/data.h"
 
-#define QUEUE 8
-#define MSG_LEN 192
+#define QUEUE GC_ACHV_COUNT /* an unlock is told once, so the queue holds at most every achievement of the table */
 
 static struct {
   bool tracking;
@@ -20,9 +19,8 @@ static struct {
   int balls;        /* Poke Balls thrown this run */
   bool loaded;      /* the run was resumed from a save: what happened before is unknown */
   bool ended;       /* the run's end was told */
-  char q[QUEUE][MSG_LEN];
+  uint8_t q[QUEUE]; /* the ids unlocked and not yet taken */
   int nq, qi;
-  char out[MSG_LEN];
 } H;
 
 void ach_reset(void) { memset(&H, 0, sizeof H); }
@@ -41,12 +39,6 @@ static uint32_t run_tag(const gc_run* run)
   uint32_t h = 2166136261u;
   for (size_t i = 0; i < run->run.seed.len && i < 64; i++) h = (h ^ run->run.seed.u[i]) * 16777619u;
   return h ? h : 1;
-}
-
-static void queue(const char* a, const char* b)
-{
-  if (H.nq >= QUEUE) return;
-  snprintf(H.q[H.nq++], MSG_LEN, "%s\n%s", a, b);
 }
 
 static bool evolves(int species)
@@ -71,20 +63,15 @@ void ach_reset_loaded(void)
   H.loaded = true;
 }
 
-/* what is met now is unlocked and told */
+/* what is met now is unlocked and queued for the app to tell (ach_take_unlock) */
 static bool evaluate(gc_system* sys, const gc_run* run)
 {
   char seed[32];
   snprintf(seed, sizeof seed, "%08xw%d", (unsigned)run_tag(run), (int)run->wave);
   gc_achv_new fresh;
   gc_achv_evaluate(sys, seed, 0, &fresh);
-  for (int i = 0; i < fresh.n; i++) {
-    const gc_achv_def* d = &gc_achv_defs[fresh.id[i]];
-    char a[96], b[96];
-    snprintf(a, sizeof a, "Achievement unlocked: %s!", d->name);
-    snprintf(b, sizeof b, "You received %s!", gc_achv_reward_name(d));
-    queue(a, b);
-  }
+  for (int i = 0; i < fresh.n; i++)
+    if (H.nq < QUEUE) H.q[H.nq++] = fresh.id[i];
   return fresh.n > 0;
 }
 
@@ -134,12 +121,11 @@ bool ach_on_screen(const gc_run* run, int kind, int jojo, bool bizarre)
   return changed;
 }
 
-const char* ach_take_message(void)
+int ach_take_unlock(void)
 {
   if (H.qi >= H.nq) {
     H.nq = H.qi = 0;
-    return NULL;
+    return -1;
   }
-  snprintf(H.out, sizeof H.out, "%s", H.q[H.qi++]);
-  return H.out;
+  return H.q[H.qi++];
 }

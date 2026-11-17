@@ -4,24 +4,18 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "achv_toast.h"
 #include "char_sprite.h"
 #include "dialogue_view.h"
 #include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "postmortem_screen.h"
-#include <math.h>
 
 #include "run_summary.h"
-#include "toast_view.h"
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
-
-/* AchvBar: it slides in over 500 ms, is in place until 10 s after it began (showAchv's delayedCall(10000, hide)), slides out over 500 ms */
-#define TOAST_IN_MS 500.0f
-#define TOAST_OUT_AT_MS 10000.0f
-#define TOAST_OUT_MS 500.0f
 
 /* GameOverPhase's way into the end card of a Classic win: fadeIn(500), the rival slides in, her dialogue (one page per A), fadeOut(500),
  * she is hidden (750 under the black), then EndCardPhase's fadeIn(1000) and its prompt */
@@ -49,11 +43,6 @@ static struct {
   wg_gains gains;           /* a.gains copied */
   int msgs[WG_MAX], n_msgs; /* the gains that are messages, in order; page is the one in the box (-1 = the line of the result) */
   int page;
-  int toasts[WG_MAX], n_toasts; /* the gains that are bars */
-  int toast;                    /* the bar on screen (index into toasts), == n_toasts when none is */
-  float toast_ms;               /* how long it has been up */
-  wg_toast info;                /* its words, and what tv_draw gets */
-  tv_info tv;
 } R;
 
 /* the box and its window grow from two lines to three when there are messages to tell: a first ribbon is two long lines */
@@ -79,13 +68,14 @@ static void show_gain(int page) {
   show_page_text(text);
 }
 
-static void start_toast(int i) {
-  R.toast = i;
-  R.toast_ms = 0;
-  if (i >= R.n_toasts) return;
-  wg_toast_of(&R.gains.item[R.toasts[i]], &R.info);
-  R.tv = (tv_info){R.info.title, R.info.desc, R.info.score, R.info.icon, R.info.tier};
-  ui_play_sound("se/achv");
+/* AchvBar: the gains that are bars go to the app's achievement bar (achv_toast.h), which slides each in over 500 ms, keeps it until 10 s after it
+ * began (showAchv's delayedCall(10000, hide)), slides it out over 500 ms and goes on to the next, with the achievement sound as each begins. It
+ * is the UI's and not this screen's, as upstream's ui.achvBar is: leaving the screen does not take the bar away. */
+static void push_toast(const wg_item* it) {
+  wg_toast info;
+  wg_toast_of(it, &info);
+  const tv_info tv = {info.title, info.desc, info.score, info.icon, info.tier};
+  atoast_push(&tv, false);
 }
 
 static void leave_result(void) {
@@ -200,21 +190,6 @@ static void rs_update(ui_screen* s, float dt) {
     case ST_CARD:
       break;
   }
-  if (R.toast < R.n_toasts) {
-    R.toast_ms += dt;
-    if (R.toast_ms >= TOAST_OUT_AT_MS + TOAST_OUT_MS) start_toast(R.toast + 1);
-  }
-}
-
-/* the bar on the top screen: Sine.easeOut in, Sine.easeIn out */
-static void draw_toast(void) {
-  if (R.toast >= R.n_toasts) return;
-  float slide = 1.0f;
-  if (R.toast_ms < TOAST_IN_MS)
-    slide = sinf(R.toast_ms / TOAST_IN_MS * 1.5707963f);
-  else if (R.toast_ms >= TOAST_OUT_AT_MS)
-    slide = cosf((R.toast_ms - TOAST_OUT_AT_MS) / TOAST_OUT_MS * 1.5707963f); /* 1 - Sine.easeIn */
-  tv_draw(&R.tv, slide);
 }
 
 /* ui.fadeIn / fadeOut: the black over both screens; 0 = clear */
@@ -311,8 +286,7 @@ static void draw_top(void) {
     if (ui_space(UI_FIELD)) text_draw(TS_SUMMARY, 160, 90, "Game Over", &o);
   }
   if (ui_space(UI_PHYS_TOP)) draw_fade(400, 240);
-  /* the bars are the UI's, over the fade as over the scene */
-  if (R.a.victory && ui_space(UI_FIELD)) draw_toast();
+  /* the bars are the UI's (ui_tick draws them), over the fade as over the scene */
 }
 
 static void draw_bottom(void) {
@@ -364,7 +338,7 @@ void result_screen_open(const result_args* a) {
   if (a->victory && gains.n > 0 && gains.n <= WG_MAX) R.gains = gains;
   for (int i = 0; i < R.gains.n; i++) {
     if (wg_is_toast(&R.gains.item[i]))
-      R.toasts[R.n_toasts++] = i;
+      push_toast(&R.gains.item[i]);
     else
       R.msgs[R.n_msgs++] = i;
   }
@@ -393,6 +367,5 @@ void result_screen_open(const result_args* a) {
     set_stage(ST_CARD);
     show_end_card_line();
   }
-  start_toast(0);
   ui_set(&g_screen);
 }

@@ -19,6 +19,7 @@
 #include "result_screen.h"
 #include "run_history.h"
 #include "achv_screen.h"
+#include "achv_toast.h"
 #include "run_saves.h"
 #include "run_settings.h"
 #include "slot_screen.h"
@@ -454,7 +455,12 @@ static void on_achv_exit(void* arg) {
 
 static void show_achievements(void) {
   /* the collection ones follow the Pokedex, which changes outside a run too (hatching): what is met now is given before the list shows */
-  if (gc_achv_evaluate(sysd_get(), "title", 0, NULL) > 0) sysd_save();
+  gc_achv_new fresh;
+  if (gc_achv_evaluate(sysd_get(), "title", 0, &fresh) > 0) {
+    sysd_save();
+    /* each one is told with the bar, which stays over the list as it stays over every screen */
+    for (int i = 0; i < fresh.n; i++) atoast_push_achv(fresh.id[i]);
+  }
   const achv_args a = {sysd_get(), on_achv_exit, NULL};
   achv_screen_open(&a);
 }
