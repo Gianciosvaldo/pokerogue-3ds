@@ -416,8 +416,35 @@ static void test_all_in(void)
     printf("ok All-In (three distinct souls; a win: a Big Nugget and two screens of %d Master-tier items; a loss takes all three)\n", want);
 }
 
+/* the playtest hook (rundriver.txt "mystery=darby,5", lorenzo 2026-11-17): it reaches Bizarre runs for D'Arby, keeps his party of four and never fires
+ * in a plain run (no pillar hook: the encounter does not exist there) */
+static void test_forced(void)
+{
+    const struct { bool hook; int party; bool me; } C[] = {{true, 4, true}, {true, 3, false}, {false, 4, false}};
+    for (int k = 0; k < 3; k++) {
+        gc_debug_force_mystery(GC_ME_DARBY, 5);
+        make_run("darby-forced", C[k].hook, C[k].party, 3);
+        run.wave = 3; gc_new_battle(&run);
+        assert(run.wave == 4 && run.battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER);
+        /* the first wave from 5 that is not a trainer's becomes D'Arby (a trainer wave keeps its trainer) */
+        bool got = false;
+        for (int w = 5; w < 10 && !got; w++) {
+            gc_new_battle(&run);
+            assert(run.wave == w);
+            if (run.battle_type == BATTLE_TYPE_TRAINER) continue;
+            got = true;
+            assert((run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) == C[k].me);
+            if (C[k].me) assert(run.mystery_type == GC_ME_DARBY);
+        }
+        assert(got);
+    }
+    gc_debug_force_mystery(-1, 1);
+    puts("ok forced (rundriver mystery=darby,5: the first non-trainer wave from 5, Bizarre with four Pokemon only)");
+}
+
 int main(void)
 {
+    test_forced();
     test_score();
     test_tie_break();
     test_cheat();

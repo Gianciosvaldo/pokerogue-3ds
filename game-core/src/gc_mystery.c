@@ -218,13 +218,15 @@ static bool available_ex(const gc_run *r, int type, int tier, bool force)
 static bool available(const gc_run *r, int type, int tier) { return available_ex(r, type, tier, false); }
 
 /* Developer hook (sdmc:/3ds/pokerogue/rundriver.txt "mystery="): the first plain wave from `min_wave` on, once per run, becomes this encounter, so a Rogue-tier one can be played
- * without waiting for the draw. Off (type -1) unless the app sets it; custom runs never use it. */
+ * without waiting for the draw. Off (type -1) unless the app sets it; custom runs only use it for the custom encounters (gc_debug_mystery_custom). */
 static int force_type = -1, force_min_wave = 1;
 void gc_debug_force_mystery(int type, int min_wave)
 {
     force_type = type >= 0 && type < GC_ME_COUNT ? type : -1;
     force_min_wave = min_wave > 1 ? min_wave : 1;
 }
+/* lorenzo's own encounters (D'Arby) only exist in Bizarre runs, which are custom runs: the hook reaches custom runs for those alone */
+bool gc_debug_mystery_custom(void) { return force_type >= GC_ME_UPSTREAM_COUNT; }
 bool gc_debug_mystery_pending(const gc_run *run, int wave)
 {
     if (force_type < 0 || wave < force_min_wave || wave % 10 == 0) return false;
