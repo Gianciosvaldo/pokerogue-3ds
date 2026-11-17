@@ -43,6 +43,9 @@ void me_flow_intro(const gc_run* run, char* out, size_t n);
 int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max);
 
 /* the sprites the encounter of the run stands on the field with while its intro plays (what the window of its question also shows) */
+/* D'Arby's pose on the platform (lorenzo's three battle sprites): 0 the standard darby.png, 1 darby_victorious.png (he won the hand: his Stand beside
+ * him), 2 darby_defeated.png (the player won). The run screen sets it from the result lines; me_flow_field_sprites draws it */
+void me_flow_set_darby_pose(int pose);
 int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max);
 
 /* A Trainer's Test picks its stat trainer at run time (the screen's trainerPick): the trainer's signature Pokemon and the trainer, laid out like the

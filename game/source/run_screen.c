@@ -469,6 +469,11 @@ static bv_mon make_mon(const gc_mon* m, bool player) {
   return out;
 }
 
+static void field_sprites(void) {
+  static me_intro_sprite me_sp[ME_MAX_INTRO];
+  bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
+}
+
 static void preload_moves(void) {
   for (int i = 0; i < G.run.n_party; i++)
     for (int k = 0; k < PR_N_MOVES(&G.run.party[i].b); k++) ba_preload_move(PR_MOVES(&G.run.party[i].b)[k]);
@@ -584,10 +589,7 @@ static void wave_black(void* arg) {
   }
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
-  if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) {   /* the encounter's own sprites on the platform */
-    static me_intro_sprite me_sp[ME_MAX_INTRO];
-    bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
-  }
+  if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) field_sprites();   /* the encounter's own sprites on the platform */
   /* after the Pokemon's sprites, which need texture memory in big pieces: the preload is only a guess at what will play */
   preload_moves();
   refresh_item_bars();
@@ -736,6 +738,11 @@ static bool handle_event(int i) {
         break;
       }
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
+      /* D'Arby on the platform: his Stand beside him once the player's hand is lost, collapsed once the player wins (a caught cheat ends in the win) */
+      if (msg_is(e, "mysteryEncounters/darby:result.handLost") || msg_is(e, "mysteryEncounters/darby:result.win")) {
+        me_flow_set_darby_pose(msg_is(e, "mysteryEncounters/darby:result.win") ? 2 : 1);
+        field_sprites();
+      }
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
 
@@ -759,6 +766,7 @@ static bool handle_event(int i) {
       break;
 
     case GC_EV_WAVE:
+      me_flow_set_darby_pose(0);   /* a new wave: D'Arby sits at his table again (the pose is only for his result lines) */
       begin_wave(i);
       return true;
 
@@ -940,6 +948,7 @@ static bool handle_event(int i) {
     }
 
     case GC_EV_MYSTERY: /* the encounter's own intro is said when its screen comes (mystery_screen) */
+      me_flow_set_darby_pose(0);
       break;
 
     case GC_EV_SAVE_POINT:

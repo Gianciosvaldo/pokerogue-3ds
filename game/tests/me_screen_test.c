@@ -471,6 +471,17 @@ int main(void) {
   {
     me_intro_sprite fs[ME_MAX_INTRO];
     CHECK(me_flow_intro_sprites(GC_ME_DARBY, 160, 164, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, "images/trainer/custom/darby"), "darby: the platform keeps darby.png: %s", fs[0].key);
+    /* his result poses on the platform: the Stand beside him after the player's lost hand, collapsed after the player's win, both falling back to darby.png */
+    const int8_t type_was = R.mystery_type;
+    R.mystery_type = GC_ME_DARBY;
+    static const char* const POSE[3] = {"images/trainer/custom/darby", "images/trainer/custom/darby_victorious", "images/trainer/custom/darby_defeated"};
+    for (int pose = 2; pose >= 0; pose--) {
+      me_flow_set_darby_pose(pose);
+      memset(fs, 0, sizeof fs);
+      CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]) && (pose == 0 || !strcmp(fs[0].alt, POSE[0])),
+            "darby pose %d: %s (alt %s)", pose, fs[0].key, fs[0].alt);
+    }
+    R.mystery_type = type_was;
   }
   CHECK(has_text(0, "D'Arby the Gambler") && has_text(0, "Will you play?"), "darby: title and query");
   draw(1);
