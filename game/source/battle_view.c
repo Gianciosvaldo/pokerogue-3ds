@@ -82,7 +82,7 @@ typedef struct {
   struct { bool on; float x, y, age; } tera_sp[4];
 } side;
 
-typedef enum { M_IDLE, M_EVENTS, M_COMMAND, M_FIGHT } mode;
+typedef enum { M_IDLE, M_EVENTS, M_COMMAND, M_FIGHT, M_TARGET } mode;
 
 static struct {
   bv_setup setup;
@@ -110,6 +110,16 @@ static struct {
   mode mode;
   int cmd_cursor, move_cursor;   /* cmd_cursor 4 = the Tera button (upstream Command.TERA) */
   bool tera_fight;               /* the fight menu was opened from the Tera button: a move picked is a Terastallize */
+  struct {                       /* bv_ask_target (TargetSelectUiHandler) */
+    bool ok[4];                  /* the targets, by field index */
+    int slot;                    /* the attacker's field index */
+    int cursor;                  /* the field index pointed at */
+    float t;                     /* ms since the cursor last moved: the flash's and the box's phase (setCursor restarts both tweens) */
+    int last[2];                 /* cursor0 / cursor1: what each slot picked last; a player index (0, 1) means none, so 0 from a memset is none */
+    char title[48];
+    void (*on_target)(int, void*);
+    void* arg;
+  } tg;
   /* events */
   bv_event ev[EV_MAX];
   char ev_text[EV_MAX][EV_TEXT];
@@ -212,6 +222,42 @@ static side* side_of(int battler) { if(battler<0||battler>=4)return &B.s[0];retu
 static side* command_side(void){return side_of(B.opts.command_slot==1?1:0);}
 bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
 int bv_biome(void) { return B.begun ? B.setup.biome : -1; }
+
+/* ------------------------------------------------------------------ the target choice (TargetSelectUiHandler) */
+
+/* The first target on a side in upstream's getMoveTargets order (the foes in field order, then the user, then its ally): the lowest field
+ * index of that side, -1 when the side has none */
+static int tg_first(bool foes) {
+  for (int f = foes ? 2 : 0; f < (foes ? 4 : 2); f++)
+    if (B.tg.ok[f]) return f;
+  return -1;
+}
+/* resetCursor: the slot's last pick if it was a foe that is still a target, else targets[0] */
+static int tg_default(void) {
+  const int last = B.tg.last[B.tg.slot & 1];
+  if (last >= 2 && last < 4 && B.tg.ok[last]) return last;
+  const int foe = tg_first(true);
+  return foe >= 0 ? foe : tg_first(false);
+}
+static void tg_set(int field) {
+  B.tg.cursor = field;
+  B.tg.t = 0;
+}
+/* targetFlashTween: alpha 1 -> 0.25, Sine.easeInOut (Phaser: 0.5 * (1 - cos(pi v))), 450 ms, yoyo, loopDelay 150 */
+static float tg_sine_in_out(float v) { return 0.5f * (1 - cosf(3.14159265f * v)); }
+static float tg_flash(float t) {
+  const float p = fmodf(t, 1050);
+  if (p < 450) return 1 - 0.75f * tg_sine_in_out(p / 450);
+  if (p < 900) return 0.25f + 0.75f * tg_sine_in_out((p - 450) / 450);
+  return 1;
+}
+/* targetBattleInfoMoveTween: y base -> base + 1, Linear, 250 ms, yoyo, no rest */
+static float tg_bob(float t) {
+  const float p = fmodf(t, 500);
+  return p < 250 ? p / 250 : (500 - p) / 250;
+}
+static bool tg_pointed(const side* sd) { return B.mode == M_TARGET && field_of(sd) == B.tg.cursor; }
+static float target_bob(const side* sd) { return tg_pointed(sd) ? tg_bob(B.tg.t) : 0; }
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -417,6 +463,14 @@ static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 /* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
  * sprite slides over 500 ms, Sine.easeOut. A screen that already has two player columns has nothing to do. */
 static void (*music_hook)(int a);   /* where BEV_MUSIC goes */
+/* The battle screen's two hotkeys (lorenzo, 2026-11-16): X changes what the bottom screen shows and Y steps the game speed (the app's hook).
+ * The view and the held keys are statics, not B, which bv_begin clears: the view stays through the waves. The debug view is the screen as it
+ * was (the strip and the debug rows); the standard one is meant to become the larger "what will you do" design and is the strip alone until
+ * then. A held key repeats: the repeats are swallowed until its release. */
+typedef enum { BV_VIEW_DEBUG, BV_VIEW_STANDARD, BV_VIEW_COUNT } bottom_view;
+static bottom_view g_view = BV_VIEW_DEBUG;
+static bool g_view_held, g_speed_held;
+static const char* (*speed_hook)(bool step);
 static bool step_doubles(float dt) {
   if (B.step == 0) {
     if (B.setup.doubles || B.late_double) return true;
@@ -648,6 +702,8 @@ static void draw_sprite(side* sd, bool player) {
   o.origin_x = 0.5f;
   o.origin_y = 1.0f;
   o.scale_x = o.scale_y = sd->scale;
+  /* the pointed target flashes: upstream's tween sets the alpha outright (a Pokemon behind its doll too) */
+  const float alpha = tg_pointed(sd) ? tg_flash(B.tg.t) : sd->mon_alpha;
   if (sd->black) o.tint = RR_RGBA(0, 0, 0, 255);
   else if (sd->catch_on) {
     /* pokemon.tint(color) is a flat fill: black through the multiply, then the colour added back as the tone */
@@ -655,8 +711,8 @@ static void draw_sprite(side* sd, bool player) {
     o.tint = RR_RGBA(v, v, v, 255);
     rr_set_tone((int)(sd->catch_rgb[0] * (1 - sd->catch_untint)), (int)(sd->catch_rgb[1] * (1 - sd->catch_untint)),
                 (int)(sd->catch_rgb[2] * (1 - sd->catch_untint)));
-  } else if (sd->mon.terastallized) o.tint = tera_tint(sd->mon.tera_type, (int)(sd->mon_alpha * 255 + 0.5f));
-  else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
+  } else if (sd->mon.terastallized) o.tint = tera_tint(sd->mon.tera_type, (int)(alpha * 255 + 0.5f));
+  else if (alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(alpha * 255 + 0.5f));
   if (sd->drop > 0) {
     /* fainting: the sprite sinks below its base line */
     int vis = (int)(f->src_h - sd->drop);
@@ -1158,7 +1214,7 @@ static float info_slide(const side *sd,bool player){return player?150:sd->mon.bo
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = info_base_x(sd,true) + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
+  float bx = info_base_x(sd,true) + sd->info_dx, by = player_info_y(sd) + target_bob(sd); /* PlayerBattleInfo container */
   /* a double: pbinfo_player_mini, the name, the status and the level 1.5 higher (PlayerBattleInfo.setMini), no HP numbers, no EXP bar */
   const bool mini = player_mini(sd);
   const float lift = mini ? -1.5f : 0;
@@ -1208,7 +1264,7 @@ static void draw_enemy_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
   const bool boss = m->boss;
-  float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles&&second_column(sd)?-114:-141; /* EnemyBattleInfo container (setOffset: 27 down) */
+  float bx = info_base_x(sd,false) + sd->info_dx, by = (B.setup.doubles&&second_column(sd)?-114:-141) + target_bob(sd); /* EnemyBattleInfo container (setOffset: 27 down) */
   const float name_x = bx - (boss ? 172 : 124), bar_x = bx - (boss ? 109 : 71), bar_y = by + (boss ? 2.5f : 4.5f), bar_w = boss ? 86 : 48;
   img_draw(boss ? "images/ui/pbinfo_enemy_boss" : "images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
   draw_types(m, false, false, bx, by);
@@ -1571,6 +1627,63 @@ void bv_set_info(const char* name, const char* desc) {
   snprintf(B.info_desc, sizeof B.info_desc, "%s", desc ? desc : "");
 }
 
+/* The target choice on the bottom screen: a tile for each of the four places, foes on the top row and the player's side under them, left and
+ * right as they stand on the field; the pointed tile has the yellow frame (the Pokemon on the field flashes), a place the move cannot reach is
+ * dimmed, and the strip says "A: choose   B: back" (each a tap). Upstream has no such panel: its field is the screen you point at. */
+#define TG_X0 8.0f
+#define TG_W 148.0f
+#define TG_GAP 8.0f
+#define TG_H 56.0f
+#define TG_FOE_Y (-192.0f)
+#define TG_ALLY_Y (-128.0f)
+#define TG_HINT_X 12.0f
+#define TG_HINT_Y (-29.0f)
+static const char* const TG_HINTS[2] = {"A: choose", "B: back"};
+static void tg_tile(int f, float* x, float* y) {
+  *x = TG_X0 + (f % 2) * (TG_W + TG_GAP);
+  *y = f >= 2 ? TG_FOE_Y : TG_ALLY_Y;
+}
+static int tg_tile_at(float x, float y) {
+  for (int f = 0; f < 4; f++) {
+    float tx, ty;
+    tg_tile(f, &tx, &ty);
+    if (x >= tx && x < tx + TG_W && y >= ty && y < ty + TG_H) return f;
+  }
+  return -1;
+}
+static void draw_target_tile(int f) {
+  const side* sd = side_of(f);
+  float x, y;
+  tg_tile(f, &x, &y);
+  ui_window(x, y, TG_W, TG_H, WIN_NORMAL);
+  if (sd->present && sd->mon.species > 0) {
+    const bv_mon* m = &sd->mon;
+    draw_name(m, f < 2, x + 10, y + 12);
+    draw_level(x + TG_W - 42, y + 15, m->level, false);
+    const float ratio = m->max_hp ? fmaxf(0, fminf(sd->hp_shown / m->max_hp, 1.0f)) : 0;
+    const float bar_x = x + 26, bar_y = y + 37, bar_w = TG_W - 38;
+    img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bar_x - 2, bar_y - 1, 1, 0);
+    rr_rect(bar_x, bar_y, bar_w, 5, RR_RGBA(0x30, 0x30, 0x38, 255));
+    const rr_color c = ratio > 0.5f ? RR_RGBA(0x50, 0xd0, 0x60, 255) : ratio > 0.25f ? RR_RGBA(0xf8, 0xc8, 0x30, 255) : RR_RGBA(0xf0, 0x50, 0x48, 255);
+    float w = floorf(bar_w * ratio + 0.5f);
+    if (w < 1 && sd->hp_shown > 0) w = 1;
+    if (w > 0) rr_rect(bar_x, bar_y, w, 5, c);
+  }
+  if (!B.tg.ok[f]) rr_rect(x + 2, y + 2, TG_W - 4, TG_H - 4, RR_RGBA(0x10, 0x10, 0x18, 160));
+  if (f == B.tg.cursor) {
+    draw_cursor_frame(x, y, TG_W, TG_H);
+    draw_cursor_frame(x + 1, y + 1, TG_W - 2, TG_H - 2);
+  }
+}
+static void draw_target_pad(void) {
+  char t[96];
+  if (B.tg.title[0]) snprintf(t, sizeof t, "Choose a target for %s", B.tg.title);
+  else snprintf(t, sizeof t, "Choose a target");
+  text_draw(TS_MOVE_LABEL, TG_X0, TG_FOE_Y - 12, t, NULL); /* under the debug lines (physical y 2..30) */
+  for (int f = 0; f < 4; f++) draw_target_tile(f);
+  for (int i = 0; i < 2; i++) text_draw(TS_INSTRUCTIONS_TEXT, hint_x(TS_INSTRUCTIONS_TEXT, TG_HINT_X, TG_HINTS, i), TG_HINT_Y, TG_HINTS[i], NULL);
+}
+
 /* Upstream's ui container strip (y -48..0): the message window's bg frame, the command window or the fight windows, and the text.
  * It is drawn twice: on the bottom screen, where the touch-free controls live, and on the top screen over the field's last 48 rows,
  * where upstream puts it (it covers the lower part of the player's Pokemon, as upstream's does). `top` leaves out what upstream
@@ -1610,6 +1723,7 @@ static void draw_bottom(bool top) {
     }
   }
   if (cmd_shown() && B.has_balls && !info) draw_party_tray();
+  if (!top && B.mode == M_TARGET) draw_target_pad();
   if(!top)draw_level_stats();
   if (!top) draw_ability_bar();
 }
@@ -1629,6 +1743,22 @@ static void draw_debug(void) {
   rr_text_sys(2, 12, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
   ba_debug_text(d, sizeof d);
   rr_text_sys(2, 22, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
+}
+
+/* What the bottom screen shows besides the strip: in the debug view the debug rows, and in both what X and Y do now (right, under the rows and above the target pad's tiles, which start at y 48) */
+static void draw_bottom_extras(void) {
+  if (!ui_space(UI_PHYS_BOTTOM)) return;
+  if (g_view == BV_VIEW_DEBUG) draw_debug();
+  text_opts o = text_defaults();
+  o.origin_x = 1;
+  char s[80], name[40];
+  if (speed_hook) {
+    i18n_t(name, sizeof name, speed_hook(false), NULL);
+    snprintf(s, sizeof s, "Y  Speed: %s", name);
+    text_draw(TS_MOVE_LABEL, 316, 31, s, &o);
+  }
+  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");
+  text_draw(TS_MOVE_LABEL, 316, 40, s, &o);
 }
 
 /* ------------------------------------------------------------------ events */
@@ -2592,6 +2722,7 @@ static void run_event(float dt) {
         if (B.opening_summon) B.player_throw_ms=0;
         if (!player) B.trainer_visible=false;
         if (e->mon) set_mon(sd, e->mon, player);
+        if (player) B.tg.last[field_of(sd) & 1] = -1; /* a Pokemon just sent out starts its target choice fresh (waveTurnCount 1) */
         sd->present = true;
         sd->scale = 0;
         sd->info_on = false;
@@ -2928,9 +3059,75 @@ static bool undo_command(ui_button b){
   return true;
 }
 
+/* TargetSelectUiHandler.processInput: A and B answer (and are remembered for the slot's next turn), the D-pad moves by place */
+static bool target_input(ui_button b) {
+  const int c = B.tg.cursor;
+  int to = -1;
+  switch (b) {
+    case BTN_ACTION:
+    case BTN_CANCEL: {
+      B.tg.last[B.tg.slot & 1] = c;
+      ui_play_select();
+      B.mode = M_IDLE;
+      void (*fn)(int, void*) = B.tg.on_target;
+      B.tg.on_target = NULL;
+      if (fn) fn(b == BTN_ACTION ? c : -1, B.tg.arg);
+      return true;
+    }
+    case BTN_UP:
+      if (c < 2) to = tg_first(true);
+      break;
+    case BTN_DOWN:
+      if (c >= 2) to = tg_first(false);
+      break;
+    case BTN_LEFT:
+      if (c % 2 && B.tg.ok[c - 1]) to = c - 1;
+      break;
+    case BTN_RIGHT:
+      if (!(c % 2) && c + 1 < 4 && B.tg.ok[c + 1]) to = c + 1;
+      break;
+    default:
+      return false;
+  }
+  if (to < 0) return false;
+  tg_set(to);
+  ui_play_select();
+  return true;
+}
+/* A tap: on a tile it points there, on the pointed tile it picks (the touch rule of the list screens); the strip's hints are their buttons */
+static bool target_touch(float x, float y) {
+  if (y >= -48) {
+    const int h = hint_at(TS_INSTRUCTIONS_TEXT, TG_HINT_X, TG_HINTS, 2, x);
+    return h == 0 ? target_input(BTN_ACTION) : h == 1 ? target_input(BTN_CANCEL) : false;
+  }
+  const int f = tg_tile_at(x, y);
+  if (f < 0 || !B.tg.ok[f]) return false;
+  if (f == B.tg.cursor) return target_input(BTN_ACTION);
+  tg_set(f);
+  ui_play_select();
+  return true;
+}
+
 static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
   if(stats_input(b))return true;
+  if (b == BTN_CYCLE_TERA) { /* X: the next bottom-screen view, in any mode (the events play with it too) */
+    if (!g_view_held) {
+      g_view_held = true;
+      g_view = (bottom_view)((g_view + 1) % BV_VIEW_COUNT);
+      ui_play_select();
+    }
+    return true;
+  }
+  if (b == BTN_CYCLE_NATURE && speed_hook) { /* Y: the next game speed */
+    if (!g_speed_held) {
+      g_speed_held = true;
+      speed_hook(true);
+      ui_play_select();
+    }
+    return true;
+  }
+  if (B.mode == M_TARGET) return target_input(b);
   if (B.mode == M_EVENTS && B.lvl.on) {
     /* promptLevelUpStats' onActionInput: the gains, then the totals, then the window closes */
     if (B.lvl.ivs) {
@@ -3115,6 +3312,7 @@ static void bv_update(ui_screen* s, float dt) {
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.heaven_box_t > 0) B.heaven_box_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
+  if (B.mode == M_TARGET) B.tg.t += dt;
   if (!tween_done(&B.field_tw)) {
     tween_update(&B.field_tw, dt);
     B.field_scale = B.field_tw.value;
@@ -3189,6 +3387,8 @@ static void draw_field_overlay(void) {
 
 static void bv_release(ui_screen *s,ui_button b){
   (void)s;if(b==BTN_STATS){B.stats_shown=false;tween_start(&B.stats_tw,B.stats_alpha,0,125,EASE_SINE_IN_OUT);}
+  if(b==BTN_CYCLE_TERA)g_view_held=false;
+  if(b==BTN_CYCLE_NATURE)g_speed_held=false;
 }
 
 static void bv_draw(ui_screen* s, rr_screen which) {
@@ -3220,7 +3420,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
       text_draw(TS_MOVE_LABEL,8,6,"Hold SELECT: Stat changes",NULL);
-    draw_debug();
+    draw_bottom_extras();
   }
 }
 
@@ -3232,6 +3432,7 @@ static bool bv_touch(ui_screen* s, float px, float py) {
   /* the events play: a tap anywhere is A, for a message that waits for a button and for the level-up window (msgbox_input does
    * nothing while a message is still typing or not waiting) */
   if (B.mode == M_EVENTS) return bv_input(NULL, BTN_ACTION);
+  if (B.mode == M_TARGET) return target_touch(x, y);
   if (B.mode == M_COMMAND) {
     if (B.opts.can_tera && x >= TERA_BTN_X - 16 && x < TERA_BTN_X + 16 && y >= TERA_BTN_Y - 14 && y < TERA_BTN_Y + 14) {
       B.bar_sel = -1;
@@ -3265,6 +3466,7 @@ void bv_begin(const bv_setup* setup) {
   int selected_bar=B.bar;
   memset(&B, 0, sizeof B);
   B.bar=selected_bar;B.bar_sel=-1;
+  g_view_held=g_speed_held=false; /* a key still down from the last battle's end has no release to come to this one */
   chs_reset();
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
@@ -3298,6 +3500,7 @@ void bv_begin(const bv_setup* setup) {
 }
 
 void bv_set_music_hook(void (*hook)(int a)) { music_hook = hook; }
+void bv_set_speed_hook(const char* (*hook)(bool step)) { speed_hook = hook; }
 
 bool bv_player_centred(void) { return B.centred; }
 
@@ -3383,4 +3586,18 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   msgbox_show(&B.msg, s, 0, false);
   B.msg.wait_ms = 1e9f;
   (void)name_with_affix;
+}
+
+void bv_ask_target(const bv_target_opts* opts, void (*on_target)(int, void*), void* arg) {
+  memcpy(B.tg.ok, opts->ok, sizeof B.tg.ok);
+  B.tg.slot = opts->slot & 1;
+  snprintf(B.tg.title, sizeof B.tg.title, "%s", opts->title ? opts->title : "");
+  B.tg.on_target = on_target;
+  B.tg.arg = arg;
+  B.hold_cmd = false;
+  B.bar_open = false;
+  B.bar_sel = -1;
+  msgbox_clear(&B.msg);
+  B.mode = M_TARGET;
+  tg_set(tg_default());
 }

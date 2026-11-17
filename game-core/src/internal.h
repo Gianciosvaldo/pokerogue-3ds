@@ -345,6 +345,8 @@ bool gc_custom_trainer(gc_run *run, const gc_custom_encounter *enc);            
 void gc_custom_team_items(gc_run *run);                                                   /* the team's items instead of the generated ones (enemy_items) */
 void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
 void gc_enemy_finish_party_me(gc_run *run);                          /* the same for an initBattleWithEnemyConfig without item configs: the item rolls, then updateModifiers' stats */
+void gc_event_queue_wave_rewards(gc_run *run, int wave);              /* VictoryPhase's getFixedBattleEventRewards loop (Classic): the ModifierRewardPhases for `wave` */
+void gc_queue_battle_end(gc_run *run);                                  /* what VictoryPhase queues after a won battle's BattleEndPhase (tests call it) */
 gc_event_effects gc_event_effects_now(const gc_run *run);             /* gc/events.h: the effects open now, all zero without a source */
 void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scene addEnemyPokemon sees (run-core's context) */
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */

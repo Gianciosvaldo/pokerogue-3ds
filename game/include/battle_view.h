@@ -255,10 +255,26 @@ void bv_me_intro(const me_intro_sprite* sprites, int n);
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 /* where BEV_MUSIC goes (the app's music is not the view's): a is the event's a */
 void bv_set_music_hook(void (*hook)(int a));
+/* The game-speed key's hook (Y on the battle screen; without one the key does nothing). step true moves the game to the next speed; either way it
+ * answers the locale key of the speed now in force ("settings:gameSpeedFast"), which the bottom screen shows. */
+void bv_set_speed_hook(const char* (*hook)(bool step));
 bool bv_playing(void);
 /* opts NULL = everything allowed. */
 void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck);
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command c, void* arg), void* arg);
+
+/* The target of a single-target move in a double (upstream's TargetSelectUiHandler). The pointed Pokemon flashes on the field (alpha 1 to
+ * 0.25 and back, 450 ms each way, 150 ms rest) and its info box bobs 1 px; the D-pad moves between the targets by where they stand (UP to the
+ * foes, DOWN to the player's side, LEFT / RIGHT inside a side), A picks, B goes back (field -1). The cursor starts on the foe the same slot
+ * picked last turn, else on the first foe (upstream's resetCursor: a new wave, a Pokemon just sent out or an ally picked last turn start fresh).
+ * The bottom screen shows the four places as tiles: a tap points at a tile, a tap on the pointed one picks it; "A: choose" / "B: back" are
+ * tappable. */
+typedef struct {
+  bool ok[4];          /* field index (BattlerIndex 0..3) the move can be aimed at */
+  int slot;            /* the attacker's field index, 0 or 1 */
+  const char* title;   /* the move's name for the bottom screen's heading (copied), NULL = none */
+} bv_target_opts;
+void bv_ask_target(const bv_target_opts* opts, void (*on_target)(int field, void* arg), void* arg);
 /* The screen's current view of a side's Pokemon (after the events played so far). */
 bv_mon* bv_mon_of(int battler);
 

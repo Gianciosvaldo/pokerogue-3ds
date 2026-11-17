@@ -49,6 +49,12 @@ int64_t eh_now(void)
     return eh_local_seconds(&tm);
 }
 
+/* custom-core's cc_titem to the item's modifierTypes key (reward-core's pr_item_keys; game-core checks the key against them) */
+static const char *const ITEM_KEY[CC_TITEM_COUNT] = {
+    NULL, "SHINY_CHARM", "ABILITY_CHARM", "CATCHING_CHARM", "EXP_CHARM", "SUPER_EXP_CHARM", "HEALING_CHARM", "CANDY_JAR", "MEGA_BRACELET",
+    "DYNAMAX_BAND",
+};
+
 void eh_effects_at(int64_t local_s, gc_event_effects *out)
 {
     memset(out, 0, sizeof *out);
@@ -61,6 +67,11 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
     out->trainer_shiny_chance = fx.trainer_shiny_chance;
     out->upgrade_vouchers = fx.upgrade_vouchers;
     out->town_snow = (fx.flags & CC_TFX_TOWN_SNOW) != 0;
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX && i < GC_EVENT_REWARDS_MAX && fx.rewards[i].wave; i++) {
+        if (fx.rewards[i].item >= CC_TITEM_COUNT || !ITEM_KEY[fx.rewards[i].item]) continue;   /* the module never gives one; never read past the table */
+        out->rewards[i].wave = fx.rewards[i].wave;
+        out->rewards[i].key = ITEM_KEY[fx.rewards[i].item];
+    }
 }
 
 static void ask(void *user, gc_event_effects *out)

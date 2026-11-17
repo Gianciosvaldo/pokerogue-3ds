@@ -24,12 +24,14 @@
 
 #include "app_flow.h"
 #include "battle_event_store.h"
+#include "battle_view.h"
 #include "i18n.h"
 #include "me_flow.h"
 #include "mui.h"
 #include "pak.h"
 #include "rr.h"
 #include "run_screen.h"
+#include "run_settings.h"
 #include "save.h"
 #include "snd.h"
 #include "ui.h"
@@ -90,6 +92,17 @@ static void fatal(const char* msg) {
   }
 }
 
+/* Y on the battle screen (battle_view.h): the next game speed. It lasts for the session, and the run settings screen opens on it (app_flow.c),
+ * which keeps it on the card once a run is started from there. */
+static const char* speed_key(bool step) {
+  int speed = rset_speed_from_scale(ui_game_speed());
+  if (step) {
+    speed = rset_next_speed(speed);
+    ui_set_game_speed(rset_time_scale(speed));
+  }
+  return rset_speed_key(speed);
+}
+
 int main(void) {
   osSetSpeedupEnable(true); /* no-op on Old 3DS */
   if (!rr_init()) return 1;
@@ -102,6 +115,7 @@ int main(void) {
   save_init();
   srand((unsigned)osGetTime());
   ui_init();
+  bv_set_speed_hook(speed_key);
   mui_set_window_style(ui_window_style());
   ps_init();
   rs_config cfg;

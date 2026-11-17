@@ -109,10 +109,44 @@ int main(void)
     CHECK_EQ(fx_at(at(2026, 11, 17, 23, 59, 59)).town_snow, 1);
     CHECK_EQ(fx_at(at(2027, 3, 4, 5, 6, 7)).town_snow, 1);
     CHECK_EQ(fx_at(-1).town_snow, 0);
+    /* the items given after a wave (second round). 2026-11-16 is an odd day: Waiting Room (daily) is open, Candy Jar Day (even days) is not,
+     * and Charm Hour is 18:00 to 19:00. The list is the table's order, written out here from the events' own wording. */
+    fx = fx_at(at(2026, 11, 16, 12, 0, 0));
+    CHECK_EQ(fx.rewards[0].wave, 115);
+    CHECK(fx.rewards[0].key && !strcmp(fx.rewards[0].key, "MEGA_BRACELET"));
+    CHECK_EQ(fx.rewards[1].wave, 115);
+    CHECK(fx.rewards[1].key && !strcmp(fx.rewards[1].key, "DYNAMAX_BAND"));
+    CHECK_EQ(fx.rewards[2].wave, 0);
+    CHECK(fx.rewards[2].key == NULL);
+    fx = fx_at(at(2026, 11, 16, 18, 30, 0));
+    static const struct { int wave; const char *key; } odd_charm[] = {{8, "SHINY_CHARM"}, {8, "ABILITY_CHARM"}, {8, "CATCHING_CHARM"}, {25, "SHINY_CHARM"},
+                                                                       {115, "MEGA_BRACELET"}, {115, "DYNAMAX_BAND"}};
+    for (unsigned i = 0; i < 6; i++) {
+        CHECK_EQ(fx.rewards[i].wave, odd_charm[i].wave);
+        CHECK(fx.rewards[i].key && !strcmp(fx.rewards[i].key, odd_charm[i].key));
+    }
+    CHECK_EQ(fx.rewards[6].wave, 0);
+    CHECK_EQ(fx_at(at(2026, 11, 16, 17, 59, 59)).rewards[0].wave, 115);   /* Charm Hour not yet open */
+    CHECK_EQ(fx_at(at(2026, 11, 16, 19, 0, 0)).rewards[0].wave, 115);     /* and closed again */
+    /* 2026-11-17 is an even day: Candy Jar Day is open as well, its Candy Jar after wave 25 (table order: Charm Hour, Candy Jar Day, Waiting Room) */
+    fx = fx_at(at(2026, 11, 17, 18, 30, 0));
+    static const struct { int wave; const char *key; } even_charm[] = {{8, "SHINY_CHARM"}, {8, "ABILITY_CHARM"}, {8, "CATCHING_CHARM"}, {25, "SHINY_CHARM"},
+                                                                        {25, "CANDY_JAR"}, {115, "MEGA_BRACELET"}, {115, "DYNAMAX_BAND"}};
+    for (unsigned i = 0; i < 7; i++) {
+        CHECK_EQ(fx.rewards[i].wave, even_charm[i].wave);
+        CHECK(fx.rewards[i].key && !strcmp(fx.rewards[i].key, even_charm[i].key));
+    }
+    CHECK_EQ(fx.rewards[7].wave, 0);
+    fx = fx_at(at(2026, 11, 17, 12, 0, 0));
+    CHECK_EQ(fx.rewards[0].wave, 25);
+    CHECK(!strcmp(fx.rewards[0].key, "CANDY_JAR"));
+    CHECK_EQ(fx.rewards[1].wave, 115);
     /* a negative instant: nothing, even though two events are open all day */
     fx = fx_at(-1);
     CHECK_EQ(fx.shiny_catch_mult, 0);
     CHECK_EQ(fx.candy_mult, 0);
+    CHECK_EQ(fx.rewards[0].wave, 0);
+    CHECK(fx.rewards[0].key == NULL);
 
     /* the source game-core asks follows the pinned clock, live otherwise */
     gc_event_effects out;
