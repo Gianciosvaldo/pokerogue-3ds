@@ -44,8 +44,11 @@ purity-check: $(OBJS)
 san-test:
 	$(MAKE) --no-print-directory BUILD=$(BUILD)/san CFLAGS="-O1 -g -std=c99 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-sanitize-recover=undefined" unit-test
 
+# every mutation builds and runs the unit tests in its own scratch directory, so they run side by side (the runner has 4 cores); serial this
+# passed the CI job's 60 minutes once the timed events' mutations were added
+MUTATION_JOBS ?= 4
 mutation-test:
-	python3 tools/mutations.py
+	python3 tools/mutations.py -j $(MUTATION_JOBS)
 
 report: $(BUILD)/layout_test
 	$(BUILD)/layout_test --report
