@@ -66,6 +66,12 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
     out->luck_boost = fx.luck_boost;
     out->trainer_shiny_chance = fx.trainer_shiny_chance;
     out->upgrade_vouchers = fx.upgrade_vouchers;
+    unsigned nb = 0;
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX && nb < GC_EVENT_BUFF_MAX && fx.delibirdy_buff[i]; i++) {
+        if (fx.delibirdy_buff[i] >= CC_TITEM_COUNT || !ITEM_KEY[fx.delibirdy_buff[i]]) continue;   /* the module never gives one; never read past the table */
+        out->delibirdy_buff[nb++] = ITEM_KEY[fx.delibirdy_buff[i]];
+    }
+    out->delibirdy_common = (fx.flags & CC_TFX_DELIBIRDY_COMMON) != 0;
     out->town_snow = (fx.flags & CC_TFX_TOWN_SNOW) != 0;
     for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX && i < GC_EVENT_SPECIES_MAX && fx.luck_species[i]; i++) out->luck_species[i] = fx.luck_species[i];
     out->boost_fusions = (fx.flags & CC_TFX_BOOST_FUSIONS) != 0;

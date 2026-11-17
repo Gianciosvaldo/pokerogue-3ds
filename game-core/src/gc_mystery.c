@@ -176,12 +176,19 @@ static bool any_pick_ok(const gc_run *run, int type, int option)
     return false;
 }
 
+/* the tier an encounter is drawn in: its own, except for the timed event that moves Delibird-y from GREAT to COMMON (getMysteryEncounterTierForEvent) */
+static int me_tier(const gc_run *r, int type)
+{
+    if (type == GC_ME_DELIBIRDY && gc_event_effects_now(r).delibirdy_common) return GC_ME_COMMON;
+    return me_rules[type].tier;
+}
+
 /* `force` is the developer hook: the biome, the wave window, the wave modulus and the money rule are waived, every rule about the party and the run stays */
 static bool available_ex(const gc_run *r, int type, int tier, bool force)
 {
     if (type < 0 || type >= GC_ME_COUNT || (!force && !biome_has(r, type))) return false;
     const me_rule *q = &me_rules[type];
-    if (q->tier != tier || (!force && (r->wave < q->min_wave || r->wave > q->max_wave))) return false;
+    if (me_tier(r, type) != tier || (!force && (r->wave < q->min_wave || r->wave > q->max_wave))) return false;
     if (r->n_mystery_history && r->mystery_history[r->n_mystery_history - 1].type == type) return false;
     if (q->max_seen && seen_count(r, type) >= q->max_seen) return false;
     if (q->min_party && legal_party(r) < q->min_party) return false;
@@ -218,14 +225,14 @@ bool gc_debug_mystery_pending(const gc_run *run, int wave)
 {
     if (force_type < 0 || wave < force_min_wave || wave % 10 == 0) return false;
     for (int i = 0; i < run->n_mystery_history; i++) if (run->mystery_history[i].type == force_type) return false;
-    return available_ex(run, force_type, me_rules[force_type].tier, true);
+    return available_ex(run, force_type, me_tier(run, force_type), true);
 }
 
 bool gc_mystery_select(gc_run *run, int *out_type, int *out_tier)
 {
     if (gc_debug_mystery_pending(run, run->wave)) {
         *out_type = force_type;
-        *out_tier = me_rules[force_type].tier;
+        *out_tier = me_rules[force_type].tier;   /* SeenEncounterData holds encounter.encounterTier, the encounter's own */
         return true;
     }
     int weights[4] = {66, 40, 19, 3};
@@ -254,7 +261,7 @@ bool gc_mystery_select(gc_run *run, int *out_type, int *out_tier)
     int type = n ? candidates[n == 1 ? 0 : pr_rng_integer_in_range(&run->run.rng, 0, n - 1)]
                  : GC_ME_MYSTERIOUS_CHALLENGERS;
     *out_type = type;
-    *out_tier = tier;
+    *out_tier = n ? me_rules[type].tier : tier;   /* SeenEncounterData(encounter.encounterTier): the encounter's own, which is the drawn one unless an event moved it */
     return true;
 }
 

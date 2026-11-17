@@ -1,6 +1,6 @@
 /* Delibird-y (src/data/mystery-encounters/encounters/delibirdy-encounter.ts at pinned upstream 8555c08).
  *
- * Three options, nothing drawn from any RNG (the timed event's extra gift, getDelibirdyBuff, is out with the other timed events):
+ * Three options, nothing drawn from any RNG (except the timed event's extra gift, getDelibirdyBuff: one pick of the option phase's stream when two or more are candidates):
  *
  * 1 Give Money (MoneyRequirement(0, 2)): onPreOptionPhase takes the wave's money times 2 (requiredMoney as the requirement last worked it out,
  * so getWaveMoneyAmount(2); updatePlayerMoney(.., false showMessage): no text). The option phase gives an Amulet Coin through a ModifierRewardPhase
@@ -142,12 +142,37 @@ static void gift(gc_run *run, const char *key, const gc_mon *shell_bell_to)
     else queue_reward(run, key);
 }
 
+/* doEventReward(): with a timed event's Delibird-y buff (gc/events.h), one more ModifierRewardPhase unshifted after the gift's own:
+ *   const candidates = event_buff.filter(c => !(existingCharm && existingCharm.getStackCount() >= existingCharm.getMaxStackCount()));
+ *   candidates.length > 0 ? unshiftNew("ModifierRewardPhase", modifierTypes[randSeedItem(candidates)]) : unshiftNew("ModifierRewardPhase", modifierTypes.VOUCHER)
+ * Both are unshifted in the same phase, so they run in the order they were unshifted: the gift's text, then this one's. randSeedItem draws nothing for one candidate, else Phaser's pick (one integerInRange) on the option phase's
+ * stream. An empty buff list (no event) does nothing at all. An item the game does not know is not a candidate. */
+static void event_reward(gc_run *run)
+{
+    const gc_event_effects fx = gc_event_effects_now(run);
+    bool any = false;
+    const char *cand[GC_EVENT_BUFF_MAX];
+    int n = 0;
+    for (int i = 0; i < GC_EVENT_BUFF_MAX && fx.delibirdy_buff[i]; i++) {
+        any = true;
+        const int idx = gc_reward_item_index(fx.delibirdy_buff[i]);
+        if (idx < 0 || stack_full(run, pr_item_keys[idx])) continue;
+        cand[n++] = pr_item_keys[idx];
+    }
+    if (!any) return;
+    if (n == 0) { queue_reward(run, "VOUCHER"); return; }
+    if (n == 1) { queue_reward(run, cand[0]); return; }
+    pr_rng r = gc_me_option_rng(run);
+    queue_reward(run, cand[pr_rng_integer_in_range(&r, 0, n - 1)]);
+}
+
 bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **why)
 {
     if (option == 0) {
         /* onPreOptionPhase: updatePlayerMoney(-requiredMoney, true, false) */
         run->money = fmin(fmax(run->money - gc_delibirdy_price(run), 0.0), 9007199254740991.0);
         gift(run, "AMULET_COIN", field_lead(run));
+        event_reward(run);
         gc_me_leave_with_heal_shop(run);
         return true;
     }
@@ -163,6 +188,7 @@ bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **wh
     } else {
         gift(run, "HEALING_CHARM", run->n_party > 0 ? &run->party[run->party_order[0]] : NULL);
     }
+    event_reward(run);   /* before loseHeldItem, as upstream */
     /* chosenPokemon.loseHeldItem(modifier, false): one stack, the item with its last (no updateModifiers) */
     for (int i = 0; i < run->n_items; i++) {
         gc_item *it = &run->items[i];
