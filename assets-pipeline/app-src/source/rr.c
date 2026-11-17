@@ -782,17 +782,6 @@ void rr_circle(float x, float y, float r, rr_color c) {
   C2D_DrawCircleSolid(x + g_origin[g_cur][0], y + g_origin[g_cur][1], 0.0f, r, to_c2d(c));
 }
 
-void rr_tri(float x0, float y0, float x1, float y1, float x2, float y2, rr_color c) {
-  if (g_zoom != 1) {
-    x0 = g_zoom_x + (x0 - g_zoom_x) * g_zoom, y0 = g_zoom_y + (y0 - g_zoom_y) * g_zoom;
-    x1 = g_zoom_x + (x1 - g_zoom_x) * g_zoom, y1 = g_zoom_y + (y1 - g_zoom_y) * g_zoom;
-    x2 = g_zoom_x + (x2 - g_zoom_x) * g_zoom, y2 = g_zoom_y + (y2 - g_zoom_y) * g_zoom;
-  }
-  const float ox = g_origin[g_cur][0], oy = g_origin[g_cur][1];
-  const u32 k = to_c2d(c);
-  C2D_DrawTriangle(x0 + ox, y0 + oy, k, x1 + ox, y1 + oy, k, x2 + ox, y2 + oy, k, 0.0f);
-}
-
 void rr_nineslice(const rr_frame* f, float x, float y, float w, float h, int b) {
   if (!f || !f->tex) return;
   int fw = f->w, fh = f->h, sx = f->x, sy = f->y;

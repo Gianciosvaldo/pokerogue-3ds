@@ -865,7 +865,6 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 bool bv_playing(void) { return W.playing; }
 
 void bv_set_item_bars(const bv_item *foe,int nf,const bv_item *keys,int nk,int luck){(void)foe;(void)nf;(void)keys;(void)nk;(void)luck;}
-void bv_set_header(int wave,const char* biome,const char* money){(void)wave;(void)biome;(void)money;}
 static bool cfg_ask_switch;
 static int n_switch_yes, n_switch_no, n_switch_second;
 

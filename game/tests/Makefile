@@ -567,13 +567,6 @@ build/target_select_test: target_select_test.c ../source/battle_view.c ../source
 target_select_test: build/target_select_test
 .PHONY: target_select_test
 
-# the standard bottom screen (lorenzo's Black 2 design): the strip, the buttons and their D-pad and taps, the item panel
-build/standard_view_test: standard_view_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
-	@mkdir -p build
-	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections standard_view_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
-standard_view_test: build/standard_view_test
-.PHONY: standard_view_test
-
 # the foes' side of a double battle on the top screen: platform raised (up) with the foes, trainer and doll on their marks, smaller field
 build/doubles_layout_test: doubles_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
 	@mkdir -p build

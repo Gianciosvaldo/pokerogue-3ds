@@ -28,7 +28,6 @@ void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(v
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
 void rr_set_grey(int a){(void)a;}
 void rr_circle(float x,float y,float r,rr_color c){(void)x;(void)y;(void)r;(void)c;}
-void rr_tri(float x0,float y0,float x1,float y1,float x2,float y2,rr_color c){(void)x0;(void)y0;(void)x1;(void)y1;(void)x2;(void)y2;(void)c;}
 void rr_set_zoom(float z,float cx,float cy){(void)z;(void)cx;(void)cy;}
 float text_draw(text_style st,float x,float y,const char *s,const text_opts *o){(void)st;(void)x;(void)y;(void)o;return (float)strlen(s)*4;}
 float text_width(text_style st,const char *s,const text_opts *o){(void)st;(void)o;return (float)strlen(s)*4;}

@@ -103,15 +103,6 @@ static const char* speed_key(bool step) {
   return rset_speed_key(speed);
 }
 
-/* The battle strip's battery (battle_view.h): ptm:u's level 0..5 and charge state; -1 when the service is not there. */
-static bool g_ptmu;
-static int battery_level(bool* charging) {
-  u8 level = 0, charge = 0;
-  if (!g_ptmu || R_FAILED(PTMU_GetBatteryLevel(&level))) return -1;
-  if (R_SUCCEEDED(PTMU_GetBatteryChargeState(&charge))) *charging = charge != 0;
-  return level;
-}
-
 int main(void) {
   osSetSpeedupEnable(true); /* no-op on Old 3DS */
   if (!rr_init()) return 1;
@@ -125,8 +116,6 @@ int main(void) {
   srand((unsigned)osGetTime());
   ui_init();
   bv_set_speed_hook(speed_key);
-  g_ptmu = R_SUCCEEDED(ptmuInit());
-  bv_set_battery_hook(battery_level);
   mui_set_window_style(ui_window_style());
   ps_init();
   rs_config cfg;
@@ -137,7 +126,6 @@ int main(void) {
   while (ui_tick()) {
   }
   bes_shutdown();
-  if (g_ptmu) ptmuExit();
   snd_exit();
   rr_exit();
   return 0;
