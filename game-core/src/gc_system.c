@@ -365,11 +365,14 @@ void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int 
             if (ev > mult) mult = ev;
         }
         /* Pokemon.addFriendship: a fusion feeds the candy bar of each species' root, and the multiplier is halved for each
-         * (/2; /1.5 while a timed event boosts fusions, which the port has no calendar for). floor(friendship * mult / 2), in
+         * (/2; /1.5 while a timed event boosts fusions). floor(friendship * mult / 2), in
          * integers: the gain is positive here. The first root is fed before the second, as upstream's forEach does; a Pokemon
          * fused with its own line feeds the one bar twice. */
         const bool fused = m->b.fusion_species != 0;
-        const int amount = fused ? (friendship * mult) / 2 : friendship * mult;
+        /* candyFriendshipMultiplier /= areFusionsBoosted() ? 1.5 : 2, then Math.floor(friendship * candyFriendshipMultiplier): the same
+         * doubles upstream divides (in any game mode: the event's flag is not Classic-only there). */
+        const bool boosted = fused && run && gc_event_effects_now(run).boost_fusions;
+        const int amount = boosted ? (int)floor(friendship * ((double)mult / 1.5)) : fused ? (friendship * mult) / 2 : friendship * mult;
         gc_system_add_starter_friendship(sys, gc_species_root_id(m->b.species), amount);
         if (fused) gc_system_add_starter_friendship(sys, gc_species_root_id(m->b.fusion_species), amount);
     }

@@ -8,6 +8,7 @@
  *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output.
  *   candy : the Classic candy friendship multiplier (getClassicFriendshipMultiplier(): 3, or an event's when higher; Classic only).
  *   voucher: the voucher a defeated boss gives (TrainerVictoryPhase): upgraded while an event says getUpgradeUnlockedVouchers().
+ *   fusion: Fusion Day also changes the shop: DNA Splicers' weights per tier (init-modifier-pools.ts), asked of reward-core's own weight function.
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
 #include <stdio.h>
@@ -200,6 +201,44 @@ static void luck_section(void)
     open_now.luck_boost = 0;
     CHECK_EQ(gc_party_luck(&run), 4);
     CHECK_EQ(party_luck(NULL, 4), 4);
+
+    /* luck-boosted species (Lucky Species Hour): each party member of a listed species adds 1 to the sum (getPartyLuckValue:
+     * p.getLuck() + (eventSpecies.includes(p.species.speciesId) ? 1 : 0)); the party is Bulbasaur (1), Charmander (4), Squirtle (7) */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.luck_species[0] = 133;                                   /* Eevee: nobody in the party */
+    CHECK_EQ(party_luck(&SRC, 0), 0);
+    open_now.luck_species[0] = SPECIES_ID_BULBASAUR;
+    CHECK_EQ(party_luck(&SRC, 0), 1);
+    CHECK_EQ(party_luck(&SRC, 5), 6);                                 /* on top of the members' own luck */
+    CHECK_EQ(party_luck(NULL, 0), 0);                                 /* no source: nothing */
+    open_now.luck_species[1] = SPECIES_ID_CHARMANDER;
+    CHECK_EQ(party_luck(&SRC, 0), 2);
+    open_now.luck_species[2] = SPECIES_ID_SQUIRTLE;
+    CHECK_EQ(party_luck(&SRC, 0), 3);
+    open_now.luck_species[3] = 133;                                   /* a species after them changes nothing */
+    CHECK_EQ(party_luck(&SRC, 0), 3);
+    open_now.luck_boost = 1;                                          /* with the hour's flat boost: 3 + 1 */
+    CHECK_EQ(party_luck(&SRC, 0), 4);
+    CHECK_EQ(party_luck(&SRC, 12), 14);                               /* the sum is capped at 14 first, then the boost, then 14 again */
+    open_now.luck_boost = 0;
+    CHECK_EQ(party_luck(&SRC, 13), 14);                               /* 13 + 3 = 16, capped */
+    /* the list's last slot (the twelfth) is read too */
+    memset(&open_now, 0, sizeof open_now);
+    for (int i = 0; i < GC_EVENT_SPECIES_MAX - 1; i++) open_now.luck_species[i] = (uint16_t)(133 + i);
+    open_now.luck_species[GC_EVENT_SPECIES_MAX - 1] = SPECIES_ID_SQUIRTLE;
+    CHECK_EQ(party_luck(&SRC, 0), 1);
+    /* a member counts once however often its species is listed (the list has no duplicates upstream, but a wrong source must not double it) */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.luck_species[0] = SPECIES_ID_BULBASAUR;
+    open_now.luck_species[1] = SPECIES_ID_BULBASAUR;
+    CHECK_EQ(party_luck(&SRC, 0), 1);
+    /* a member that cannot fight (fainted) adds neither its luck nor the species' */
+    CHECK_EQ(party_luck(&SRC, 5), 6);
+    run.party[0].b.hp = 0;
+    CHECK_EQ(gc_party_luck(&run), 0);
+    /* asked at each call: the hour closing is seen by the next one */
+    memset(&open_now, 0, sizeof open_now);
+    CHECK_EQ(party_luck(&SRC, 0), 0);
 }
 
 /* the starter bars' friendship points a Pokemon's gain of 3 feeds, in a run of `mode` with the source installed. A fused Pokemon feeds each root's bar. */
@@ -261,6 +300,24 @@ static void candy_section(void)
     open_now.candy_mult = 4;
     CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 6);      /* 12 / 2 */
     CHECK_EQ(second, 6);
+    /* Fusion Day: a fusion's candy is divided by 1.5, not 2, in any game mode (upstream's areFusionsBoosted() is not Classic-only);
+     * Math.floor(friendship * (mult / 1.5)). A Pokemon that is not a fusion is not changed. */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.boost_fusions = 1;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 6);      /* 3 * (3 / 1.5) */
+    CHECK_EQ(second, 6);
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, &second), 9);
+    CHECK_EQ(friendship_points(GAME_MODES_ENDLESS, &SRC, true, &second), 2);      /* 3 * (1 / 1.5) = 2 where unboosted gives floor(3 / 2) = 1 */
+    CHECK_EQ(second, 2);
+    CHECK_EQ(friendship_points(GAME_MODES_ENDLESS, &SRC, false, &second), 3);
+    open_now.candy_mult = 4;                                                      /* with Sweet Tooth: 3 * (4 / 1.5) = 8 */
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 8);
+    CHECK_EQ(second, 8);
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, false, &second), 12);
+    open_now.candy_mult = 10;                                                     /* 3 * (10 / 1.5) = 20 */
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 20);
+    open_now.boost_fusions = 0;
+    CHECK_EQ(friendship_points(GAME_MODES_CLASSIC, &SRC, true, &second), 15);     /* the boost off again: floor(30 / 2) */
     /* no run behind the gain (a caller with none): there is no source to ask, no crash, and the gain is what it was before events (a
      * missing run counts as Classic's x3) */
     static gc_system sys2;
@@ -330,12 +387,56 @@ static void voucher_section(void)
     CHECK_EQ(by_type[0] + by_type[3], 0);
 }
 
+/* the shop's DNA Splicers weights with fusions boosted (init-modifier-pools.ts): in the GREAT pool 4 in a Spliced Endless run, else 2 in Classic
+ * while boosted, else 0; in the ROGUE pool 24 unless (Classic and boosted) or Spliced Endless, with two unfused party members in both. */
+extern int pr_reward_weight(pr_reward_ctx *ctx, int item, int tier, int reroll_count);
+static int splicers_weight(int mode, const gc_event_source *src, int tier, int unfused)
+{
+    static const char seed[] = "events-fusion";
+    memset(&run, 0, sizeof run);
+    gc_run_new(&run, mode, seed, 7);
+    gc_run_set_events(&run, src);
+    gc_starter team[3];
+    memset(team, 0, sizeof team);
+    const int species[3] = {SPECIES_ID_BULBASAUR, SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
+    for (int i = 0; i < 3; i++) {
+        team[i].species = (uint16_t)species[i];
+        team[i].tera_type = -1;
+        for (int k = 0; k < 6; k++) team[i].ivs[k] = 15;
+    }
+    const char *why = "";
+    CHECK(gc_run_set_starters(&run, team, 3, &why));
+    for (int i = 0; i < 3; i++) run.party[i].b.fusion_species = i < unfused ? 0 : SPECIES_ID_PIDGEY;   /* the others are fusions (a Spliced Endless team starts fused) */
+    return pr_reward_weight(gc_reward_ctx(&run), PR_ITEM_DNA_SPLICERS, tier, 0);
+}
+
+static void fusion_section(void)
+{
+    memset(&open_now, 0, sizeof open_now);
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, NULL, MODIFIER_TIER_GREAT, 3), 0);
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, NULL, MODIFIER_TIER_ROGUE, 3), 24);
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_ROGUE, 3), 24);   /* a source with nothing open */
+    open_now.boost_fusions = 1;
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_GREAT, 3), 2);
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_ROGUE, 3), 0);
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, NULL, MODIFIER_TIER_GREAT, 3), 0);    /* no source: the weights are upstream's own */
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_GREAT, 2), 2);    /* two unfused members are enough */
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_GREAT, 1), 0);    /* one is not: party.filter(p => !p.fusionSpecies).length > 1 */
+    CHECK_EQ(splicers_weight(GAME_MODES_CLASSIC, &SRC, MODIFIER_TIER_ROGUE, 1), 0);
+    /* Classic only: Endless is unchanged, Spliced Endless has its own weights whatever the event says */
+    CHECK_EQ(splicers_weight(GAME_MODES_ENDLESS, &SRC, MODIFIER_TIER_GREAT, 3), 0);
+    CHECK_EQ(splicers_weight(GAME_MODES_ENDLESS, &SRC, MODIFIER_TIER_ROGUE, 3), 24);
+    CHECK_EQ(splicers_weight(GAME_MODES_SPLICED_ENDLESS, &SRC, MODIFIER_TIER_GREAT, 3), 4);
+    CHECK_EQ(splicers_weight(GAME_MODES_SPLICED_ENDLESS, &SRC, MODIFIER_TIER_ROGUE, 3), 0);
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
     if (!only || !strcmp(only, "shiny")) shiny_section();
     if (!only || !strcmp(only, "luck")) luck_section();
     if (!only || !strcmp(only, "candy")) candy_section();
+    if (!only || !strcmp(only, "fusion")) fusion_section();
     if (!only || !strcmp(only, "voucher")) voucher_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;
