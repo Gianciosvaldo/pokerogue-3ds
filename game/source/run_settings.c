@@ -37,3 +37,19 @@ float rset_time_scale(int speed) {
   if (speed < RSET_SPEED_SLOW || speed > RSET_SPEED_TURBO) speed = RSET_SPEED_NORMAL;
   return (float)speed;
 }
+
+int rset_next_speed(int speed) {
+  if (speed < RSET_SPEED_SLOW || speed > RSET_SPEED_TURBO) return RSET_SPEED_NORMAL;
+  return speed == RSET_SPEED_TURBO ? RSET_SPEED_SLOW : speed + 1;
+}
+
+int rset_speed_from_scale(float scale) {
+  const int speed = (int)(scale + 0.5f);
+  return speed < RSET_SPEED_SLOW || speed > RSET_SPEED_TURBO ? RSET_SPEED_NORMAL : speed;
+}
+
+const char* rset_speed_key(int speed) {
+  static const char* const KEYS[4] = {"settings:gameSpeedSlow", "settings:gameSpeedNormal", "settings:gameSpeedFast",
+                                      "settings:gameSpeedTurbo"};
+  return KEYS[speed < RSET_SPEED_SLOW || speed > RSET_SPEED_TURBO ? RSET_SPEED_NORMAL - RSET_SPEED_SLOW : speed - RSET_SPEED_SLOW];
+}

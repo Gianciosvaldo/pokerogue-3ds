@@ -191,6 +191,12 @@ Controls: upstream's gamepad layout by button position. A = ACTION, B = CANCEL, 
 SELECT = STATS, Y = CYCLE_NATURE, X = CYCLE_TERA, L = CYCLE_FORM, R = CYCLE_SHINY,
 ZL = CYCLE_GENDER, ZR = CYCLE_ABILITY. START + SELECT together quits.
 
+On the battle screen (`battle_view.c`) X and Y are the port's own hotkeys (lorenzo, 2026-11-16), taken before the screen's other keys, in every mode:
+**X** changes what the bottom screen shows (the debug view, which is the screen as it was, with the strip and the debug rows; the standard one, the
+strip alone until its larger "what will you do" design is made), **Y** steps the game speed Slow, Normal, Fast, Turbo and round (`bv_set_speed_hook`,
+wired in `main.c`). The speed lasts for the session and the run settings screen opens on it. Both labels are on the bottom screen, right side;
+a held key changes once. L and R switch the item bar there, as before. Name entry and the football game keep their own use of X and Y.
+
 ## Screens
 Upstream draws everything on one 320x180 canvas. Here:
 - **Top screen (400x240)**: the battle field at 1:1, centred (the field and its info boxes), and upstream's message / command / fight strip over its last 48 rows (`draw_bottom(true)`, drawn through `UI_TOP_CANVAS_UI`, where upstream puts it; it covers the lower part of the player's Pokemon as upstream's does).

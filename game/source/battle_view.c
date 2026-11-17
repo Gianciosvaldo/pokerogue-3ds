@@ -463,6 +463,14 @@ static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 /* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
  * sprite slides over 500 ms, Sine.easeOut. A screen that already has two player columns has nothing to do. */
 static void (*music_hook)(int a);   /* where BEV_MUSIC goes */
+/* The battle screen's two hotkeys (lorenzo, 2026-11-16): X changes what the bottom screen shows and Y steps the game speed (the app's hook).
+ * The view and the held keys are statics, not B, which bv_begin clears: the view stays through the waves. The debug view is the screen as it
+ * was (the strip and the debug rows); the standard one is meant to become the larger "what will you do" design and is the strip alone until
+ * then. A held key repeats: the repeats are swallowed until its release. */
+typedef enum { BV_VIEW_DEBUG, BV_VIEW_STANDARD, BV_VIEW_COUNT } bottom_view;
+static bottom_view g_view = BV_VIEW_DEBUG;
+static bool g_view_held, g_speed_held;
+static const char* (*speed_hook)(bool step);
 static bool step_doubles(float dt) {
   if (B.step == 0) {
     if (B.setup.doubles || B.late_double) return true;
@@ -1735,6 +1743,22 @@ static void draw_debug(void) {
   rr_text_sys(2, 12, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
   ba_debug_text(d, sizeof d);
   rr_text_sys(2, 22, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
+}
+
+/* What the bottom screen shows besides the strip: in the debug view the debug rows, and in both what X and Y do now (right, under the rows and above the target pad's tiles, which start at y 48) */
+static void draw_bottom_extras(void) {
+  if (!ui_space(UI_PHYS_BOTTOM)) return;
+  if (g_view == BV_VIEW_DEBUG) draw_debug();
+  text_opts o = text_defaults();
+  o.origin_x = 1;
+  char s[80], name[40];
+  if (speed_hook) {
+    i18n_t(name, sizeof name, speed_hook(false), NULL);
+    snprintf(s, sizeof s, "Y  Speed: %s", name);
+    text_draw(TS_MOVE_LABEL, 316, 31, s, &o);
+  }
+  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");
+  text_draw(TS_MOVE_LABEL, 316, 40, s, &o);
 }
 
 /* ------------------------------------------------------------------ events */
@@ -3087,6 +3111,22 @@ static bool target_touch(float x, float y) {
 static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
   if(stats_input(b))return true;
+  if (b == BTN_CYCLE_TERA) { /* X: the next bottom-screen view, in any mode (the events play with it too) */
+    if (!g_view_held) {
+      g_view_held = true;
+      g_view = (bottom_view)((g_view + 1) % BV_VIEW_COUNT);
+      ui_play_select();
+    }
+    return true;
+  }
+  if (b == BTN_CYCLE_NATURE && speed_hook) { /* Y: the next game speed */
+    if (!g_speed_held) {
+      g_speed_held = true;
+      speed_hook(true);
+      ui_play_select();
+    }
+    return true;
+  }
   if (B.mode == M_TARGET) return target_input(b);
   if (B.mode == M_EVENTS && B.lvl.on) {
     /* promptLevelUpStats' onActionInput: the gains, then the totals, then the window closes */
@@ -3347,6 +3387,8 @@ static void draw_field_overlay(void) {
 
 static void bv_release(ui_screen *s,ui_button b){
   (void)s;if(b==BTN_STATS){B.stats_shown=false;tween_start(&B.stats_tw,B.stats_alpha,0,125,EASE_SINE_IN_OUT);}
+  if(b==BTN_CYCLE_TERA)g_view_held=false;
+  if(b==BTN_CYCLE_NATURE)g_speed_held=false;
 }
 
 static void bv_draw(ui_screen* s, rr_screen which) {
@@ -3378,7 +3420,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
       text_draw(TS_MOVE_LABEL,8,6,"Hold SELECT: Stat changes",NULL);
-    draw_debug();
+    draw_bottom_extras();
   }
 }
 
@@ -3424,6 +3466,7 @@ void bv_begin(const bv_setup* setup) {
   int selected_bar=B.bar;
   memset(&B, 0, sizeof B);
   B.bar=selected_bar;B.bar_sel=-1;
+  g_view_held=g_speed_held=false; /* a key still down from the last battle's end has no release to come to this one */
   chs_reset();
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
@@ -3457,6 +3500,7 @@ void bv_begin(const bv_setup* setup) {
 }
 
 void bv_set_music_hook(void (*hook)(int a)) { music_hook = hook; }
+void bv_set_speed_hook(const char* (*hook)(bool step)) { speed_hook = hook; }
 
 bool bv_player_centred(void) { return B.centred; }
 
