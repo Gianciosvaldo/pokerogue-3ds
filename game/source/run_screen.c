@@ -76,6 +76,7 @@ static struct {
   int ball_target;
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
   bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
+  bool scene_up;                /* the battle screen has been set up since the run (or the load) began: wave_black has run */
   bool next_encounter;          /* this wave is the next one of the same biome: no fade, the enemy side slides in over the old one */
   int wave_ev;                  /* the WAVE event being shown */
   uint32_t drain_no;            /* drain() calls of this run, for the combat observer (one number per drain, never reused) */
@@ -118,6 +119,7 @@ static void reset_driver(void) {
   memset(G.present,0,sizeof G.present);
   G.shown = G.shown_ally = -1;
   G.fade_done = false;
+  G.scene_up = false;
   G.wave_ev = 0;
   G.drain_no = 0;
   G.nq = G.qi = 0;
@@ -347,6 +349,30 @@ static bool is_farewell(const gc_event* e) {
   return false;
 }
 
+/* A new run's first wave can have text ahead of its WAVE event: game-core sets the biome's weather before it queues the wave and says so
+ * ("It started to snow!", the Town's weather on the days of the Snowy Town event). With no battle scene up yet the starter select is still
+ * the screen, bv_play has nothing to play on (the battle screen is not on the stack until the wave's black), and the run never starts: the
+ * starter select stays on screen and takes no button. Until the scene is up the text is said right after the WAVE event instead, when the
+ * scene is there. Only text ahead of the WAVE, and only when nothing else is: the rotation keeps every other event where it is. */
+static void say_text_after_wave_scene(void) {
+  static gc_event hold; /* one event of the swaps: off the 3DS stack */
+  if (G.scene_up || G.nq < 2) return;
+  int n = 0;
+  while (n < G.nq && G.q[n].kind == GC_EV_MESSAGE) n++;
+  if (n == 0 || n >= G.nq || G.q[n].kind != GC_EV_WAVE) return;
+  /* [text.. WAVE] -> [WAVE text..]: reverse the text, then reverse the whole run of them */
+  for (int i = 0, j = n - 1; i < j; i++, j--) {
+    hold = G.q[i];
+    G.q[i] = G.q[j];
+    G.q[j] = hold;
+  }
+  for (int i = 0, j = n; i < j; i++, j--) {
+    hold = G.q[i];
+    G.q[i] = G.q[j];
+    G.q[j] = hold;
+  }
+}
+
 static void drain(void) {
   G.nq = G.qi = 0;
   G.swap_prompt = false;
@@ -355,6 +381,7 @@ static void drain(void) {
   /* The combat history takes the raw events here, once per drain, before anything is converted or played: the screen's timing,
    * its redraws and its skips cannot count a turn twice or leave one out. */
   co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);
+  say_text_after_wave_scene();
   const gc_screen* s = gc_run_screen(&G.run);
 
   /* the learn dialog (menus' learn_move_start) shows what game-core says around its screen: drop
@@ -473,6 +500,7 @@ static bool offer_look(bv_mon* out) {
 /* At black: the new wave's scene, and the intro events (already in G.ev up to the call) */
 static void wave_black(void* arg) {
   (void)arg;
+  G.scene_up = true; /* bv_begin below puts the battle screen up (nothing between can play events) */
   const gc_event* w = &G.q[G.wave_ev];
   /* A trainer chosen inside a mystery encounter starts on the same wave. Its
    * TRAINER event owns a fresh scene; its fields are not wave/biome metadata. */

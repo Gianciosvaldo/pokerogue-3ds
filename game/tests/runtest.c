@@ -572,6 +572,9 @@ void bv_set_music_hook(void (*hook)(int a)) { (void)hook; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   if (W.playing) BAD("bv_play while the last one is still playing");
+  /* the real battle screen is not on the UI stack until bv_begin (the first wave's black): events played before it have no screen to run on,
+   * the starter select stays up with its input shut and the run never starts (the Snowy Town event's weather text, 2026-11-17) */
+  if (!W.begun) BAD("events played before the first bv_begin: no battle screen is up to play them (the run would never start)");
   for (int i = 0; i < n; i++) {
     const bv_event* e = &ev[i];
     const int s = screen_slot(e->battler);
@@ -2173,6 +2176,7 @@ int main(int argc, char** argv) {
   /* timed events (events_host.h): the app's runs ask the console's clock for open events, which would change every run's shiny rolls and
    * so the corpus with the date. No event is ever open here. */
   eh_use_fixed_clock(-1);
+  if (getenv("RUNTEST_EVENTS")) eh_use_fixed_clock(1794884400LL);   /* RUNTEST_EVENTS: 2026-11-17 03:00, outside the one-hour events: Snowy Town, Lucky Catch, Sweet Tooth, Waiting Room and the day's own are open */
   int runs = argc > 1 ? atoi(argv[1]) : 20;
   int first = argc > 2 ? atoi(argv[2]) : 0;
   if (runs < 1) runs = 1;
