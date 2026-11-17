@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "achv_toast.h"
 #include "bgm.h"
+#include "screen_clip.h"
 #include "snd.h"
 #include "tween.h"
 
@@ -387,6 +389,7 @@ bool ui_tick(void) {
   int from = first_drawn();
   for (int i = from; i < g_depth; i++)
     if (g_stack[i]->update) g_stack[i]->update(g_stack[i], dt);
+  atoast_update(dt); /* the achievement bar (upstream's ui.achvBar) is the UI's, not a screen's */
   bgm_tick(real_dt); /* music plays at its own pace (upstream scales only its fades) */
   snd_update();
 
@@ -401,6 +404,15 @@ bool ui_tick(void) {
       rr_set_origin(g_drawing, 0, 0);
       int a = (int)(g_fade.alpha * 255 + 0.5f);
       rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, a > 255 ? 255 : a));
+    }
+    if (atoast_active()) {
+      /* whatever state the last screen left (a tint, a zoom, a scissor), the bar is drawn plain */
+      rr_set_blend(RR_BLEND_NORMAL);
+      rr_set_grey(0);
+      rr_set_tone(0, 0, 0);
+      rr_set_zoom(1, 0, 0);
+      clip_off();
+      atoast_draw(); /* over the screens and over the fade, as the bars were over the scene */
     }
   }
   rr_frame_end();
