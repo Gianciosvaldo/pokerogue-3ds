@@ -12,6 +12,7 @@
  *           ULTRA; CATCHING_CHARM, ABILITY_CHARM, SUPER_EXP_CHARM, MEGA_BRACELET, DYNAMAX_BAND ROGUE; SHINY_CHARM, HEALING_CHARM MASTER) and
  *           max stacks from modifier.ts / modifier-type.ts, not from the port's tables.
  *   voucher: the voucher a defeated boss gives (TrainerVictoryPhase): upgraded while an event says getUpgradeUnlockedVouchers().
+ *   snow  : Snowy Town: the Town's weather pool replaced by {SNOW: 1}, no other biome touched.
  *   fusion: Fusion Day also changes the shop: DNA Splicers' weights per tier (init-modifier-pools.ts), asked of reward-core's own weight function.
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
@@ -548,6 +549,51 @@ static void voucher_section(void)
     CHECK_EQ(by_type[0] + by_type[3], 0);
 }
 
+/* Snowy Town: the Town's weather pool is replaced by {SNOW: 1} (arena.ts setBiomeWeather: weatherPool = timedEventManager.getWeather()?.[biomeId]).
+ * One slot of weight is a randSeedInt(1), which returns its minimum without drawing, so the run's RNG is left as it was. */
+static int roll_weather(int biome, int wave, const gc_event_source *src, bool *rng_moved)
+{
+    static const char seed[] = "events-snow";
+    memset(&run, 0, sizeof run);
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    gc_run_set_events(&run, src);
+    run.biome = biome;
+    run.wave = wave;
+    const pr_rng before = run.run.rng;
+    const int w = gc_roll_biome_weather(&run);
+    if (rng_moved) *rng_moved = memcmp(&before, &run.run.rng, sizeof before) != 0;
+    return w;
+}
+
+static void snow_section(void)
+{
+    bool moved = false;
+    memset(&open_now, 0, sizeof open_now);
+    for (int wave = 1; wave <= 60; wave += 7) {
+        CHECK_EQ(roll_weather(BIOME_ID_TOWN, wave, NULL, &moved), WEATHER_TYPE_NONE);        /* the Town's own pool is {NONE: 1} */
+        CHECK_EQ(roll_weather(BIOME_ID_TOWN, wave, &SRC, &moved), WEATHER_TYPE_NONE);        /* a source with nothing open */
+    }
+    open_now.town_snow = 1;
+    for (int wave = 1; wave <= 60; wave += 7) {                                              /* by day and by night alike */
+        CHECK_EQ(roll_weather(BIOME_ID_TOWN, wave, &SRC, &moved), WEATHER_TYPE_SNOW);
+        CHECK(!moved);
+        CHECK_EQ(roll_weather(BIOME_ID_TOWN, wave, NULL, &moved), WEATHER_TYPE_NONE);         /* no source: upstream's own */
+    }
+    /* only the Town: every other biome rolls as it does without the event, on the same RNG */
+    for (int biome = 1; biome < 20; biome++) {
+        bool m1 = false, m2 = false;
+        const int plain = roll_weather(biome, 20, NULL, &m1);
+        const int event = roll_weather(biome, 20, &SRC, &m2);
+        CHECK_EQ(event, plain);
+        CHECK_EQ(m2, m1);
+    }
+    /* biome 10 (Seabed) has its own pool, {RAIN: 1} in the data: a non-vacuous other biome */
+    CHECK(roll_weather(10, 20, &SRC, &moved) != WEATHER_TYPE_SNOW);
+    /* asked at each roll */
+    open_now.town_snow = 0;
+    CHECK_EQ(roll_weather(BIOME_ID_TOWN, 8, &SRC, &moved), WEATHER_TYPE_NONE);
+}
+
 /* the shop's DNA Splicers weights with fusions boosted (init-modifier-pools.ts): in the GREAT pool 4 in a Spliced Endless run, else 2 in Classic
  * while boosted, else 0; in the ROGUE pool 24 unless (Classic and boosted) or Spliced Endless, with two unfused party members in both. */
 extern int pr_reward_weight(pr_reward_ctx *ctx, int item, int tier, int reroll_count);
@@ -597,6 +643,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "shiny")) shiny_section();
     if (!only || !strcmp(only, "luck")) luck_section();
     if (!only || !strcmp(only, "candy")) candy_section();
+    if (!only || !strcmp(only, "snow")) snow_section();
     if (!only || !strcmp(only, "fusion")) fusion_section();
     if (!only || !strcmp(only, "rewards")) rewards_section();
     if (!only || !strcmp(only, "voucher")) voucher_section();

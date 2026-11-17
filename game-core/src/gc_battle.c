@@ -75,6 +75,12 @@ int gc_roll_biome_weather(gc_run *run)
     int w[10] = {0};
     for (int i = 0; i < gc_biome_field_count; i++)
         if (gc_biome_fields[i].biome == run->biome) for (int k = 0; k < 10; k++) w[k] = gc_biome_fields[i].weather[k];
+    /* a timed event's weather for the biome (gc/events.h; upstream: weatherPool = timedEventManager.getWeather()?.[biomeId], the whole pool
+     * replaced): the Town is {SNOW: 1} */
+    if (run->biome == BIOME_ID_TOWN && gc_event_effects_now(run).town_snow) {
+        memset(w, 0, sizeof w);
+        w[WEATHER_TYPE_SNOW] = 1;
+    }
     const int tod = pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset);
     if (tod == TIME_OF_DAY_DUSK || tod == TIME_OF_DAY_NIGHT) {
         w[WEATHER_TYPE_SUNNY] = 0;
