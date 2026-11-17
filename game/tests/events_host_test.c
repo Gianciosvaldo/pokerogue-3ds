@@ -122,6 +122,11 @@ int main(void)
             CHECK(fx.delibirdy_buff[0] == NULL);
         }
     }
+    /* Snowy Town is daily, all day: open at every instant the table is read, closed on a clock that cannot be read */
+    CHECK_EQ(fx_at(at(2026, 11, 16, 0, 0, 0)).town_snow, 1);
+    CHECK_EQ(fx_at(at(2026, 11, 17, 23, 59, 59)).town_snow, 1);
+    CHECK_EQ(fx_at(at(2027, 3, 4, 5, 6, 7)).town_snow, 1);
+    CHECK_EQ(fx_at(-1).town_snow, 0);
     /* Lucky Species Hour (16:00 to 17:00 daily): the Eevee line, in the list's own order; Fusion Day is every third day starting at phase 2 */
     static const int eevee[] = {133, 134, 135, 136, 196, 197, 470, 471, 700};
     fx = fx_at(at(2026, 11, 16, 16, 30, 0));

@@ -72,6 +72,7 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
         out->delibirdy_buff[nb++] = ITEM_KEY[fx.delibirdy_buff[i]];
     }
     out->delibirdy_common = (fx.flags & CC_TFX_DELIBIRDY_COMMON) != 0;
+    out->town_snow = (fx.flags & CC_TFX_TOWN_SNOW) != 0;
     for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX && i < GC_EVENT_SPECIES_MAX && fx.luck_species[i]; i++) out->luck_species[i] = fx.luck_species[i];
     out->boost_fusions = (fx.flags & CC_TFX_BOOST_FUSIONS) != 0;
     for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX && i < GC_EVENT_REWARDS_MAX && fx.rewards[i].wave; i++) {
