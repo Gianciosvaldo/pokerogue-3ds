@@ -142,6 +142,8 @@ void rr_set_blend(rr_blend b);
 void rr_set_grey(int alpha);
 /* A filled circle about (x, y) (origin and zoom as rr_rect). */
 void rr_circle(float x, float y, float r, rr_color c);
+/* A filled triangle (citro2d's C2D_DrawTriangle), in the same space as rr_rect. */
+void rr_tri(float x0, float y0, float x1, float y1, float x2, float y2, rr_color c);
 /* A signed colour (-255..255 per channel) added to every drawn pixel's RGB before blending,
  * until changed (reset to 0 at each rr_target): upstream's sprite shader "tone" (rgb part). */
 void rr_set_tone(int r, int g, int b);
