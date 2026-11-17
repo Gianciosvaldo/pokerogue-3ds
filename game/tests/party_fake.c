@@ -89,9 +89,22 @@ int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color col, rr
   return mui_text(s, x, y, utf8);
 }
 
+/* What the screen draws, told to a test that wants it (party_bands_test): 'i' an image (x, y, and its origin in w, h), 'c' a clip
+ * (x, y, w, h), 'o' the clip turned off */
+void (*pf_draw_hook)(char kind, const char* key, float x, float y, float w, float h);
+
 bool mui_image(const char* key, const char* frame, float x, float y, float ox, float oy) {
-  (void)key; (void)frame; (void)x; (void)y; (void)ox; (void)oy;
+  (void)frame;
+  if (pf_draw_hook) pf_draw_hook('i', key, x, y, ox, oy);
   return true;
+}
+
+void mui_clip(float x, float y, float w, float h) {
+  if (pf_draw_hook) pf_draw_hook('c', "", x, y, w, h);
+}
+
+void mui_clip_off(void) {
+  if (pf_draw_hook) pf_draw_hook('o', "", 0, 0, 0, 0);
 }
 
 bool mui_image_ex(const char* key, const char* frame, float x, float y, const rr_draw_opts* opts) {

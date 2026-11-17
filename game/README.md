@@ -203,7 +203,14 @@ Upstream draws everything on one 320x180 canvas. Here:
 - **Window style**: `GM_DEFAULT_WINDOW_STYLE` (`ui_widgets.h`) is 5, the grey windows of the reference screenshots (lorenzo, 2026-10-12); upstream's own default is 1 (red). `main.c` hands it to the menus (`mui_set_window_style`), so every window uses the same style. Change the one constant to go back.
 - **Bottom screen (320x240)**: upstream's `ui` container, bottom-aligned, so the message and
   command strip (upstream y -48..0) is the last 48 rows. Full-screen menus (party, summary,
-  starter select...) use `UI_BOTTOM_CANVAS`: a whole 320x180 canvas, centred.
+  starter select...) use `UI_BOTTOM_CANVAS`: a whole 320x180 canvas, centred. That leaves 30 rows above and below (`MUI_BAND`): the party and
+  summary screens draw their background into them (lorenzo, 2026-11-17, "black bands above and below"), nothing scaled. Party: the grid
+  background again, moved by whole 32 px grid periods, three copies wide so the empty-slot bars baked into the art at x >= 143 stay out
+  (`draw_bg_bands` in `menus/party.c`). Summary: the header bar made taller (its dark row stretched, its teal line copied up) and the last
+  row of the background and of each page stretched down, so the panels go on (`draw_bg_bands`, `draw_row_below` in `menus/summary.c`).
+  Host tests: `party_bands_test`, the band section of `summary_ui_test`; `tests/bands_mutations.py` plants bugs in them. The art's pixels
+  are not in the repo, so which rows are plain grid and which row is the header's dark one is read off screenshots of the app, and the look
+  has not been seen on a console.
 
 Every position in the code is upstream's own number in one of these spaces (see `ui_space` in
 [`include/ui.h`](include/ui.h)), so layouts can be copied from upstream's handlers directly.

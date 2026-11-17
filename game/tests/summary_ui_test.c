@@ -120,26 +120,48 @@ int mui_bbtext(mui_style s, float x, float y, const char* bbtext) {
   return 0;
 }
 
-void mui_clip(float x, float y, float w, float h) {
-  rec('c', "", x, y, w, h, 0, 0);
+/* The clips and images of a draw, with the scale of a stretched one, for the band checks below (on while g_bl_on) */
+typedef struct {
+  char kind; /* 'c' clip (x, y, w, h), 'i' image (x, y, origin ox, oy), 'e' image_ex (x, y, scale sx, sy, origin ox, oy), 'o' clip off */
+  char key[40];
+  float x, y, w, h, sx, sy, ox, oy;
+} bcall;
+static bcall g_bl[64];
+static int g_nbl;
+static bool g_bl_on;
+static void brec(char kind, const char* key, float x, float y, float w, float h, float sx, float sy, float ox, float oy) {
+  if (!g_bl_on || g_nbl >= 64) return;
+  g_bl[g_nbl++] = (bcall){kind, "", x, y, w, h, sx, sy, ox, oy};
+  snprintf(g_bl[g_nbl - 1].key, sizeof g_bl[g_nbl - 1].key, "%s", key);
 }
 
-void mui_clip_off(void) {}
+void mui_clip(float x, float y, float w, float h) {
+  rec('c', "", x, y, w, h, 0, 0);
+  brec('c', "", x, y, w, h, 0, 0, 0, 0);
+}
+
+void mui_clip_off(void) { brec('o', "", 0, 0, 0, 0, 0, 0, 0, 0); }
 
 bool mui_image(const char* atlas, const char* frame, float x, float y, float ox, float oy) {
   (void)frame;
   rec('i', atlas, x, y, 0, 0, ox, oy);
+  brec('i', atlas, x, y, 0, 0, 0, 0, ox, oy);
   return true;
 }
 
 bool mui_image_ex(const char* atlas, const char* frame, float x, float y, const rr_draw_opts* opts) {
-  (void)atlas; (void)frame; (void)x; (void)y; (void)opts;
+  (void)frame;
+  brec('e', atlas, x, y, 0, 0, opts->scale_x, opts->scale_y, opts->origin_x, opts->origin_y);
   return true;
 }
 
 const rr_frame* mui_frame(const char* key, const char* frame) {
-  (void)key; (void)frame;
+  (void)frame;
   static rr_frame dummy = {0, 0, 16, 16};
+  /* a page's art as the band checks need it: 214 wide (PAGE_X 106 to the screen's edge), 158 high; elsewhere the old 16 x 16 */
+  static rr_frame page = {0, 0, 0, 0, 0, 0, 0, 214, 158};
+  if (g_bl_on && key && (!strcmp(key, "ui/summary_profile") || !strcmp(key, "ui/summary_stats") || !strcmp(key, "ui/summary_moves")))
+    return &page;
   return &dummy;
 }
 
@@ -526,6 +548,99 @@ int main(void) {
   summary_draw();
   assert(!find('o', "(+2)", 0) && !find('o', "ACC +3", 0));
   summary_close();
+
+  /* ---- the bands of the bottom screen (lorenzo, 2026-11-17: black bands above and below "pokemon info"): the canvas is 180 rows on a 240-row
+   * screen, so the art's own edges are drawn into the 30 rows above and below it. The calls are checked, not the art's pixels (not in the repo);
+   * the art rows named come from the app's screenshot of this screen (header dark between teal lines at canvas rows 2 and 14). */
+  {
+    party[0].show_battle_stages = false;
+    args.mode = SUMMARY_DEFAULT;
+    args.page = SUMMARY_PROFILE;
+    args.index = 0;
+    summary_open(&args, &ev);
+    summary_update(300.0f);
+    g_bl_on = true;
+    g_nbl = 0;
+    summary_draw();
+    g_bl_on = false;
+    int own = -1; /* the canvas' own background */
+    for (int i = 0; i < g_nbl; i++)
+      if (g_bl[i].kind == 'i' && !strcmp(g_bl[i].key, "ui/summary_bg") && g_bl[i].y == 180 && g_bl[i].x == 0) {
+        own = i;
+        break;
+      }
+    assert(own == 8);
+    /* above: the dark row stretched over the band and the canvas' first row (the art's own is empty), then the teal line copied up */
+    assert(g_bl[0].kind == 'c' && g_bl[0].x == 0 && g_bl[0].y == -30 && g_bl[0].w == 320 && g_bl[0].h == 31);
+    assert(g_bl[1].kind == 'e' && !strcmp(g_bl[1].key, "ui/summary_bg") && g_bl[1].x == 0 && g_bl[1].sx == 1 && g_bl[1].sy == 31 && g_bl[1].oy == 0);
+    assert(g_bl[1].y + 8 * g_bl[1].sy == -30 && g_bl[1].y + 9 * g_bl[1].sy == 1); /* art row 8 covers exactly the band and row 0 */
+    assert(g_bl[2].kind == 'c' && g_bl[2].y == -30 && g_bl[2].h == 1 && g_bl[2].w == 320);
+    assert(g_bl[3].kind == 'i' && !strcmp(g_bl[3].key, "ui/summary_bg") && g_bl[3].x == 0 && g_bl[3].oy == 1);
+    assert(2 + (g_bl[3].y - 180) == -30); /* the canvas' row 2, the teal line, lands on the band's first row */
+    /* the mask after them is the canvas and the bands: 320 x 240, from y -30 */
+    assert(g_bl[4].kind == 'c' && g_bl[4].x == 0 && g_bl[4].y == -30 && g_bl[4].w == 320 && g_bl[4].h == 240);
+    /* below: the background's last row stretched over the 30 rows under the canvas (and the canvas' own last row) */
+    assert(g_bl[5].kind == 'c' && g_bl[5].x == 0 && g_bl[5].y == 180 && g_bl[5].w == 320 && g_bl[5].h == 30);
+    assert(g_bl[6].kind == 'e' && !strcmp(g_bl[6].key, "ui/summary_bg") && g_bl[6].x == 0 && g_bl[6].y == 210 && g_bl[6].sy == 31 && g_bl[6].oy == 1);
+    assert(g_bl[7].kind == 'c' && g_bl[7].y == -30 && g_bl[7].h == 240); /* the mask is back */
+    /* the profile page: its image at (106, 180), then its last row over x 106..320 of the band, then the mask again */
+    int pg = -1;
+    for (int i = own; i < g_nbl; i++)
+      if (g_bl[i].kind == 'i' && !strcmp(g_bl[i].key, "ui/summary_profile")) {
+        pg = i;
+        break;
+      }
+    assert(pg > 0 && g_bl[pg].x == 106 && g_bl[pg].y == 180 && g_bl[pg].oy == 1);
+    assert(g_bl[pg + 1].kind == 'c' && g_bl[pg + 1].x == 106 && g_bl[pg + 1].y == 180 && g_bl[pg + 1].w == 214 && g_bl[pg + 1].h == 30);
+    assert(g_bl[pg + 2].kind == 'e' && !strcmp(g_bl[pg + 2].key, "ui/summary_profile") && g_bl[pg + 2].x == 106 && g_bl[pg + 2].y == 210 &&
+           g_bl[pg + 2].sy == 31 && g_bl[pg + 2].oy == 1);
+    assert(g_bl[pg + 3].kind == 'c' && g_bl[pg + 3].y == -30 && g_bl[pg + 3].h == 240);
+    /* a page that slides in is only drawn where the screen is: no band clip leaves it */
+    summary_input(MB_RIGHT);
+    summary_update(100.0f);
+    g_bl_on = true;
+    g_nbl = 0;
+    summary_draw();
+    g_bl_on = false;
+    int below = 0;
+    for (int i = 0; i < g_nbl; i++)
+      if (g_bl[i].kind == 'c' && g_bl[i].y == 180 && g_bl[i].h == 30) {
+        assert(g_bl[i].x >= 0 && g_bl[i].w > 0 && g_bl[i].x + g_bl[i].w <= 320);
+        below++;
+      }
+    assert(below == 3); /* the background and the two pages of the slide */
+    /* each page's band is cut to where that page is: from its x (or the screen's edge) to its right edge (or the screen's) */
+    int pages = 0;
+    for (int i = 0; i + 1 < g_nbl; i++)
+      if (g_bl[i].kind == 'i' && g_bl[i].y == 180 && !strncmp(g_bl[i].key, "ui/summary_", 11) && strcmp(g_bl[i].key, "ui/summary_bg") &&
+          strstr(g_bl[i].key, "prompt") == NULL && g_bl[i].oy == 1 && g_bl[i + 1].kind == 'c') {
+        const float px = g_bl[i].x, l = px < 0 ? 0 : px, r = px + 214 > 320 ? 320 : px + 214;
+        assert(g_bl[i + 1].x == l && g_bl[i + 1].x + g_bl[i + 1].w == r && g_bl[i + 1].y == 180 && g_bl[i + 1].h == 30);
+        pages++;
+      }
+    assert(pages == 2);
+    summary_close();
+
+    /* the moves page: the description's own mask is put back as the widened one, so the bands keep showing */
+    party[0].nmoves = 1;
+    party[0].moves[0].id = 33;
+    args.page = SUMMARY_MOVES;
+    summary_open(&args, &ev);
+    summary_update(300.0f);
+    (void)summary_input(MB_ACTION);
+    summary_update(300.0f);
+    g_bl_on = true;
+    g_nbl = 0;
+    summary_draw();
+    g_bl_on = false;
+    int desc = -1;
+    for (int i = 0; i < g_nbl; i++)
+      if (g_bl[i].kind == 'c' && g_bl[i].x == 112 && g_bl[i].y == 121 && g_bl[i].w == 205 && g_bl[i].h == 59) desc = i;
+    assert(desc > 0 && desc + 1 < g_nbl);
+    assert(g_bl[desc + 1].kind == 'c' && g_bl[desc + 1].x == 0 && g_bl[desc + 1].y == -30 && g_bl[desc + 1].w == 320 && g_bl[desc + 1].h == 240);
+    summary_close();
+    party[0].nmoves = 0;
+  }
 
   assert(!strcmp(menu_move_name(216), "Return"));
   assert(!strcmp(menu_move_name(228), "Pursuit"));

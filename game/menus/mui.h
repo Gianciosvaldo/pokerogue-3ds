@@ -27,6 +27,9 @@ extern "C" {
 
 #define MUI_W 320
 #define MUI_H 180
+/* The bottom screen is 320x240: a screen that centres the 320x180 canvas on it (UI_BOTTOM_CANVAS, origin y 30) leaves MUI_BAND rows above
+ * and below it. Full-screen menus draw their background into those rows too (party, summary), so no black band shows. */
+#define MUI_BAND 30
 
 /* upstream Button (src/enums/buttons.ts), same order */
 typedef enum {

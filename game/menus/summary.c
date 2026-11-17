@@ -230,6 +230,49 @@ static int frame_h(const char* key) {
   return f ? f->src_h : 0;
 }
 
+static int frame_w(const char* key) {
+  const rr_frame* f = mui_frame(key, NULL);
+  return f ? f->src_w : 0;
+}
+
+/* ------------------------------------------------------------ the bands of the bottom screen
+ * The canvas is 180 rows on a 240-row screen: MUI_BAND rows above and below it (UI_BOTTOM_CANVAS). The art is made for 180 rows and
+ * has nothing for them, so they are made from its own edges, nothing scaled: above, the header bar made taller (its dark middle row
+ * stretched over the band, with its top teal line on the band's first row); below, the art's last row carried on down, the
+ * background's and each page's (the pages' panels, flat at their last row, simply go on). The summary's mask is the canvas plus the
+ * bands, so what sits in them is only what is drawn here. Rows of the art, counted from its top, on the real screen (a screenshot of it):
+ * the header is dark between its teal lines at canvas rows 2 and 14, and the art is 179 or 180 rows tall. */
+#define HEADER_DARK_ROW 8 /* an art row inside the header's dark part, with either art height */
+#define HEADER_LINE_ROW 2 /* the header's top teal line, as a canvas row */
+
+/* the canvas' mask, widened over the bands */
+static void outer_clip(void) { mui_clip(0, -MUI_BAND, MUI_W, MUI_H + 2 * MUI_BAND); }
+
+/* `key`'s last row, stretched over the bands' lower part, between x and x + w (clipped to the screen) */
+static void draw_row_below(const char* key, float x, int w) {
+  const float x0 = x < 0 ? 0 : x, x1 = x + w > MUI_W ? MUI_W : x + w;
+  if (x1 <= x0) return;
+  mui_clip(x0, MUI_H, x1 - x0, MUI_BAND);
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_y = 1; /* the art's bottom edge on y: its last row is the one stretched, over y .. y - (BAND + 1) */
+  o.scale_y = MUI_BAND + 1;
+  mui_image_ex(key, NULL, x, MUI_H + MUI_BAND, &o);
+  outer_clip();
+}
+
+static void draw_bg_bands(void) {
+  /* above: the dark row over the whole band (and the canvas' first row, which the art leaves empty) ... */
+  mui_clip(0, -MUI_BAND, MUI_W, MUI_BAND + 1);
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.scale_y = MUI_BAND + 1;
+  mui_image_ex("ui/summary_bg", NULL, 0, -MUI_BAND - HEADER_DARK_ROW * (MUI_BAND + 1), &o);
+  /* ... and the header's teal line on the band's first row: the art's own row, 32 rows up from where it is */
+  mui_clip(0, -MUI_BAND, MUI_W, 1);
+  mui_image("ui/summary_bg", NULL, 0, MUI_H - (HEADER_LINE_ROW + MUI_BAND), 0, 1);
+  outer_clip();
+  draw_row_below("ui/summary_bg", 0, MUI_W);
+}
+
 /* ------------------------------------------------------------ status and move effect */
 
 static void show_status(bool instant) {
@@ -513,7 +556,7 @@ static void draw_moves(float px, float py, bool main) {
     float dy = S.move_desc_y - scroll_offset(S.now - S.move_desc_t0, S.move_desc_lines, 4);
     mui_clip(112, 121, 205, 59);
     mui_text(TS_WINDOW_ALT, mx + 1, my + dy, S.move_desc);
-    mui_clip(0, 0, MUI_W, MUI_H);
+    outer_clip();
   }
   if (S.cursor_obj) {
     if (S.selected_move > -1)
@@ -528,6 +571,7 @@ static void draw_moves(float px, float py, bool main) {
 static void draw_page(int page, float px, bool main) {
   const char* key = page_key(page);
   mui_image(key, NULL, px, MUI_H, 0, 1);
+  draw_row_below(key, px, frame_w(key));
   float py = MUI_H - frame_h(key);
   switch (page) {
     case SUMMARY_PROFILE: draw_profile(px, py, main); break;
@@ -899,7 +943,7 @@ static const char* status_frame(int s) {
 void summary_draw(void) {
   if (!S.active) return;
   const menu_mon* m = &S.mon;
-  mui_clip(0, 0, MUI_W, MUI_H);
+  draw_bg_bands(); /* leaves the mask on: the canvas widened over the bands */
 
   mui_image("ui/summary_bg", NULL, 0, MUI_H, 0, 1);
   int bg_h = frame_h("ui/summary_bg");

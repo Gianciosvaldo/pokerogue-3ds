@@ -74,6 +74,12 @@ int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color col, rr
   return 0;
 }
 
+void mui_clip(float x, float y, float w, float h) {
+  (void)x; (void)y; (void)w; (void)h;
+}
+
+void mui_clip_off(void) {}
+
 bool mui_image(const char* key, const char* frame, float x, float y, float ox, float oy) {
   (void)key; (void)frame; (void)x; (void)y; (void)ox; (void)oy;
   return true;

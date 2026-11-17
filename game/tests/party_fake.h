@@ -18,6 +18,8 @@ void pf_release(int slot);
 int pf_farewells(void);
 void pf_clear_text(void);
 int pf_text_count(const char* text);
+/* A test's listener for what the screen draws: set it and call party_draw (see party_fake.c) */
+extern void (*pf_draw_hook)(char kind, const char* key, float x, float y, float w, float h);
 int pf_msg_count(const char* text);   /* how many times the screen showed this message (its callback ran at once) */
 
 #endif

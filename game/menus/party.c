@@ -1171,10 +1171,32 @@ static void draw_options(void) {
     mui_image("ui/cursor", NULL, right + 8 - P.options_w, bottom - 19 - 16 * (P.nopt - 1 - P.options_cursor), 0, 0);
 }
 
+/* The rows of the bottom screen above and below the canvas (MUI_BAND each), which upstream's 320x180 background does not reach. The
+ * background is a grid that repeats every 32 px both ways, so the bands are the background again, moved by whole periods and clipped
+ * to the band. Two things of it are not a plain grid and are kept out: the bars of the empty slots are baked into the art, at x >= 143
+ * (the benched slots' x, slot_rect) from y 12 to 148, and the art's first row is empty. So every band takes its rows from the grid at
+ * x < 143 (the top from rows 34..64, the bottom from rows 84..114: both clear of bars), and since that is only 143 px wide it is
+ * drawn three times, moved right by 0, 128 and 256 (multiples of 32, so the grid lines carry on); each later copy covers what the
+ * earlier ones brought in from x >= 143. The band's clip starts at the canvas' first row (+1): that row is empty in the art. */
+#define BAND_BAR_X 143
+#define BAND_COPIES 3
+static const float BAND_COPY_X[BAND_COPIES] = {0, 128, 256};
+#define BAND_TOP_SHIFT (-64)
+#define BAND_BOTTOM_SHIFT 96
+
+static void draw_bg_bands(const char* bg) {
+  mui_clip(0, -MUI_BAND, MUI_W, MUI_BAND + 1);
+  for (int i = 0; i < BAND_COPIES; i++) mui_image(bg, NULL, BAND_COPY_X[i], Y(0) + BAND_TOP_SHIFT, 0, 1);
+  mui_clip(0, MUI_H, MUI_W, MUI_BAND);
+  for (int i = 0; i < BAND_COPIES; i++) mui_image(bg, NULL, BAND_COPY_X[i], Y(0) + BAND_BOTTOM_SHIFT, 0, 1);
+  mui_clip_off();
+}
+
 void party_draw(void) {
   if (!P.active) return;
   const char* bg = item_manage_mode() ? (P.a.double_battle ? "ui/party_bg_double_manage" : "ui/party_bg")
                                       : (P.a.double_battle ? "ui/party_bg_double" : "ui/party_bg");
+  draw_bg_bands(bg);
   mui_image(bg, NULL, 0, Y(0), 0, 1);
   for (int i = 0; i < P.n; i++) draw_slot(i);
 
