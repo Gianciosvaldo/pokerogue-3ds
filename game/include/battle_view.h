@@ -255,6 +255,9 @@ void bv_me_intro(const me_intro_sprite* sprites, int n);
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 /* where BEV_MUSIC goes (the app's music is not the view's): a is the event's a */
 void bv_set_music_hook(void (*hook)(int a));
+/* The game-speed key's hook (Y on the battle screen; without one the key does nothing). step true moves the game to the next speed; either way it
+ * answers the locale key of the speed now in force ("settings:gameSpeedFast"), which the bottom screen shows. */
+void bv_set_speed_hook(const char* (*hook)(bool step));
 bool bv_playing(void);
 /* opts NULL = everything allowed. */
 void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck);

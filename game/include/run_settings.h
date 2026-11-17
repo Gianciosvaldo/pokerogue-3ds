@@ -40,6 +40,13 @@ bool rset_save(const rset_values* v);
 /* The speed the screens run at: upstream's gameSpeed over the port's written durations, which are upstream's own (a speed of 3 makes
  * them three times shorter, as upstream's Normal does). */
 float rset_time_scale(int speed);
+/* The speed the in-battle Y button moves to: Slow, Normal, Fast, Turbo, back to Slow. A speed that is none of them (the football game runs at 1)
+ * goes to Normal. */
+int rset_next_speed(int speed);
+/* The preset a live game speed (ui_game_speed) stands for; Normal for a scale that is none of them. */
+int rset_speed_from_scale(float scale);
+/* The locale key of the preset's name ("settings:gameSpeedFast"); Normal's for a speed that is none of them. */
+const char* rset_speed_key(int speed);
 
 typedef struct {
   rset_values values;  /* what the screen starts with */

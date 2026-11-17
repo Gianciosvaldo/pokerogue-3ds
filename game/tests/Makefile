@@ -477,6 +477,12 @@ build/tera_button_test: tera_button_test.c ../source/battle_view.c
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
 .PHONY: tera_button_test
 
+bottom_view_test: build/bottom_view_test
+build/bottom_view_test: bottom_view_test.c ../source/battle_view.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: bottom_view_test
+
 tera_icon_test: build/tera_icon_test
 build/tera_icon_test: tera_icon_test.c ../source/battle_view.c
 	@mkdir -p build

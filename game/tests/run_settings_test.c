@@ -77,6 +77,22 @@ int main(void) {
   CHECK(!rset_save(&(rset_values){.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_DAILY}), "a Daily Run is not saved");
   read_result = SAVE_NOT_FOUND;
   CHECK(rset_load().mode == GAME_MODES_CLASSIC, "missing settings default to Classic");
+  /* the in-battle Y button: Slow -> Normal -> Fast -> Turbo -> Slow; a speed that is no preset goes to Normal */
+  CHECK(rset_next_speed(RSET_SPEED_SLOW) == RSET_SPEED_NORMAL, "Slow goes to Normal");
+  CHECK(rset_next_speed(RSET_SPEED_NORMAL) == RSET_SPEED_FAST, "Normal goes to Fast");
+  CHECK(rset_next_speed(RSET_SPEED_FAST) == RSET_SPEED_TURBO, "Fast goes to Turbo");
+  CHECK(rset_next_speed(RSET_SPEED_TURBO) == RSET_SPEED_SLOW, "Turbo wraps to Slow");
+  CHECK(rset_next_speed(1) == RSET_SPEED_NORMAL && rset_next_speed(0) == RSET_SPEED_NORMAL && rset_next_speed(6) == RSET_SPEED_NORMAL &&
+        rset_next_speed(-3) == RSET_SPEED_NORMAL, "a speed that is no preset goes to Normal");
+  for (int s = RSET_SPEED_SLOW; s <= RSET_SPEED_TURBO; s++)
+    CHECK(rset_speed_from_scale(rset_time_scale(s)) == s, "the preset %d is found again from its time scale", s);
+  CHECK(rset_speed_from_scale(1.0f) == RSET_SPEED_NORMAL && rset_speed_from_scale(0.0f) == RSET_SPEED_NORMAL &&
+        rset_speed_from_scale(9.0f) == RSET_SPEED_NORMAL, "a scale that is no preset reads as Normal");
+  CHECK(rset_speed_from_scale(3.4f) == RSET_SPEED_NORMAL && rset_speed_from_scale(3.6f) == RSET_SPEED_FAST, "a scale rounds to the nearest preset");
+  CHECK(!strcmp(rset_speed_key(RSET_SPEED_SLOW), "settings:gameSpeedSlow") && !strcmp(rset_speed_key(RSET_SPEED_NORMAL), "settings:gameSpeedNormal") &&
+        !strcmp(rset_speed_key(RSET_SPEED_FAST), "settings:gameSpeedFast") && !strcmp(rset_speed_key(RSET_SPEED_TURBO), "settings:gameSpeedTurbo"),
+        "each preset has its own name");
+  CHECK(!strcmp(rset_speed_key(0), "settings:gameSpeedNormal") && !strcmp(rset_speed_key(9), "settings:gameSpeedNormal"), "a speed that is no preset is named Normal");
   printf("run_settings_test: %d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }
