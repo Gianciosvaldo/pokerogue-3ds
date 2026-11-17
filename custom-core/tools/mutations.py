@@ -1204,8 +1204,8 @@ mut(TE, "cc_status st = cc_tevent_schedule_validate(&e->when);", "cc_status st =
 mut(TE, "    st = cc_tevent_effects_validate(&e->fx);\n    if (st != CC_OK) return st;\n", "", "the effects of an event unchecked")
 for term in ["!e->fx.shiny_encounter_mult && ", "!e->fx.shiny_catch_mult && ", "!e->fx.candy_mult && ", "!e->fx.luck_boost && "]:
     mut(TE, term, "", f"an event whose only effect is {term.strip('! &').split('.')[-1]} counts as changing nothing")
-mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers)", "!e->fx.upgrade_vouchers)", "an event whose only effect is trainer_shiny_chance counts as changing nothing")
-mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers)", "!e->fx.trainer_shiny_chance)", "an event whose only effect is upgrade_vouchers counts as changing nothing")
+mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers &&", "!e->fx.upgrade_vouchers &&", "an event whose only effect is trainer_shiny_chance counts as changing nothing")
+mut(TE, "!e->fx.trainer_shiny_chance &&\n        !e->fx.upgrade_vouchers &&", "!e->fx.trainer_shiny_chance &&", "an event whose only effect is upgrade_vouchers counts as changing nothing")
 mut(TE, "        return CC_E_CONSISTENCY;\n    return CC_OK;\n}\n\ncc_status cc_tevents_validate_in", "        return CC_OK;\n    return CC_OK;\n}\n\ncc_status cc_tevents_validate_in", "an event that changes nothing accepted")
 mut(TE, "if (count > CC_TEVENTS_MAX) return CC_E_COUNT;", "if (count >= CC_TEVENTS_MAX) return CC_E_COUNT;", "a full table refused")
 mut(TE, "if (count > CC_TEVENTS_MAX) return CC_E_COUNT;", "", "no limit on the table")
@@ -1232,6 +1232,44 @@ mut(TE, "if (!(mask >> i & 1u)) continue;", "", "effects: a closed event counts"
 for field in ["shiny_encounter_mult", "shiny_catch_mult", "candy_mult", "luck_boost", "trainer_shiny_chance", "upgrade_vouchers"]:
     mut(TE, f"if (f->{field} > out.{field}) out.{field} = f->{field};", f"out.{field} += f->{field};", f"effects: {field} stacks")
     mut(TE, f"if (f->{field} > out.{field}) out.{field} = f->{field};", f"if (f->{field} < out.{field}) out.{field} = f->{field};", f"effects: {field} takes the smaller")
+# second round: flags, lists
+mut(TE, "if (f->flags & ~CC_TFX_ALL) return CC_E_RANGE;", "", "an unknown flag accepted")
+mut(TE, "        if (r->item) return CC_E_RANGE;\n            ended = 1;", "        ended = 1;", "an unused reward slot with an item accepted")
+mut(TE, "        if (r->item) return CC_E_RANGE;\n            ended = 1;", "        if (r->item) return CC_E_RANGE;", "rewards: a used slot after an empty one accepted")
+mut(TE, "        if (ended) return CC_E_RANGE;\n        if (r->wave > CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;", "        if (r->wave > CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;", "rewards: a gap in the list accepted")
+mut(TE, "if (r->wave > CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;", "if (r->wave >= CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;", "rewards: the last allowed wave refused")
+mut(TE, "if (r->wave > CC_TEVENT_REWARD_WAVE_MAX) return CC_E_RANGE;", "", "rewards: any wave accepted")
+mut(TE, "if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (r->item >= CC_TITEM_COUNT) return CC_E_RANGE;", "rewards: a wave with no item accepted")
+mut(TE, "if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (r->item == CC_TITEM_NONE) return CC_E_RANGE;", "rewards: an unknown item accepted")
+mut(TE, "if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (r->item == CC_TITEM_NONE || r->item > CC_TITEM_COUNT) return CC_E_RANGE;", "rewards: the item one past the last accepted")
+mut(TE, "if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (r->item == CC_TITEM_NONE || r->item >= CC_TITEM_COUNT - 1) return CC_E_RANGE;", "rewards: the last item refused")
+mut(TE, "if (f->rewards[j].wave == r->wave && f->rewards[j].item == r->item) return CC_E_DUPLICATE;", "if (f->rewards[j].wave == r->wave || f->rewards[j].item == r->item) return CC_E_DUPLICATE;", "rewards: the same item on another wave is a duplicate")
+mut(TE, "if (f->rewards[j].wave == r->wave && f->rewards[j].item == r->item) return CC_E_DUPLICATE;", "if (f->rewards[j].wave == r->wave) return CC_E_DUPLICATE;", "rewards: two items on one wave are a duplicate")
+mut(TE, "if (f->rewards[j].wave == r->wave && f->rewards[j].item == r->item) return CC_E_DUPLICATE;", ";", "rewards: duplicates accepted")
+mut(TE, "        if (ended) return CC_E_RANGE;\n        if (sp > CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;", "        if (sp > CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;", "species: a gap in the list accepted")
+mut(TE, "if (sp > CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;", "if (sp >= CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;", "species: the largest id refused")
+mut(TE, "if (sp > CC_TEVENT_SPECIES_ID_MAX) return CC_E_RANGE;", "", "species: any id accepted")
+mut(TE, "if (f->luck_species[j] == sp) return CC_E_DUPLICATE;", ";", "species: duplicates accepted")
+mut(TE, "        if (ended) return CC_E_RANGE;\n        if (it >= CC_TITEM_COUNT) return CC_E_RANGE;", "        if (it >= CC_TITEM_COUNT) return CC_E_RANGE;", "buff: a gap in the list accepted")
+mut(TE, "if (it >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (it > CC_TITEM_COUNT) return CC_E_RANGE;", "buff: the item one past the last accepted")
+mut(TE, "if (it >= CC_TITEM_COUNT) return CC_E_RANGE;", "if (it >= CC_TITEM_COUNT - 1) return CC_E_RANGE;", "buff: the last item refused")
+mut(TE, "if (f->delibirdy_buff[j] == it) return CC_E_DUPLICATE;", ";", "buff: duplicates accepted")
+mut(TE, " && !e->fx.rewards[0].wave", "", "an event whose only effect is rewards counts as changing nothing")
+mut(TE, " && !e->fx.luck_species[0]", "", "an event whose only effect is luck_species counts as changing nothing")
+mut(TE, " && !e->fx.delibirdy_buff[0]", "", "an event whose only effect is delibirdy_buff counts as changing nothing")
+mut(TE, " && !e->fx.flags)", ")", "an event whose only effect is a flag counts as changing nothing")
+mut(TE, "out.flags |= f->flags;", "out.flags = f->flags;", "effects: the flags of the last open event only")
+mut(TE, "out.flags |= f->flags;", "out.flags &= f->flags;", "effects: flags AND-ed")
+mut(TE, "if (!dup && n_rewards < CC_TEVENT_REWARDS_MAX) out.rewards[n_rewards++] = f->rewards[k];", "if (n_rewards < CC_TEVENT_REWARDS_MAX) out.rewards[n_rewards++] = f->rewards[k];", "effects: a duplicate reward kept")
+mut(TE, "if (!dup && n_rewards < CC_TEVENT_REWARDS_MAX) out.rewards[n_rewards++] = f->rewards[k];", "if (!dup && n_rewards < CC_TEVENT_REWARDS_MAX - 1) out.rewards[n_rewards++] = f->rewards[k];", "effects: the last reward slot unused")
+mut(TE, "if (out.rewards[j].wave == f->rewards[k].wave && out.rewards[j].item == f->rewards[k].item) dup = 1;", "if (out.rewards[j].wave == f->rewards[k].wave) dup = 1;", "effects: two items of one wave count as one")
+mut(TE, "if (out.rewards[j].wave == f->rewards[k].wave && out.rewards[j].item == f->rewards[k].item) dup = 1;", "if (out.rewards[j].item == f->rewards[k].item) dup = 1;", "effects: one item on two waves counts as one")
+mut(TE, "if (!dup && n_species < CC_TEVENT_SPECIES_MAX) out.luck_species[n_species++] = f->luck_species[k];", "if (n_species < CC_TEVENT_SPECIES_MAX) out.luck_species[n_species++] = f->luck_species[k];", "effects: a duplicate species kept")
+mut(TE, "if (!dup && n_species < CC_TEVENT_SPECIES_MAX) out.luck_species[n_species++] = f->luck_species[k];", "if (!dup && n_species < CC_TEVENT_SPECIES_MAX - 1) out.luck_species[n_species++] = f->luck_species[k];", "effects: the last species slot unused")
+mut(TE, "if (!dup && n_buff < CC_TEVENT_BUFF_MAX) out.delibirdy_buff[n_buff++] = f->delibirdy_buff[k];", "if (n_buff < CC_TEVENT_BUFF_MAX) out.delibirdy_buff[n_buff++] = f->delibirdy_buff[k];", "effects: a duplicate buff item kept")
+mut(TE, "if (!dup && n_buff < CC_TEVENT_BUFF_MAX) out.delibirdy_buff[n_buff++] = f->delibirdy_buff[k];", "if (!dup && n_buff < CC_TEVENT_BUFF_MAX - 1) out.delibirdy_buff[n_buff++] = f->delibirdy_buff[k];", "effects: the last buff slot unused")
+mut(TE, "if (out.luck_species[j] == f->luck_species[k]) dup = 1;", "", "effects: species duplicates not noticed")
+mut(TE, "if (out.delibirdy_buff[j] == f->delibirdy_buff[k]) dup = 1;", "", "effects: buff duplicates not noticed")
 equiv(TE, "if (a % b != 0 && a < 0) q--;", "if (a % b != 0) q--;", "window only uses floor_div for the day it starts scanning from; one day too early adds an opening that has already closed (skipped) and the loop bound still reaches the next opening, so every answer is the same")
 equiv(TE, "return m < 0 ? m + b : m;", "return m;", "window only uses floor_mod for the first opening day on or after `from`; a negative remainder starts at most period-1 days earlier on the same phase, which the loop bound still covers, so every answer is the same")
 equiv(TE, "if (s->period_days < 1 || s->period_days > CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "if (s->period_days > CC_TEVENT_PERIOD_MAX) return CC_E_RANGE;", "period 0 is refused by the next check anyway (phase_day >= 0 is always true), with the same status")
@@ -1239,20 +1277,40 @@ equiv(TE, "if (cc_tevents_validate_in(ev, count) != CC_OK || !time_ok(local_s)) 
 equiv(TE, "while (n <= max && s[n]) n++;", "while (s[n]) n++;", "bounded_len's bound only keeps a runaway string short; every string the module reads is terminated, so the length (and the checks on it) is the same")
 equiv(TE, "for (unsigned i = 0; i < count && i < CC_TEVENTS_MAX; i++) {", "for (unsigned i = 0; i < count; i++) {", "a count over CC_TEVENTS_MAX makes the mask 0 first, so the loop bound is never what stops it")
 for old, new in [
-    ('{"lucky_catch", "Lucky Catch", {1, 0, 0, 1440}, {0, 3, 0, 0, 0, 0}}', '{"lucky_catch", "Lucky Catch", {1, 0, 0, 1440}, {0, 2, 0, 0, 0, 0}}'),
-    ('{"sweet_tooth", "Sweet Tooth", {1, 0, 0, 1440}, {0, 0, 4, 0, 0, 0}}', '{"sweet_tooth", "Sweet Tooth", {1, 0, 0, 1440}, {0, 0, 3, 0, 0, 0}}'),
-    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {2, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}'),
-    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {3, 1, 0, 1440}, {2, 0, 0, 0, 0, 0}}'),
-    ('{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}', '{"shiny_day", "Shiny Day", {3, 0, 0, 1440}, {3, 0, 0, 0, 0, 0}}'),
-    ('{"voucher_plus_day", "Voucher Plus Day", {2, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}', '{"voucher_plus_day", "Voucher Plus Day", {2, 0, 0, 1440}, {0, 0, 0, 0, 0, 1}}'),
-    ('{"voucher_plus_day", "Voucher Plus Day", {2, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}', '{"voucher_plus_day", "Voucher Plus Day", {3, 1, 0, 1440}, {0, 0, 0, 0, 0, 1}}'),
-    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 781, 60}, {0, 0, 0, 0, 6554, 0}}'),
-    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 61}, {0, 0, 0, 0, 6554, 0}}'),
-    ('{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6554, 0}}', '{"shiny_trainers", "Shiny Trainers", {1, 0, 780, 60}, {0, 0, 0, 0, 6555, 0}}'),
-    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1201, 60}, {0, 0, 0, 1, 0, 0}}'),
-    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1200, 59}, {0, 0, 0, 1, 0, 0}}'),
-    ('{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}}', '{"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 2, 0, 0}}'),
+    ('{1, 0, 0, 1440}, {.shiny_catch_mult = 3}', '{1, 0, 0, 1440}, {.shiny_catch_mult = 2}'),
+    ('{1, 0, 0, 1440}, {.candy_mult = 4}', '{1, 0, 0, 1440}, {.candy_mult = 3}'),
+    ('{3, 0, 0, 1440}, {.shiny_encounter_mult = 2}', '{2, 0, 0, 1440}, {.shiny_encounter_mult = 2}'),
+    ('{3, 0, 0, 1440}, {.shiny_encounter_mult = 2}', '{3, 1, 0, 1440}, {.shiny_encounter_mult = 2}'),
+    ('{3, 0, 0, 1440}, {.shiny_encounter_mult = 2}', '{3, 0, 0, 1440}, {.shiny_encounter_mult = 3}'),
+    ('{2, 1, 0, 1440}, {.upgrade_vouchers = 1}', '{2, 0, 0, 1440}, {.upgrade_vouchers = 1}'),
+    ('{2, 1, 0, 1440}, {.upgrade_vouchers = 1}', '{3, 1, 0, 1440}, {.upgrade_vouchers = 1}'),
+    ('{1, 0, 780, 60}, {.trainer_shiny_chance = 6554}', '{1, 0, 781, 60}, {.trainer_shiny_chance = 6554}'),
+    ('{1, 0, 780, 60}, {.trainer_shiny_chance = 6554}', '{1, 0, 780, 61}, {.trainer_shiny_chance = 6554}'),
+    ('{1, 0, 780, 60}, {.trainer_shiny_chance = 6554}', '{1, 0, 780, 60}, {.trainer_shiny_chance = 6555}'),
+    ('{1, 0, 1200, 60}, {.luck_boost = 1}', '{1, 0, 1201, 60}, {.luck_boost = 1}'),
+    ('{1, 0, 1200, 60}, {.luck_boost = 1}', '{1, 0, 1200, 59}, {.luck_boost = 1}'),
+    ('{1, 0, 1200, 60}, {.luck_boost = 1}', '{1, 0, 1200, 60}, {.luck_boost = 2}'),
     ('{"lucky_catch", "Lucky Catch"', '{"lucky_catch2", "Lucky Catch"'),
+    # second round
+    ('{1, 0, 1080, 60}', '{1, 0, 1081, 60}'),
+    ('{1, 0, 1080, 60}', '{1, 0, 1080, 61}'),
+    ('{{8, CC_TITEM_SHINY_CHARM}, {8, CC_TITEM_ABILITY_CHARM}', '{{9, CC_TITEM_SHINY_CHARM}, {8, CC_TITEM_ABILITY_CHARM}'),
+    ('{8, CC_TITEM_CATCHING_CHARM}, {25, CC_TITEM_SHINY_CHARM}', '{8, CC_TITEM_CATCHING_CHARM}, {26, CC_TITEM_SHINY_CHARM}'),
+    ('{8, CC_TITEM_ABILITY_CHARM}', '{8, CC_TITEM_CATCHING_CHARM}'),
+    ('{1, 0, 960, 60}', '{1, 0, 961, 60}'),
+    ('{.luck_species = {133, 134, 135, 136, 196, 197, 470, 471, 700}}', '{.luck_species = {133, 134, 135, 136, 196, 197, 470, 471}}'),
+    ('{.luck_species = {133, 134, 135, 136, 196, 197, 470, 471, 700}}', '{.luck_species = {133, 134, 135, 136, 196, 197, 470, 471, 701}}'),
+    ('{2, 0, 0, 1440}, {.rewards = {{25, CC_TITEM_CANDY_JAR}}}', '{2, 1, 0, 1440}, {.rewards = {{25, CC_TITEM_CANDY_JAR}}}'),
+    ('{2, 0, 0, 1440}, {.rewards = {{25, CC_TITEM_CANDY_JAR}}}', '{2, 0, 0, 1440}, {.rewards = {{26, CC_TITEM_CANDY_JAR}}}'),
+    ('{3, 1, 0, 1440},                             /* Delibird-y', '{3, 0, 0, 1440},                             /* Delibird-y'),
+    ('CC_TITEM_HEALING_CHARM},\n      .flags = CC_TFX_DELIBIRDY_COMMON', 'CC_TITEM_HEALING_CHARM},\n      .flags = 0'),
+    ('{.delibirdy_buff = {CC_TITEM_CATCHING_CHARM, CC_TITEM_SHINY_CHARM', '{.delibirdy_buff = {CC_TITEM_SHINY_CHARM, CC_TITEM_SHINY_CHARM'),
+    ('{3, 2, 0, 1440}, {.flags = CC_TFX_BOOST_FUSIONS}', '{3, 1, 0, 1440}, {.flags = CC_TFX_BOOST_FUSIONS}'),
+    ('{3, 2, 0, 1440}, {.flags = CC_TFX_BOOST_FUSIONS}', '{3, 2, 0, 1440}, {.flags = CC_TFX_TOWN_SNOW}'),
+    ('{{115, CC_TITEM_MEGA_BRACELET}, {115, CC_TITEM_DYNAMAX_BAND}}', '{{114, CC_TITEM_MEGA_BRACELET}, {115, CC_TITEM_DYNAMAX_BAND}}'),
+    ('{{115, CC_TITEM_MEGA_BRACELET}, {115, CC_TITEM_DYNAMAX_BAND}}', '{{115, CC_TITEM_MEGA_BRACELET}, {115, CC_TITEM_MEGA_BRACELET}}'),
+    ('{.flags = CC_TFX_TOWN_SNOW}', '{.flags = CC_TFX_BOOST_FUSIONS}'),
+    ('{"snowy_town", "Snowy Town", {1, 0, 0, 1440}', '{"snowy_town", "Snowy Town", {2, 0, 0, 1440}'),
 ]:
     mut(TT, old, new)
 

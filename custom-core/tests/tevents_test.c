@@ -212,7 +212,7 @@ static void test_window_errors(void)
 
 static cc_tevent good(void)
 {
-    cc_tevent e = {"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {0, 0, 0, 1, 0, 0}};
+    cc_tevent e = {"golden_hour", "Golden Hour", {1, 0, 1200, 60}, {.luck_boost = 1}};
     return e;
 }
 
@@ -301,11 +301,11 @@ static void test_combine(void)
 {
     /* a: daily all day (shiny x2, catch x3), b: the same days, one hour (shiny x5, luck 2, vouchers), c: every other day (candy 4, trainer 100) */
     const cc_tevent t[] = {
-        {"a", "A", {1, 0, 0, 1440}, {2, 3, 0, 0, 0, 0}},
-        {"b", "B", {1, 0, 600, 60}, {5, 0, 0, 2, 0, 1}},
-        {"c", "C", {2, 1, 0, 1440}, {0, 0, 4, 1, 100, 0}},
-        {"d", "D", {2, 1, 0, 1440}, {0, 1, 0, 0, 200, 0}},
-        {"e", "E", {2, 1, 0, 1440}, {0, 0, 2, 0, 0, 1}},     /* candy and vouchers again: b and e both upgrade vouchers, c and e both set candy */
+        {"a", "A", {1, 0, 0, 1440}, {.shiny_encounter_mult = 2, .shiny_catch_mult = 3}},
+        {"b", "B", {1, 0, 600, 60}, {.shiny_encounter_mult = 5, .luck_boost = 2, .upgrade_vouchers = 1}},
+        {"c", "C", {2, 1, 0, 1440}, {.candy_mult = 4, .luck_boost = 1, .trainer_shiny_chance = 100}},
+        {"d", "D", {2, 1, 0, 1440}, {.shiny_catch_mult = 1, .trainer_shiny_chance = 200}},
+        {"e", "E", {2, 1, 0, 1440}, {.candy_mult = 2, .upgrade_vouchers = 1}},     /* candy and vouchers again: b and e both upgrade vouchers, c and e both set candy */
     };
     const unsigned n = 5;
     CHECK_EQ(cc_tevents_validate_in(t, n), CC_OK);
@@ -350,9 +350,9 @@ static void test_combine(void)
 
 static void test_refusals(void)
 {
-    const cc_tevent ok[] = {{"a", "A", {1, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}};
-    const cc_tevent bad[] = {{"a", "A", {1, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}, {"b", "B", {0, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}};
-    const cc_tevent dup[] = {{"a", "A", {1, 0, 0, 1440}, {2, 0, 0, 0, 0, 0}}, {"a", "B", {1, 0, 0, 1440}, {3, 0, 0, 0, 0, 0}}};
+    const cc_tevent ok[] = {{"a", "A", {1, 0, 0, 1440}, {.shiny_encounter_mult = 2}}};
+    const cc_tevent bad[] = {{"a", "A", {1, 0, 0, 1440}, {.shiny_encounter_mult = 2}}, {"b", "B", {0, 0, 0, 1440}, {.shiny_encounter_mult = 2}}};
+    const cc_tevent dup[] = {{"a", "A", {1, 0, 0, 1440}, {.shiny_encounter_mult = 2}}, {"a", "B", {1, 0, 0, 1440}, {.shiny_encounter_mult = 3}}};
     const int64_t now = T(2026, 11, 16, 12, 0, 0);
     CHECK_EQ(cc_tevents_active_in(ok, 1, now), 1u);
     CHECK_EQ(cc_tevents_effects_in(ok, 1, now).shiny_encounter_mult, 2);
@@ -422,29 +422,38 @@ static void test_random_schedules(void)
 static void test_shipped_table(void)
 {
     CHECK_EQ(cc_tevents_validate(), CC_OK);
-    CHECK_EQ(cc_tevent_count, 6u);
+    CHECK_EQ(cc_tevent_count, 13u);
     CHECK(cc_tevent_count <= CC_TEVENTS_MAX);
-    static const char *const ids[] = {"lucky_catch", "sweet_tooth", "shiny_day", "voucher_plus_day", "shiny_trainers", "golden_hour"};
-    for (unsigned i = 0; i < 6; i++) CHECK(strcmp(cc_tevents[i].id, ids[i]) == 0);
+    static const char *const ids[] = {"lucky_catch", "sweet_tooth", "shiny_day", "voucher_plus_day", "shiny_trainers", "golden_hour",
+                                      "charm_hour", "lucky_species_hour", "candy_jar_day", "delibirdy_day", "fusion_day", "waiting_room", "snowy_town"};
+    for (unsigned i = 0; i < 13; i++) CHECK(strcmp(cc_tevents[i].id, ids[i]) == 0);
+    CHECK(cc_tevents_active(T(2026, 11, 16, 12, 0, 0)) != 0);
 
-    /* hand-checked moments */
+    /* hand-checked moments of the first six (the low six bits of the mask) */
+    const uint32_t first = 0x3Fu;
     cc_tevent_effects f = cc_tevents_effects(T(2026, 11, 16, 12, 0, 0));   /* day 20773, odd: Voucher Plus Day, not Shiny Day; between the two hours */
-    CHECK_EQ(cc_tevents_active(T(2026, 11, 16, 12, 0, 0)), 0x1u | 0x2u | 0x8u);
+    CHECK_EQ(cc_tevents_active(T(2026, 11, 16, 12, 0, 0)) & first, 0x1u | 0x2u | 0x8u);
     CHECK(f.shiny_encounter_mult == 0 && f.shiny_catch_mult == 3 && f.candy_mult == 4 && f.luck_boost == 0 && f.trainer_shiny_chance == 0 &&
           f.upgrade_vouchers == 1);
     f = cc_tevents_effects(T(2026, 11, 16, 20, 30, 0));                      /* Golden Hour */
     CHECK(f.shiny_encounter_mult == 0 && f.shiny_catch_mult == 3 && f.candy_mult == 4 && f.luck_boost == 1 && f.trainer_shiny_chance == 0 &&
           f.upgrade_vouchers == 1);
     f = cc_tevents_effects(T(2026, 11, 17, 12, 0, 0));                       /* day 20774: neither a Shiny Day (20774 mod 3 = 2) nor an odd day */
-    CHECK_EQ(cc_tevents_active(T(2026, 11, 17, 12, 0, 0)), 0x1u | 0x2u);
+    CHECK_EQ(cc_tevents_active(T(2026, 11, 17, 12, 0, 0)) & first, 0x1u | 0x2u);
     CHECK(f.shiny_encounter_mult == 0 && f.shiny_catch_mult == 3 && f.candy_mult == 4 && f.luck_boost == 0 && f.trainer_shiny_chance == 0 &&
           f.upgrade_vouchers == 0);
     f = cc_tevents_effects(T(2026, 11, 18, 13, 30, 0));                      /* day 20775: a Shiny Day (mod 3 = 0) and an odd day, at Shiny Trainers' hour */
     CHECK(f.shiny_encounter_mult == 2 && f.shiny_catch_mult == 3 && f.candy_mult == 4 && f.luck_boost == 0 && f.trainer_shiny_chance == 6554 &&
           f.upgrade_vouchers == 1);
-    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 13, 30, 0)), 0x1u | 0x2u | 0x4u | 0x8u | 0x10u);
-    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 12, 59, 59)), 0x1u | 0x2u | 0x4u | 0x8u);
-    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 14, 0, 0)), 0x1u | 0x2u | 0x4u | 0x8u);
+    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 13, 30, 0)) & first, 0x1u | 0x2u | 0x4u | 0x8u | 0x10u);
+    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 12, 59, 59)) & first, 0x1u | 0x2u | 0x4u | 0x8u);
+    CHECK_EQ(cc_tevents_active(T(2026, 11, 18, 14, 0, 0)) & first, 0x1u | 0x2u | 0x4u | 0x8u);
+
+    /* what each of the second round's events lists, written out here and not read from the table */
+    static const cc_tevent_reward charm[] = {{8, CC_TITEM_SHINY_CHARM}, {8, CC_TITEM_ABILITY_CHARM}, {8, CC_TITEM_CATCHING_CHARM}, {25, CC_TITEM_SHINY_CHARM}};
+    static const uint16_t eevees[] = {133, 134, 135, 136, 196, 197, 470, 471, 700};
+    static const uint8_t buff[] = {CC_TITEM_CATCHING_CHARM, CC_TITEM_SHINY_CHARM, CC_TITEM_ABILITY_CHARM, CC_TITEM_EXP_CHARM, CC_TITEM_SUPER_EXP_CHARM,
+                                   CC_TITEM_HEALING_CHARM};
 
     /* every minute of twelve days against the table read as plain rules */
     const int64_t d0 = T(2026, 11, 16, 0, 0, 0);
@@ -455,6 +464,12 @@ static void test_shipped_table(void)
         if (fl_mod(day, 2) == 1) want |= 0x8u;                   /* voucher plus day: every second day */
         if (minute >= 780 && minute < 840) want |= 0x10u;        /* 13:00 to 14:00 */
         if (minute >= 1200 && minute < 1260) want |= 0x20u;      /* 20:00 to 21:00 */
+        if (minute >= 1080 && minute < 1140) want |= 1u << 6;    /* charm hour 18:00 to 19:00 */
+        if (minute >= 960 && minute < 1020) want |= 1u << 7;     /* lucky species hour 16:00 to 17:00 */
+        if (fl_mod(day, 2) == 0) want |= 1u << 8;                /* candy jar day: every second day, even day numbers */
+        if (fl_mod(day, 3) == 1) want |= 1u << 9;                /* delibirdy day */
+        if (fl_mod(day, 3) == 2) want |= 1u << 10;               /* fusion day */
+        want |= 1u << 11 | 1u << 12;                             /* waiting room and snowy town: every minute */
         CHECK_EQ(cc_tevents_active(t), want);
         f = cc_tevents_effects(t);
         CHECK_EQ(f.shiny_encounter_mult, (want & 0x4u) ? 2 : 0);
@@ -463,6 +478,24 @@ static void test_shipped_table(void)
         CHECK_EQ(f.luck_boost, (want & 0x20u) ? 1 : 0);
         CHECK_EQ(f.trainer_shiny_chance, (want & 0x10u) ? 6554 : 0);
         CHECK_EQ(f.upgrade_vouchers, (want & 0x8u) ? 1 : 0);
+        /* the joined lists, in table order: charm hour, candy jar day, waiting room */
+        cc_tevent_reward wr[CC_TEVENT_REWARDS_MAX];
+        memset(wr, 0, sizeof wr);
+        unsigned nw = 0;
+        if (want >> 6 & 1u) for (unsigned k = 0; k < 4; k++) wr[nw++] = charm[k];
+        if (want >> 8 & 1u) { wr[nw].wave = 25; wr[nw++].item = CC_TITEM_CANDY_JAR; }
+        wr[nw].wave = 115; wr[nw++].item = CC_TITEM_MEGA_BRACELET;
+        wr[nw].wave = 115; wr[nw++].item = CC_TITEM_DYNAMAX_BAND;
+        CHECK(memcmp(f.rewards, wr, sizeof wr) == 0);
+        uint16_t sp[CC_TEVENT_SPECIES_MAX];
+        memset(sp, 0, sizeof sp);
+        if (want >> 7 & 1u) memcpy(sp, eevees, sizeof eevees);
+        CHECK(memcmp(f.luck_species, sp, sizeof sp) == 0);
+        uint8_t bf[CC_TEVENT_BUFF_MAX];
+        memset(bf, 0, sizeof bf);
+        if (want >> 9 & 1u) memcpy(bf, buff, sizeof buff);
+        CHECK(memcmp(f.delibirdy_buff, bf, sizeof bf) == 0);
+        CHECK_EQ(f.flags, ((want >> 10 & 1u) ? CC_TFX_BOOST_FUSIONS : 0u) | ((want >> 9 & 1u) ? CC_TFX_DELIBIRDY_COMMON : 0u) | CC_TFX_TOWN_SNOW);
     }
 
     /* what the title screen shows: Golden Hour from 19:00 */
@@ -472,6 +505,223 @@ static void test_shipped_table(void)
     CHECK_EQ(active, 0);
     CHECK_EQ(b - T(2026, 11, 16, 19, 0, 0), 3600);   /* opens in one hour */
     CHECK_EQ(e - b, 3600);
+}
+
+/* ------------------------------------------------------------------ the second round: lists and flags */
+
+static cc_tevent_effects fx_with(const cc_tevent_reward *rw, unsigned nr, const uint16_t *sp, unsigned ns, const uint8_t *bf, unsigned nb, uint8_t flags)
+{
+    cc_tevent_effects f;
+    memset(&f, 0, sizeof f);
+    for (unsigned i = 0; i < nr; i++) f.rewards[i] = rw[i];
+    for (unsigned i = 0; i < ns; i++) f.luck_species[i] = sp[i];
+    for (unsigned i = 0; i < nb; i++) f.delibirdy_buff[i] = bf[i];
+    f.flags = flags;
+    return f;
+}
+
+static void test_lists_validate(void)
+{
+    /* the limits, as literals */
+    CHECK_EQ(CC_TEVENT_REWARDS_MAX, 8u);
+    CHECK_EQ(CC_TEVENT_SPECIES_MAX, 12u);
+    CHECK_EQ(CC_TEVENT_BUFF_MAX, 6u);
+    CHECK_EQ(CC_TEVENT_REWARD_WAVE_MAX, 199u);
+    CHECK_EQ(CC_TEVENT_SPECIES_ID_MAX, 10000u);
+    CHECK_EQ(CC_TITEM_COUNT, 10);
+    CHECK_EQ(CC_TFX_BOOST_FUSIONS, 1u);
+    CHECK_EQ(CC_TFX_DELIBIRDY_COMMON, 2u);
+    CHECK_EQ(CC_TFX_TOWN_SNOW, 4u);
+    CHECK_EQ(CC_TFX_ALL, 7u);
+
+    cc_tevent_effects f;
+    memset(&f, 0, sizeof f);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);                 /* empty lists and no flags */
+
+    /* flags */
+    f.flags = 7;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.flags = 8;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.flags = 0x80;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+
+    /* rewards */
+    memset(&f, 0, sizeof f);
+    f.rewards[0].wave = 1; f.rewards[0].item = CC_TITEM_SHINY_CHARM;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.rewards[0].wave = 199;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.rewards[0].wave = 200;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.rewards[0].wave = 65535;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.rewards[0].wave = 8; f.rewards[0].item = CC_TITEM_NONE;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);            /* a wave with no item */
+    f.rewards[0].item = CC_TITEM_DYNAMAX_BAND;                       /* the last item */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.rewards[0].item = CC_TITEM_COUNT;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.rewards[0].item = 255;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.rewards[0].item = CC_TITEM_SHINY_CHARM;                        /* an item with no wave */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.rewards[1].wave = 8; f.rewards[1].item = CC_TITEM_SHINY_CHARM; /* a gap before the first entry */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.rewards[0].wave = 8; f.rewards[0].item = CC_TITEM_SHINY_CHARM;
+    f.rewards[2].wave = 9; f.rewards[2].item = CC_TITEM_SHINY_CHARM; /* a gap inside */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.rewards[0].wave = 8; f.rewards[0].item = CC_TITEM_SHINY_CHARM;
+    f.rewards[1].wave = 8; f.rewards[1].item = CC_TITEM_SHINY_CHARM; /* the same wave and item twice */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_DUPLICATE);
+    f.rewards[1].item = CC_TITEM_ABILITY_CHARM;                      /* the same wave, another item */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.rewards[1].item = CC_TITEM_SHINY_CHARM; f.rewards[1].wave = 25; /* the same item, another wave */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX; i++) { f.rewards[i].wave = (uint16_t)(10 + i); f.rewards[i].item = CC_TITEM_CANDY_JAR; }
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);                 /* a full list */
+    f.rewards[7].wave = 0;                                           /* a slot with a wave 0 but an item */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.rewards[7].item = 0;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+
+    /* species */
+    memset(&f, 0, sizeof f);
+    f.luck_species[0] = 1;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.luck_species[0] = 10000;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.luck_species[0] = 10001;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.luck_species[0] = 65535;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.luck_species[1] = 5;                                           /* a gap */
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.luck_species[0] = 5; f.luck_species[1] = 5;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_DUPLICATE);
+    for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX; i++) f.luck_species[i] = (uint16_t)(100 + i);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);                 /* a full list */
+    f.luck_species[5] = 0;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);            /* a hole in a full list */
+
+    /* the Delibird-y bonus */
+    memset(&f, 0, sizeof f);
+    f.delibirdy_buff[0] = CC_TITEM_HEALING_CHARM;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.delibirdy_buff[0] = CC_TITEM_DYNAMAX_BAND;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.delibirdy_buff[0] = CC_TITEM_COUNT;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    f.delibirdy_buff[0] = 255;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+    memset(&f, 0, sizeof f);
+    f.delibirdy_buff[1] = CC_TITEM_SHINY_CHARM;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);            /* a gap */
+    memset(&f, 0, sizeof f);
+    f.delibirdy_buff[0] = CC_TITEM_SHINY_CHARM; f.delibirdy_buff[1] = CC_TITEM_SHINY_CHARM;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_DUPLICATE);
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX; i++) f.delibirdy_buff[i] = (uint8_t)(1 + i);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    f.delibirdy_buff[3] = 0;
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_E_RANGE);
+
+    /* an event with only one of the new effects does something; with none, it is refused */
+    cc_tevent e = {"x", "X", {1, 0, 0, 1440}, {0}};
+    CHECK_EQ(cc_tevent_validate(&e), CC_E_CONSISTENCY);
+    e.fx.rewards[0].wave = 8; e.fx.rewards[0].item = CC_TITEM_SHINY_CHARM;
+    CHECK_EQ(cc_tevent_validate(&e), CC_OK);
+    memset(&e.fx, 0, sizeof e.fx);
+    e.fx.luck_species[0] = 133;
+    CHECK_EQ(cc_tevent_validate(&e), CC_OK);
+    memset(&e.fx, 0, sizeof e.fx);
+    e.fx.delibirdy_buff[0] = CC_TITEM_EXP_CHARM;
+    CHECK_EQ(cc_tevent_validate(&e), CC_OK);
+    memset(&e.fx, 0, sizeof e.fx);
+    e.fx.flags = CC_TFX_TOWN_SNOW;
+    CHECK_EQ(cc_tevent_validate(&e), CC_OK);
+    memset(&e.fx, 0, sizeof e.fx);
+    CHECK_EQ(cc_tevent_validate(&e), CC_E_CONSISTENCY);
+}
+
+static void test_lists_combine(void)
+{
+    const int64_t now = T(2026, 11, 16, 12, 0, 0);
+    const cc_tevent_reward ra[] = {{8, CC_TITEM_SHINY_CHARM}, {25, CC_TITEM_SHINY_CHARM}};
+    const cc_tevent_reward rb[] = {{8, CC_TITEM_SHINY_CHARM}, {8, CC_TITEM_ABILITY_CHARM}};
+    const uint16_t sa[] = {1, 2}, sb[] = {2, 3};
+    const uint8_t ba[] = {CC_TITEM_SHINY_CHARM, CC_TITEM_ABILITY_CHARM}, bb[] = {CC_TITEM_ABILITY_CHARM, CC_TITEM_CANDY_JAR};
+    cc_tevent t[3];
+    memset(t, 0, sizeof t);
+    t[0] = (cc_tevent){"a", "A", {1, 0, 0, 1440}, fx_with(ra, 2, sa, 2, ba, 2, CC_TFX_BOOST_FUSIONS)};
+    t[1] = (cc_tevent){"b", "B", {1, 0, 600, 120}, fx_with(rb, 2, sb, 2, bb, 2, CC_TFX_DELIBIRDY_COMMON)};
+    t[2] = (cc_tevent){"c", "C", {2, 1, 0, 1440}, fx_with(NULL, 0, NULL, 0, NULL, 0, CC_TFX_TOWN_SNOW)};   /* day 20773 is odd: open */
+    CHECK_EQ(cc_tevents_validate_in(t, 3), CC_OK);
+    cc_tevent_effects f = cc_tevents_effects_in(t, 3, now);          /* 12:00: a and b (600..720 is 10:00..12:00, closed at 12:00) */
+    CHECK_EQ(cc_tevents_active_in(t, 3, now), 0x5u);                 /* a and c */
+    CHECK_EQ(f.rewards[0].wave, 8); CHECK_EQ(f.rewards[0].item, CC_TITEM_SHINY_CHARM);
+    CHECK_EQ(f.rewards[1].wave, 25); CHECK_EQ(f.rewards[1].item, CC_TITEM_SHINY_CHARM);
+    CHECK_EQ(f.rewards[2].wave, 0);
+    CHECK_EQ(f.luck_species[0], 1); CHECK_EQ(f.luck_species[1], 2); CHECK_EQ(f.luck_species[2], 0);
+    CHECK_EQ(f.delibirdy_buff[0], CC_TITEM_SHINY_CHARM); CHECK_EQ(f.delibirdy_buff[1], CC_TITEM_ABILITY_CHARM); CHECK_EQ(f.delibirdy_buff[2], 0);
+    CHECK_EQ(f.flags, CC_TFX_BOOST_FUSIONS | CC_TFX_TOWN_SNOW);      /* the OR of the open events: b's flag is not in */
+    /* 11:00: a, b and c all open: lists joined in table order without duplicates, flags OR-ed */
+    const int64_t at11 = T(2026, 11, 16, 11, 0, 0);
+    CHECK_EQ(cc_tevents_active_in(t, 3, at11), 0x7u);
+    f = cc_tevents_effects_in(t, 3, at11);
+    CHECK_EQ(f.rewards[0].wave, 8); CHECK_EQ(f.rewards[0].item, CC_TITEM_SHINY_CHARM);
+    CHECK_EQ(f.rewards[1].wave, 25); CHECK_EQ(f.rewards[1].item, CC_TITEM_SHINY_CHARM);
+    CHECK_EQ(f.rewards[2].wave, 8); CHECK_EQ(f.rewards[2].item, CC_TITEM_ABILITY_CHARM);   /* (8, shiny) was in already */
+    CHECK_EQ(f.rewards[3].wave, 0);
+    CHECK_EQ(f.luck_species[0], 1); CHECK_EQ(f.luck_species[1], 2); CHECK_EQ(f.luck_species[2], 3); CHECK_EQ(f.luck_species[3], 0);
+    CHECK_EQ(f.delibirdy_buff[0], CC_TITEM_SHINY_CHARM); CHECK_EQ(f.delibirdy_buff[1], CC_TITEM_ABILITY_CHARM);
+    CHECK_EQ(f.delibirdy_buff[2], CC_TITEM_CANDY_JAR); CHECK_EQ(f.delibirdy_buff[3], 0);
+    CHECK_EQ(f.flags, CC_TFX_ALL);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);                 /* a combined result is itself a valid list */
+    /* an event that is closed adds nothing */
+    f = cc_tevents_effects_in(t, 3, T(2026, 11, 17, 3, 0, 0));       /* day 20774: c closed, b closed, a open */
+    CHECK_EQ(f.flags, CC_TFX_BOOST_FUSIONS);
+    CHECK_EQ(f.luck_species[2], 0);
+    CHECK_EQ(f.delibirdy_buff[2], 0);
+    CHECK_EQ(f.rewards[2].wave, 0);
+
+    /* two events whose lists together pass a maximum keep the first entries and stay valid */
+    cc_tevent_reward full_r[CC_TEVENT_REWARDS_MAX], more_r[2] = {{150, CC_TITEM_MEGA_BRACELET}, {151, CC_TITEM_MEGA_BRACELET}};
+    uint16_t full_s[CC_TEVENT_SPECIES_MAX], more_s[2] = {900, 901};
+    uint8_t full_b[CC_TEVENT_BUFF_MAX], more_b[1] = {CC_TITEM_DYNAMAX_BAND};
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX; i++) { full_r[i].wave = (uint16_t)(10 + i); full_r[i].item = CC_TITEM_CANDY_JAR; }
+    for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX; i++) full_s[i] = (uint16_t)(100 + i);
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX; i++) full_b[i] = (uint8_t)(1 + i);
+    cc_tevent o[2];
+    memset(o, 0, sizeof o);
+    o[0] = (cc_tevent){"f", "F", {1, 0, 0, 1440}, fx_with(full_r, CC_TEVENT_REWARDS_MAX, full_s, CC_TEVENT_SPECIES_MAX, full_b, CC_TEVENT_BUFF_MAX, 0)};
+    o[1] = (cc_tevent){"g", "G", {1, 0, 0, 1440}, fx_with(more_r, 2, more_s, 2, more_b, 1, 0)};
+    CHECK_EQ(cc_tevents_validate_in(o, 2), CC_OK);
+    f = cc_tevents_effects_in(o, 2, now);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX; i++) { CHECK_EQ(f.rewards[i].wave, 10 + i); CHECK_EQ(f.rewards[i].item, CC_TITEM_CANDY_JAR); }
+    for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX; i++) CHECK_EQ(f.luck_species[i], 100 + i);
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX; i++) CHECK_EQ(f.delibirdy_buff[i], 1 + i);
+    /* the same two the other way round: the short one first, then the long one fills up to the maximum */
+    o[0] = (cc_tevent){"g", "G", {1, 0, 0, 1440}, fx_with(more_r, 2, more_s, 2, more_b, 1, 0)};
+    o[1] = (cc_tevent){"f", "F", {1, 0, 0, 1440}, fx_with(full_r, CC_TEVENT_REWARDS_MAX, full_s, CC_TEVENT_SPECIES_MAX, full_b, CC_TEVENT_BUFF_MAX, 0)};
+    f = cc_tevents_effects_in(o, 2, now);
+    CHECK_EQ(f.rewards[0].wave, 150); CHECK_EQ(f.rewards[1].wave, 151); CHECK_EQ(f.rewards[2].wave, 10); CHECK_EQ(f.rewards[7].wave, 15);
+    CHECK_EQ(f.luck_species[0], 900); CHECK_EQ(f.luck_species[1], 901); CHECK_EQ(f.luck_species[2], 100); CHECK_EQ(f.luck_species[11], 109);
+    CHECK_EQ(f.delibirdy_buff[0], CC_TITEM_DYNAMAX_BAND); CHECK_EQ(f.delibirdy_buff[1], 1); CHECK_EQ(f.delibirdy_buff[5], 5);
+    CHECK_EQ(cc_tevent_effects_validate(&f), CC_OK);
+
+    /* a table with an invalid second-round list is refused whole */
+    cc_tevent bad[1];
+    bad[0] = (cc_tevent){"h", "H", {1, 0, 0, 1440}, fx_with(NULL, 0, NULL, 0, NULL, 0, 0)};
+    bad[0].fx.flags = 8;
+    CHECK_EQ(cc_tevents_validate_in(bad, 1), CC_E_RANGE);
+    CHECK_EQ(cc_tevents_active_in(bad, 1, now), 0u);
 }
 
 int main(void)
@@ -487,6 +737,8 @@ int main(void)
     test_combine();
     test_refusals();
     test_random_schedules();
+    test_lists_validate();
+    test_lists_combine();
     test_shipped_table();
     return cc_summary("tevents_test");
 }
