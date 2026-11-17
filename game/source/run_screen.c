@@ -738,10 +738,12 @@ static bool handle_event(int i) {
         break;
       }
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
-      /* D'Arby on the platform: his Stand beside him once the player's hand is lost, collapsed once the player wins (a caught cheat ends in the win) */
-      if (msg_is(e, "mysteryEncounters/darby:result.handLost") || msg_is(e, "mysteryEncounters/darby:result.win")) {
-        me_flow_set_darby_pose(msg_is(e, "mysteryEncounters/darby:result.win") ? 2 : 1);
-        field_sprites();
+      /* D'Arby on the platform after the callout (lorenzo 2026-11-17): his Stand beside him when the player loses (the souls are taken, or a false
+       * call), collapsed when the player wins (a straight win, or a caught cheat) */
+      {
+        const bool lost = msg_is(e, "mysteryEncounters/darby:result.soulTaken") || msg_is(e, "mysteryEncounters/darby:result.falseCall");
+        const bool won = msg_is(e, "mysteryEncounters/darby:result.win") || msg_is(e, "mysteryEncounters/darby:result.caught");
+        if (lost || won) { me_flow_set_darby_pose(won ? 2 : 1); field_sprites(); }
       }
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
