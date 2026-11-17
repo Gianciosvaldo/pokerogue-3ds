@@ -109,7 +109,9 @@ static struct {
   float msg_wrap;
   mode mode;
   int cmd_cursor, move_cursor;   /* cmd_cursor 4 = the Tera button (upstream Command.TERA) */
-  bool tera_fight;               /* the fight menu was opened from the Tera button: a move picked is a Terastallize */
+  bool tera_fight;               /* the fight menu was opened from the Tera button (the standard view: Tera chosen on the move screen): a move
+                                  * picked is a Terastallize */
+  int sv_tera_row;               /* the standard move screen: the row (0 top, 1 bottom) its Tera button was reached from */
   struct {                       /* bv_ask_target (TargetSelectUiHandler) */
     bool ok[4];                  /* the targets, by field index */
     int slot;                    /* the attacker's field index */
@@ -1324,13 +1326,13 @@ static void draw_command_menu(bool top) {
  * the message is shortened by the same 33 px. The selected button (cursor on it, upstream's isTerastallized glow) is drawn larger. */
 #define TERA_BTN_X 133.0f
 #define TERA_BTN_Y -23.7f
-static void draw_tera_at(float x, float y);
-static void draw_tera_button(void) { draw_tera_at(TERA_BTN_X, TERA_BTN_Y); }
-static void draw_tera_at(float x, float y) {
+static void draw_tera_at(float x, float y, bool on);
+static void draw_tera_button(void) { draw_tera_at(TERA_BTN_X, TERA_BTN_Y, B.cmd_cursor == 4 && B.bar_sel < 0); }
+/* on: drawn larger with the Terastallized glow (the cursor on the strip's button, or the standard view's move screen with Tera chosen) */
+static void draw_tera_at(float x, float y, bool on) {
   if (!B.opts.can_tera) return;
   char fr[24];
   const rr_frame* f = mui_frame("ui/button_tera", gm_enum_lower(GM_E_POKEMON_TYPE, B.opts.tera_type, fr, sizeof fr));
-  const bool on = B.cmd_cursor == 4 && B.bar_sel < 0;
   if (f) {
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.origin_x = o.origin_y = 0.5f;
@@ -1800,8 +1802,6 @@ static const sv_hex SV_ITEMS = {4, 21, 76, 21, 9};
 static const sv_hex SV_SETTINGS = {240, 21, 76, 21, 9};
 #define SV_BALLS_X 118.0f
 #define SV_BALLS_Y 25.0f
-#define SV_TERA_X 30.0f
-#define SV_TERA_Y 92.0f
 /* the item panel over the buttons: a title row (bar, luck, hints), a grid of 26 px cells, the pointed item's name and effect */
 #define SV_PANEL_X 4.0f
 #define SV_PANEL_Y 46.0f
@@ -1826,6 +1826,10 @@ static rr_color sv_edge(int c) {
 static bool sv_cmd_ok(int c) { return c == 1 ? B.opts.can_ball : c == 3 ? B.opts.can_run : true; }
 /* The buttons are up: the command is asked in the standard view (and the ball and party screens opened from it keep them under). */
 static bool sv_cmd_shown(void) { return sv() && cmd_shown() && !B.info_on; }
+/* the move screen is up (the fight menu in the standard view) */
+static bool sv_fight_shown(void) { return sv() && B.mode == M_FIGHT; }
+/* the bottom screen is the standard view's own (no strip at its bottom) */
+static bool sv_screen_shown(void) { return sv_cmd_shown() || sv_fight_shown(); }
 
 static void sv_hex_fill(float x, float y, float w, float h, float p, rr_color c) {
   if (p > w / 2) p = w / 2;
@@ -1877,7 +1881,7 @@ static void sv_draw_header(void) {
   sv_draw_battery(294, 4);
 }
 
-static void sv_draw_balls(void) {
+static void sv_draw_balls(float y) {
   if (!B.has_balls) return;
   static const char* const FRAMES[3] = {"empty", "ball", "faint"};
   for (int i = 0; i < 6; i++) {
@@ -1885,7 +1889,7 @@ static void sv_draw_balls(void) {
     if (!f) continue;
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.scale_x = o.scale_y = 2;
-    rr_draw(f, SV_BALLS_X + i * 14, SV_BALLS_Y, &o);
+    rr_draw(f, SV_BALLS_X + i * 14, y, &o);
   }
 }
 
@@ -1908,8 +1912,7 @@ static void sv_draw_commands(void) {
   sv_label(&SV_ITEMS, "Items", 72, 0);
   sv_hex_draw(&SV_SETTINGS, 2, B.opts.on_menu ? grey : off, dark);
   sv_label(&SV_SETTINGS, "Settings", 72, B.opts.on_menu ? 0 : RR_RGBA(0x90, 0x90, 0x98, 255));
-  sv_draw_balls();
-  if (B.mode == M_COMMAND && !B.items_on) draw_tera_at(SV_TERA_X, SV_TERA_Y);
+  sv_draw_balls(SV_BALLS_Y);
 }
 
 static void sv_draw_items(void) {
@@ -1935,10 +1938,142 @@ static void sv_draw_items(void) {
   }
 }
 
+static bool bv_input(ui_screen* s, ui_button b);
+/* The move screen (lorenzo's mock-up, 2026-11-17): the four moves as hexagons in two columns, each outlined in its type's colour with the type's
+ * tag and its PP; the Tera button in a small hexagon between the columns (A on it chooses Terastallizing for the move picked next, again takes it
+ * back); the move's power, accuracy and effect (or why it can't be used) under them; the party's balls and the back button (B) at the bottom. */
+static const sv_hex SV_MOVE[4] = {
+    {6, 24, 130, 46, 12},
+    {184, 24, 130, 46, 12},
+    {6, 76, 130, 46, 12},
+    {184, 76, 130, 46, 12},
+};
+static const sv_hex SV_TERA = {139, 50, 42, 46, 10};
+static const sv_hex SV_BACK = {248, 196, 66, 32, 10};
+#define SV_INFO_Y 128.0f
+#define SV_INFO_H 62.0f
+#define SV_FIGHT_BALLS_Y 194.0f
+/* the move can be picked: there is a move in the slot, it has PP and the command allows it (else A plays the error, as on the strip) */
+static bool sv_move_ok(int i) {
+  const bv_mon* m = &command_side()->mon;
+  return i < m->n_moves && m->pp_left[i] > 0 && B.opts.move_ok[i];
+}
+static rr_color sv_type_edge(int type) {
+  int rgb[3];
+  tera_type_rgb(type, rgb);
+  return RR_RGBA(rgb[0], rgb[1], rgb[2], 255);
+}
+static void sv_draw_move(int i) {
+  const bv_mon* m = &command_side()->mon;
+  const sv_hex* h = &SV_MOVE[i];
+  const bool on = B.move_cursor == i, has = i < m->n_moves, ok = sv_move_ok(i);
+  const int mv = has ? m->moves[i] : 0;
+  const pr_move* pm = has && mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
+  if (on) sv_hex_draw(&(sv_hex){h->x - 2, h->y - 2, h->w + 4, h->h + 4, h->p + 1}, 2, RR_RGBA(0xf8, 0xf8, 0xf8, 255), RR_RGBA(0xf8, 0xf8, 0xf8, 255));
+  const rr_color edge = !has || !ok ? RR_RGBA(0x60, 0x60, 0x68, 255) : pm ? sv_type_edge(pm->type) : RR_RGBA(0xa0, 0xa0, 0xb0, 255);
+  sv_hex_draw(h, 3, edge, on ? RR_RGBA(0x48, 0x48, 0x58, 255) : RR_RGBA(0x28, 0x28, 0x30, 255));
+  text_opts o = text_defaults();
+  o.origin_x = o.origin_y = 0.5f;
+  if (!has) {
+    text_draw(TS_WINDOW, h->x + h->w / 2, h->y + h->h / 2, "-", &o);
+    return;
+  }
+  if (!ok) o.color = RR_RGBA(0x90, 0x90, 0x98, 255);
+  text_draw(TS_WINDOW, h->x + h->w / 2, h->y + 14, i18n_move_name(mv), &o);
+  char fr[24], s[24];
+  if (pm) img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), h->x + h->p + 2, h->y + 33, 0, 0.5f);
+  snprintf(s, sizeof s, "PP %d/%d", m->pp_left[i], m->pp_max[i]);
+  const text_style ps = pp_style(m->pp_left[i], m->pp_max[i]);
+  text_opts po = text_defaults();
+  po.origin_x = 1;
+  po.origin_y = 0.5f;
+  po.color = text_color(ps, false);
+  po.shadow = text_color(ps, true);
+  text_draw(TS_MOVE_LABEL, h->x + h->w - h->p - 2, h->y + 33, s, &po);
+}
+static void sv_draw_move_info(void) {
+  const bv_mon* m = &command_side()->mon;
+  ui_window(6, SV_INFO_Y, 308, SV_INFO_H, WIN_NORMAL);
+  const int c = B.move_cursor;
+  char s[400], k[96], cm[64];
+  text_opts d = text_defaults();
+  d.wrap_w = 292;
+  d.max_lines = 3;
+  if (c == 4) {
+    snprintf(s, sizeof s, B.tera_fight ? "Terastallizing: pick a move. A again: no Tera." : "A: Terastallize with the next move.");
+    text_draw(TS_MOVE_LABEL, 14, SV_INFO_Y + 8, s, &d);
+    return;
+  }
+  if (c >= m->n_moves) return;
+  const int mv = m->moves[c];
+  const pr_move* pm = mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
+  if (pm) {
+    char pw[12], ac[12];
+    if (pm->power >= 0) snprintf(pw, sizeof pw, "%d", m->move_power[c] > 0 ? m->move_power[c] : pm->power);
+    else snprintf(pw, sizeof pw, "---");
+    if (pm->accuracy >= 0) snprintf(ac, sizeof ac, "%d", pm->accuracy);
+    else snprintf(ac, sizeof ac, "---");
+    snprintf(s, sizeof s, "Power %s   Accuracy %s", pw, ac);
+    text_draw(TS_MOVE_LABEL, 14, SV_INFO_Y + 8, s, NULL);
+    char fr[24];
+    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 300, SV_INFO_Y + 11, 1, 0.5f);
+  }
+  if (B.reason_ms > 0 && B.reason[0]) {
+    snprintf(s, sizeof s, "%s", B.reason); /* the move can't be used: say why where the description is */
+  } else {
+    snprintf(k, sizeof k, "move:%s.effect", gm_enum_camel(GM_E_MOVE_ID, mv, cm, sizeof cm));
+    i18n_t(s, sizeof s, k, NULL);
+  }
+  text_draw(TS_MOVE_LABEL, 14, SV_INFO_Y + 24, s, &d);
+}
+static void sv_draw_moves(void) {
+  for (int i = 0; i < 4; i++) sv_draw_move(i);
+  if (B.opts.can_tera) {
+    const bool on = B.move_cursor == 4;
+    if (on) sv_hex_draw(&(sv_hex){SV_TERA.x - 2, SV_TERA.y - 2, SV_TERA.w + 4, SV_TERA.h + 4, SV_TERA.p + 1}, 2, RR_RGBA(0xf8, 0xf8, 0xf8, 255),
+                        RR_RGBA(0xf8, 0xf8, 0xf8, 255));
+    sv_hex_draw(&SV_TERA, 3, B.tera_fight ? tera_tint(B.opts.tera_type, 255) : RR_RGBA(0xa0, 0xa0, 0xb0, 255),
+                on ? RR_RGBA(0x48, 0x48, 0x58, 255) : RR_RGBA(0x28, 0x28, 0x30, 255));
+    draw_tera_at(SV_TERA.x + SV_TERA.w / 2, SV_TERA.y + SV_TERA.h / 2, B.tera_fight);
+  }
+  sv_draw_move_info();
+  sv_draw_balls(SV_FIGHT_BALLS_Y);
+  sv_hex_draw(&SV_BACK, 2, RR_RGBA(0xa0, 0xa0, 0xb0, 255), RR_RGBA(0x28, 0x28, 0x30, 255));
+  sv_label(&SV_BACK, "Back", 72, 0);
+}
+/* The D-pad on the move screen: a 2x2 grid, with the Tera button (when offered) between the columns on either row's way across; from it LEFT and
+ * RIGHT go back to the row it was reached from. -1 = no move. */
+static int sv_move_nav(int c, ui_button b) {
+  const bool t = B.opts.can_tera;
+  if (c == 4) return b == BTN_LEFT ? B.sv_tera_row * 2 : b == BTN_RIGHT ? B.sv_tera_row * 2 + 1 : -1;
+  if (b == BTN_UP) return c >= 2 ? c - 2 : -1;
+  if (b == BTN_DOWN) return c < 2 ? c + 2 : -1;
+  if (b == BTN_RIGHT) return c % 2 ? -1 : t ? 4 : c + 1;
+  if (b == BTN_LEFT) return c % 2 ? (t ? 4 : c - 1) : -1;
+  return -1;
+}
+static bool sv_move_touch(float x, float y) {
+  if (sv_hex_hit(&SV_BACK, x, y)) return bv_input(NULL, BTN_CANCEL);
+  if (B.opts.can_tera && sv_hex_hit(&SV_TERA, x, y)) {
+    B.move_cursor = 4;
+    return bv_input(NULL, BTN_ACTION);
+  }
+  for (int i = 0; i < 4; i++)
+    if (sv_hex_hit(&SV_MOVE[i], x, y)) {
+      B.move_cursor = i;
+      return bv_input(NULL, BTN_ACTION);
+    }
+  return false;
+}
+
 static void sv_draw(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   rr_rect(0, 0, 320, 240, RR_RGBA(0x20, 0x20, 0x28, 255));
   sv_draw_header();
+  if (sv_fight_shown()) {
+    sv_draw_moves();
+    return;
+  }
   if (!sv_cmd_shown()) return;
   sv_draw_commands();
   if (B.items_on) sv_draw_items();
@@ -1983,21 +2118,18 @@ static bool sv_items_input(ui_button b) {
       return false;
   }
 }
-/* The D-pad on the buttons by where they stand: FIGHT's neighbours are the Tera button (or Ball) on the left, Pokemon on the right, Run under it
- * and the item panel above it; Ball and Pokemon go to Run sideways and to FIGHT (Ball to the Tera button) upwards. -2 = open the items, -1 = no
- * move. */
+/* The D-pad on the buttons by where they stand: FIGHT's neighbours are Ball on the left, Pokemon on the right, Run under it and the item panel
+ * above it; Ball and Pokemon go to Run sideways and to FIGHT upwards. -2 = open the items, -1 = no move. (The Tera button is on the move
+ * screen in this view, as in lorenzo's design.) */
 static int sv_nav(int c, ui_button b) {
-  const bool t = B.opts.can_tera;
   switch (c) {
-    case 0: return b == BTN_UP ? -2 : b == BTN_LEFT ? (t ? 4 : 1) : b == BTN_RIGHT ? 2 : b == BTN_DOWN ? 3 : -1;
-    case 1: return b == BTN_UP ? (t ? 4 : 0) : b == BTN_RIGHT || b == BTN_DOWN ? 3 : -1;
+    case 0: return b == BTN_UP ? -2 : b == BTN_LEFT ? 1 : b == BTN_RIGHT ? 2 : b == BTN_DOWN ? 3 : -1;
+    case 1: return b == BTN_UP ? 0 : b == BTN_RIGHT || b == BTN_DOWN ? 3 : -1;
     case 2: return b == BTN_UP ? 0 : b == BTN_LEFT || b == BTN_DOWN ? 3 : -1;
     case 3: return b == BTN_UP ? 0 : b == BTN_LEFT ? 1 : b == BTN_RIGHT ? 2 : -1;
-    case 4: return b == BTN_RIGHT ? 0 : b == BTN_DOWN ? 1 : -1;
     default: return -1;
   }
 }
-static bool bv_input(ui_screen* s, ui_button b);
 /* A tap on the buttons is A on them (as on the strip's command window); on the panel a tap points at an item, on Items or "B: close" closes it */
 static bool sv_touch(float x, float y) {
   if (B.items_on) {
@@ -2022,10 +2154,6 @@ static bool sv_touch(float x, float y) {
     return true;
   }
   if (sv_hex_hit(&SV_SETTINGS, x, y)) return bv_input(NULL, BTN_MENU);
-  if (B.opts.can_tera && fabsf(x - SV_TERA_X) < 18 && fabsf(y - SV_TERA_Y) < 16) {
-    B.cmd_cursor = 4;
-    return bv_input(NULL, BTN_ACTION);
-  }
   for (int c = 0; c < 4; c++)
     if (sv_hex_hit(&SV_CMD[c], x, y)) {
       B.cmd_cursor = c;
@@ -2056,7 +2184,7 @@ static void draw_debug(void) {
  * the standard one. The target choice's tiles start below it in both views. */
 #define BV_KEYS_X 8.0f
 #define BV_KEYS_GAP 18.0f
-static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : sv_cmd_shown() ? SV_KEYS_CMD_Y : SV_KEYS_Y; }
+static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : sv_screen_shown() ? SV_KEYS_CMD_Y : SV_KEYS_Y; }
 static void draw_bottom_extras(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   if (g_view == BV_VIEW_DEBUG) draw_debug();
@@ -3508,7 +3636,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
   if (B.mode == M_COMMAND) {
     if(undo_command(b))return true;
     int c = B.cmd_cursor;
-    if (c == 4 && !B.opts.can_tera) c = B.cmd_cursor = 0;
+    if (c == 4 && (!B.opts.can_tera || sv())) c = B.cmd_cursor = 0; /* (the standard view's Tera button is on the move screen) */
     if (sv() && (b == BTN_UP || b == BTN_DOWN || b == BTN_LEFT || b == BTN_RIGHT)) {
       const int to = sv_nav(c, b);
       if (to == -2) {
@@ -3592,8 +3720,27 @@ static bool bv_input(ui_screen* s, ui_button b) {
     if (B.cmd_cursor != c) ui_play_select();
     return B.cmd_cursor != c;
   }
+  if (B.mode == M_FIGHT && sv()) {
+    int c = B.move_cursor;
+    if (c == 4 && !B.opts.can_tera) c = B.move_cursor = 0;
+    if (b == BTN_UP || b == BTN_DOWN || b == BTN_LEFT || b == BTN_RIGHT) {
+      const int to = sv_move_nav(c, b);
+      if (to < 0) return false;
+      if (to == 4) B.sv_tera_row = c / 2;
+      B.move_cursor = to;
+      ui_play_select();
+      return true;
+    }
+    if (b == BTN_ACTION && c == 4) { /* the Tera button: Terastallize with the move picked next, or not */
+      B.tera_fight = !B.tera_fight;
+      ui_play_select();
+      return true;
+    }
+    /* B and A on a move: as the strip's fight menu */
+  }
   if (B.mode == M_FIGHT) {
     int c = B.move_cursor;
+    if (c == 4) c = B.move_cursor = 0; /* the standard view's Tera button, left with X: the strip has no such place */
     switch (b) {
       case BTN_UP:
         if (c >= 2) B.move_cursor -= 2;
@@ -3758,7 +3905,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (sv()) sv_draw();
-    if (!sv_cmd_shown() && ui_space(UI_BOTTOM_UI)) draw_bottom(false);
+    if (!sv_screen_shown() && ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
       text_draw(TS_MOVE_LABEL,BV_KEYS_X,bv_keys_y()+9,"Hold SELECT: Stat changes",NULL); /* under the X / Y line (it sat on the debug rows) */
     draw_bottom_extras();
@@ -3790,6 +3937,7 @@ static bool bv_touch(ui_screen* s, float px, float py) {
     }
     return false;
   }
+  if (B.mode == M_FIGHT && sv()) return sv_move_touch(px, py);
   if (B.mode == M_FIGHT) {
     if (x < 240 && y >= -48) {
       B.move_cursor = (x < 125 ? 0 : 1) + (y < -24 ? 0 : 2);
@@ -3919,6 +4067,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   B.hold_cmd = false;
   if (B.cmd_cursor == 2) B.cmd_cursor = 0; /* upstream resets POKEMON to FIGHT */
   if (B.cmd_cursor == 4 && !B.opts.can_tera) B.cmd_cursor = 0; /* and the Tera button's cursor when it is not offered */
+  if (B.move_cursor == 4 && !B.opts.can_tera) B.move_cursor = 0; /* (the standard move screen's Tera button) */
   B.tera_fight = false;
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */
   B.msg.opts.wrap_w = B.has_balls ? 128 : 1110 / 6.0f; /* narrower beside the party tray */

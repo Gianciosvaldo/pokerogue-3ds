@@ -6,8 +6,10 @@
  *   3  the buttons are drawn as hexagons (rects and triangles), the pointed one framed; the top screen has no item bar and no command window
  *   4  the D-pad goes between the buttons by where they stand; UP from FIGHT, L or R open the item panel
  *   5  a tap on a button is A on it: FIGHT opens the moves, Ball / Pokemon / Run answer, a command that is off answers nothing, Settings is
- *      START (the run menu), the Tera button fights with Tera; a tap on a point's empty corner is no button
- *   6  the item panel: the D-pad by cell (11 a row), L / R switch the bar, B / Items / "B: close" close it, a tap points at an item */
+ *      START (the run menu); a tap on a point's empty corner is no button; the Tera button is not here (it is on the move screen)
+ *   6  the item panel: the D-pad by cell (11 a row), L / R switch the bar, B / Items / "B: close" close it, a tap points at an item
+ *   7  the move screen (his move-select mock-up): four type-outlined hexagons with PP, the Tera button between the columns (A chooses it for the
+ *      move picked next, A again takes it back), power / accuracy / effect or the refusal's reason, balls and Back; D-pad, taps, B */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -57,7 +59,7 @@ bool msgbox_input(msgbox* m,ui_button b){(void)m;(void)b;return false;}
 float hint_x(text_style st,float x0,const char* const* texts_,int i){(void)st;(void)texts_;return x0+50*i;}
 int hint_at(text_style st,float x0,const char* const* texts_,int n,float x){(void)st;(void)texts_;for(int i=0;i<n;i++)if(x>=x0-6&&x<x0+50*(i+1))return i;return -1;}
 int mui_reclaim_images(void){return 0;}
-const pr_move pr_moves[PR_MOVE_COUNT]={{0}};
+const pr_move pr_moves[PR_MOVE_COUNT]={[33]={.power=40,.accuracy=95}}; /* Tackle-ish, to tell power from accuracy */
 int ui_window_style(void){return 1;}
 void msgbox_draw(const msgbox* m,float x,float y){(void)m;(void)x;(void)y;}
 void msgbox_show(msgbox* m,const char* t,float d,bool p){(void)m;(void)t;(void)d;(void)p;}
@@ -165,10 +167,10 @@ int main(void){
  B.cmd_cursor=2;CHECK(!in(BTN_RIGHT)&&B.cmd_cursor==2);     /* nothing right of Pokemon */
  B.cmd_cursor=1;CHECK(!in(BTN_LEFT)&&B.cmd_cursor==1);
  o.can_tera=true;start(&o);
- in(BTN_LEFT);CHECK(B.cmd_cursor==4);                       /* the Tera button left of FIGHT */
- in(BTN_DOWN);CHECK(B.cmd_cursor==1);
- in(BTN_UP);CHECK(B.cmd_cursor==4);
- in(BTN_RIGHT);CHECK(B.cmd_cursor==0);
+ in(BTN_LEFT);CHECK(B.cmd_cursor==1);                       /* the Tera button is on the move screen: FIGHT's left is still Ball */
+ in(BTN_UP);CHECK(B.cmd_cursor==0);
+ B.cmd_cursor=4;in(BTN_DOWN);CHECK(B.cmd_cursor==3);        /* a cursor left on the strip's Tera button (X) starts from FIGHT */
+ in(BTN_UP);
  in(BTN_UP);CHECK(B.items_on&&B.bar_sel==0);               /* above FIGHT: the items */
  in(BTN_CANCEL);CHECK(!B.items_on&&B.bar_sel<0&&B.mode==M_COMMAND&&answers==0);
  in(BTN_CYCLE_FORM);CHECK(B.items_on);in(BTN_CANCEL);
@@ -188,8 +190,7 @@ int main(void){
  o=opts();
  start(&o);CHECK(tap(SV_SETTINGS.x+38,SV_SETTINGS.y+10)&&menus==1);
  o.on_menu=NULL;start(&o);CHECK(!tap(SV_SETTINGS.x+38,SV_SETTINGS.y+10)&&menus==0);o=opts();
- o.can_tera=true;start(&o);CHECK(tap(SV_TERA_X,SV_TERA_Y)&&B.mode==M_FIGHT&&B.tera_fight);
- o.can_tera=false;start(&o);CHECK(!tap(SV_TERA_X,SV_TERA_Y)&&B.mode==M_COMMAND);
+ o.can_tera=true;start(&o);draw_bottom_screen();CHECK(balls_drawn==6);               /* no Tera button on the command screen */
  o=opts();
 
  /* ---- 6: the item panel */
@@ -207,7 +208,7 @@ int main(void){
  CHECK(tap(SV_GRID_X+26*2+5,SV_GRID_Y+26+5)&&B.bar_sel==13);  /* a tap points at a cell */
  CHECK(!tap(SV_GRID_X+26*8+5,SV_GRID_Y+26*2+5)&&B.bar_sel==13);/* no item there (30 items: cell 30) */
  CHECK(!tap(SV_CMD[3].x+50,SV_CMD[3].y+18)&&answers==0);     /* the buttons under the panel do nothing */
- B.opts.can_tera=true;tap(SV_TERA_X,SV_TERA_Y);CHECK(B.cmd_cursor==0&&B.mode==M_COMMAND);B.opts.can_tera=false; /* nor the Tera button */
+ tap(SV_CMD[0].x+20,SV_CMD[0].y+46);CHECK(B.cmd_cursor==0&&B.mode==M_COMMAND);   /* nor FIGHT */
  CHECK(tap(SV_HINT_X+60,SV_TITLE_Y+2)&&!B.items_on);          /* "B: close" */
  in(BTN_CYCLE_FORM);CHECK(tap(SV_HINT_X+10,SV_TITLE_Y+2)&&B.bar==1&&B.items_on); /* "L/R: switch" */
  CHECK(tap(SV_ITEMS.x+38,SV_ITEMS.y+10)&&!B.items_on);        /* Items again */
@@ -219,6 +220,56 @@ int main(void){
  CHECK(!in(BTN_RIGHT));in(BTN_CANCEL);
  /* the fight menu: L / R do nothing (no bar on screen) */
  o=opts();start(&o);in(BTN_ACTION);CHECK(B.mode==M_FIGHT);CHECK(!in(BTN_CYCLE_FORM)&&B.bar==0);
+
+ /* ---- 7: the move screen */
+ o=opts();start(&o);CHECK(tap(SV_CMD[0].x+104,SV_CMD[0].y+46)&&B.mode==M_FIGHT&&sv_fight_shown());
+ draw_bottom_screen();
+ { int pp=0;for(int i=0;i<nt;i++)if(!strcmp(texts[i],"PP 10/10"))pp++;CHECK(pp==4); }
+ CHECK(drawn("Move")&&drawn("Back")&&drawn("Power 40   Accuracy 95")&&balls_drawn==6);
+ CHECK(tris==2*2*(4+1)+2*2);                 /* four moves and Back, each edge and fill; the pointed move's white frame */
+ cur_space=UI_BOTTOM_UI;nt=0;draw_bottom(false);cur_space=UI_PHYS_BOTTOM;
+ CHECK(bv_keys_y()==SV_KEYS_CMD_Y);
+ B.move_cursor=0;
+ in(BTN_RIGHT);CHECK(B.move_cursor==1);in(BTN_DOWN);CHECK(B.move_cursor==3);in(BTN_LEFT);CHECK(B.move_cursor==2);in(BTN_UP);CHECK(B.move_cursor==0);
+ CHECK(!in(BTN_LEFT)&&!in(BTN_UP)&&B.move_cursor==0);B.move_cursor=3;CHECK(!in(BTN_RIGHT)&&!in(BTN_DOWN)&&B.move_cursor==3);
+ CHECK(in(BTN_CANCEL)&&B.mode==M_COMMAND);                  /* B: back to the commands */
+ in(BTN_ACTION);CHECK(B.mode==M_FIGHT);
+ CHECK(tap(SV_BACK.x+33,SV_BACK.y+16)&&B.mode==M_COMMAND);  /* Back */
+ in(BTN_ACTION);
+ CHECK(tap(SV_MOVE[2].x+65,SV_MOVE[2].y+23)&&answers==1&&answered==0&&B.mode==M_IDLE&&!tera_answer); /* a tap picks the move */
+ /* a move that can't be used: greyed, its reason in the info box, nothing answered */
+ o.move_ok[1]=false;o.move_why[1]="It can't be used!";start(&o);in(BTN_ACTION);
+ draw_bottom_screen();
+ { bool grey=false;for(int i=0;i<nrc;i++)if(rect_c[i]==RR_RGBA(0x60,0x60,0x68,255)&&rect_y[i]==SV_MOVE[1].y)grey=true;CHECK(grey); }
+ CHECK(!tap(SV_MOVE[1].x+65,SV_MOVE[1].y+23)&&answers==0&&errors==1&&B.mode==M_FIGHT);
+ draw_bottom_screen();CHECK(drawn("It can't be used!"));
+ o=opts();
+ /* an empty slot and a move with no PP */
+ start(&o);side_of(0)->mon.n_moves=3;side_of(0)->mon.pp_left[0]=0;in(BTN_ACTION);draw_bottom_screen();CHECK(drawn("-")&&drawn("PP 0/10"));
+ CHECK(!tap(SV_MOVE[3].x+65,SV_MOVE[3].y+23)&&!tap(SV_MOVE[0].x+65,SV_MOVE[0].y+23)&&answers==0&&errors==2);
+ /* the Tera button between the columns */
+ o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=0;
+ in(BTN_RIGHT);CHECK(B.move_cursor==4);in(BTN_RIGHT);CHECK(B.move_cursor==1);
+ in(BTN_LEFT);CHECK(B.move_cursor==4);in(BTN_LEFT);CHECK(B.move_cursor==0);
+ in(BTN_DOWN);in(BTN_RIGHT);CHECK(B.move_cursor==4);in(BTN_LEFT);CHECK(B.move_cursor==2);
+ in(BTN_RIGHT);in(BTN_RIGHT);CHECK(B.move_cursor==3);in(BTN_LEFT);in(BTN_LEFT);CHECK(B.move_cursor==2); /* the row it was reached from */
+ CHECK(in(BTN_RIGHT)&&!in(BTN_UP)&&!in(BTN_DOWN)&&B.move_cursor==4);
+ draw_bottom_screen();CHECK(drawn("A: Terastallize with the next move.")&&balls_drawn==7);
+ in(BTN_ACTION);CHECK(B.tera_fight&&B.mode==M_FIGHT&&answers==0);   /* A on it: chosen, nothing answered yet */
+ draw_bottom_screen();CHECK(drawn("Terastallizing: pick a move. A again: no Tera."));
+ in(BTN_ACTION);CHECK(!B.tera_fight);in(BTN_ACTION);
+ in(BTN_LEFT);in(BTN_ACTION);CHECK(answers==1&&answered==0&&tera_answer==1);         /* the move picked next Terastallizes */
+ start(&o);in(BTN_ACTION);CHECK(!B.tera_fight);                                        /* a new FIGHT starts without */
+ CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&B.tera_fight&&B.move_cursor==4);                /* a tap on it chooses it */
+ CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&!B.tera_fight);
+ CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&tap(SV_MOVE[3].x+65,SV_MOVE[3].y+23)&&answers==1&&tera_answer==1);
+ o.can_tera=false;start(&o);in(BTN_ACTION);B.move_cursor=0;
+ CHECK(!tap(SV_TERA.x+21,SV_TERA.y+23)&&B.move_cursor==0&&!B.tera_fight);              /* not offered: nothing there */
+ draw_bottom_screen();CHECK(balls_drawn==6);
+ /* the Tera cursor does not outlive the offer, nor the view */
+ o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;B.mode=M_COMMAND;o.can_tera=false;bv_ask_command(&o,on_command,NULL);CHECK(B.move_cursor==0);
+ o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;g_view=BV_VIEW_DEBUG;answers=0;in(BTN_ACTION);CHECK(B.move_cursor==0&&answers==1&&answered==0);
+ g_view=BV_VIEW_STANDARD;
 
  printf("standard view: %d checks, %d failed\n",checks,failed);
  return failed?1:0;
