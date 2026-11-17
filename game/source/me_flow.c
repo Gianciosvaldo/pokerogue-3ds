@@ -940,6 +940,10 @@ static void open_question(int cursor)
     }
   if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites(F.run, 160, 164, a.intro, ME_MAX_INTRO);
   else if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
+  if (F.type == GC_ME_DARBY && a.n_intro > 0) {   /* lorenzo 2026-11-17: the platform shows darby.png, the encounter screen his more expressive darby_screen.png (the platform one if it is missing) */
+    snprintf(a.intro[0].alt, sizeof a.intro[0].alt, "%s", a.intro[0].key);
+    snprintf(a.intro[0].key, sizeof a.intro[0].key, "images/trainer/custom/darby_screen");
+  }
   a.can_back = false;
   a.on_pick = on_option;
   if (!me_screen_open(&a)) finish(0, 0, 0);

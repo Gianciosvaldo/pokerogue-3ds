@@ -465,7 +465,13 @@ int main(void) {
   me_flow_intro(&R, intro, sizeof intro);
   CHECK(strstr(intro, "shuffling a deck of cards") != NULL, "darby intro: %s", intro);
   CHECK(me_flow_open(&R, chosen, NULL), "darby opens");
+  n_sil = 0;
   draw(0);
+  CHECK(n_sil >= 1 && !strcmp(g_sil_key[0], "images/trainer/custom/darby_screen"), "darby: the encounter screen draws his expressive sprite: %d %s", n_sil, g_sil_key[0]);
+  {
+    me_intro_sprite fs[ME_MAX_INTRO];
+    CHECK(me_flow_intro_sprites(GC_ME_DARBY, 160, 164, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, "images/trainer/custom/darby"), "darby: the platform keeps darby.png: %s", fs[0].key);
+  }
   CHECK(has_text(0, "D'Arby the Gambler") && has_text(0, "Will you play?"), "darby: title and query");
   draw(1);
   CHECK(has_text(1, "Wager one soul") && has_text(1, "Go all in") && has_text(1, "Walk away") && !find_text(1, "{{"), "darby: the three wagers");
