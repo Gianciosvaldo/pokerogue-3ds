@@ -38,8 +38,6 @@
 #include "ui.h"
 #include "ui_widgets.h"
 
-static void refresh_header(void);
-
 extern int gc_item_stack(const gc_run *run, const char *key);
 
 #define EV_CAP 400      /* screen events one game-core event can make */
@@ -558,7 +556,6 @@ static void wave_black(void* arg) {
   }
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
-  refresh_header();
   if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) {   /* the encounter's own sprites on the platform */
     static me_intro_sprite me_sp[ME_MAX_INTRO];
     bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
@@ -1186,14 +1183,6 @@ static int key_items(bv_item* out, int cap) {
   return n;
 }
 
-/* the standard bottom screen's strip: wave, biome, money */
-static void refresh_header(void) {
-  char biome[48], money[32];
-  rt_biome_name(G.run.biome, biome, sizeof biome);
-  rt_money(G.run.money, money, sizeof money);
-  bv_set_header(G.run.wave, biome, money);
-}
-
 static void refresh_item_bars(void){
   static bv_item foes[BV_MAX_FOE_ITEMS],keys[BV_MAX_FOE_ITEMS];
   int nf=foe_items(foes,BV_MAX_FOE_ITEMS),nk=key_items(keys,BV_MAX_FOE_ITEMS);
@@ -1239,7 +1228,6 @@ static void ask(void) {
       o.move_why[i] = g_reason[i];
     }
   }
-  refresh_header();
   bv_ask_command(&o, on_command, NULL);
 }
 

@@ -186,7 +186,6 @@ static struct {
   int bar;       /* which item bar is showing: 0 the foe's, 1 the player's (L and R) */
   int bar_sel;   /* the item the cursor is on (Up from the top row or Down from the bottom row of the command menu), -1 = none */
   bool bar_open; /* A opened its description (in the message window) */
-  bool items_on;  /* the standard view's item panel is open (its Items button, L / R or Up from FIGHT); bar_sel is its cursor */
   bool hold_cmd; /* BALL or POKEMON was chosen and its screen is open: the command strip, the item bar and the tray stay as they were */
   /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
   bool info_on;
@@ -466,12 +465,10 @@ static bool player_mini(const side *sd){(void)sd;return player_doubles();}
 static void (*music_hook)(int a);   /* where BEV_MUSIC goes */
 /* The battle screen's two hotkeys (lorenzo, 2026-11-16): X changes what the bottom screen shows and Y steps the game speed (the app's hook).
  * The view and the held keys are statics, not B, which bv_begin clears: the view stays through the waves. The debug view is the screen as it
- * was (the strip and the debug rows, the item bar on the top screen); the standard one is lorenzo's Black 2 design (2026-11-17): a strip with the
- * wave, biome, money and battery, and the command screen as big buttons over the whole bottom screen (the "standard view" block). A held key repeats: the repeats are swallowed until its release. */
+ * was (the strip and the debug rows); the standard one is meant to become the larger "what will you do" design and is the strip alone until
+ * then. A held key repeats: the repeats are swallowed until its release. */
 typedef enum { BV_VIEW_DEBUG, BV_VIEW_STANDARD, BV_VIEW_COUNT } bottom_view;
-/* The standard view is lorenzo's Black 2 design (2026-11-17) and the default; X still reaches the debug view. */
-static bottom_view g_view = BV_VIEW_STANDARD;
-static bool sv(void) { return g_view == BV_VIEW_STANDARD; }
+static bottom_view g_view = BV_VIEW_DEBUG;
 static bool g_view_held, g_speed_held;
 static const char* (*speed_hook)(bool step);
 static bool step_doubles(float dt) {
@@ -1324,22 +1321,21 @@ static void draw_command_menu(bool top) {
  * the message is shortened by the same 33 px. The selected button (cursor on it, upstream's isTerastallized glow) is drawn larger. */
 #define TERA_BTN_X 133.0f
 #define TERA_BTN_Y -23.7f
-static void draw_tera_at(float x, float y);
-static void draw_tera_button(void) { draw_tera_at(TERA_BTN_X, TERA_BTN_Y); }
-static void draw_tera_at(float x, float y) {
+static void draw_tera_button(void) {
   if (!B.opts.can_tera) return;
   char fr[24];
   const rr_frame* f = mui_frame("ui/button_tera", gm_enum_lower(GM_E_POKEMON_TYPE, B.opts.tera_type, fr, sizeof fr));
   const bool on = B.cmd_cursor == 4 && B.bar_sel < 0;
+  const float x = TERA_BTN_X;
   if (f) {
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.origin_x = o.origin_y = 0.5f;
     o.scale_x = o.scale_y = on ? 1.6f : 1.3f;
     if (on) o.tint = tera_tint(B.opts.tera_type, 255); /* the glow: upstream's toggleTeraButton gives it the Terastallized look */
-    rr_draw(f, x, y, &o);
-    if (on) draw_tera_pulse(f, x, y, &o, B.opts.tera_type);
+    rr_draw(f, x, TERA_BTN_Y, &o);
+    if (on) draw_tera_pulse(f, x, TERA_BTN_Y, &o, B.opts.tera_type);
   } else {
-    rr_rect(x - 10, y - 9, 20, 18, on ? RR_RGBA(0xf8, 0xf8, 0xf8, 255) : RR_RGBA(0x80, 0x80, 0x98, 255));
+    rr_rect(x - 10, TERA_BTN_Y - 9, 20, 18, on ? RR_RGBA(0xf8, 0xf8, 0xf8, 255) : RR_RGBA(0x80, 0x80, 0x98, 255));
   }
 }
 
@@ -1588,7 +1584,7 @@ static void draw_cursor_frame(float x, float y, float w, float h) {
 #define TBAR_ICONS 12
 static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
 static void draw_top_bar(void) {
-  if (!B.begun || sv()) return; /* the standard view: "no more item bar" (lorenzo's design); its Items button opens them on the bottom screen */
+  if (!B.begun) return;
   char meter[48];int luck=B.opts.party_luck<0?0:B.opts.party_luck>14?14:B.opts.party_luck;
   snprintf(meter,sizeof meter,"Luck: %s (%d/14)",luck_grade(luck),luck);
   text_opts label=text_defaults();label.origin_x=1;
@@ -1722,10 +1718,8 @@ static void draw_bottom(bool top) {
   const bool bar_info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
   const bool summary_info = B.info_on && (B.mode == M_IDLE || B.mode == M_COMMAND);
   const bool info = bar_info || summary_info;
-  /* the standard view has the commands on the bottom screen's own buttons: the top strip keeps "What will X do?" alone */
-  const bool strip_cmd = cmd_shown() && !info && !sv();
-  if (strip_cmd) draw_command_menu(top);
-  if (strip_cmd) draw_tera_button();
+  if (cmd_shown() && !info) draw_command_menu(top);
+  if (cmd_shown() && !info) draw_tera_button();
   if (fight) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
@@ -1743,295 +1737,10 @@ static void draw_bottom(bool top) {
       else dv_namebox_at(RR_BOTTOM, 0, 240, 12, -55, B.speaker, ui_window_style());
     }
   }
-  if (strip_cmd && B.has_balls) draw_party_tray();
+  if (cmd_shown() && B.has_balls && !info) draw_party_tray();
   if (!top && B.mode == M_TARGET) draw_target_pad();
   if(!top)draw_level_stats();
   if (!top) draw_ability_bar();
-}
-
-/* ------------------------------------------------------------------ the standard view (lorenzo's Black 2 design, 2026-11-17) */
-
-/* The bottom screen in physical px. A strip across the top (wave, biome, money, battery), under it the Items button, the party's balls and the
- * Settings button (START's menu), then FIGHT in a big red hexagon with Ball left, Pokemon right and Run under them, drawn in code (no game
- * art: the hexagons are rects and triangles). While the command is asked these replace the strip's command window; the other modes keep the
- * strip at the bottom under the top strip. */
-static struct {
-  char wave[24], biome[48], money[32];
-} g_hdr;
-static int (*battery_hook)(bool* charging);
-static int g_batt = -1;
-static bool g_batt_charging;
-static float g_batt_ms;
-
-void bv_set_header(int wave, const char* biome, const char* money) {
-  if (wave > 0) snprintf(g_hdr.wave, sizeof g_hdr.wave, "Wave %d", wave);
-  else g_hdr.wave[0] = 0;
-  snprintf(g_hdr.biome, sizeof g_hdr.biome, "%s", biome ? biome : "");
-  snprintf(g_hdr.money, sizeof g_hdr.money, "%s", money ? money : "");
-}
-void bv_set_battery_hook(int (*hook)(bool* charging)) {
-  battery_hook = hook;
-  g_batt = -1;
-  g_batt_ms = 0;
-}
-/* the battery is asked every 5 s, not every frame */
-static void sv_battery_update(float dt) {
-  if (!battery_hook) return;
-  g_batt_ms -= dt;
-  if (g_batt_ms > 0) return;
-  g_batt_ms = 5000;
-  bool c = false;
-  g_batt = battery_hook(&c);
-  g_batt_charging = c;
-}
-
-typedef struct {
-  float x, y, w, h, p; /* box and the depth of the left and right points */
-} sv_hex;
-#define SV_HDR_H 17.0f
-/* the commands by their number (FIGHT 0, BALL 1, POKEMON 2, RUN 3) */
-static const sv_hex SV_CMD[4] = {
-    {56, 46, 208, 92, 36},   /* FIGHT */
-    {4, 146, 100, 40, 14},   /* BALL */
-    {216, 146, 100, 40, 14}, /* POKEMON */
-    {108, 176, 104, 36, 14}, /* RUN */
-};
-static const sv_hex SV_ITEMS = {4, 21, 76, 21, 9};
-static const sv_hex SV_SETTINGS = {240, 21, 76, 21, 9};
-#define SV_BALLS_X 118.0f
-#define SV_BALLS_Y 25.0f
-#define SV_TERA_X 30.0f
-#define SV_TERA_Y 92.0f
-/* the item panel over the buttons: a title row (bar, luck, hints), a grid of 26 px cells, the pointed item's name and effect */
-#define SV_PANEL_X 4.0f
-#define SV_PANEL_Y 46.0f
-#define SV_PANEL_W 312.0f
-#define SV_PANEL_H 166.0f
-#define SV_GRID_X 17.0f
-#define SV_GRID_Y 66.0f
-#define SV_ITEM_COLS 11
-#define SV_HINT_X 196.0f
-#define SV_TITLE_Y (SV_PANEL_Y + 7)
-static const char* const SV_HINTS[2] = {"L/R: switch", "B: close"};
-/* where the X / Y line goes in the standard view: under the buttons while they are up, else under the top strip */
-#define SV_KEYS_CMD_Y 216.0f
-#define SV_KEYS_Y 21.0f
-
-static rr_color sv_edge(int c) {
-  static const rr_color E[4] = {RR_RGBA(0xf8, 0x70, 0x60, 255), RR_RGBA(0xe8, 0xb8, 0x20, 255), RR_RGBA(0x60, 0xc8, 0x40, 255),
-                                RR_RGBA(0x38, 0x98, 0xe8, 255)};
-  return E[c];
-}
-/* a command that is off is greyed (the error sound plays when it is picked); POKEMON is always on (it opens the party, see bv_input) */
-static bool sv_cmd_ok(int c) { return c == 1 ? B.opts.can_ball : c == 3 ? B.opts.can_run : true; }
-/* The buttons are up: the command is asked in the standard view (and the ball and party screens opened from it keep them under). */
-static bool sv_cmd_shown(void) { return sv() && cmd_shown() && !B.info_on; }
-
-static void sv_hex_fill(float x, float y, float w, float h, float p, rr_color c) {
-  if (p > w / 2) p = w / 2;
-  rr_rect(x + p, y, w - 2 * p, h, c);
-  rr_tri(x, y + h / 2, x + p, y, x + p, y + h, c);
-  rr_tri(x + w, y + h / 2, x + w - p, y, x + w - p, y + h, c);
-}
-/* an outline of b px (the inner hexagon keeps the slopes) */
-static void sv_hex_draw(const sv_hex* h, float b, rr_color edge, rr_color fill) {
-  sv_hex_fill(h->x, h->y, h->w, h->h, h->p, edge);
-  sv_hex_fill(h->x + b, h->y + b, h->w - 2 * b, h->h - 2 * b, h->p * (h->h - 2 * b) / h->h, fill);
-}
-static bool sv_hex_hit(const sv_hex* h, float x, float y) {
-  if (x < h->x || x >= h->x + h->w || y < h->y || y >= h->y + h->h) return false;
-  const float dx = fminf(x - h->x, h->x + h->w - x), dy = fabsf(y - (h->y + h->h / 2));
-  return dx >= h->p || dy <= h->h / 2 * dx / h->p;
-}
-static void sv_label(const sv_hex* h, const char* s, int px, rr_color c) {
-  text_opts o = text_defaults();
-  o.origin_x = o.origin_y = 0.5f;
-  if (px) o.font_px = px;
-  if (c) o.color = c;
-  text_draw(TS_WINDOW, h->x + h->w / 2, h->y + h->h / 2, s, &o);
-}
-
-static void sv_draw_battery(float x, float y) {
-  if (g_batt < 0) return;
-  const rr_color line = RR_RGBA(0xd0, 0xd0, 0xd8, 255);
-  rr_rect(x, y, 20, 10, line);
-  rr_rect(x + 1, y + 1, 18, 8, RR_RGBA(0x10, 0x10, 0x14, 255));
-  rr_rect(x + 20, y + 3, 2, 4, line);
-  const int n = g_batt > 5 ? 5 : g_batt;
-  const rr_color bar = g_batt_charging ? RR_RGBA(0x60, 0xd0, 0x60, 255) : n <= 1 ? RR_RGBA(0xf0, 0x50, 0x48, 255) : line;
-  for (int i = 0; i < n; i++) rr_rect(x + 2 + i * 3.4f, y + 2, 2.6f, 6, bar);
-}
-
-static void sv_draw_header(void) {
-  rr_rect(0, 0, 320, SV_HDR_H, RR_RGBA(0x10, 0x10, 0x14, 255));
-  rr_rect(0, SV_HDR_H, 320, 1, RR_RGBA(0x58, 0x58, 0x68, 255));
-  text_opts o = text_defaults();
-  o.font_px = 72;
-  o.origin_y = 0.5f;
-  const float y = SV_HDR_H / 2;
-  text_draw(TS_WINDOW, 6, y, g_hdr.wave, &o);
-  o.origin_x = 0.5f;
-  text_draw(TS_WINDOW, 150, y, g_hdr.biome, &o);
-  o.origin_x = 1;
-  text_draw(TS_WINDOW, 290, y, g_hdr.money, &o);
-  sv_draw_battery(294, 4);
-}
-
-static void sv_draw_balls(void) {
-  if (!B.has_balls) return;
-  static const char* const FRAMES[3] = {"empty", "ball", "faint"};
-  for (int i = 0; i < 6; i++) {
-    const rr_frame* f = mui_frame("ui/pb_tray_ball", FRAMES[B.balls[i] <= BV_BALL_FAINTED ? B.balls[i] : 0]);
-    if (!f) continue;
-    rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 2;
-    rr_draw(f, SV_BALLS_X + i * 14, SV_BALLS_Y, &o);
-  }
-}
-
-static void sv_draw_commands(void) {
-  static const char* const KEYS[4] = {"commandUiHandler:fight", "commandUiHandler:ball", "commandUiHandler:pokemon", "commandUiHandler:run"};
-  const rr_color dark = RR_RGBA(0x28, 0x28, 0x30, 255), dark_on = RR_RGBA(0x48, 0x48, 0x58, 255), off = RR_RGBA(0x60, 0x60, 0x68, 255);
-  const bool cursor = !B.items_on && B.mode == M_COMMAND;
-  for (int c = 0; c < 4; c++) {
-    const bool on = cursor && B.cmd_cursor == c, ok = sv_cmd_ok(c);
-    rr_color fill = c == 0 ? (on ? RR_RGBA(0xe8, 0x40, 0x38, 255) : RR_RGBA(0xb8, 0x20, 0x20, 255)) : on ? dark_on : dark;
-    if (on) sv_hex_draw(&(sv_hex){SV_CMD[c].x - 2, SV_CMD[c].y - 2, SV_CMD[c].w + 4, SV_CMD[c].h + 4, SV_CMD[c].p + 1}, 2,
-                        RR_RGBA(0xf8, 0xf8, 0xf8, 255), RR_RGBA(0xf8, 0xf8, 0xf8, 255));
-    sv_hex_draw(&SV_CMD[c], 3, ok ? sv_edge(c) : off, fill);
-    char s[32];
-    i18n_t(s, sizeof s, KEYS[c], NULL);
-    sv_label(&SV_CMD[c], s, c == 0 ? 144 : 0, ok ? 0 : RR_RGBA(0x90, 0x90, 0x98, 255));
-  }
-  const rr_color grey = RR_RGBA(0xa0, 0xa0, 0xb0, 255);
-  sv_hex_draw(&SV_ITEMS, 2, B.items_on ? RR_RGBA(0xf8, 0xe0, 0x58, 255) : grey, dark);
-  sv_label(&SV_ITEMS, "Items", 72, 0);
-  sv_hex_draw(&SV_SETTINGS, 2, B.opts.on_menu ? grey : off, dark);
-  sv_label(&SV_SETTINGS, "Settings", 72, B.opts.on_menu ? 0 : RR_RGBA(0x90, 0x90, 0x98, 255));
-  sv_draw_balls();
-  if (B.mode == M_COMMAND && !B.items_on) draw_tera_at(SV_TERA_X, SV_TERA_Y);
-}
-
-static void sv_draw_items(void) {
-  ui_window(SV_PANEL_X, SV_PANEL_Y, SV_PANEL_W, SV_PANEL_H, WIN_NORMAL);
-  text_draw(TS_MOVE_LABEL, SV_GRID_X - 5, SV_TITLE_Y, bar_title(), NULL);
-  char meter[48];
-  const int luck = B.opts.party_luck < 0 ? 0 : B.opts.party_luck > 14 ? 14 : B.opts.party_luck;
-  snprintf(meter, sizeof meter, "Luck: %s (%d/14)", luck_grade(luck), luck);
-  text_draw(TS_MOVE_LABEL, SV_GRID_X + 66, SV_TITLE_Y, meter, NULL);
-  for (int i = 0; i < 2; i++) text_draw(TS_MOVE_LABEL, hint_x(TS_MOVE_LABEL, SV_HINT_X, SV_HINTS, i), SV_TITLE_Y, SV_HINTS[i], NULL);
-  const int n = bar_n();
-  for (int i = 0; i < n; i++) draw_bar_icon(bar_it(i), SV_GRID_X + (i % SV_ITEM_COLS) * 26 + 1, SV_GRID_Y + (i / SV_ITEM_COLS) * 26 + 1);
-  if (n == 0) text_draw(TS_MOVE_LABEL, SV_GRID_X, SV_GRID_Y + 9, "none", NULL);
-  if (B.bar_sel >= 0 && B.bar_sel < n) {
-    draw_cursor_frame(SV_GRID_X + (B.bar_sel % SV_ITEM_COLS) * 26, SV_GRID_Y + (B.bar_sel / SV_ITEM_COLS) * 26, 26, 26);
-    char name[64];
-    const char* desc;
-    bar_info_text(name, sizeof name, &desc);
-    text_draw(TS_WINDOW, SV_GRID_X - 5, SV_PANEL_Y + SV_PANEL_H - 44, name, NULL);
-    text_opts d = text_defaults();
-    d.wrap_w = SV_PANEL_W - 16;
-    if (desc && *desc) text_draw(TS_MOVE_LABEL, SV_GRID_X - 5, SV_PANEL_Y + SV_PANEL_H - 26, desc, &d);
-  }
-}
-
-static void sv_draw(void) {
-  if (!ui_space(UI_PHYS_BOTTOM)) return;
-  rr_rect(0, 0, 320, 240, RR_RGBA(0x20, 0x20, 0x28, 255));
-  sv_draw_header();
-  if (!sv_cmd_shown()) return;
-  sv_draw_commands();
-  if (B.items_on) sv_draw_items();
-}
-
-static void sv_items_open(void) {
-  B.items_on = true;
-  B.bar_sel = bar_n() > 0 ? 0 : -1;
-  B.bar_open = false;
-}
-static void sv_items_close(void) {
-  B.items_on = false;
-  B.bar_sel = -1;
-  B.bar_open = false;
-}
-/* the panel's keys: the D-pad moves on the grid, L / R switch the bar, B closes; anything else does nothing (START still opens the menu) */
-static bool sv_items_input(ui_button b) {
-  const int n = bar_n();
-  switch (b) {
-    case BTN_LEFT:
-    case BTN_RIGHT:
-    case BTN_UP:
-    case BTN_DOWN: {
-      const int d = b == BTN_LEFT ? -1 : b == BTN_RIGHT ? 1 : b == BTN_UP ? -SV_ITEM_COLS : SV_ITEM_COLS;
-      const int i = B.bar_sel + d;
-      if (B.bar_sel < 0 || i < 0 || i >= n) return false;
-      B.bar_sel = i;
-      ui_play_select();
-      return true;
-    }
-    case BTN_CYCLE_FORM:
-    case BTN_CYCLE_SHINY:
-      B.bar ^= 1;
-      B.bar_sel = bar_n() > 0 ? 0 : -1;
-      ui_play_select();
-      return true;
-    case BTN_CANCEL:
-      sv_items_close();
-      ui_play_select();
-      return true;
-    default:
-      return false;
-  }
-}
-/* The D-pad on the buttons by where they stand: FIGHT's neighbours are the Tera button (or Ball) on the left, Pokemon on the right, Run under it
- * and the item panel above it; Ball and Pokemon go to Run sideways and to FIGHT (Ball to the Tera button) upwards. -2 = open the items, -1 = no
- * move. */
-static int sv_nav(int c, ui_button b) {
-  const bool t = B.opts.can_tera;
-  switch (c) {
-    case 0: return b == BTN_UP ? -2 : b == BTN_LEFT ? (t ? 4 : 1) : b == BTN_RIGHT ? 2 : b == BTN_DOWN ? 3 : -1;
-    case 1: return b == BTN_UP ? (t ? 4 : 0) : b == BTN_RIGHT || b == BTN_DOWN ? 3 : -1;
-    case 2: return b == BTN_UP ? 0 : b == BTN_LEFT || b == BTN_DOWN ? 3 : -1;
-    case 3: return b == BTN_UP ? 0 : b == BTN_LEFT ? 1 : b == BTN_RIGHT ? 2 : -1;
-    case 4: return b == BTN_RIGHT ? 0 : b == BTN_DOWN ? 1 : -1;
-    default: return -1;
-  }
-}
-static bool bv_input(ui_screen* s, ui_button b);
-/* A tap on the buttons is A on them (as on the strip's command window); on the panel a tap points at an item, on Items or "B: close" closes it */
-static bool sv_touch(float x, float y) {
-  if (B.items_on) {
-    if (sv_hex_hit(&SV_ITEMS, x, y)) return sv_items_input(BTN_CANCEL);
-    if (y >= SV_TITLE_Y - 4 && y < SV_TITLE_Y + 12 && x >= SV_HINT_X - 6) {
-      const int h = hint_at(TS_MOVE_LABEL, SV_HINT_X, SV_HINTS, 2, x);
-      return h == 0 ? sv_items_input(BTN_CYCLE_SHINY) : h == 1 ? sv_items_input(BTN_CANCEL) : false;
-    }
-    if (x >= SV_GRID_X && y >= SV_GRID_Y && x < SV_GRID_X + SV_ITEM_COLS * 26) {
-      const int i = (int)((y - SV_GRID_Y) / 26) * SV_ITEM_COLS + (int)((x - SV_GRID_X) / 26);
-      if (i < bar_n() && i != B.bar_sel) {
-        B.bar_sel = i;
-        ui_play_select();
-        return true;
-      }
-    }
-    return false;
-  }
-  if (sv_hex_hit(&SV_ITEMS, x, y)) {
-    sv_items_open();
-    ui_play_select();
-    return true;
-  }
-  if (sv_hex_hit(&SV_SETTINGS, x, y)) return bv_input(NULL, BTN_MENU);
-  if (B.opts.can_tera && fabsf(x - SV_TERA_X) < 18 && fabsf(y - SV_TERA_Y) < 16) {
-    B.cmd_cursor = 4;
-    return bv_input(NULL, BTN_ACTION);
-  }
-  for (int c = 0; c < 4; c++)
-    if (sv_hex_hit(&SV_CMD[c], x, y)) {
-      B.cmd_cursor = c;
-      return bv_input(NULL, BTN_ACTION);
-    }
-  return false;
 }
 
 static void draw_debug(void) {
@@ -2056,7 +1765,7 @@ static void draw_debug(void) {
  * the standard one. The target choice's tiles start below it in both views. */
 #define BV_KEYS_X 8.0f
 #define BV_KEYS_GAP 18.0f
-static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : sv_cmd_shown() ? SV_KEYS_CMD_Y : SV_KEYS_Y; }
+static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : 6.0f; }
 static void draw_bottom_extras(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   if (g_view == BV_VIEW_DEBUG) draw_debug();
@@ -3434,7 +3143,6 @@ static bool bv_input(ui_screen* s, ui_button b) {
     if (!g_view_held) {
       g_view_held = true;
       g_view = (bottom_view)((g_view + 1) % BV_VIEW_COUNT);
-      sv_items_close(); /* the item bar's cursor and the panel are the view's own */
       ui_play_select();
     }
     return true;
@@ -3461,13 +3169,6 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return true;
   }
   if (B.mode == M_EVENTS) return msgbox_input(&B.msg, b);
-  if (sv() && B.mode == M_COMMAND && B.items_on && b != BTN_MENU) return sv_items_input(b);
-  if (sv() && B.mode == M_COMMAND && (b == BTN_CYCLE_FORM || b == BTN_CYCLE_SHINY)) { /* L / R open the item panel */
-    sv_items_open();
-    ui_play_select();
-    return true;
-  }
-  if (sv() && B.mode == M_FIGHT && (b == BTN_CYCLE_FORM || b == BTN_CYCLE_SHINY)) return false; /* no item bar on screen */
   if ((B.mode == M_COMMAND || B.mode == M_FIGHT) && (b == BTN_CYCLE_FORM || b == BTN_CYCLE_SHINY)) {
     /* L and R switch the item bar; a cursor on the bar goes to the first item of the other one (or off, when that is empty) */
     const bool focused = B.bar_sel >= 0;
@@ -3477,7 +3178,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
     ui_play_select();
     return true;
   }
-  if (B.mode == M_COMMAND && B.bar_sel >= 0 && !sv()) {
+  if (B.mode == M_COMMAND && B.bar_sel >= 0) {
     /* the cursor is on the item bar: Left/Right move it (an open description follows), A opens its description in the message window
      * (or closes it), B closes the description and then leaves the bar, Up/Down leave it */
     if (b == BTN_LEFT || b == BTN_RIGHT) {
@@ -3509,18 +3210,6 @@ static bool bv_input(ui_screen* s, ui_button b) {
     if(undo_command(b))return true;
     int c = B.cmd_cursor;
     if (c == 4 && !B.opts.can_tera) c = B.cmd_cursor = 0;
-    if (sv() && (b == BTN_UP || b == BTN_DOWN || b == BTN_LEFT || b == BTN_RIGHT)) {
-      const int to = sv_nav(c, b);
-      if (to == -2) {
-        sv_items_open();
-        ui_play_select();
-        return true;
-      }
-      if (to < 0) return false;
-      B.cmd_cursor = to;
-      ui_play_select();
-      return true;
-    }
     switch (b) {
       case BTN_UP:
         if (c == 4) break;
@@ -3652,7 +3341,6 @@ static void bv_update(ui_screen* s, float dt) {
   if (B.heaven_box_t > 0) B.heaven_box_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
   if (B.mode == M_TARGET) B.tg.t += dt;
-  sv_battery_update(dt);
   if (!tween_done(&B.field_tw)) {
     tween_update(&B.field_tw, dt);
     B.field_scale = B.field_tw.value;
@@ -3757,8 +3445,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_PHYS_TOP)) draw_heaven_box();
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-    if (sv()) sv_draw();
-    if (!sv_cmd_shown() && ui_space(UI_BOTTOM_UI)) draw_bottom(false);
+    if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
       text_draw(TS_MOVE_LABEL,BV_KEYS_X,bv_keys_y()+9,"Hold SELECT: Stat changes",NULL); /* under the X / Y line (it sat on the debug rows) */
     draw_bottom_extras();
@@ -3774,7 +3461,6 @@ static bool bv_touch(ui_screen* s, float px, float py) {
    * nothing while a message is still typing or not waiting) */
   if (B.mode == M_EVENTS) return bv_input(NULL, BTN_ACTION);
   if (B.mode == M_TARGET) return target_touch(x, y);
-  if (B.mode == M_COMMAND && sv()) return sv_touch(px, py);
   if (B.mode == M_COMMAND) {
     if (B.opts.can_tera && x >= TERA_BTN_X - 16 && x < TERA_BTN_X + 16 && y >= TERA_BTN_Y - 14 && y < TERA_BTN_Y + 14) {
       B.bar_sel = -1;
@@ -3910,7 +3596,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   }
   bv_set_item_bars(opts?opts->foe_items:NULL,opts?opts->n_foe_items:0,
                    opts?opts->key_items:NULL,opts?opts->n_key_items:0,opts?opts->party_luck:0);
-  sv_items_close();
+  B.bar_sel=-1;B.bar_open=false;
   B.opts.foe_items = B.opts.key_items = NULL;
   B.has_balls = opts && opts->has_party_balls;
   if (B.has_balls) memcpy(B.balls, opts->party_balls, sizeof B.balls);
@@ -3937,7 +3623,8 @@ void bv_ask_target(const bv_target_opts* opts, void (*on_target)(int, void*), vo
   B.tg.on_target = on_target;
   B.tg.arg = arg;
   B.hold_cmd = false;
-  sv_items_close();
+  B.bar_open = false;
+  B.bar_sel = -1;
   msgbox_clear(&B.msg);
   B.mode = M_TARGET;
   tg_set(tg_default());

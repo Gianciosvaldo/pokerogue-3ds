@@ -258,11 +258,6 @@ void bv_set_music_hook(void (*hook)(int a));
 /* The game-speed key's hook (Y on the battle screen; without one the key does nothing). step true moves the game to the next speed; either way it
  * answers the locale key of the speed now in force ("settings:gameSpeedFast"), which the bottom screen shows. */
 void bv_set_speed_hook(const char* (*hook)(bool step));
-/* The standard bottom screen's strip: "Wave N" (0 = none), the biome's name and the money as shown ("₽1,234"); copied, kept through the waves. */
-void bv_set_header(int wave, const char* biome, const char* money);
-/* The strip's battery: the hook answers the level 0..5 (PTMU_GetBatteryLevel) or -1 when unknown, and whether it charges; asked every 5 s.
- * Without one no battery is drawn. */
-void bv_set_battery_hook(int (*hook)(bool* charging));
 bool bv_playing(void);
 /* opts NULL = everything allowed. */
 void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck);

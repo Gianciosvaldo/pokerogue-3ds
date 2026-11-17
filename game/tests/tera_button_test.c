@@ -57,7 +57,6 @@ int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
-    g_view=BV_VIEW_DEBUG; /* the debug view's strip and top-screen item bar (the standard view is standard_view_test's) */
     /* reaching the button: LEFT from FIGHT and from POKEMON, RIGHT back to FIGHT, UP and DOWN stay on it */
     fresh(true,false);
     in(BTN_LEFT);assert(B.cmd_cursor==4);
