@@ -30,7 +30,9 @@ void img_draw_opts(const char *key,const char *frame,float x,float y,const rr_dr
 static int rects,tris,balls_drawn;
 static rr_color rect_c[64];static float rect_x[64],rect_y[64],rect_w[64];static int nrc;
 void rr_rect(float x,float y,float w,float h,rr_color c){(void)h;if(nrc<64){rect_c[nrc]=c;rect_x[nrc]=x;rect_y[nrc]=y;rect_w[nrc]=w;nrc++;}rects++;}
-void rr_tri(float x0,float y0,float x1,float y1,float x2,float y2,rr_color c){(void)x0;(void)y0;(void)x1;(void)y1;(void)x2;(void)y2;(void)c;tris++;}
+static int tri_frac; /* triangles with a corner off the pixel grid */
+void rr_tri(float x0,float y0,float x1,float y1,float x2,float y2,rr_color c){(void)y0;(void)y1;(void)y2;(void)c;tris++;
+ if(x0!=floorf(x0)||x1!=floorf(x1)||x2!=floorf(x2))tri_frac++;}
 void rr_draw_cropped(const rr_frame *f,float x,float y,int w,int h,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)w;(void)h;(void)o;}
 void rr_draw(const rr_frame *f,float x,float y,const rr_draw_opts *o){(void)f;(void)x;(void)y;(void)o;balls_drawn++;}
 void rr_set_tone(int r,int g,int b){(void)r;(void)g;(void)b;}
@@ -99,10 +101,11 @@ static void start(const bv_command_opts* o){
  memset(&B,0,sizeof B);B.begun=true;B.bar_sel=-1;snprintf(B.biome,sizeof B.biome,"plains");put(0,1);put(2,7);
  answers=0;answered=-9;menus=0;errors=0;bv_ask_command(o,on_command,NULL);
 }
+#define MV(i) (*sv_move_hex(i))
 static bool in(ui_button b){return bv_input(NULL,b);}
 static bool tap(float x,float y){return bv_touch(NULL,x,y);}
 static bool drawn(const char* s){for(int i=0;i<nt;i++)if(!strcmp(texts[i],s))return true;return false;}
-static void draw_bottom_screen(void){nt=0;nrc=0;rects=tris=balls_drawn=windows=0;cur_space=UI_PHYS_BOTTOM;sv_draw();}
+static void draw_bottom_screen(void){nt=0;nrc=0;rects=tris=balls_drawn=windows=tri_frac=0;cur_space=UI_PHYS_BOTTOM;sv_draw();}
 static int batt_level=3;static bool batt_charging;static int batt_asks;
 static int battery(bool* charging){batt_asks++;*charging=batt_charging;return batt_level;}
 static int count_rects_w(float w){int n=0;for(int i=0;i<nrc;i++)if(fabsf(rect_w[i]-w)<.01f)n++;return n;}
@@ -145,8 +148,7 @@ int main(void){
  cur_space=UI_PHYS_TOP;nt=0;draw_top_bar();CHECK(!drawn("Foe items")&&nt==0); /* no item bar (nor its luck) on the top screen */
  g_view=BV_VIEW_DEBUG;nt=0;draw_top_bar();CHECK(drawn("Foe items"));g_view=BV_VIEW_STANDARD;
  /* the X / Y line goes under the buttons while they are up, under the strip otherwise */
- CHECK(bv_keys_y()==SV_KEYS_CMD_Y);B.mode=M_EVENTS;CHECK(bv_keys_y()==SV_KEYS_Y);B.mode=M_COMMAND;
- CHECK(SV_KEYS_CMD_Y>=SV_CMD[3].y+SV_CMD[3].h&&SV_KEYS_Y>SV_HDR_H);
+ CHECK(SV_CMD[3].y+SV_CMD[3].h<=236&&SV_CMD[0].y>=SV_ITEMS.y+SV_ITEMS.h); /* the buttons fill the screen under the Items row */
  /* a command that is off is greyed */
  o.can_run=false;start(&o);draw_bottom_screen();
  { bool grey=false;for(int i=0;i<nrc;i++)if(rect_c[i]==RR_RGBA(0x60,0x60,0x68,255)&&rect_y[i]==SV_CMD[3].y)grey=true;CHECK(grey); }
@@ -225,10 +227,20 @@ int main(void){
  o=opts();start(&o);CHECK(tap(SV_CMD[0].x+104,SV_CMD[0].y+46)&&B.mode==M_FIGHT&&sv_fight_shown());
  draw_bottom_screen();
  { int pp=0;for(int i=0;i<nt;i++)if(!strcmp(texts[i],"PP 10/10"))pp++;CHECK(pp==4); }
- CHECK(drawn("Move")&&drawn("Back")&&drawn("Power 40   Accuracy 95")&&balls_drawn==6);
+ CHECK(drawn("Move")&&drawn("Back")&&drawn("Power 40   Accuracy 95")&&balls_drawn==0); /* no balls on the move screen */
  CHECK(tris==2*2*(4+1)+2*2);                 /* four moves and Back, each edge and fill; the pointed move's white frame */
+ CHECK(tri_frac==0);                          /* every point on whole pixels: no seam (lorenzo: "a square inside each hexagon") */
+ /* lorenzo's notes on the first look (2026-11-17): the columns close up while Tera is not unlocked, the Tera hexagon's sides have the moves'
+  * slope, and the screen is used down to its bottom */
+ CHECK(MV(1).x-(MV(0).x+MV(0).w)==8&&MV(0).x==6&&MV(1).x+MV(1).w==314&&MV(2).x==MV(0).x&&MV(3).x==MV(1).x);
+ CHECK(MV(0).y>=SV_HDR_H+12);                 /* moved down from the strip, not packed under it */
+ CHECK(MV(0).y+MV(0).h<MV(2).y&&MV(2).y+MV(2).h<=SV_INFO_Y&&SV_INFO_Y+SV_INFO_H<=SV_BACK.y&&SV_BACK.y+SV_BACK.h>=230&&SV_BACK.y+SV_BACK.h<=240);
+ B.opts.can_tera=true;
+ CHECK(MV(0).x+MV(0).w<=SV_TERA.x&&SV_TERA.x+SV_TERA.w<=MV(1).x&&MV(1).x-(MV(0).x+MV(0).w)<=SV_TERA.w+8);
+ CHECK(fabsf(SV_TERA.h/SV_TERA.p-MV(0).h/MV(0).p)<.001f);
+ CHECK(fabsf((SV_TERA.y+SV_TERA.h/2)-(MV(0).y+MV(2).y+MV(2).h)/2)<.5f); /* between the rows */
+ B.opts.can_tera=false;
  cur_space=UI_BOTTOM_UI;nt=0;draw_bottom(false);cur_space=UI_PHYS_BOTTOM;
- CHECK(bv_keys_y()==SV_KEYS_CMD_Y);
  B.move_cursor=0;
  in(BTN_RIGHT);CHECK(B.move_cursor==1);in(BTN_DOWN);CHECK(B.move_cursor==3);in(BTN_LEFT);CHECK(B.move_cursor==2);in(BTN_UP);CHECK(B.move_cursor==0);
  CHECK(!in(BTN_LEFT)&&!in(BTN_UP)&&B.move_cursor==0);B.move_cursor=3;CHECK(!in(BTN_RIGHT)&&!in(BTN_DOWN)&&B.move_cursor==3);
@@ -236,17 +248,17 @@ int main(void){
  in(BTN_ACTION);CHECK(B.mode==M_FIGHT);
  CHECK(tap(SV_BACK.x+33,SV_BACK.y+16)&&B.mode==M_COMMAND);  /* Back */
  in(BTN_ACTION);
- CHECK(tap(SV_MOVE[2].x+65,SV_MOVE[2].y+23)&&answers==1&&answered==0&&B.mode==M_IDLE&&!tera_answer); /* a tap picks the move */
+ CHECK(tap(MV(2).x+65,MV(2).y+23)&&answers==1&&answered==0&&B.mode==M_IDLE&&!tera_answer); /* a tap picks the move */
  /* a move that can't be used: greyed, its reason in the info box, nothing answered */
  o.move_ok[1]=false;o.move_why[1]="It can't be used!";start(&o);in(BTN_ACTION);
  draw_bottom_screen();
- { bool grey=false;for(int i=0;i<nrc;i++)if(rect_c[i]==RR_RGBA(0x60,0x60,0x68,255)&&rect_y[i]==SV_MOVE[1].y)grey=true;CHECK(grey); }
- CHECK(!tap(SV_MOVE[1].x+65,SV_MOVE[1].y+23)&&answers==0&&errors==1&&B.mode==M_FIGHT);
+ { bool grey=false;for(int i=0;i<nrc;i++)if(rect_c[i]==RR_RGBA(0x60,0x60,0x68,255)&&rect_y[i]==MV(1).y)grey=true;CHECK(grey); }
+ CHECK(!tap(MV(1).x+65,MV(1).y+23)&&answers==0&&errors==1&&B.mode==M_FIGHT);
  draw_bottom_screen();CHECK(drawn("It can't be used!"));
  o=opts();
  /* an empty slot and a move with no PP */
  start(&o);side_of(0)->mon.n_moves=3;side_of(0)->mon.pp_left[0]=0;in(BTN_ACTION);draw_bottom_screen();CHECK(drawn("-")&&drawn("PP 0/10"));
- CHECK(!tap(SV_MOVE[3].x+65,SV_MOVE[3].y+23)&&!tap(SV_MOVE[0].x+65,SV_MOVE[0].y+23)&&answers==0&&errors==2);
+ CHECK(!tap(MV(3).x+65,MV(3).y+23)&&!tap(MV(0).x+65,MV(0).y+23)&&answers==0&&errors==2);
  /* the Tera button between the columns */
  o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=0;
  in(BTN_RIGHT);CHECK(B.move_cursor==4);in(BTN_RIGHT);CHECK(B.move_cursor==1);
@@ -254,7 +266,7 @@ int main(void){
  in(BTN_DOWN);in(BTN_RIGHT);CHECK(B.move_cursor==4);in(BTN_LEFT);CHECK(B.move_cursor==2);
  in(BTN_RIGHT);in(BTN_RIGHT);CHECK(B.move_cursor==3);in(BTN_LEFT);in(BTN_LEFT);CHECK(B.move_cursor==2); /* the row it was reached from */
  CHECK(in(BTN_RIGHT)&&!in(BTN_UP)&&!in(BTN_DOWN)&&B.move_cursor==4);
- draw_bottom_screen();CHECK(drawn("A: Terastallize with the next move.")&&balls_drawn==7);
+ draw_bottom_screen();CHECK(drawn("A: Terastallize with the next move.")&&balls_drawn==1); /* the Tera icon */
  in(BTN_ACTION);CHECK(B.tera_fight&&B.mode==M_FIGHT&&answers==0);   /* A on it: chosen, nothing answered yet */
  draw_bottom_screen();CHECK(drawn("Terastallizing: pick a move. A again: no Tera."));
  in(BTN_ACTION);CHECK(!B.tera_fight);in(BTN_ACTION);
@@ -262,10 +274,10 @@ int main(void){
  start(&o);in(BTN_ACTION);CHECK(!B.tera_fight);                                        /* a new FIGHT starts without */
  CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&B.tera_fight&&B.move_cursor==4);                /* a tap on it chooses it */
  CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&!B.tera_fight);
- CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&tap(SV_MOVE[3].x+65,SV_MOVE[3].y+23)&&answers==1&&tera_answer==1);
+ CHECK(tap(SV_TERA.x+21,SV_TERA.y+23)&&tap(MV(3).x+65,MV(3).y+23)&&answers==1&&tera_answer==1);
  o.can_tera=false;start(&o);in(BTN_ACTION);B.move_cursor=0;
  CHECK(!tap(SV_TERA.x+21,SV_TERA.y+23)&&B.move_cursor==0&&!B.tera_fight);              /* not offered: nothing there */
- draw_bottom_screen();CHECK(balls_drawn==6);
+ draw_bottom_screen();CHECK(balls_drawn==0);
  /* the Tera cursor does not outlive the offer, nor the view */
  o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;B.mode=M_COMMAND;o.can_tera=false;bv_ask_command(&o,on_command,NULL);CHECK(B.move_cursor==0);
  o.can_tera=true;start(&o);in(BTN_ACTION);B.move_cursor=4;g_view=BV_VIEW_DEBUG;answers=0;in(BTN_ACTION);CHECK(B.move_cursor==0&&answers==1&&answered==0);

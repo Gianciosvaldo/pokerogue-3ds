@@ -1793,10 +1793,10 @@ typedef struct {
 #define SV_HDR_H 17.0f
 /* the commands by their number (FIGHT 0, BALL 1, POKEMON 2, RUN 3) */
 static const sv_hex SV_CMD[4] = {
-    {56, 46, 208, 92, 36},   /* FIGHT */
-    {4, 146, 100, 40, 14},   /* BALL */
-    {216, 146, 100, 40, 14}, /* POKEMON */
-    {108, 176, 104, 36, 14}, /* RUN */
+    {56, 56, 208, 92, 36},   /* FIGHT */
+    {4, 156, 100, 40, 14},   /* BALL */
+    {216, 156, 100, 40, 14}, /* POKEMON */
+    {108, 186, 104, 36, 14}, /* RUN */
 };
 static const sv_hex SV_ITEMS = {4, 21, 76, 21, 9};
 static const sv_hex SV_SETTINGS = {240, 21, 76, 21, 9};
@@ -1813,9 +1813,6 @@ static const sv_hex SV_SETTINGS = {240, 21, 76, 21, 9};
 #define SV_HINT_X 196.0f
 #define SV_TITLE_Y (SV_PANEL_Y + 7)
 static const char* const SV_HINTS[2] = {"L/R: switch", "B: close"};
-/* where the X / Y line goes in the standard view: under the buttons while they are up, else under the top strip */
-#define SV_KEYS_CMD_Y 216.0f
-#define SV_KEYS_Y 21.0f
 
 static rr_color sv_edge(int c) {
   static const rr_color E[4] = {RR_RGBA(0xf8, 0x70, 0x60, 255), RR_RGBA(0xe8, 0xb8, 0x20, 255), RR_RGBA(0x60, 0xc8, 0x40, 255),
@@ -1840,7 +1837,9 @@ static void sv_hex_fill(float x, float y, float w, float h, float p, rr_color c)
 /* an outline of b px (the inner hexagon keeps the slopes) */
 static void sv_hex_draw(const sv_hex* h, float b, rr_color edge, rr_color fill) {
   sv_hex_fill(h->x, h->y, h->w, h->h, h->p, edge);
-  sv_hex_fill(h->x + b, h->y + b, h->w - 2 * b, h->h - 2 * b, h->p * (h->h - 2 * b) / h->h, fill);
+  /* the inner points' depth in whole px: a fractional one leaves the fill's middle rect and its end triangles meeting off the pixel grid, and a
+   * 1 px seam of the outline's colour showed between them (lorenzo, 2026-11-17: "why is there a square inside each hexagon") */
+  sv_hex_fill(h->x + b, h->y + b, h->w - 2 * b, h->h - 2 * b, floorf(h->p * (h->h - 2 * b) / h->h + 0.5f), fill);
 }
 static bool sv_hex_hit(const sv_hex* h, float x, float y) {
   if (x < h->x || x >= h->x + h->w || y < h->y || y >= h->y + h->h) return false;
@@ -1941,18 +1940,26 @@ static void sv_draw_items(void) {
 static bool bv_input(ui_screen* s, ui_button b);
 /* The move screen (lorenzo's mock-up, 2026-11-17): the four moves as hexagons in two columns, each outlined in its type's colour with the type's
  * tag and its PP; the Tera button in a small hexagon between the columns (A on it chooses Terastallizing for the move picked next, again takes it
- * back); the move's power, accuracy and effect (or why it can't be used) under them; the party's balls and the back button (B) at the bottom. */
-static const sv_hex SV_MOVE[4] = {
-    {6, 24, 130, 46, 12},
-    {184, 24, 130, 46, 12},
-    {6, 76, 130, 46, 12},
-    {184, 76, 130, 46, 12},
-};
-static const sv_hex SV_TERA = {139, 50, 42, 46, 10};
-static const sv_hex SV_BACK = {248, 196, 66, 32, 10};
-#define SV_INFO_Y 128.0f
-#define SV_INFO_H 62.0f
-#define SV_FIGHT_BALLS_Y 194.0f
+ * back); the move's power, accuracy and effect (or why it can't be used) under them, and the back button (B). His notes on the first look: the
+ * columns close up (and the moves widen) while Tera is not unlocked, the Tera hexagon's sides have the moves' slope (same height and point
+ * depth), no balls, and the whole spread down the screen. */
+#define SV_MOVE_Y0 30.0f
+#define SV_MOVE_H 48.0f
+#define SV_MOVE_GAP 6.0f
+#define SV_MOVE_P 12.0f
+#define SV_MOVE_W_TERA 132.0f   /* the columns with the Tera button between them */
+#define SV_MOVE_W 150.0f        /* without it: 8 px apart */
+static const sv_hex SV_TERA = {140, SV_MOVE_Y0 + (2 * SV_MOVE_H + SV_MOVE_GAP - SV_MOVE_H) / 2, 40, SV_MOVE_H, SV_MOVE_P};
+static const sv_hex SV_BACK = {248, 204, 66, 30, 10};
+#define SV_INFO_Y 142.0f
+#define SV_INFO_H 56.0f
+/* move slot i's hexagon (0 1 / 2 3) */
+static const sv_hex* sv_move_hex(int i) {
+  static sv_hex h;
+  const float w = B.opts.can_tera ? SV_MOVE_W_TERA : SV_MOVE_W;
+  h = (sv_hex){i % 2 ? 320 - 6 - w : 6, SV_MOVE_Y0 + (i / 2) * (SV_MOVE_H + SV_MOVE_GAP), w, SV_MOVE_H, SV_MOVE_P};
+  return &h;
+}
 /* the move can be picked: there is a move in the slot, it has PP and the command allows it (else A plays the error, as on the strip) */
 static bool sv_move_ok(int i) {
   const bv_mon* m = &command_side()->mon;
@@ -1965,7 +1972,7 @@ static rr_color sv_type_edge(int type) {
 }
 static void sv_draw_move(int i) {
   const bv_mon* m = &command_side()->mon;
-  const sv_hex* h = &SV_MOVE[i];
+  const sv_hex* h = sv_move_hex(i);
   const bool on = B.move_cursor == i, has = i < m->n_moves, ok = sv_move_ok(i);
   const int mv = has ? m->moves[i] : 0;
   const pr_move* pm = has && mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
@@ -1979,9 +1986,9 @@ static void sv_draw_move(int i) {
     return;
   }
   if (!ok) o.color = RR_RGBA(0x90, 0x90, 0x98, 255);
-  text_draw(TS_WINDOW, h->x + h->w / 2, h->y + 14, i18n_move_name(mv), &o);
+  text_draw(TS_WINDOW, h->x + h->w / 2, h->y + 15, i18n_move_name(mv), &o);
   char fr[24], s[24];
-  if (pm) img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), h->x + h->p + 2, h->y + 33, 0, 0.5f);
+  if (pm) img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), h->x + h->p + 2, h->y + 35, 0, 0.5f);
   snprintf(s, sizeof s, "PP %d/%d", m->pp_left[i], m->pp_max[i]);
   const text_style ps = pp_style(m->pp_left[i], m->pp_max[i]);
   text_opts po = text_defaults();
@@ -1989,7 +1996,7 @@ static void sv_draw_move(int i) {
   po.origin_y = 0.5f;
   po.color = text_color(ps, false);
   po.shadow = text_color(ps, true);
-  text_draw(TS_MOVE_LABEL, h->x + h->w - h->p - 2, h->y + 33, s, &po);
+  text_draw(TS_MOVE_LABEL, h->x + h->w - h->p - 2, h->y + 35, s, &po);
 }
 static void sv_draw_move_info(void) {
   const bv_mon* m = &command_side()->mon;
@@ -2037,7 +2044,6 @@ static void sv_draw_moves(void) {
     draw_tera_at(SV_TERA.x + SV_TERA.w / 2, SV_TERA.y + SV_TERA.h / 2, B.tera_fight);
   }
   sv_draw_move_info();
-  sv_draw_balls(SV_FIGHT_BALLS_Y);
   sv_hex_draw(&SV_BACK, 2, RR_RGBA(0xa0, 0xa0, 0xb0, 255), RR_RGBA(0x28, 0x28, 0x30, 255));
   sv_label(&SV_BACK, "Back", 72, 0);
 }
@@ -2059,7 +2065,7 @@ static bool sv_move_touch(float x, float y) {
     return bv_input(NULL, BTN_ACTION);
   }
   for (int i = 0; i < 4; i++)
-    if (sv_hex_hit(&SV_MOVE[i], x, y)) {
+    if (sv_hex_hit(sv_move_hex(i), x, y)) {
       B.move_cursor = i;
       return bv_input(NULL, BTN_ACTION);
     }
@@ -2179,23 +2185,24 @@ static void draw_debug(void) {
   rr_text_sys(2, 22, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
 }
 
-/* What the bottom screen shows besides the strip: in the debug view the debug rows, and in both what X and Y do now, on one line from the left
- * edge (lorenzo, 2026-11-17: the two labels stacked at the right edge were "out of place"): under the debug rows in the debug view, at the top in
- * the standard one. The target choice's tiles start below it in both views. */
+/* What the bottom screen shows besides the strip, in the debug view only: the debug rows and, under them, what X and Y do now on one line from
+ * the left edge (lorenzo, 2026-11-17: the two labels stacked at the right edge were "out of place"). The standard view has none of it ("eliminate
+ * the white text at the bottom explaining controls from all screens"): X, Y and SELECT still work there. */
 #define BV_KEYS_X 8.0f
 #define BV_KEYS_GAP 18.0f
-static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : sv_screen_shown() ? SV_KEYS_CMD_Y : SV_KEYS_Y; }
+#define BV_KEYS_Y 34.0f
 static void draw_bottom_extras(void) {
-  if (!ui_space(UI_PHYS_BOTTOM)) return;
-  if (g_view == BV_VIEW_DEBUG) draw_debug();
+  if (!ui_space(UI_PHYS_BOTTOM) || g_view != BV_VIEW_DEBUG) return;
+  draw_debug();
   char x_label[48], y_label[80], name[40];
-  snprintf(x_label, sizeof x_label, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");
-  text_draw(TS_MOVE_LABEL, BV_KEYS_X, bv_keys_y(), x_label, NULL);
+  snprintf(x_label, sizeof x_label, "X  Screen: Debug"); /* (drawn in the debug view only) */
+  text_draw(TS_MOVE_LABEL, BV_KEYS_X, BV_KEYS_Y, x_label, NULL);
   if (speed_hook) {
     i18n_t(name, sizeof name, speed_hook(false), NULL);
     snprintf(y_label, sizeof y_label, "Y  Speed: %s", name);
-    text_draw(TS_MOVE_LABEL, BV_KEYS_X + text_width(TS_MOVE_LABEL, x_label, NULL) + BV_KEYS_GAP, bv_keys_y(), y_label, NULL);
+    text_draw(TS_MOVE_LABEL, BV_KEYS_X + text_width(TS_MOVE_LABEL, x_label, NULL) + BV_KEYS_GAP, BV_KEYS_Y, y_label, NULL);
   }
+  if (B.mode == M_COMMAND || B.mode == M_FIGHT) text_draw(TS_MOVE_LABEL, BV_KEYS_X, BV_KEYS_Y + 9, "Hold SELECT: Stat changes", NULL); /* under it */
 }
 
 /* ------------------------------------------------------------------ events */
@@ -3906,8 +3913,6 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (sv()) sv_draw();
     if (!sv_screen_shown() && ui_space(UI_BOTTOM_UI)) draw_bottom(false);
-    if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
-      text_draw(TS_MOVE_LABEL,BV_KEYS_X,bv_keys_y()+9,"Hold SELECT: Stat changes",NULL); /* under the X / Y line (it sat on the debug rows) */
     draw_bottom_extras();
   }
 }

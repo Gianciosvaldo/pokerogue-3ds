@@ -52,11 +52,9 @@ M = [
     (BV, "    if (c == 4 && (!B.opts.can_tera || sv())) c = B.cmd_cursor = 0;", "    if (c == 4 && !B.opts.can_tera) c = B.cmd_cursor = 0;", SV, "a strip Tera cursor stays on in the standard command screen"),
     # ---- the move screen
     (BV, "  if (sv_fight_shown()) {\n    sv_draw_moves();\n    return;\n  }\n", "", SV, "no move screen (the commands stay up)"),
-    (BV, "static bool sv_screen_shown(void) { return sv_cmd_shown() || sv_fight_shown(); }", "static bool sv_screen_shown(void) { return sv_cmd_shown(); }", SV, "the move screen keeps the X / Y line under the strip"),
     (BV, "  return i < m->n_moves && m->pp_left[i] > 0 && B.opts.move_ok[i];", "  return i < m->n_moves && m->pp_left[i] > 0;", SV, "a refused move is not greyed"),
     (BV, '  snprintf(s, sizeof s, "PP %d/%d", m->pp_left[i], m->pp_max[i]);', '  snprintf(s, sizeof s, "PP %d/%d", m->pp_max[i], m->pp_max[i]);', SV, "PP shows the maximum twice"),
     (BV, '  sv_label(&SV_BACK, "Back", 72, 0);\n', '', SV, "no Back label"),
-    (BV, "  sv_draw_balls(SV_FIGHT_BALLS_Y);\n", "", SV, "no balls on the move screen"),
     (BV, '    snprintf(s, sizeof s, "%s", B.reason); /* the move can\'t be used: say why where the description is */', '    s[0] = 0;', SV, "the refusal's reason is not shown"),
     (BV, '    snprintf(s, sizeof s, "Power %s   Accuracy %s", pw, ac);', '    snprintf(s, sizeof s, "Power %s   Accuracy %s", ac, pw);', SV, "power and accuracy swapped"),
     (BV, "  if (c == 4) return b == BTN_LEFT ? B.sv_tera_row * 2 : b == BTN_RIGHT ? B.sv_tera_row * 2 + 1 : -1;", "  if (c == 4) return b == BTN_LEFT ? 0 : b == BTN_RIGHT ? 1 : -1;", SV, "the Tera button forgets the row"),
@@ -73,6 +71,11 @@ M = [
     (BV, "    if (c == 4) c = B.move_cursor = 0; /* the standard view's Tera button, left with X: the strip has no such place */\n", "", SV, "the debug view keeps the move screen's Tera cursor"),
     (BV, "    draw_tera_at(SV_TERA.x + SV_TERA.w / 2, SV_TERA.y + SV_TERA.h / 2, B.tera_fight);\n", "", SV, "no Tera icon on the move screen"),
     (BV, "  if (!has) {\n    text_draw(TS_WINDOW, h->x + h->w / 2, h->y + h->h / 2, \"-\", &o);\n    return;\n  }", "  if (!has) return;", SV, "an empty slot says nothing"),
+    # ---- lorenzo's notes on the first look (2026-11-17)
+    (BV, "floorf(h->p * (h->h - 2 * b) / h->h + 0.5f), fill);", "h->p * (h->h - 2 * b) / h->h, fill);", SV, "the inner points off the pixel grid (the seam)"),
+    (BV, "  const float w = B.opts.can_tera ? SV_MOVE_W_TERA : SV_MOVE_W;", "  const float w = SV_MOVE_W_TERA;", SV, "the columns stay apart without Tera"),
+    (BV, "static const sv_hex SV_TERA = {140, SV_MOVE_Y0 + (2 * SV_MOVE_H + SV_MOVE_GAP - SV_MOVE_H) / 2, 40, SV_MOVE_H, SV_MOVE_P};", "static const sv_hex SV_TERA = {140, SV_MOVE_Y0 + (2 * SV_MOVE_H + SV_MOVE_GAP - SV_MOVE_H) / 2, 40, SV_MOVE_H, 10};", SV, "the Tera hexagon's sides have another slope"),
+    (BV, "#define SV_MOVE_Y0 30.0f", "#define SV_MOVE_Y0 22.0f", SV, "the move screen does not reach the bottom"),
     # ---- the taps
     (BV, "  if (B.mode == M_COMMAND && sv()) return sv_touch(px, py);\n", "", SV, "taps go to the strip's command window"),
     (BV, "  if (sv_hex_hit(&SV_SETTINGS, x, y)) return bv_input(NULL, BTN_MENU);\n", "", SV, "Settings does nothing"),
