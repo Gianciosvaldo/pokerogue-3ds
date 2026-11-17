@@ -628,3 +628,19 @@ build/events_host_test: $(EVH_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(EVH_SRCS) -lm -o $@
 events_host_test: build/events_host_test
 .PHONY: events_host_test
+
+# what the title screen says about the timed events (source/events_view.c) on the shipped table; make events_view_test && build/events_view_test
+EVV_SRCS := events_view_test.c ../source/events_view.c ../source/custom_core_build.c
+build/events_view_test: $(EVV_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(EVV_SRCS) -lm -o $@
+events_view_test: build/events_view_test
+.PHONY: events_view_test
+
+# the title screen with the events banner and panel (source/title_screen.c) over the real table and clock adapter, with a fake drawing layer; make title_events_test && build/title_events_test
+TEV_SRCS := title_events_test.c ../source/title_screen.c ../source/events_view.c ../source/events_host.c ../source/custom_core_build.c
+build/title_events_test: $(TEV_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(TEV_SRCS) -lm -o $@
+title_events_test: build/title_events_test
+.PHONY: title_events_test
