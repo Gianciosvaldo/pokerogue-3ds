@@ -120,8 +120,19 @@ int main(void){
  in(BTN_DOWN);CHECK(B.tg.cursor==1);                                    /* the player's side: the ally */
  in(BTN_DOWN);CHECK(B.tg.cursor==1);
  in(BTN_LEFT);CHECK(B.tg.cursor==1);                                    /* the user is no target */
- in(BTN_UP);CHECK(B.tg.cursor==2);                                      /* UP: the first foe (upstream's find) */
+ in(BTN_UP);CHECK(B.tg.cursor==3);                                      /* UP from the right-hand ally: the foe straight across */
  in(BTN_LEFT);CHECK(B.tg.cursor==2);
+ in(BTN_DOWN);CHECK(B.tg.cursor==1);                                    /* DOWN from the left foe: the only target on the player's side */
+ ask(1,true,false,true,true);in(BTN_DOWN);CHECK(B.tg.cursor==0);in(BTN_UP);CHECK(B.tg.cursor==2); /* the left ally: the left foe */
+ in(BTN_RIGHT);in(BTN_DOWN);CHECK(B.tg.cursor==0);                     /* nobody below the right foe: the first on that side */
+ in(BTN_CANCEL);
+ ask(0,false,true,true,false);in(BTN_DOWN);in(BTN_UP);CHECK(B.tg.cursor==2); /* the foe across can't be hit: the first foe */
+ in(BTN_CANCEL);
+ field4();B.flipped=true;ask(1,true,false,true,true);in(BTN_DOWN);CHECK(B.tg.cursor==0);in(BTN_UP);CHECK(B.tg.cursor==3); /* a swapped survivor keeps its column */
+ in(BTN_CANCEL);B.flipped=false;
+ ask(0,true,true,true,true);in(BTN_RIGHT);in(BTN_DOWN);CHECK(B.tg.cursor==1);in(BTN_CANCEL); /* (no move offers both of the player's own and the
+                                                                                             * foes; a made-up set shows DOWN goes across too) */
+ ask(0,false,true,true,true);in(BTN_DOWN);in(BTN_UP);in(BTN_LEFT);
  CHECK(answers==0&&B.mode==M_TARGET);
  ask(1,true,false,false,true);CHECK(B.tg.cursor==3);in(BTN_LEFT);CHECK(B.tg.cursor==3);in(BTN_DOWN);CHECK(B.tg.cursor==0);
  in(BTN_RIGHT);CHECK(B.tg.cursor==0);in(BTN_UP);CHECK(B.tg.cursor==3);
@@ -155,15 +166,29 @@ int main(void){
   tg_tile(3,&x,&y);CHECK(bv_touch(NULL,x+10,240+y+10)&&B.tg.cursor==3&&answers==0);   /* points */
   CHECK(bv_touch(NULL,x+10,240+y+10)&&answers==1&&answered==3);                       /* picks */
   ask(0,false,true,true,true);tg_tile(0,&x,&y);CHECK(!bv_touch(NULL,x+10,240+y+10)&&B.tg.cursor==3&&answers==0); /* the user: nothing */
-  tg_tile(1,&x,&y);CHECK(bv_touch(NULL,x+TG_W-1,240+y+TG_H-1)&&B.tg.cursor==1);
+  tg_tile(1,&x,&y);CHECK(bv_touch(NULL,x+TG_W-1,240+y+tg_h()-1)&&B.tg.cursor==1);
+  CHECK(!bv_touch(NULL,x+10,240+y+tg_h()+1)||tg_tile_at(x+10,y+tg_h()+1)!=1);         /* just under the tile is not it */
   CHECK(!bv_touch(NULL,x+TG_W+2,240+y+2));                                             /* between the tiles */
   CHECK(bv_touch(NULL,TG_HINT_X+70,230)&&answers==1&&answered==-1);                     /* "B: back" */
   ask(0,false,true,true,true);CHECK(bv_touch(NULL,TG_HINT_X+5,230)&&answered==B.tg.last[0]);  /* "A: choose" */
   /* the tiles do not run into one another, into the debug lines at the top (physical y < 32) or into the strip */
-  float x0,y0,x1,y1,x2,y2;tg_tile(2,&x0,&y0);tg_tile(3,&x1,&y1);tg_tile(0,&x2,&y2);
-  CHECK(x0+TG_W<=x1&&x1+TG_W<=320&&y0+TG_H<=y2&&y2+TG_H<=-48&&240+y0-12>=32);
+  /* the debug view (the default): two thin rows below its debug rows and the X / Y labels (physical y < 50); the standard view: the big tiles
+   * and their heading below the labels */
+  for(int v=0;v<2;v++){
+   g_view=v?BV_VIEW_STANDARD:BV_VIEW_DEBUG;
+   float x0,y0,x1,y1,x2,y2;tg_tile(2,&x0,&y0);tg_tile(3,&x1,&y1);tg_tile(0,&x2,&y2);
+   CHECK(x0+TG_W<=x1&&x1+TG_W<=320&&y0+tg_h()<=y2&&y2+tg_h()<=-48);
+   CHECK(v?240+y0-12>=32:240+y0>=110);
+   CHECK(near(tg_h(),v?TG_H:TG_MINI_H)&&tg_mini()==!v);
+   CHECK(tg_tile_at(x2+5,y2+5)==0&&tg_tile_at(x1+5,y1+5)==3);
+  }
+  g_view=BV_VIEW_DEBUG;
  }
  field4();ask(0,false,true,true,true);rects=0;draw_target_pad();CHECK(rects>=4);  /* the HP bars of the four tiles */
+ g_view=BV_VIEW_STANDARD;rects=0;draw_target_pad();CHECK(rects>=4);g_view=BV_VIEW_DEBUG;
+ /* the top screen's strip keeps the fight menu while the target is chosen; the bottom one has the hints */
+ CHECK(strip_fight(true)&&!strip_fight(false));
+ in(BTN_ACTION);CHECK(!strip_fight(true));B.mode=M_FIGHT;CHECK(strip_fight(true)&&strip_fight(false));
  printf("target select: %d checks, %d failed\n",checks,failed);
  return failed?1:0;
 }

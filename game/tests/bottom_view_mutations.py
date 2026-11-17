@@ -53,9 +53,13 @@ M = [
     (BV, "  if (g_view == BV_VIEW_DEBUG) draw_debug();", "  if (g_view != BV_VIEW_DEBUG) draw_debug();", VT, "the debug rows are drawn in the other view"),
     (BV, "  if (speed_hook) {\n    i18n_t(name", "  if (1) {\n    i18n_t(name", VT, "the speed line is drawn without a hook"),
     (BV, "    i18n_t(name, sizeof name, speed_hook(false), NULL);", "    i18n_t(name, sizeof name, speed_hook(true), NULL);", VT, "drawing the speed line steps the speed"),
-    (BV, '  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");', '  snprintf(s, sizeof s, "X  Screen: %s", "Debug");', VT, "the view's name is always Debug"),
-    (BV, '  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");', '  snprintf(s, sizeof s, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Standard" : "Debug");', VT, "the view's name is the other one's"),
-    (BV, "  text_opts o = text_defaults();\n  o.origin_x = 1;\n  char s[80], name[40];", "  text_opts o = text_defaults();\n  char s[80], name[40];", VT, "the labels are not right-aligned"),
+    (BV, '  snprintf(x_label, sizeof x_label, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");', '  snprintf(x_label, sizeof x_label, "X  Screen: %s", "Debug");', VT, "the view's name is always Debug"),
+    (BV, '  snprintf(x_label, sizeof x_label, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Debug" : "Standard");', '  snprintf(x_label, sizeof x_label, "X  Screen: %s", g_view == BV_VIEW_DEBUG ? "Standard" : "Debug");', VT, "the view's name is the other one's"),
+    # ---- where the X / Y line sits (lorenzo, 2026-11-17)
+    (BV, "static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : 6.0f; }", "static float bv_keys_y(void) { return 6.0f; }", VT, "the X / Y line sits on the debug rows"),
+    (BV, "static float bv_keys_y(void) { return g_view == BV_VIEW_DEBUG ? 34.0f : 6.0f; }", "static float bv_keys_y(void) { return 34.0f; }", VT, "the standard view's X / Y line is not at the top"),
+    (BV, "    text_draw(TS_MOVE_LABEL, BV_KEYS_X + text_width(TS_MOVE_LABEL, x_label, NULL) + BV_KEYS_GAP, bv_keys_y(), y_label, NULL);", "    text_draw(TS_MOVE_LABEL, BV_KEYS_X, bv_keys_y(), y_label, NULL);", VT, "Y's label is drawn over X's"),
+    (BV, "  text_draw(TS_MOVE_LABEL, BV_KEYS_X, bv_keys_y(), x_label, NULL);", "  text_opts o = text_defaults();\n  o.origin_x = 1;\n  text_draw(TS_MOVE_LABEL, BV_KEYS_X, bv_keys_y(), x_label, &o);", VT, "X's label is right-aligned again"),
     (BV, "static void draw_bottom_extras(void) {\n  if (!ui_space(UI_PHYS_BOTTOM)) return;", "static void draw_bottom_extras(void) {", VT, "the labels are drawn on the top screen too"),
     (BV, "static bottom_view g_view = BV_VIEW_DEBUG;", "static bottom_view g_view = BV_VIEW_STANDARD;", VT, "the screen starts in the other view"),
     # ---- the speeds

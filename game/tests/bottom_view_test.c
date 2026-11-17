@@ -9,7 +9,7 @@
 const rr_draw_opts RR_DEFAULT_OPTS={0,0,1,1,0,0xffffffff};
 const pr_move pr_moves[PR_MOVE_COUNT]={{0}};
 static int selects,errors,debug_rows;static bool space_ok=true;
-static char drawn[16][96];static int n_drawn;static float drawn_origin[16];
+static char drawn[16][96];static int n_drawn;static float drawn_origin[16],drawn_x[16],drawn_y[16];
 int ui_window_style(void){return 1;}
 void ui_window(float x,float y,float w,float h,win_variant v){}
 void ui_cursor(float x,float y){}
@@ -29,7 +29,7 @@ text_opts text_defaults(void){return (text_opts){0};}
 rr_color text_color(text_style style,bool shadow){return 0;}
 float text_width(text_style style,const char* text,const text_opts* opts){return 8*strlen(text);}
 float text_draw(text_style style,float x,float y,const char* text,const text_opts* opts){
-    if(n_drawn<16){snprintf(drawn[n_drawn],sizeof drawn[0],"%s",text);drawn_origin[n_drawn]=opts?opts->origin_x:0;n_drawn++;}
+    if(n_drawn<16){snprintf(drawn[n_drawn],sizeof drawn[0],"%s",text);drawn_origin[n_drawn]=opts?opts->origin_x:0;drawn_x[n_drawn]=x;drawn_y[n_drawn]=y;n_drawn++;}
     return 0;
 }
 void msgbox_draw(const msgbox* box,float x,float y){}
@@ -134,7 +134,11 @@ int main(void){
     assert(debug_rows==3);assert(has_drawn("X  Screen: Debug")&&has_drawn("Y  Speed: settings:gameSpeedFast"));
     g_view=BV_VIEW_STANDARD;draw_extras();
     assert(debug_rows==0);assert(has_drawn("X  Screen: Standard")&&has_drawn("Y  Speed: settings:gameSpeedFast"));
-    for(int i=0;i<n_drawn;i++)assert(drawn_origin[i]==1); /* right-aligned, at the screen's edge */
+    /* one line from the left edge, X then Y (lorenzo, 2026-11-17: the stacked right-aligned labels were out of place): at the top in the standard
+     * view, under the debug rows (physical y 2..31) in the debug one; Y starts after X's text */
+    assert(n_drawn==2&&!strcmp(drawn[0],"X  Screen: Standard")&&drawn_x[0]==8&&drawn_y[0]==6&&drawn_y[1]==6&&drawn_x[1]==8+8*strlen(drawn[0])+18);
+    for(int i=0;i<n_drawn;i++)assert(drawn_origin[i]==0);
+    g_view=BV_VIEW_DEBUG;draw_extras();assert(n_drawn==2&&drawn_y[0]==34&&drawn_y[1]==34);g_view=BV_VIEW_STANDARD;
     speed=3;draw_extras();assert(has_drawn("Y  Speed: settings:gameSpeedTurbo")); /* the label follows the speed */
     speed_hook=NULL;draw_extras();
     assert(has_drawn("X  Screen: Standard")&&n_drawn==1); /* no hook: no Y line */
