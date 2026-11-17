@@ -17,6 +17,7 @@
 
 struct gc_run;
 
+#define GC_EVENT_SPECIES_MAX 12   /* luck-boosted species of all the open events together (custom-core's CC_TEVENT_SPECIES_MAX) */
 #define GC_EVENT_REWARDS_MAX 8   /* wave rewards of all the open events together (custom-core's CC_TEVENT_REWARDS_MAX) */
 
 /* One item an event gives after a Classic wave's battle (upstream's classicWaveRewards entry). `key` is the item's modifierTypes key
@@ -33,6 +34,8 @@ typedef struct gc_event_effects {
     uint8_t luck_boost;              /* added to the party luck (getLuckBoost), the cap of 14 still applies; 0 = none */
     uint16_t trainer_shiny_chance;   /* a trainer's Pokemon's shiny threshold out of 65536 (getClassicTrainerShinyChance); 0 = none */
     uint8_t upgrade_vouchers;        /* getUpgradeUnlockedVouchers: nonzero = a defeated boss gives the upgraded voucher */
+    uint16_t luck_species[GC_EVENT_SPECIES_MAX];   /* getEventLuckBoostedSpecies: each party member of one of these adds 1 to the luck sum; ends at the first 0 */
+    uint8_t boost_fusions;           /* areFusionsBoosted: a fusion feeds each candy bar 1/1.5 of the gain instead of 1/2, and the shop offers DNA Splicers more */
     gc_event_reward rewards[GC_EVENT_REWARDS_MAX];   /* getFixedBattleEventRewards: given in a Classic run after the wave's battle, before the shop */
 } gc_event_effects;
 

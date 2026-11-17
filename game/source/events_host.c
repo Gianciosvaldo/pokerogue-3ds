@@ -66,6 +66,8 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
     out->luck_boost = fx.luck_boost;
     out->trainer_shiny_chance = fx.trainer_shiny_chance;
     out->upgrade_vouchers = fx.upgrade_vouchers;
+    for (unsigned i = 0; i < CC_TEVENT_SPECIES_MAX && i < GC_EVENT_SPECIES_MAX && fx.luck_species[i]; i++) out->luck_species[i] = fx.luck_species[i];
+    out->boost_fusions = (fx.flags & CC_TFX_BOOST_FUSIONS) != 0;
     for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX && i < GC_EVENT_REWARDS_MAX && fx.rewards[i].wave; i++) {
         if (fx.rewards[i].item >= CC_TITEM_COUNT || !ITEM_KEY[fx.rewards[i].item]) continue;   /* the module never gives one; never read past the table */
         out->rewards[i].wave = fx.rewards[i].wave;

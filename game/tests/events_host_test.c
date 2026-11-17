@@ -104,6 +104,20 @@ int main(void)
     CHECK_EQ(fx_at(at(2026, 11, 18, 23, 59, 59)).shiny_encounter_mult, 2);
     CHECK_EQ(fx_at(at(2026, 11, 19, 0, 0, 0)).shiny_encounter_mult, 0);
     CHECK_EQ(fx_at(at(2026, 11, 18, 12, 0, 0)).upgrade_vouchers, 1);
+    /* Lucky Species Hour (16:00 to 17:00 daily): the Eevee line, in the list's own order; Fusion Day is every third day starting at phase 2 */
+    static const int eevee[] = {133, 134, 135, 136, 196, 197, 470, 471, 700};
+    fx = fx_at(at(2026, 11, 16, 16, 30, 0));
+    for (unsigned i = 0; i < 9; i++) CHECK_EQ(fx.luck_species[i], eevee[i]);
+    CHECK_EQ(fx.luck_species[9], 0);
+    CHECK_EQ(fx_at(at(2026, 11, 16, 15, 59, 59)).luck_species[0], 0);
+    CHECK_EQ(fx_at(at(2026, 11, 16, 17, 0, 0)).luck_species[0], 0);
+    /* day 20773 % 3 == 1, 20774 % 3 == 2 (Fusion Day), 20775 % 3 == 0 */
+    CHECK_EQ(20774 % 3, 2);
+    CHECK_EQ(fx_at(at(2026, 11, 16, 12, 0, 0)).boost_fusions, 0);    /* day 20773 */
+    CHECK_EQ(fx_at(at(2026, 11, 17, 0, 0, 0)).boost_fusions, 1);     /* day 20774 */
+    CHECK_EQ(fx_at(at(2026, 11, 17, 23, 59, 59)).boost_fusions, 1);
+    CHECK_EQ(fx_at(at(2026, 11, 18, 0, 0, 0)).boost_fusions, 0);     /* day 20775 */
+    CHECK_EQ(fx_at(-1).boost_fusions, 0);
     /* the items given after a wave (second round). 2026-11-16 is an odd day: Waiting Room (daily) is open, Candy Jar Day (even days) is not,
      * and Charm Hour is 18:00 to 19:00. The list is the table's order, written out here from the events' own wording. */
     fx = fx_at(at(2026, 11, 16, 12, 0, 0));

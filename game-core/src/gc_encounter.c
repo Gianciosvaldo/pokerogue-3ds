@@ -212,8 +212,12 @@ int gc_party_luck(gc_run *run)
         m[i].fusion_luck = run->party[i].fusion_luck;
         m[i].allowed = gc_mon_allowed(&run->party[i]);
     }
-    /* getEventLuckBoost(): a timed event's luck (gc/events.h), asked now; the Daily Run's seeded luck has none */
-    return pr_run_get_party_luck_value(&run->run, m, run->n_party, NULL, 0, gc_event_effects_now(run).luck_boost);
+    /* getEventLuckBoost() and getEventLuckBoostedSpecies(): a timed event's luck and its species (gc/events.h), asked now; the Daily Run's
+     * seeded luck has neither */
+    const gc_event_effects fx = gc_event_effects_now(run);
+    int species[GC_EVENT_SPECIES_MAX], n_species = 0;
+    for (int i = 0; i < GC_EVENT_SPECIES_MAX && fx.luck_species[i]; i++) species[n_species++] = fx.luck_species[i];
+    return pr_run_get_party_luck_value(&run->run, m, run->n_party, species, n_species, fx.luck_boost);
 }
 
 /* regenerateModifierPoolThresholds(getEnemyField(), WILD or TRAINER) on the run's RNG, without the item rolls that follow it: each
