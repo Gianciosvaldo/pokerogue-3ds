@@ -22,7 +22,8 @@ void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o) {
   assert(f==&frame);draws++;px=x;py=y;opts=*o;
 }
 static void near(float x,float y) { assert(fabsf(x-y)<0.001f); }
-void rr_set_zoom(float z,float cx,float cy) { (void)z;(void)cx;(void)cy; } /* draw_trainers drops the field zoom for a JoJo challenger */
+static float zoom_now=1; static int zoom_sets;
+void rr_set_zoom(float z,float cx,float cy) { (void)cx;(void)cy;zoom_now=z;zoom_sets++; } /* draw_trainers drops the field zoom for a JoJo challenger */
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 static bool stage_files = true;   /* whether the pack has Pucci's stage sprites */
@@ -98,6 +99,16 @@ int main(void) {
   assert(!strcmp(atlas,"images/trainer/custom/dio_world"));near(px,160+124*z);near(py,132-52*z);near(opts.origin_y,1);
   B.world.slide=0;draw_world_dio();near(px,160+124*z+140);
   B.world.on=false;before=draws;draw_world_dio();assert(draws==before);
+  /* an encounter's intro sprites on the enemy platform: upstream's at the field's zoom; lorenzo's own art (images/trainer/custom/, D'Arby) 1:1 like his
+   * JoJo trainers, its feet where the zoom puts them */
+  field_zoom_cur=FIELD_ZOOM;   /* field_zoom(true) at scale 1, without its fit (that pulls in the image cache) */
+  const float fz=field_zoom_cur;assert(fz>1);
+  memset(B.me_sp,0,sizeof B.me_sp);B.me_n=1;B.enemy_slide=0;
+  strcpy(B.me_sp[0].key,"images/mystery-encounters/dark_deal_scientist");B.me_sp[0].x=160;B.me_sp[0].y=164;B.me_sp[0].scale=1;
+  int sets=zoom_sets;draw_me_intro();near(px,228);near(py,76);assert(zoom_sets==sets);
+  strcpy(B.me_sp[0].key,"images/trainer/custom/darby");
+  draw_me_intro();near(px,160+68*fz);near(py,132-56*fz);assert(zoom_sets==sets+2&&zoom_now==fz);
+  field_zoom_cur=1;
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;
 }

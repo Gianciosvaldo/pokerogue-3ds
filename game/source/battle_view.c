@@ -866,7 +866,16 @@ static void draw_me_intro(void) {
     o.scale_x = o.scale_y = s->scale > 0 ? s->scale : 1;
     const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
     o.tint = RR_RGBA(v, v, v, 255);
-    rr_draw(f, 228 + B.enemy_slide + (s->x - 160), 76 + (s->y - 164), &o);
+    const float x = 228 + B.enemy_slide + (s->x - 160), y = 76 + (s->y - 164);
+    if (!strncmp(s->key, "images/trainer/custom/", 22)) {
+      /* lorenzo's own encounter art (D'Arby) is drawn 1:1 like his JoJo trainers (draw_trainers): feet where the zoom puts them, up to 99 px tall */
+      const float z = field_zoom_cur;
+      if (z != 1) rr_set_zoom(1, 160, 132);
+      rr_draw(f, 160 + (x - 160) * z, 132 + (y - 132) * z, &o);
+      if (z != 1) rr_set_zoom(z, 160, 132);
+      continue;
+    }
+    rr_draw(f, x, y, &o);
   }
 }
 

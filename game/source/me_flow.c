@@ -234,6 +234,7 @@ static const struct {
   intro_cfg c[INTRO_MAX];
 } INTRO[] = {
     {GC_ME_DARK_DEAL, 2, {{'M', "dark_deal_scientist", 0, 0, 0, 0}, {'M', "dark_deal_porygon", 0, 0, 0, 0}}},
+    {GC_ME_DARBY, 1, {{'T', "custom/darby", 0, 0, 0, 0}}},   /* lorenzo's own sprite (sd-builder/extra-images/trainer/custom/darby.png) */
     {GC_ME_MYSTERIOUS_CHEST, 1, {{'M', "mysterious_chest_blue", 0, 8, 0, 0}}},
     {GC_ME_DEPARTMENT_STORE_SALE, 2, {{'M', "department_store_sale_lady", -20, 0, 0, 0}, {0, "", 30, 0, 0, 0}}},
     {GC_ME_SHADY_VITAMIN_DEALER, 2, {{0, "", 24, 0, 1.1f, 0}, {'M', "shady_vitamin_dealer", -12, 3, 0, 0}}},
@@ -687,6 +688,8 @@ static void on_member_back(void* arg)
   open_question(F.option);
 }
 
+static void species_sprite(int species, int form_index, bool shiny, me_intro_sprite* o);
+
 static void open_members(void)
 {
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
@@ -704,6 +707,14 @@ static void open_members(void)
       if (sc->me_args[i].name && !strncmp(sc->me_args[i].name, "card", 4) && sc->me_args[i].kind == PR_ARG_POKEMON_NAME) {
         const size_t l = strlen(cards);
         snprintf(cards + l, sizeof cards - l, "%s%s", l ? ", " : "", i18n_species_name((int)(sc->me_args[i].v >> 16)));
+      }
+    /* the six face up across the top screen, half size (lorenzo: the "cards" are the Pokemon themselves) */
+    for (int i = 0, k = 0; i < sc->n_me_args && a.n_intro < ME_MAX_INTRO; i++)
+      if (sc->me_args[i].name && !strncmp(sc->me_args[i].name, "card", 4) && sc->me_args[i].kind == PR_ARG_POKEMON_NAME) {
+        me_intro_sprite* o = &a.intro[a.n_intro++];
+        species_sprite((int)(sc->me_args[i].v >> 16), (int)((sc->me_args[i].v >> 8) & 0xff), false, o);
+        o->x = 160 + (k++ - 2.5f) * 52;
+        o->scale = 0.5f;
       }
     const pr_msg_arg deck = {.name = "cards", .kind = PR_ARG_STR, .s = cards};
     fmt("card.description", &deck, 1, false, a.description, sizeof a.description);
@@ -767,25 +778,25 @@ static void open_tutor(int cursor)
 
 /* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
  * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
-static void safari_sprite(const gc_mon* e, me_intro_sprite* o)
+static void species_sprite(int species, int form_index, bool shiny, me_intro_sprite* o)
 {
   const pr_species* sp = NULL;
   for (int lo = 0, hi = PR_SPECIES_COUNT - 1; lo <= hi && !sp;) {
     const int mid = (lo + hi) / 2;
-    if (pr_species_table[mid].id == e->b.species) sp = &pr_species_table[mid];
-    else if (pr_species_table[mid].id < e->b.species) lo = mid + 1;
+    if (pr_species_table[mid].id == species) sp = &pr_species_table[mid];
+    else if (pr_species_table[mid].id < species) lo = mid + 1;
     else hi = mid - 1;
   }
   const char* fk = "";
   if (sp && sp->nforms > 1) {
-    const int form = e->b.form >= sp->nforms ? sp->nforms - 1 : e->b.form;
+    const int form = form_index >= sp->nforms ? sp->nforms - 1 : form_index;
     if (pr_forms[sp->form0 + form].form_key) fk = pr_forms[sp->form0 + form].form_key;
   }
   char plain[ME_SPRITE_LEN];
-  if (*fk) snprintf(plain, sizeof plain, "images/pokemon/%d-%s", (int)e->b.species, fk);
-  else snprintf(plain, sizeof plain, "images/pokemon/%d", (int)e->b.species);
+  if (*fk) snprintf(plain, sizeof plain, "images/pokemon/%d-%s", species, fk);
+  else snprintf(plain, sizeof plain, "images/pokemon/%d", species);
   memset(o, 0, sizeof *o);
-  if (e->b.shiny) {
+  if (shiny) {
     snprintf(o->key, sizeof o->key, "images/pokemon/shiny/%s", plain + strlen("images/pokemon/"));
     snprintf(o->alt, sizeof o->alt, "%s", plain);
   } else {
@@ -795,6 +806,8 @@ static void safari_sprite(const gc_mon* e, me_intro_sprite* o)
   o->y = 164;
   o->scale = 1.0f;
 }
+
+static void safari_sprite(const gc_mon* e, me_intro_sprite* o) { species_sprite(e->b.species, e->b.form, e->b.shiny, o); }
 
 static void open_safari(int cursor)
 {

@@ -623,7 +623,7 @@ int main(void) {
                   (!strncmp(sp[i].key, "images/", 7) || !strcmp(sp[i].key, "items")),
               "sprite %d of encounter %d placed on the screen: %s %g %g", i, t, sp[i].key, sp[i].x, sp[i].y);
     }
-    CHECK(drawn == 24, "24 encounters draw an intro: %d", drawn);
+    CHECK(drawn == 25, "25 encounters draw an intro (24 upstream ones and D'Arby): %d", drawn);
   }
 
   /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */
