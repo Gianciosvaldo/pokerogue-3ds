@@ -34,6 +34,7 @@ int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
+    g_view=BV_VIEW_DEBUG; /* the debug view's strip and top-screen item bar (the standard view is standard_view_test's) */
     for(int mode=0;mode<2;mode++)for(int top=0;top<2;top++){
         memset(&B,0,sizeof B);B.mode=mode?M_COMMAND:M_IDLE;B.hold_cmd=true;B.has_balls=true;B.bar_sel=-1;
         reset_draws();draw_bottom(top);assert(commands==1&&trays==1&&messages==1&&!names&&!descriptions);
