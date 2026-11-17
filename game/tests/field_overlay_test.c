@@ -114,5 +114,8 @@ void rr_set_blend(rr_blend b){(void)b;}
 void rr_text_sys(float x,float y,float size,const char *s,rr_color c){(void)x;(void)y;(void)size;(void)s;(void)c;}
 void ui_cursor(float x,float y){(void)x;(void)y;}
 float ui_now(void){return 0;}
+/* the target choice's hints (ui_widgets.c), not under test here */
+float hint_x(text_style st, float x0, const char* const* texts, int i) { (void)st; (void)texts; return x0 + 60 * i; }
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) { (void)st; (void)x0; (void)texts; (void)n; (void)x; return -1; }
 int mui_reclaim_images(void) { return 0; }
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; }

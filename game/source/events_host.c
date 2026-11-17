@@ -72,6 +72,11 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
         out->delibirdy_buff[nb++] = ITEM_KEY[fx.delibirdy_buff[i]];
     }
     out->delibirdy_common = (fx.flags & CC_TFX_DELIBIRDY_COMMON) != 0;
+    for (unsigned i = 0; i < CC_TEVENT_REWARDS_MAX && i < GC_EVENT_REWARDS_MAX && fx.rewards[i].wave; i++) {
+        if (fx.rewards[i].item >= CC_TITEM_COUNT || !ITEM_KEY[fx.rewards[i].item]) continue;   /* the module never gives one; never read past the table */
+        out->rewards[i].wave = fx.rewards[i].wave;
+        out->rewards[i].key = ITEM_KEY[fx.rewards[i].item];
+    }
 }
 
 static void ask(void *user, gc_event_effects *out)
