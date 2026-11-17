@@ -93,8 +93,6 @@ static void rs_draw(ui_screen* s, rr_screen which) {
   if (which != RR_BOTTOM) return;
   if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
   if (!ui_space(UI_BOTTOM_UI)) return;
-  static const char* const SPEED_KEYS[4] = {"settings:gameSpeedSlow", "settings:gameSpeedNormal", "settings:gameSpeedFast",
-                                            "settings:gameSpeedTurbo"};
   char label[ROWS][48], value[2][48];
   snprintf(label[0], sizeof label[0], "Mode");
   i18n_t(label[1], sizeof label[1], "settings:gameSpeed", NULL);
@@ -104,7 +102,7 @@ static void rs_draw(ui_screen* s, rr_screen which) {
     snprintf(value[0], sizeof value[0], "%s", BIZARRE_NAME); /* the port's own mode: no upstream string */
   else
     i18n_t(value[0], sizeof value[0], MODE_KEYS[R.v.mode], NULL);
-  i18n_t(value[1], sizeof value[1], SPEED_KEYS[R.v.speed - RSET_SPEED_SLOW], NULL);
+  i18n_t(value[1], sizeof value[1], rset_speed_key(R.v.speed), NULL);
   const float w = 200, h = 16 + ROWS * ROW_H, x = 160 - w / 2, y = -48 - h - 8;
   ui_window(x, y, w, h, WIN_NORMAL);
   text_opts right = text_defaults();

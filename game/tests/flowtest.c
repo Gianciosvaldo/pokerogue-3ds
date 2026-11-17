@@ -94,6 +94,7 @@ void rset_open(const rset_args* a) {
   if (a->on_start) a->on_start(&v, a->arg);
 }
 void ui_set_game_speed(float scale) { game_speed = scale; }
+float ui_game_speed(void) { return game_speed; }
 
 static slots_args S;
 static rsv_info S_info[RSV_SLOTS]; /* the list's own copy of the caller's info at the last open / refresh */
@@ -1028,6 +1029,15 @@ int main(void) {
     CHECK(game_speed == rset_time_scale(RSET_SPEED_TURBO), "app_start applies the saved speed (%.1f)", game_speed);
     T.on_choose(TITLE_NEW_GAME, T.arg);
     CHECK(RS.values.speed == RSET_SPEED_TURBO && RS.values.mode == RSET_MODE_BIZARRE, "the run settings open with the saved values");
+    S.on_back(S.arg);
+    /* Y on a battle's screen changed the speed in force (battle_view.h's hook): the card opens on it, not on the saved one */
+    game_speed = rset_time_scale(RSET_SPEED_SLOW);
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    CHECK(RS.values.speed == RSET_SPEED_SLOW && RS.values.mode == RSET_MODE_BIZARRE, "the run settings open on the speed in force (%d)", RS.values.speed);
+    S.on_back(S.arg);
+    game_speed = 1; /* a speed that is no preset (the football game's) reads as Normal */
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    CHECK(RS.values.speed == RSET_SPEED_NORMAL, "a speed that is no preset opens as Normal (%d)", RS.values.speed);
     S.on_back(S.arg);
     snprintf(cp, sizeof cp, "%s/settings.sav", SAVE_DIR);
     write_raw(cp, "\x09\x07", 2);

@@ -404,6 +404,7 @@ static void on_title(title_choice c, void* arg) {
     }
     case TITLE_NEW_GAME: {
       A.settings = rset_load(); /* as the screen last left them (B keeps a changed speed too) */
+      A.settings.speed = rset_speed_from_scale(ui_game_speed()); /* the speed in force: Y on a battle's screen changes it without the card */
       const gc_system* sys=sysd_get();
       const rset_args a = {.values=A.settings,.bizarre_unlocked=gc_system_bizarre_unlocked(sys),.endless_unlocked=sys&&sys->unlocks.endless_mode,
         .spliced_endless_unlocked=sys&&sys->unlocks.spliced_endless_mode,.on_start=on_settings_start};
