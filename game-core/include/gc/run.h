@@ -223,7 +223,12 @@ typedef struct {
 /* GC_ME_STAGE_SAFARI: the Safari Zone's minigame (options 0..3 = throw a ball, throw bait, throw mud, run; `slot` = where the cursor starts; the Pokemon is
  * enemy[0]) */
 /* GC_ME_STAGE_ABILITY: Clowning Around after the shop (n_options 2: 0 = Yes, which asks for a party member (GC_CH_MYSTERY.b; any Pokemon), 1 = No; me_args "ability", "blacephalonName") */
-enum { GC_ME_STAGE_FIRST = 0, GC_ME_STAGE_TUTOR = 1, GC_ME_STAGE_SAFARI = 2, GC_ME_STAGE_ABILITY = 3 };
+/* D'Arby the Gambler (gc_darby.c): GC_ME_STAGE_DARBY_SOUL picks one soul of the wager (n_options 1, a party member; me_args "soulsLeft"), GC_ME_STAGE_DARBY_CARD
+ * picks the Pokemon played as the card (n_options 1, a party member; me_args "card1".."card6" = his six cards face up, PR_ARG_POKEMON_NAME, and "cardLevel"),
+ * GC_ME_STAGE_DARBY_ACCUSE after a lost hand (0 = Accept the Deal, 1 = You Cheated!), GC_ME_STAGE_DARBY_VITAMIN after a Standard win (options 0..5 = the
+ * vitamin of HP, Atk, Def, SpAtk, SpDef, Spd, each asks for a party member; me_args "vitaminsLeft") */
+enum { GC_ME_STAGE_FIRST = 0, GC_ME_STAGE_TUTOR = 1, GC_ME_STAGE_SAFARI = 2, GC_ME_STAGE_ABILITY = 3,
+       GC_ME_STAGE_DARBY_SOUL = 4, GC_ME_STAGE_DARBY_CARD = 5, GC_ME_STAGE_DARBY_ACCUSE = 6, GC_ME_STAGE_DARBY_VITAMIN = 7 };
 int gc_superfan_tutor_move(const gc_run *run, int k);   /* the k-th (0..3) move the Bug-Type Superfan's tutor offers */
 enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
@@ -296,7 +301,7 @@ enum gc_mystery_type {
     GC_ME_TELEPORTING_HIJINKS, GC_ME_BUG_TYPE_SUPERFAN, GC_ME_FUN_AND_GAMES,
     GC_ME_UNCOMMON_BREED, GC_ME_GLOBAL_TRADE_SYSTEM, GC_ME_THE_EXPERT_POKEMON_BREEDER,
     GC_ME_PILLAR_MEN,   /* custom content only (gc/custom.h, pillar): not an upstream encounter */
-    GC_ME_STAND_ARROW,  /* custom content only (Bizarre runs, the same hook): not an upstream encounter */
+    GC_ME_DARBY,        /* D'Arby the Gambler (Soul Poker): custom content only, Bizarre runs, lorenzo's spec */
     GC_ME_COUNT
 };
 /* every encounter from here on is lorenzo's own and is offered only when the app's pillar hook says the run is a Bizarre one (gc/custom.h) */

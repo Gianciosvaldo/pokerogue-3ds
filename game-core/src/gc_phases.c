@@ -896,6 +896,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         if (p->a == GC_ME_CLOWNING_AROUND) return gc_clown_post_start(run, p);   /* the ability swap waits for its answer */
         gc_mystery_post(run, p);
         return true;
+    case RP_DARBY:
+        return gc_darby_stage_start(run, p);
     case RP_FG_KO:
         gc_fg_lose(run);
         return true;
@@ -1043,6 +1045,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         return gc_superfan_tutor_choose(run, c, why, ok);
     case RP_ME_POST:
         return gc_clown_post_choose(run, p, c, why, ok);
+    case RP_DARBY:
+        return gc_darby_stage_choose(run, p, c, why, ok);
     case RP_CATCH:
         return gc_catch_choose(run, p, c, why, ok);
     default:

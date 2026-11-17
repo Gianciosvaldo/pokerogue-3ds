@@ -50,7 +50,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,1,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,1,4,(1u<<9),0,0},
     [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
-    [GC_ME_STAND_ARROW]             = {GC_ME_GREAT, 10,180,1,2,0,0,0},   /* lorenzo's own (Bizarre runs): any biome, a party of two, once per run */
+    [GC_ME_DARBY]                   = {GC_ME_ULTRA, 40,INT16_MAX,1,4,0,0,0},   /* lorenzo's own (Bizarre runs): wave 40+, no last wave, any biome, a party of four, once per run */
 };
 
 /* mysteryEncountersByBiome (mystery-encounter-biomes.ts): the biome's own entries, then the non-extreme, human-transitable, civilization and any-biome groups. Compared with
@@ -80,7 +80,7 @@ static bool biome_has_id(int b, int type)
     case GC_ME_TRAINING_SESSION: case GC_ME_DELIBIRDY: case GC_ME_A_TRAINERS_TEST:
     case GC_ME_TRASH_TO_TREASURE: case GC_ME_BERRIES_ABOUND: case GC_ME_CLOWNING_AROUND:
     case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS: case GC_ME_UNCOMMON_BREED:
-    case GC_ME_STAND_ARROW:
+    case GC_ME_DARBY:
         return true; /* all biomes */
     case GC_ME_SLUMBERING_SNORLAX:
         return b == BIOME_ID_PLAINS || b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS;
@@ -169,7 +169,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_BUG_TYPE_SUPERFAN && option == 2) return gc_superfan_pick_ok(run, idx);
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);
-    if (type == GC_ME_STAND_ARROW && option == 0) return gc_arrow_pick_ok(run, idx);
+    if (type == GC_ME_DARBY) return gc_darby_pick_ok(run, option, idx);
     return false;
 }
 
@@ -543,10 +543,8 @@ static void setup_texts(gc_run *run)
         screen_arg(s, name);
         break;
     }
-    case GC_ME_STAND_ARROW:
-        s->option_pick[0] = GC_PICK_MEMBER;
-        screen_arg(s, pr_arg_int("awakenPercent", gc_arrow_awaken_percent()));
-        screen_arg(s, pr_arg_int("losePercent", gc_arrow_lose_percent()));
+    case GC_ME_DARBY:
+        s->option_pick[GC_DARBY_STANDARD] = GC_PICK_MEMBER;   /* the Standard wager's one soul; All-In asks for its three after the choice */
         break;
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
@@ -650,7 +648,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND: case GC_ME_DELIBIRDY:
-    case GC_ME_BUG_TYPE_SUPERFAN: case GC_ME_STAND_ARROW:
+    case GC_ME_BUG_TYPE_SUPERFAN: case GC_ME_DARBY:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -731,9 +729,6 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_WEIRD_DREAM) {
         /* onInit: the new species of every party member are chosen when the encounter starts, whatever the player picks (and widen the BST ranges when short) */
         gc_weird_plan(run);
-    } else if (type == GC_ME_STAND_ARROW) {
-        /* piercing one of your own needs a second Pokemon that can fight on if the Arrow takes it; the wild one and leaving need nothing */
-        s->option_ok[0] = gc_arrow_pierce_ok(run);
     } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
         /* Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade and Leave are always on
          * (the item trade's party screen filters on a transferable held item) */
@@ -1445,8 +1440,9 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         gc_pillar_execute(run, option);
         return true;
 
-    case GC_ME_STAND_ARROW:
-        gc_arrow_execute(run, option, b);
+    case GC_ME_DARBY:
+        if (option == GC_DARBY_STANDARD && !gc_darby_pick_ok(run, option, b)) { *why = "no such Pokemon"; *ok = false; return false; }
+        gc_darby_execute(run, option, option == GC_DARBY_STANDARD ? b : -1);
         return true;
 
     case GC_ME_MYSTERIOUS_CHALLENGERS:
@@ -1597,6 +1593,7 @@ void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }
 void gc_me_apply_damage(gc_mon *m, int damage) { me_apply_damage(m, damage); }
 
 void gc_me_leave(gc_run *run) { end_mystery_encounter_leave(run); }
+void gc_me_give_vitamin(gc_run *run, int idx, int stat) { if (idx >= 0 && idx < run->n_party && stat >= 0 && stat < 6) me_give_vitamin(run, idx, stat); }
 
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move)
 {

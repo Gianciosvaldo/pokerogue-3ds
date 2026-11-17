@@ -47,7 +47,7 @@ static const char* const NS[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM] = "globalTradeSystem",
     [GC_ME_THE_EXPERT_POKEMON_BREEDER] = "theExpertPokemonBreeder",
     [GC_ME_PILLAR_MEN] = "pillarMen",
-    [GC_ME_STAND_ARROW] = "standArrow",   /* lorenzo's own: its dialogue is compiled in (custom_texts.h) */
+    [GC_ME_DARBY] = "darby",              /* lorenzo's own: D'Arby the Gambler, its dialogue compiled in (custom_texts.h) */
 };
 
 /* The Pillar Men are lorenzo's own encounter (custom runs): no upstream locale file, so their texts are here. The three silhouettes are
@@ -205,6 +205,7 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type move tutor after the win: battleWon came as an event, the intro is over */
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_SAFARI) return;   /* the Safari Zone's actions: the Pokemon's messages came as events, the intro is over */
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_ABILITY) return;   /* Clowning Around's ability swap offer: the clown's lines and the prompt came as events */
+  if (gc_run_screen(run)->me_stage >= GC_ME_STAGE_DARBY_SOUL) return;  /* D'Arby's hand after the wager: his lines came as events */
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
@@ -399,6 +400,12 @@ static void finish(int option, int b, int c)
     void (*tutor_cb)(const me_choice*, void*) = F.on_choice;
     void* tutor_arg = F.arg;
     if (tutor_cb) tutor_cb(&ch, tutor_arg);
+    return;
+  }
+  if (F.run && gc_run_screen(F.run)->me_stage >= GC_ME_STAGE_DARBY_SOUL) {   /* D'Arby's stages: the core says every line itself */
+    void (*darby_cb)(const me_choice*, void*) = F.on_choice;
+    void* darby_arg = F.arg;
+    if (darby_cb) darby_cb(&ch, darby_arg);
     return;
   }
   if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_ABILITY) {   /* Yes (with the Pokemon) or No: the core says "abilityGained" and the outro itself */
@@ -686,6 +693,22 @@ static void open_members(void)
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a Pokemon.");
+  const int stage = gc_run_screen(F.run)->me_stage;
+  if (stage == GC_ME_STAGE_DARBY_SOUL) fmt("soul.query", NULL, 0, false, a.query, sizeof a.query);
+  if (stage == GC_ME_STAGE_DARBY_CARD) {
+    /* his six cards, named here: one message holds at most five tokens */
+    static char cards[6 * 40];
+    cards[0] = 0;
+    const gc_screen* sc = gc_run_screen(F.run);
+    for (int i = 0; i < sc->n_me_args; i++)
+      if (sc->me_args[i].name && !strncmp(sc->me_args[i].name, "card", 4) && sc->me_args[i].kind == PR_ARG_POKEMON_NAME) {
+        const size_t l = strlen(cards);
+        snprintf(cards + l, sizeof cards - l, "%s%s", l ? ", " : "", i18n_species_name((int)(sc->me_args[i].v >> 16)));
+      }
+    const pr_msg_arg deck = {.name = "cards", .kind = PR_ARG_STR, .s = cards};
+    fmt("card.description", &deck, 1, false, a.description, sizeof a.description);
+    fmt("card.query", NULL, 0, false, a.query, sizeof a.query);
+  }
   for (int i = 0; i < F.run->n_party && a.n < ME_MAX_OPTIONS; i++) {
     const int slot = slot_of(i);
     const gc_mon* m = &F.run->party[slot];
@@ -694,7 +717,7 @@ static void open_members(void)
     a.options[a.n].ok = gc_mystery_member_ok(F.run, F.option, slot);
     a.n++;
   }
-  a.can_back = true;
+  a.can_back = stage != GC_ME_STAGE_DARBY_SOUL && stage != GC_ME_STAGE_DARBY_CARD;   /* D'Arby's soul and card pickers are the whole screen */
   a.on_pick = on_member;
   a.on_back = on_member_back;
   if (!me_screen_open(&a)) finish(F.option, 0, 0);
@@ -815,9 +838,50 @@ static void open_ability(int cursor)
   if (!me_screen_open(&a)) finish(1, 0, 0);
 }
 
+/* D'Arby the Gambler after the wager (custom content): the soul and card pickers are party screens of their own; after a lost hand Accept the Deal or You
+ * Cheated!; after a Standard win the six vitamins, each then asks for a Pokemon */
+static void open_darby(int cursor)
+{
+  const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage == GC_ME_STAGE_DARBY_SOUL || s->me_stage == GC_ME_STAGE_DARBY_CARD) {
+    F.option = 0;
+    open_members();
+    return;
+  }
+  static me_args a; /* static, as the others: me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  if (s->me_stage == GC_ME_STAGE_DARBY_ACCUSE) {
+    fmt("accuse.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < 2; i++) {
+      char sub[48];
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      snprintf(sub, sizeof sub, "accuse.option.%d.label", i + 1);
+      fmt(sub, NULL, 0, false, o->label, sizeof o->label);
+      snprintf(sub, sizeof sub, "accuse.option.%d.tooltip", i + 1);
+      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+    }
+  } else {   /* GC_ME_STAGE_DARBY_VITAMIN */
+    fmt("vitamin.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < s->n_options && i < 6; i++) {
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      const gm_item_ui* it = gm_item_ui_find("BASE_STAT_BOOSTER", i);
+      snprintf(o->label, sizeof o->label, "%s", it && it->name ? it->name : "Vitamin");
+      if (it && it->desc) snprintf(o->tooltip, sizeof o->tooltip, "%s", it->desc);
+    }
+  }
+  a.cursor = cursor >= 0 && cursor < a.n ? cursor : 0;
+  a.can_back = false;
+  a.on_pick = on_option;
+  if (!me_screen_open(&a)) finish(0, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage >= GC_ME_STAGE_DARBY_SOUL) { open_darby(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_ABILITY) { open_ability(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }

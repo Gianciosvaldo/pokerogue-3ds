@@ -2137,6 +2137,19 @@ static int times_drawn(int type, int waves) {
   return drawn;
 }
 
+/* times_drawn with a fourth member (a copy of the first) for the draws, the party as it was afterwards */
+static int times_drawn_four(int type, int waves) {
+  const int n = R->n_party;
+  if (n < 4) {
+    R->party[3] = R->party[0];
+    R->party_order[3] = 3;
+    R->n_party = 4;
+  }
+  const int drawn = times_drawn(type, waves);
+  R->n_party = n;
+  return drawn;
+}
+
 /* the Pillar Men's hook: offered in a custom run only, each option hands in its fighter's team and makes him the live foe, and the roll state
  * with a live Pillar Man still saves and loads (a live character must be a dealt one) */
 static void test_pillar(void) {
@@ -2157,8 +2170,8 @@ static void test_pillar(void) {
   }
   gc_custom_team t;
   CHECK(!h->pillar(NULL, R, 3, &t), "no fourth fighter");
-  /* the Stand Arrow and every encounter after the Pillar Men ride on the same hook: a Bizarre run is dealt them */
-  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) > 0 && times_drawn(GC_ME_STAND_ARROW, 400) > 0, "a Bizarre run draws the Pillar Men and the Stand Arrow");
+  /* every encounter after the Pillar Men rides on the same hook: a Bizarre run is dealt them (D'Arby wants a party of four: a fourth member for the draw) */
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) > 0 && times_drawn_four(GC_ME_DARBY, 400) > 0, "a Bizarre run draws the Pillar Men and D'Arby");
   R->battle_type = BATTLE_TYPE_WILD;
   CHECK(cr_save(slot_used, R) == RSV_SAVED, "a run with a Pillar Man dealt saves");
   char why[RSV_WHY_LEN];
@@ -2179,7 +2192,7 @@ static void test_classic_plain(void) {
   gc_custom_team t;
   memset(&t, 0, sizeof t);
   CHECK(!h->pillar(NULL, R, 0, &t), "and no Pillar Man hands in a team");
-  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) == 0 && times_drawn(GC_ME_STAND_ARROW, 400) == 0, "a plain Classic run is never dealt the Pillar Men or the Stand Arrow");
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) == 0 && times_drawn_four(GC_ME_DARBY, 400) == 0, "a plain Classic run is never dealt the Pillar Men or D'Arby");
   const gc_custom_encounter e = {.wave = 5, .biome = 14 /* Desert: Gyro's */, .kind = GC_ENC_TRAINER, .flags = GC_ENF_RANDOM_TRAINER, .level = 20, .species = 1};
   for (int i = 0; i < 400; i++) CHECK(!h->trainer(NULL, R, &e, &t), "an eligible trainer wave never becomes a JoJo trainer (%d)", i);
   CHECK(cr_stats_get()->jojo_waves == 0, "the roll was not even asked");
