@@ -44,6 +44,10 @@ echo "== runtest (Lock Capsule through the reward screen's own callbacks: lock, 
 RUNTEST_LOCK=1 build/runtest 350 0 || failed="$failed runtest-lock"
 echo "== runtest (Will you switch? at a wild battle's start, answered yes and no, never at a trainer's) 5000"
 RUNTEST_ASK_SWITCH=1 build/runtest 5000 0 || failed="$failed runtest-ask-switch"
+# The first run opens with the timed events of a day (2026-11-17 03:00, Snowy Town among them): the Town's weather text comes before the first
+# wave's event, and with no battle screen up yet it stopped the run from ever starting (the starter select stayed on screen with its input shut).
+echo "== runtest (timed events open: Snowy Town's weather text ahead of the first wave) 300"
+RUNTEST_EVENTS=1 build/runtest 300 0 || failed="$failed runtest-events"
 echo "== runtest 10000"
 build/runtest 10000 || failed="$failed runtest"
 echo "== runtest (external event storage, inactive inline buffer cleared) 10000"
