@@ -109,6 +109,9 @@ static struct {
   char opt_label[40][72];
   int refused_streak;
   bool opt_cancel;
+  void (*target_done)(int, void*); /* bv_ask_target: the battle screen's own target choice */
+  void* target_arg;
+  bv_target_opts target;
   void (*confirm_done)(int, void*);
   void* confirm_arg;
   void (*party_pick)(int, int, void*);
@@ -1025,6 +1028,26 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   }
 }
 
+/* The target choice of a single-target move in a double: answered with the same rolls the option list it replaced took (cancel 1 in 7, else
+ * one of the targets in field order), so every run plays as it did */
+void bv_ask_target(const bv_target_opts* opts, void (*on_target)(int, void*), void* arg) {
+  n_options++;
+  const gc_screen* sc = gc_run_screen(rs_run());
+  if (sc->kind != GC_SCREEN_TARGET) BAD("a target choice was asked on screen %d", sc->kind);
+  int n = 0;
+  for (int f = 0; f < 4; f++) {
+    if (opts->ok[f] != sc->target_ok[f]) BAD("target %d offered %d, game-core says %d", f, opts->ok[f], sc->target_ok[f]);
+    n += opts->ok[f];
+  }
+  if (n < 2) BAD("a target choice with %d targets", n);
+  if (opts->slot != sc->slot) BAD("the target choice is for slot %d, the screen's is %d", opts->slot, sc->slot);
+  if (!opts->title || !opts->title[0]) BAD("the target choice has no move name");
+  W.target = *opts;
+  W.target.title = NULL;
+  W.target_done = on_target;
+  W.target_arg = arg;
+}
+
 /* ---- menus ---- */
 void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*on_done)(int, void*), void* arg) {
   n_options++;
@@ -1870,6 +1893,19 @@ static bool step(void) {
     if (scan && (memcmp(&scan_rng,&scan_run->run.rng,sizeof scan_rng) ||
                  memcmp(&scan_battle_rng,&scan_run->bt.battle_rng,sizeof scan_battle_rng)))
       BAD("IV scanner advanced a battle RNG stream");
+    return true;
+  }
+  if (W.target_done) {
+    void (*f)(int, void*) = W.target_done;
+    W.target_done = NULL;
+    int n = 0;
+    for (int k = 0; k < 4; k++) n += W.target.ok[k];
+    int pick = rnd(7) == 0 ? -2 : (int)rnd((uint32_t)n);
+    (void)rnd(100); /* the roll for smart_option, which left a target pick as it was */
+    int field = -1;
+    for (int k = 0, i = 0; k < 4 && pick >= 0; k++)
+      if (W.target.ok[k] && i++ == pick) field = k;
+    f(field, W.target_arg);
     return true;
   }
   if (W.opt_done) {

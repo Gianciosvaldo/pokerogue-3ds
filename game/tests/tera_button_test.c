@@ -51,6 +51,9 @@ static void fresh(bool tera,bool struggle){
     memset(&got,0,sizeof got);answers=0;
 }
 static void in(int b){bv_input(NULL,b);}
+/* the target choice's hints (ui_widgets.c), not under test here */
+float hint_x(text_style st, float x0, const char* const* texts, int i) { (void)st; (void)texts; return x0 + 60 * i; }
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) { (void)st; (void)x0; (void)texts; (void)n; (void)x; return -1; }
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){

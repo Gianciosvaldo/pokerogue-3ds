@@ -28,6 +28,9 @@ const char* i18n_stat_name(int stat){return "Stat";}
 const char* gm_enum_lower(gm_enum e,int value,char* out,int n){return "normal";}
 const char* gm_enum_camel(gm_enum e,int value,char* out,int n){return "normal";}
 static void reset_draws(void){commands=trays=messages=names=descriptions=0;}
+/* the target choice's hints (ui_widgets.c), not under test here */
+float hint_x(text_style st, float x0, const char* const* texts, int i) { (void)st; (void)texts; return x0 + 60 * i; }
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) { (void)st; (void)x0; (void)texts; (void)n; (void)x; return -1; }
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 int main(void){
