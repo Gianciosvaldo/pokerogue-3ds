@@ -49,6 +49,12 @@ int64_t eh_now(void)
     return eh_local_seconds(&tm);
 }
 
+/* custom-core's cc_titem to the item's modifierTypes key (reward-core's pr_item_keys; game-core checks the key against them) */
+static const char *const ITEM_KEY[CC_TITEM_COUNT] = {
+    NULL, "SHINY_CHARM", "ABILITY_CHARM", "CATCHING_CHARM", "EXP_CHARM", "SUPER_EXP_CHARM", "HEALING_CHARM", "CANDY_JAR", "MEGA_BRACELET",
+    "DYNAMAX_BAND",
+};
+
 void eh_effects_at(int64_t local_s, gc_event_effects *out)
 {
     memset(out, 0, sizeof *out);
@@ -60,6 +66,12 @@ void eh_effects_at(int64_t local_s, gc_event_effects *out)
     out->luck_boost = fx.luck_boost;
     out->trainer_shiny_chance = fx.trainer_shiny_chance;
     out->upgrade_vouchers = fx.upgrade_vouchers;
+    unsigned nb = 0;
+    for (unsigned i = 0; i < CC_TEVENT_BUFF_MAX && nb < GC_EVENT_BUFF_MAX && fx.delibirdy_buff[i]; i++) {
+        if (fx.delibirdy_buff[i] >= CC_TITEM_COUNT || !ITEM_KEY[fx.delibirdy_buff[i]]) continue;   /* the module never gives one; never read past the table */
+        out->delibirdy_buff[nb++] = ITEM_KEY[fx.delibirdy_buff[i]];
+    }
+    out->delibirdy_common = (fx.flags & CC_TFX_DELIBIRDY_COMMON) != 0;
 }
 
 static void ask(void *user, gc_event_effects *out)

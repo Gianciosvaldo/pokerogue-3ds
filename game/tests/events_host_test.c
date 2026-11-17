@@ -104,6 +104,24 @@ int main(void)
     CHECK_EQ(fx_at(at(2026, 11, 18, 23, 59, 59)).shiny_encounter_mult, 2);
     CHECK_EQ(fx_at(at(2026, 11, 19, 0, 0, 0)).shiny_encounter_mult, 0);
     CHECK_EQ(fx_at(at(2026, 11, 18, 12, 0, 0)).upgrade_vouchers, 1);
+    /* Delibirdy Day: every third day, the days with day % 3 == 1 (2026-11-16 is day 20773), all day: Delibird-y as a COMMON encounter and the six charms.
+     * 2026-11-17 and 18 are not; 2026-11-19 is */
+    CHECK_EQ(20773 % 3, 1);
+    {
+        static const char *const CHARMS[6] = {"CATCHING_CHARM", "SHINY_CHARM", "ABILITY_CHARM", "EXP_CHARM", "SUPER_EXP_CHARM", "HEALING_CHARM"};
+        const int64_t days[3] = {at(2026, 11, 16, 0, 0, 0), at(2026, 11, 16, 23, 59, 59), at(2026, 11, 19, 12, 0, 0)};
+        for (int d = 0; d < 3; d++) {
+            fx = fx_at(days[d]);
+            CHECK_EQ(fx.delibirdy_common, 1);
+            for (int i = 0; i < 6; i++) CHECK(fx.delibirdy_buff[i] && !strcmp(fx.delibirdy_buff[i], CHARMS[i]));
+        }
+        const int64_t off[3] = {at(2026, 11, 15, 23, 59, 59), at(2026, 11, 17, 12, 0, 0), at(2026, 11, 18, 12, 0, 0)};
+        for (int d = 0; d < 3; d++) {
+            fx = fx_at(off[d]);
+            CHECK_EQ(fx.delibirdy_common, 0);
+            CHECK(fx.delibirdy_buff[0] == NULL);
+        }
+    }
     /* a negative instant: nothing, even though two events are open all day */
     fx = fx_at(-1);
     CHECK_EQ(fx.shiny_catch_mult, 0);
@@ -120,6 +138,7 @@ int main(void)
     CHECK_EQ(out.luck_boost, 1);
     CHECK_EQ(out.shiny_catch_mult, 3);
     CHECK_EQ(out.upgrade_vouchers, 1);
+    CHECK_EQ(out.delibirdy_common, 0);   /* 2026-11-18 is day 20775: not a Delibirdy Day */
     eh_use_fixed_clock(at(2026, 11, 17, 3, 0, 0));   /* asked again: the clock is not read once */
     memset(&out, 0, sizeof out);
     eh_source()->effects(eh_source()->user, &out);

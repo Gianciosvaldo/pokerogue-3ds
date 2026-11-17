@@ -8,6 +8,7 @@
  *           expectation is upstream's threshold (BASE_SHINY_CHANCE 64 x getShinyEncounterMultiplier()), not this port's output.
  *   candy : the Classic candy friendship multiplier (getClassicFriendshipMultiplier(): 3, or an event's when higher; Classic only).
  *   voucher: the voucher a defeated boss gives (TrainerVictoryPhase): upgraded while an event says getUpgradeUnlockedVouchers().
+ *   delibirdy: Delibirdy Day: the bonus charm of getDelibirdyBuff after each of Delibird-y's three gifts, and its tier moved GREAT -> COMMON.
  *   luck  : the party luck value (getPartyLuckValue): min(getEventLuckBoost() + clamp(sum of the party's luck, 0, 14), 14). */
 #include "../src/internal.h"
 #include <stdio.h>
@@ -330,12 +331,248 @@ static void voucher_section(void)
     CHECK_EQ(by_type[0] + by_type[3], 0);
 }
 
+/* ---- Delibird-y (Delibirdy Day): the bonus charm of getDelibirdyBuff, and the tier GREAT -> COMMON ---- */
+static gc_system dsys;
+static void dstart(const char *seed, int wave, const gc_event_source *src)
+{
+    memset(&run, 0, sizeof run);
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    gc_system_init_defaults(&dsys);
+    run.sys = &dsys;
+    gc_run_set_events(&run, src);
+    run.wave = wave;
+    run.biome = BIOME_ID_PLAINS;
+    run.money = 1000000;
+    run.n_party = 2;
+    for (int i = 0; i < 2; i++) {
+        gc_starter st;
+        memset(&st, 0, sizeof st);
+        st.species = i ? SPECIES_ID_LAPRAS : SPECIES_ID_PIKACHU;
+        st.tera_type = -1;
+        for (int k = 0; k < 6; k++) st.ivs[k] = 15;
+        st.moves[0] = MOVE_ID_TACKLE;
+        gc_mon_new_player(&run, &run.party[i], &st, 30);
+        run.party[i].pause_evolutions = true;
+        run.party_order[i] = (int8_t)i;
+    }
+    run.n_items = 0;
+    memset(run.items, 0, sizeof run.items);
+    run.battle_type = BATTLE_TYPE_WILD;
+    gc_rq_reset(&gc_int(&run)->rq);
+    run.mystery_type = GC_ME_DELIBIRDY;
+}
+
+static void dopen(void)
+{
+    gc_items_to_battle(&run);
+    gc_rq_unshift(&run, gc_rp(RP_MYSTERY, GC_ME_DELIBIRDY, GC_ME_GREAT, 0));
+    gc_run_until_screen(&run);
+    CHECK(run.screen.kind == GC_SCREEN_MYSTERY);
+}
+
+static void dchoose(int option, int member, int item)
+{
+    const char *why = "";
+    gc_choice ch = {GC_CH_MYSTERY, option, member, item};
+    CHECK(gc_run_choose(&run, &ch, &why));
+}
+
+static int dheld(const char *key)
+{
+    int n = 0;
+    for (int i = 0; i < run.n_items; i++) if (!strcmp(run.items[i].key, key)) n += run.items[i].stack;
+    return n;
+}
+
+/* the item names of the "battle:rewardGain" texts, in the order they were said */
+static char dsaid[8][32];
+static int dn_said;
+static void dlisten(void)
+{
+    gc_event e;
+    dn_said = 0;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind != GC_EV_MESSAGE || !e.msg.key || !strstr(e.msg.key, "rewardGain") || dn_said >= 8) continue;
+        dsaid[dn_said][0] = 0;
+        for (int a = 0; a < e.msg.n_args; a++)
+            if (e.msg.args[a].name && !strcmp(e.msg.args[a].name, "modifierName") && e.msg.args[a].s) {
+                const char *q = strstr(e.msg.args[a].s, "ModifierType.");
+                if (q) snprintf(dsaid[dn_said], sizeof dsaid[0], "%s", q + 13);
+            }
+        if (strstr(e.msg.key, "rewardGain") && !dsaid[dn_said][0]) snprintf(dsaid[dn_said], sizeof dsaid[0], "?");
+        dn_said++;
+    }
+}
+
+static void delibirdy_section(void)
+{
+    memset(&open_now, 0, sizeof open_now);
+    /* no source, or nothing open: the Amulet Coin and nothing else */
+    for (int k = 0; k < 2; k++) {
+        dstart("events-deli-0", 40, k ? &SRC : NULL);
+        gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+        dopen();
+        dchoose(0, 0, 0);
+        CHECK_EQ(dheld("AMULET_COIN"), 1);
+        CHECK_EQ(dheld("CATCHING_CHARM") + dheld("SHINY_CHARM") + dheld("HEALING_CHARM"), 0);
+        CHECK_EQ(dsys.voucher_counts[GC_VOUCHER_REGULAR], 0);
+    }
+    /* one candidate: given, and said after the Amulet Coin (both are unshifted in this phase, so they run in the order they were unshifted) */
+    open_now.delibirdy_buff[0] = "CATCHING_CHARM";
+    dstart("events-deli-1", 40, &SRC);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dheld("AMULET_COIN"), 1);
+    CHECK_EQ(dheld("CATCHING_CHARM"), 1);
+    dlisten();
+    CHECK_EQ(dn_said, 2);
+    CHECK(strstr(dsaid[0], "AMULET_COIN") != NULL);
+    CHECK(strstr(dsaid[1], "CATCHING_CHARM") != NULL);
+    /* the charm at its maximum stack (3) is no candidate: a Voucher instead (one regular egg voucher), the coin as before */
+    dstart("events-deli-2", 40, &SRC);
+    gc_item_add(&run, "CATCHING_CHARM", -1, 0, 3);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dheld("CATCHING_CHARM"), 3);
+    CHECK_EQ(dsys.voucher_counts[GC_VOUCHER_REGULAR], 1);
+    CHECK_EQ(dheld("AMULET_COIN"), 1);
+    /* one below the maximum is still a candidate */
+    dstart("events-deli-2b", 40, &SRC);
+    gc_item_add(&run, "CATCHING_CHARM", -1, 0, 2);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dheld("CATCHING_CHARM"), 3);
+    CHECK_EQ(dsys.voucher_counts[GC_VOUCHER_REGULAR], 0);
+    /* the coin at its maximum (5): the lead gets a Shell Bell as before, and the event's charm still comes */
+    dstart("events-deli-3", 40, &SRC);
+    gc_item_add(&run, "AMULET_COIN", -1, 0, 5);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dheld("AMULET_COIN"), 5);
+    CHECK_EQ(dheld("CATCHING_CHARM"), 1);
+    CHECK_EQ(dheld("SHELL_BELL"), 1);
+    /* two candidates: exactly one is given, both come up over many seeds, and the same seed always gives the same one */
+    open_now.delibirdy_buff[1] = "SHINY_CHARM";
+    int catching = 0, shiny = 0;
+    for (int n = 0; n < 60; n++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "events-deli-pick-%d", n);
+        dstart(seed, 40, &SRC);
+        gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+        dopen();
+        dchoose(0, 0, 0);
+        const int c = dheld("CATCHING_CHARM"), sh = dheld("SHINY_CHARM");
+        CHECK_EQ(c + sh, 1);
+        catching += c;
+        shiny += sh;
+        dstart(seed, 40, &SRC);
+        gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+        dopen();
+        dchoose(0, 0, 0);
+        CHECK_EQ(dheld("CATCHING_CHARM"), c);
+    }
+    CHECK(catching > 10 && shiny > 10);
+    /* a full one is dropped from the candidates: always the other */
+    for (int n = 0; n < 20; n++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "events-deli-full-%d", n);
+        dstart(seed, 40, &SRC);
+        gc_item_add(&run, "CATCHING_CHARM", -1, 0, 3);
+        gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+        dopen();
+        dchoose(0, 0, 0);
+        CHECK_EQ(dheld("SHINY_CHARM"), 1);
+        CHECK_EQ(dheld("CATCHING_CHARM"), 3);
+    }
+    /* all full: a Voucher */
+    dstart("events-deli-allfull", 40, &SRC);
+    gc_item_add(&run, "CATCHING_CHARM", -1, 0, 3);
+    gc_item_add(&run, "SHINY_CHARM", -1, 0, 4);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dsys.voucher_counts[GC_VOUCHER_REGULAR], 1);
+    /* the other two options give it as well, after their own gift */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.delibirdy_buff[0] = "ABILITY_CHARM";
+    dstart("events-deli-food", 40, &SRC);
+    gc_item_add(&run, "BERRY", BERRY_TYPE_SITRUS, run.party[1].b.id, 1);
+    dopen();
+    dchoose(1, 1, 0);
+    CHECK_EQ(dheld("CANDY_JAR"), 1);
+    CHECK_EQ(dheld("ABILITY_CHARM"), 1);
+    CHECK_EQ(dheld("BERRY"), 0);                       /* the berry was given */
+    dlisten();
+    CHECK(dn_said == 2 && strstr(dsaid[0], "CANDY_JAR") && strstr(dsaid[1], "ABILITY_CHARM"));
+    dstart("events-deli-item", 40, &SRC);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(2, 0, 0);
+    CHECK_EQ(dheld("HEALING_CHARM"), 1);
+    CHECK_EQ(dheld("ABILITY_CHARM"), 1);
+    CHECK_EQ(dheld("LEFTOVERS"), 0);
+    /* an unknown key is no candidate; the list is still an event's, so with nothing else a Voucher */
+    memset(&open_now, 0, sizeof open_now);
+    open_now.delibirdy_buff[0] = "NOT_AN_ITEM";
+    dstart("events-deli-unknown", 40, &SRC);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[0].b.id, 1);
+    dopen();
+    dchoose(0, 0, 0);
+    CHECK_EQ(dsys.voucher_counts[GC_VOUCHER_REGULAR], 1);
+
+    /* the tier: while the event says COMMON, Delibird-y is a candidate of the Common draw and no longer of the Great draw. The same seed gives the
+     * same tier roll with and without the event, so a draw that gives Delibird-y only with the event came up Common, and one that gives it only
+     * without came up Great. Both happen, and the history still holds its own tier, GREAT (SeenEncounterData(encounter.encounterTier)) */
+    int gained = 0, lost = 0, both = 0;
+    for (int n = 0; n < 1500; n++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "events-deli-tier-%d", n);
+        bool got[2] = {false, false};
+        int roll = -1;
+        for (int ev = 0; ev < 2; ev++) {
+            memset(&open_now, 0, sizeof open_now);
+            open_now.delibirdy_common = (uint8_t)ev;
+            dstart(seed, 20 + (n % 150), &SRC);
+            gc_item_add(&run, "BERRY", BERRY_TYPE_SITRUS, run.party[1].b.id, 1);
+            int type = -1, tier = -1;
+            pr_rng copy = run.run.rng;   /* the tier roll the draw makes first: randSeedInt(128) with the weights 66, 40, 19, 3 and no history */
+            roll = pr_rng_seed_int(&copy, 66 + 40 + 19 + 3, 0);
+            if (!gc_mystery_select(&run, &type, &tier) || type != GC_ME_DELIBIRDY) continue;
+            CHECK_EQ(tier, GC_ME_GREAT);
+            got[ev] = true;
+        }
+        if (got[1] && !got[0]) { gained++; CHECK(roll <= 66); }                 /* only the event: a Common roll */
+        else if (got[0] && !got[1]) { lost++; CHECK(roll > 66 && roll <= 106); }   /* only without it: a Great roll */
+        else if (got[0] && got[1]) both++;
+    }
+    CHECK(gained > 5 && lost > 5);
+    /* the developer hook (a forced encounter) goes through the same tier, and records the encounter's own */
+    for (int ev = 0; ev < 2; ev++) {
+        memset(&open_now, 0, sizeof open_now);
+        open_now.delibirdy_common = (uint8_t)ev;
+        dstart("events-deli-force", 21, &SRC);
+        gc_item_add(&run, "BERRY", BERRY_TYPE_SITRUS, run.party[1].b.id, 1);
+        gc_debug_force_mystery(GC_ME_DELIBIRDY, 1);
+        int type = -1, tier = -1;
+        CHECK(gc_mystery_select(&run, &type, &tier));
+        gc_debug_force_mystery(-1, 1);
+        CHECK_EQ(type, GC_ME_DELIBIRDY);
+        CHECK_EQ(tier, GC_ME_GREAT);
+    }
+    CHECK_EQ(both, 0);   /* on one roll the tier is Common or Great, never both: the event moves it from one to the other */
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
     if (!only || !strcmp(only, "shiny")) shiny_section();
     if (!only || !strcmp(only, "luck")) luck_section();
     if (!only || !strcmp(only, "candy")) candy_section();
+    if (!only || !strcmp(only, "delibirdy")) delibirdy_section();
     if (!only || !strcmp(only, "voucher")) voucher_section();
     printf("events: %d checks, 0 failures\n", checks);
     return 0;

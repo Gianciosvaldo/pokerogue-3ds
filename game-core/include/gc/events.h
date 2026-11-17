@@ -17,6 +17,8 @@
 
 struct gc_run;
 
+#define GC_EVENT_BUFF_MAX 6   /* Delibird-y bonus items of all the open events together (custom-core's CC_TEVENT_BUFF_MAX) */
+
 typedef struct gc_event_effects {
     uint8_t shiny_encounter_mult;    /* a wild or trainer Pokemon's shiny odds x this (upstream getShinyEncounterMultiplier); 0 = x1 */
     uint8_t shiny_catch_mult;        /* a shiny target's catch-rate multiplier (getShinyCatchMultiplier); 0 = the non-event value */
@@ -24,6 +26,8 @@ typedef struct gc_event_effects {
     uint8_t luck_boost;              /* added to the party luck (getLuckBoost), the cap of 14 still applies; 0 = none */
     uint16_t trainer_shiny_chance;   /* a trainer's Pokemon's shiny threshold out of 65536 (getClassicTrainerShinyChance); 0 = none */
     uint8_t upgrade_vouchers;        /* getUpgradeUnlockedVouchers: nonzero = a defeated boss gives the upgraded voucher */
+    const char *delibirdy_buff[GC_EVENT_BUFF_MAX];   /* getDelibirdyBuff: modifierTypes keys the Delibird-y encounter may add as a bonus; ends at the first NULL */
+    uint8_t delibirdy_common;        /* mysteryEncounterTierChanges: the Delibird-y encounter is COMMON instead of GREAT */
 } gc_event_effects;
 
 typedef struct gc_event_source {
