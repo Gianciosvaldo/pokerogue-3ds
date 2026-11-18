@@ -54,7 +54,13 @@ int main(void)
             assert(id == (j < 17 ? j : 100 + j - 17));
             for (int k = 0; k < j; k++) assert(gc_achv_jojo_id(k) != id);
         }
-        assert(strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GIORNO)].name, "Giorno") && strstr(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].name, "Kars"));
+        assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GIORNO)].desc, "Defeat Giorno Giovanna.") && !strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].desc, "Defeat Kars."));
+        /* lorenzo's names (2026-11-18): each a title of its own, at most 63 characters (the achievement bar's 64-byte copy), no two the same */
+        assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].name, "Eventually, He Stopped Thinking") && !strcmp(gc_achv_defs[gc_achv_flawless_id(GC_JOJO_GIORNO)].name, "Primo Mafioso"));
+        for (int a = 0; a < GC_ACHV_COUNT; a++) {
+            assert(gc_achv_defs[a].name[0] && strlen(gc_achv_defs[a].name) <= 63);
+            for (int b = 0; b < a; b++) assert(strcmp(gc_achv_defs[a].name, gc_achv_defs[b].name) != 0);
+        }
         assert(strstr(gc_achv_defs[26].desc, "34"));   /* Every Face names the number */
     }
 
@@ -64,8 +70,9 @@ int main(void)
         assert(gc_achv_flawless_id(-1) == -1 && gc_achv_flawless_id(GC_JOJO_COUNT) == -1 && gc_achv_flawless_id(0) == 118 && gc_achv_flawless_id(33) == 151);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_flawless_id(j);
-            assert(gc_achv_defs[id].group == GC_ACHV_GROUP_JOJO && strncmp(gc_achv_defs[id].name, "Flawless ", 9) == 0);
-            assert(strstr(gc_achv_defs[id].desc, gc_achv_defs[gc_achv_jojo_id(j)].name) != NULL);   /* "Defeat <the same name> without ..." */
+            const char *base = gc_achv_defs[gc_achv_jojo_id(j)].desc;   /* "Defeat X." */
+            assert(gc_achv_defs[id].group == GC_ACHV_GROUP_JOJO && strncmp(gc_achv_defs[id].desc, base, strlen(base) - 1) == 0 &&
+                   strstr(gc_achv_defs[id].desc, "without any of your Pokemon fainting"));   /* "Defeat X without ..." */
             fresh();
             gc_achv_jojo_won(&S, j, 3, false);
             eval(NULL);
