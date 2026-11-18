@@ -1,57 +1,75 @@
 # PokeRogue for the Old 3DS
 
-A native C port of [PokeRogue](https://github.com/pagefaultgames/pokerogue) for the original Nintendo 3DS, with offline SD-card saves and optional custom content. The app runs real battles and run progression, and includes a separate Pokémon football mode.
+A native C port of [PokeRogue](https://github.com/pagefaultgames/pokerogue) for the original Nintendo 3DS, with offline SD-card saves and optional custom content. The app runs real battles and run progression, mystery encounters, Endless modes, a custom Classic (Bizarre) mode, and a separate Pokémon football mode.
 
-**Battle-core is still being completed.** This overview describes merged code through `414fde5` (2026-10-25), not exhaustive upstream parity or acceptance on every console. An older Windows builder contains the revision recorded in its `files/VERSION.txt`, not necessarily everything below.
+**Battle-core is still being completed.** This overview describes merged code through `d6abb21` (2026-11-18), not exhaustive upstream parity or acceptance on every console. Almost nothing listed below has been seen on a real console: each PR records what was tested on a host and what was not. An older Windows builder contains the revision recorded in its `files/VERSION.txt`, not necessarily everything below.
 
-**Code only:** Pokémon and PokeRogue art, music, fonts, logos and generated `.pak` files are built locally from pinned upstream sources for your own SD card. Do not commit or redistribute those assets. CI can provide the bare homebrew application; it still needs locally generated packs.
+**Code only for Pokémon content:** Pokémon and PokeRogue art, music, fonts, logos and generated `.pak` files are built locally from pinned upstream sources for your own SD card. Do not commit or redistribute those assets. CI can provide the bare homebrew application; it still needs locally generated packs. The custom pictures and music for the added characters are files the project owner supplied (see [sd-builder](sd-builder/README.md)); they are not Pokémon or PokeRogue content, and their licence is the owner's to settle.
 
-## Additions since October 4
+## Additions
 
-The demo has become an integrated run app. The [complete change index](docs/CHANGES-SINCE-2026-10-04.md) records all 301 intervening first-parent commits, including individual mechanics and fixes. The [previous README](docs/history/README-2026-10-04.md) is preserved as historical evidence.
+The demo has become an integrated run app. Two complete change indexes record every first-parent commit: [2026-10-04 to 10-25](docs/CHANGES-SINCE-2026-10-04.md) (301 entries) and [2026-10-25 to 11-18](docs/CHANGES-SINCE-2026-10-25.md) (263 entries), including individual mechanics and fixes. The earlier READMEs are preserved as historical evidence: [2026-10-04](docs/history/README-2026-10-04.md) and [2026-10-25](docs/history/README-2026-10-25.md).
+
+### Game modes
+
+- The **Mode** row of the New Game settings offers **Classic**, **Classic (Bizarre)**, **Endless** and **Endless (Spliced)**. Bizarre is the custom-content mode and replaces the old “Custom: yes/no” row. Bizarre and the Endless modes unlock by winning Classic, as upstream gates Endless; profiles with a recorded Classic win are recognized. Saves from the old Custom row load as Bizarre.
+- Endless covers the enemy buff phases, upstream’s starter rules (a 15-point budget, fusion for Spliced), clear rewards, the Eternatus item lock and learning/resume behavior at high waves. Native comparisons for the supported Endless waves are retained.
+- The final boss now plays its message, speech and music and transforms into Eternamax for the double-battle second phase; Inverse Battle and Challenge-mode naming are honored.
+- Gym Leaders, the Elite Four and Champions are restored in runs, with their Terastallization, abilities, forms and fixed moves; their teams are as strong as their round. The Town Youngster, evil-team grunts, admins and bosses are real fights with generator-accurate movesets. Some details are still missing; the PRs ([#509](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/509), [#510](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/510), [#520](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/520), [#536](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/536)) list them.
 
 ### Runs and presentation
 
-- Title screen, Continue/New Game/Load Game, five save slots, run renaming, Save and Quit, run history, game-over and Classic-clear results, unlocks, vouchers and ribbons. Saves retain backups and reject invalid data; saving is restricted to supported run boundaries.
-- Run-driven encounters, trainer battles, Classic rival fights and trainer dialogue, catching and full-party release, fleeing, experience, move learning, evolution choices, reward selection, shop rerolls and biome selection. Reward options use reward-core rather than the old fixed demonstration pool.
-- Doubles encounters and lure-driven encounter chances, separate commands and target selection, and undoing the first Pokémon’s selection. Doubles layout, sprite transitions and menu responsiveness have received fixes.
-- Battle music and animations, player/trainer presentation, boss HP segments, stat-stage inspection for your team and opponents, persistent key/foe item displays, held-item inspection, transfer and discard.
-- TM compatibility labels, cancellation and descriptions; PP Up display corrections; localized move-name and trapping-message fixes; slower ability-description scrolling; bottom-screen level-up stat changes; and fixes for menu/command stack crashes.
+- Title screen, Continue/New Game/Load Game, five save slots, run renaming, Save and Quit, run history, game-over and Classic-clear results, unlocks, vouchers and ribbons. Saves retain backups and reject invalid data; saving is restricted to supported run boundaries. A “Will you switch?” question at a wave’s start no longer drops the pending save when a run is loaded 3–5 waves back; waves with a mystery encounter are still not saved (documented gap).
+- Doubles: separate commands, a target choice drawn on the field (flash, foe first, tappable tiles), a corrected foe platform and layout, and fixes for a lone player Pokémon at turn end. X/Y in battle cycle the bottom-screen view and the game speed.
+- The player’s Terastallize command (button, icon in the info boxes, battle-sprite look); fused Pokémon (DNA Splicers) shown as both halves in battle and the party, with unsplice, candy and level-up handling; boss info box, HP-bar dividers and shields; stat-stage readouts that show what a stat really moved.
+- Run info pages with larger text over the whole 400×240 top screen; animations, ME screens and dialogue portraits that use the full top screen; an upstream-style achievement bar on any screen.
+- A **timed-event** panel on the title screen shows which events are on (see below).
 
-The app’s entry flow remains focused on ordinary Classic and Custom Runs. Core support for other modes and high-wave generation does not establish a complete selectable Daily/Endless/Challenge interface. See the [app README](game/README.md) for controls and implementation details.
+An attempted “Black 2” redesign of the battle bottom screen is **not** part of the app: it was reverted and remains an unmerged draft ([PR #680](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/680)).
 
-### Starters, eggs and persistent progression
+### Starters, eggs, shop and persistent progression
 
-- Starter filtering and sorting, plus pre-run customization of known moves, unlocked natures, shiny tiers and abilities, plus passive selection. Caught natures and natures obtained through mints persist in the profile.
-- Species candy from the implemented upstream catch, hatch and friendship owners. Candy can unlock a passive, purchase same-species eggs and reduce a starter’s cost twice. A custom direct hidden-ability purchase uses that species’ passive-unlock cost; species without a hidden ability do not offer it.
-- A luck display, profile unlock persistence and three scheduled Pokérus starters per three-hour period.
-- Voucher-based egg acquisition and victory-driven hatch progression, hatched Pokémon sprites and animation, egg-move information, and a nature/stat/IV radar display. Hatching updates the starter profile rather than adding the Pokémon directly to the active party.
-- IV Scanner prompts and persistent starter, candy, friendship and Classic-win records.
+- Starter filtering and sorting, customization of known moves, natures, shiny tiers, abilities and passives; L/ZL cycle caught forms and genders; teams over 10 points up to a 15-point budget; a fix for starter sprites that vanished at random.
+- Species candy, voucher-based egg acquisition, hatching with sprites and animation, a luck display and three scheduled Pokérus starters per three-hour period. Both Mega Stones of a species and the Kyurem/Calyrex form items appear in the shop, and the Lock Capsule’s Reroll works again with its lock on.
+- Mystery-encounter selection follows upstream’s rules, including per-run caps and biome lists; a bug that let almost no encounter type come up is fixed ([PR #614](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/614)).
+
+### Mystery encounters
+
+All 30 upstream encounter types are reachable. Encounters ported with upstream comparison tests include Dark Deal, Fight or Flight, Slumbering Snorlax, Training Session, Berries Abound, Delibird-y, the Global Trade System, Mysterious Challengers, Mysterious Chest, The Strong Stuff, Fiery Fallout, Teleporting Hijinks, Uncommon Breed, Dancing Lessons, Absolute Avarice, Safari Zone, The Winstrate Challenge, A Trainer’s Test, Clowning Around, Weird Dream (transformation, alternate-team fight, backdrop), Bug-Type Superfan, The Expert Pokémon Breeder, Trash to Treasure, Fun and Games and the no-battle families (Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can’t Refuse, the Pokémon Salesman). A real question screen draws each encounter’s intro, options, tooltips and party/move picks; check each PR for what was tested only on a host.
 
 ### Battle mechanics and fixes
 
-Merged work includes doubles callbacks such as Helping Hand, Acupressure, After You, partner cures/healing, redirection, Commander/Order Up and pledges; additional abilities, forms, Transform/copy behavior, suppression and switching interactions; and held-item acquisition, theft, loss and transfer owners, including Grip Claw, Baton, Mini Black Hole and Pickup.
-
-Further additions include Macho Brace growth and its 50-stack bonuses, Gimmighoul coin/evolution tracking, held form-item activation, Revival Blessing, Terastallization phases, and wider level/stat/damage/experience and save handling. Fury Cutter, Rollout and Echoed Voice retain their source-defined chains across waves when appropriate. Self-Destruct/Explosion user fainting and interrupted Dig/Fly/Dive/Phantom Force-style charge cleanup have regression coverage.
-
-Long-history work now preserves Last Resort, nonvirtual move queries, Protect streaks, Conversion 2/Lock-On searches and repeated-faint/Retaliate/trainer-Tera callers beyond earlier history-window limits. These proofs cover their documented boundaries; other finite histories and wide-level callers remain under audit.
+Beyond the October work (doubles callbacks, held-item owners, Terastallization phases, long-history proofs, Macho Brace, Revival Blessing and more): permanent maximum HP across recoil/costs/healing/Substitute/Healing Wish owners; the 48 public arena-tag keys; Tailwind callbacks through Court Change; Eviolite clones; Shedinja’s extra-party evolution and shared IVs; full TM history beyond 64 moves; weighted wild and boss movesets, including fused bosses; fused-Pokémon ability, type, move and candy handling; Multi Lens stacking; Fell Stinger stat-stage display; and customPokemonData types in `getTypes`.
 
 See the [battle-core README](battle-core/README.md), [completion checklist](battle-core/COMPLETION-CHECKLIST.md) and [deviation register](battle-core/DEVIATIONS.md). Encounter-end charge cancellation deliberately fixes user-reported behavior retained by the pinned upstream; its validation is recorded in [PR #409](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/409).
 
-### Custom Runs and football
+### Custom content
 
-- Custom Run Legacy reports record the final blow and support persistent Nemeses, radar, rematch scheduling, optional encounters and claims. Nemeses originate from Custom Runs. Report, roster and transaction persistence are integrated with the app.
-- The capsule machine supports voucher-to-egg transactions, reveal presentation and touch interaction, with durable transaction handling. Additional mystery encounter ports include Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can’t Refuse, the Pokémon Salesman and Fun and Games.
-- JoJo challengers in Classic (Bizarre) runs (34 characters; the first 17 of 2026-10-18/19, then 17 more of 2026-11-15, Caesar to Giorno): character/team tables, biome-based spawn policy (30% of the eligible waves), run-screen introductions and dialogue, sprite keys, and persisted encounter state (a 64-bit dealt mask).
-- The title’s Football entry opens a separate live 22-player mode: a 55-point profile-based draft, editable offense/defense lineups, movement, manual snaps, passing, running, tackling, coverage, 20 offensive plays and eight defensive schemes, a seven-round playoff, experience, evolution/move choices, shops and compatible Mega forms. It uses `football_live.sav`; START retains access to the older six-player mode and its `football.sav`. Ordinary run saves remain separate. See [live football controls and limits](football-core/LIVE.md).
+All of the following is the project owner’s own design, not upstream behavior, and is offered in Classic (Bizarre) runs unless noted.
+
+- **Rematches and Nemeses.** Custom Run Legacy reports record the final blow and support persistent Nemeses, a radar, rematch scheduling and claims. Since the Bizarre mode, rematches and the Nemesis radar apply to plain Classic **and** Bizarre runs (not Endless). A rematch Nemesis cannot be fled from or caught.
+- **Capsule machine.** Voucher-to-egg transactions with reveal presentation, touch interaction and durable transaction handling.
+- **JoJo challengers.** 34 characters (the first 17 from October; Caesar to Giorno added 2026-11-15) are drawn into eligible trainer waves of Bizarre runs at a 30% chance, each at most once a run and at most one per wave, with their own intro (“A Bizarre Foe appears!”), lines, teams and music. Their pictures are drawn at 1:1 so sprites up to 99 px are not cut. Persisted state is a 64-bit dealt mask.
+- **Stands and passives.** Pucci’s Made in Heaven (replacing a Speed Boost stand-in), DIO’s The World (time stops on one or two turns a battle, with its own sounds) and Kars’s Perfect Being (the last Pokémon nullifies physical damage and halves special).
+- **Pillar Men** (Esidisi, Wamuu, Kars) encounter, with silhouette screens and its own theme.
+- **D’Arby the Gambler** (Soul Poker; waves 40 and later, once per run, needs four or more Pokémon): a deck-and-wager card game on a table with face-down cards, a lie-detector callout that appears only after a loss, an “All-In” that opens a Master and a Rogue reward screen, and the achievement “Gambler’s Downfall”. The design that seals lost souls in chips and lets D’Arby return in a rematch is **not merged** ([PR #686](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/686), draft).
+- **Achievements.** 153 custom achievements (JoJo “Defeat X”, a “Flawless X” for each of the 34 challengers, “Twenty Faces”, run/collection/egg groups, trainer, region and football achievements, D’Arby’s) with an upstream-style bar and a list screen. Titles follow the owner’s own wording.
+- **Timed events** (the owner’s own events, driven by the console clock, not upstream’s event calendar): Lucky Catch, Sweet Tooth, Shiny Day (every 3rd day), Voucher Plus Day (every 2nd day), Shiny Trainers (13:00–14:00), Golden Hour (20:00–21:00), Charm Hour, Lucky Species Hour, Candy Jar Day, Delibirdy Day, Fusion Day, Waiting Room and Snowy Town. The numbers come from upstream’s own event effects at the pin; the days and hours are the owner’s draft and have not been tuned on hardware.
+- **Stand Arrow and Tonio’s Trattoria** (the other planned Bizarre-only encounters) are **not built**: they wait for the owner’s specs.
+
+### Football
+
+The title’s Football entry opens a separate live 22-player mode: a 55-point profile-based draft (a Pokémon per position), editable offense/defense lineups with pick-up-and-swap, movement, manual snaps, passing, running, tackling, coverage, 20 offensive plays and eight defensive schemes with audited coverage, kickoffs, punts, field goals, extra points, two-point tries and returns, and interceptions that stay live. The **Football Playoffs** are now thirteen matches (8 + 4 + 1) against the Kanto line-up with type teams and an opponent card; members gain friendship and ten levels per won round, evolve by their level (including species that never could), earn species candy for plays, and the shop sells evolution items, vitamins and Mega Stones; a won match gives an egg voucher (a Premium one for the title), and a finished playoff restarts by itself. Presentation includes a reworked stadium (turf, end zones, big side-on goal posts, benches, stands, crowd), route lines, sound effects and menus, and upbeat match music. It uses `football_live.sav`; START retains access to the older six-player mode and its `football.sav`. Ordinary run saves remain separate. See [live football controls and limits](football-core/LIVE.md).
 
 ## Validation and remaining work
 
 The replication target is upstream game `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales `270ed0a2938b2c3e2e34e7de940e84aecadf548b` and assets `87426a79611f9d212c4dc8af58e2834a05b93725`. This is not a claim of parity with today’s upstream beta. Recorded reference proofs use Node 22 where specified.
 
-[CI run 40207779956](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/40207779956) passed on main `9c9f6e0`: core/custom/save/football checks, app host tests, the actual ARM build and startup-stack checks. Normal tests remain required; only the dedicated custom-only Task63 check is skipped in the current work. Native upstream comparisons are separately recorded in feature validation reports and are not implied by a host test pass.
+This README does not cite a passing CI run for the current head of `main`: the last full CI run recorded on `main` is [run 40233368164](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/40233368164) (2026-10-25), and later work was validated on its own PR heads (CI was blocked by the repository’s GitHub Actions spending limit from 2026-11-17). Each PR records the commands and counts it ran. Native upstream comparisons are separately recorded in feature validation reports and are not implied by a host test pass.
 
 Battle-core still needs its complete enabled-source inventory reconciled with implementation and proof references, remaining fixed-size/overflow and received-hit histories audited, unresolved identity/form/fusion and phase callers closed, and wide-level Endless behavior validated across its owning callers. Full-run upstream comparisons and hardware acceptance remain separate from bounded source proofs. Read the [completion checklist](battle-core/COMPLETION-CHECKLIST.md) before describing battle-core as finished; older task tables and benchmark results are historical scopes, not a completion percentage.
+
+Known gaps in the app include mystery-encounter waves that are not saved, upstream achievements not yet ported, and the evil-team and gym details listed in the PRs named above.
 
 ## Repository layout
 
@@ -62,8 +80,8 @@ Battle-core still needs its complete enabled-source inventory reconciled with im
 | [run-core](run-core/README.md) | Encounter, trainer, wave and enemy generation |
 | [ai-core](ai-core/README.md) | Enemy command selection and scoring |
 | [reward-core](reward-core/README.md) | Reward generation and application |
-| [game-core](game-core/README.md) | Integrated run orchestration, progression, profile data and saves |
-| [custom-core](custom-core/README.md) | Legacy/Nemesis data, reducer, codec, scheduling and custom trainer policy |
+| [game-core](game-core/README.md) | Integrated run orchestration, progression, mystery encounters, profile data and saves |
+| [custom-core](custom-core/README.md) | Legacy/Nemesis data, reducer, codec, scheduling, JoJo roster, timed events and custom trainer policy |
 | [football-core](football-core/LIVE.md) | Separate live football engine and career integration |
 | [assets-pipeline](assets-pipeline/README.md) | Local upstream asset/data pack generation and shared renderer/loaders |
 | [sd-builder](sd-builder/README.md) | Windows builder, local asset setup and SD-card installation |
@@ -81,7 +99,7 @@ docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
 
 The whole repository is mounted because the app links its logic cores. `game/` is the current app; `assets-pipeline/app-src/` supplies shared renderer, pack, audio and save support, while its own entry point is an older demo.
 
-On Windows, follow the [SD builder instructions](sd-builder/README.md) to generate assets and prepare a local installation. Elsewhere, use `assets-pipeline/build_sd.py` as described in the [asset pipeline](assets-pipeline/README.md). This documentation update does not publish a new builder or bundle copyrighted packs.
+On Windows, follow the [SD builder instructions](sd-builder/README.md) to generate assets and prepare a local installation (the builder also produces a one-file `.3dsx` or `.cia` with the packs inside). Elsewhere, use `assets-pipeline/build_sd.py` as described in the [asset pipeline](assets-pipeline/README.md). This documentation update does not publish a new builder or bundle copyrighted packs.
 
 Representative host checks are:
 
