@@ -18,13 +18,13 @@
   "{" \
   "\"intro\":\"A well-dressed man sits at a small table, shuffling a deck of cards. He's been waiting for you.\"," \
   "\"title\":\"D'Arby the Gambler\"," \
-  "\"description\":\"\\\"One hand of Soul Poker, trainer. Your Pokemon against my cards. Win, and I pay handsomely. Lose, and the souls you wagered are mine.\\\"\"," \
+  "\"description\":\"\\\"One hand of Soul Poker, trainer. Your Pokemon against my cards. Win, and I pay handsomely. Lose, and the souls you wagered are mine... until you beat me at my own game.\\\"\"," \
   "\"query\":\"Will you play?\"," \
   "\"option\":{" \
   "\"1\":{\"label\":\"Wager one soul\"," \
-  "\"tooltip\":\"(-) Lose 1 Pokemon if you lose (+) 2 Rarer Candy and 2 vitamins of your choice\"}," \
+  "\"tooltip\":\"(-) If you lose, 1 Pokemon is sealed until you beat him later (+) 2 Rarer Candy and 2 vitamins of your choice\"}," \
   "\"2\":{\"label\":\"Go all in\"," \
-  "\"tooltip\":\"(-) Lose 3 Pokemon if you lose (+) A Big Nugget, a Master-tier and a Rogue-tier reward screen\"}," \
+  "\"tooltip\":\"(-) If you lose, 3 Pokemon are sealed until you beat him later (+) A Big Nugget, a Master-tier and a Rogue-tier reward screen\"}," \
   "\"3\":{\"label\":\"Walk away\"," \
   "\"tooltip\":\"(-) Nothing happens\"," \
   "\"selected\":\"You leave D'Arby to his cards.\"}}," \
@@ -33,7 +33,7 @@
   "\"query\":\"Choose the Pokemon you will play.\"}," \
   "\"accuse\":{\"query\":\"What will you do?\"," \
   "\"option\":{" \
-  "\"1\":{\"label\":\"Accept the Deal\",\"tooltip\":\"(-) D'Arby seals the souls you wagered in his chips (+) Beat him when he comes back to win them back\"}," \
+  "\"1\":{\"label\":\"Accept the Deal\",\"tooltip\":\"(-) D'Arby seals the souls you wagered in his chips (+) He will challenge you again later: beat him to win them back\"}," \
   "\"2\":{\"label\":\"You Cheated!\",\"tooltip\":\"(+) If he cheated, you win the full reward (-) If he didn't, the souls are lost for good\"}}}," \
   "\"vitamin\":{\"query\":\"Choose a vitamin to give. ({{vitaminsLeft}} left)\"}," \
   "\"line\":{\"1\":\"\\\"I've already made my move. Show me yours.\\\"\",\"2\":\"\\\"Fate has already decided this hand.\\\"\"}," \
@@ -51,7 +51,7 @@
   "\"caught\":\"The swapped card slips from D'Arby's sleeve!\"," \
   "\"falseCall\":\"D'Arby smiles. \\\"An honest hand, trainer. Those souls are mine for good.\\\"\"," \
   "\"soulTaken\":\"{{pokemonName}}'s soul is lost to D'Arby for good.\"," \
-  "\"soulSealed\":\"{{pokemonName}}'s soul is sealed in one of D'Arby's poker chips.\"}," \
+  "\"soulSealed\":\"{{pokemonName}}'s soul is sealed in one of D'Arby's poker chips. Beat him when he returns to win it back.\"}," \
   "\"rematch\":{" \
   "\"query\":\"D'Arby's chip holds {{pokemonName}}. Take it back?\"," \
   "\"option\":{" \
