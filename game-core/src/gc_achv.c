@@ -171,7 +171,7 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Not a Single Frog Fell", "Defeat Weather Report without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Infinite Rotation", "Defeat Johnny Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"In a Flawless Way", "Defeat Sandman without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
-    {"not so Scary Monsters", "Defeat Diego Brando without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Not so Scary Monsters", "Defeat Diego Brando without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Not a Single Coin Dropped", "Defeat Shigechi without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Nothing Left to Fix", "Defeat Josuke Higashikata without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"I Refuse", "Defeat Rohan Kishibe without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
