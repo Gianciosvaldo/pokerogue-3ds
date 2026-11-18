@@ -47,6 +47,7 @@ static const char* const NS[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM] = "globalTradeSystem",
     [GC_ME_THE_EXPERT_POKEMON_BREEDER] = "theExpertPokemonBreeder",
     [GC_ME_PILLAR_MEN] = "pillarMen",
+    [GC_ME_DARBY] = "darby",              /* lorenzo's own: D'Arby the Gambler, its dialogue compiled in (custom_texts.h) */
 };
 
 /* The Pillar Men are lorenzo's own encounter (custom runs): no upstream locale file, so their texts are here. The three silhouettes are
@@ -204,6 +205,7 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_TUTOR) return;   /* the Bug-type move tutor after the win: battleWon came as an event, the intro is over */
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_SAFARI) return;   /* the Safari Zone's actions: the Pokemon's messages came as events, the intro is over */
   if (gc_run_screen(run)->me_stage == GC_ME_STAGE_ABILITY) return;   /* Clowning Around's ability swap offer: the clown's lines and the prompt came as events */
+  if (gc_run_screen(run)->me_stage >= GC_ME_STAGE_DARBY_SOUL) return;  /* D'Arby's hand after the wager: his lines came as events */
   char t[ME_TEXT_LEN * 2];
   if (fmt("intro", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
@@ -232,6 +234,7 @@ static const struct {
   intro_cfg c[INTRO_MAX];
 } INTRO[] = {
     {GC_ME_DARK_DEAL, 2, {{'M', "dark_deal_scientist", 0, 0, 0, 0}, {'M', "dark_deal_porygon", 0, 0, 0, 0}}},
+    {GC_ME_DARBY, 1, {{'T', "custom/darby", 0, 0, 0, 0}}},   /* lorenzo's own sprite (sd-builder/extra-images/trainer/custom/darby.png) */
     {GC_ME_MYSTERIOUS_CHEST, 1, {{'M', "mysterious_chest_blue", 0, 8, 0, 0}}},
     {GC_ME_DEPARTMENT_STORE_SALE, 2, {{'M', "department_store_sale_lady", -20, 0, 0, 0}, {0, "", 30, 0, 0, 0}}},
     {GC_ME_SHADY_VITAMIN_DEALER, 2, {{0, "", 24, 0, 1.1f, 0}, {'M', "shady_vitamin_dealer", -12, 3, 0, 0}}},
@@ -302,12 +305,20 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
   return 0;
 }
 
+static int g_darby_pose;
+void me_flow_set_darby_pose(int pose) { g_darby_pose = pose; }
+
 int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max)
 {
   const int type = run->mystery_type;
   if (type == GC_ME_A_TRAINERS_TEST) return me_flow_trtest_sprites(run, 160, 164, out, max);
   if (type == GC_ME_PILLAR_MEN) return 0;   /* its silhouettes belong to the window */
-  return me_flow_intro_sprites(type, 160, 164, out, max);
+  const int n = me_flow_intro_sprites(type, 160, 164, out, max);
+  if (type == GC_ME_DARBY && n > 0 && g_darby_pose) {   /* the same bottom centre: the three PNGs are laid out so the table stays put */
+    snprintf(out[0].alt, sizeof out[0].alt, "%s", out[0].key);
+    snprintf(out[0].key, sizeof out[0].key, "images/trainer/custom/%s", g_darby_pose == 1 ? "darby_victorious" : "darby_defeated");
+  }
+  return n;
 }
 
 /* A Trainer's Test's spriteConfigs (onInit): the stat trainer's signature Pokemon (x 22, y -2) and the trainer (x -24, y 4), both with their shadow */
@@ -398,6 +409,12 @@ static void finish(int option, int b, int c)
     void (*tutor_cb)(const me_choice*, void*) = F.on_choice;
     void* tutor_arg = F.arg;
     if (tutor_cb) tutor_cb(&ch, tutor_arg);
+    return;
+  }
+  if (F.run && gc_run_screen(F.run)->me_stage >= GC_ME_STAGE_DARBY_SOUL) {   /* D'Arby's stages: the core says every line itself */
+    void (*darby_cb)(const me_choice*, void*) = F.on_choice;
+    void* darby_arg = F.arg;
+    if (darby_cb) darby_cb(&ch, darby_arg);
     return;
   }
   if (F.run && gc_run_screen(F.run)->me_stage == GC_ME_STAGE_ABILITY) {   /* Yes (with the Pokemon) or No: the core says "abilityGained" and the outro itself */
@@ -679,12 +696,38 @@ static void on_member_back(void* arg)
   open_question(F.option);
 }
 
+static void species_sprite(int species, int form_index, bool shiny, me_intro_sprite* o);
+
 static void open_members(void)
 {
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a Pokemon.");
+  const int stage = gc_run_screen(F.run)->me_stage;
+  if (stage == GC_ME_STAGE_DARBY_SOUL) fmt("soul.query", NULL, 0, false, a.query, sizeof a.query);
+  if (stage == GC_ME_STAGE_DARBY_CARD) {
+    /* his six cards, named here: one message holds at most five tokens */
+    static char cards[6 * 40];
+    cards[0] = 0;
+    const gc_screen* sc = gc_run_screen(F.run);
+    for (int i = 0; i < sc->n_me_args; i++)
+      if (sc->me_args[i].name && !strncmp(sc->me_args[i].name, "card", 4) && sc->me_args[i].kind == PR_ARG_POKEMON_NAME) {
+        const size_t l = strlen(cards);
+        snprintf(cards + l, sizeof cards - l, "%s%s", l ? ", " : "", i18n_species_name((int)(sc->me_args[i].v >> 16)));
+      }
+    /* the six face up across the top screen, half size (lorenzo: the "cards" are the Pokemon themselves) */
+    for (int i = 0, k = 0; i < sc->n_me_args && a.n_intro < ME_MAX_INTRO; i++)
+      if (sc->me_args[i].name && !strncmp(sc->me_args[i].name, "card", 4) && sc->me_args[i].kind == PR_ARG_POKEMON_NAME) {
+        me_intro_sprite* o = &a.intro[a.n_intro++];
+        species_sprite((int)(sc->me_args[i].v >> 16), (int)((sc->me_args[i].v >> 8) & 0xff), false, o);
+        o->x = 160 + (k++ - 2.5f) * 52;
+        o->scale = 0.5f;
+      }
+    const pr_msg_arg deck = {.name = "cards", .kind = PR_ARG_STR, .s = cards};
+    fmt("card.description", &deck, 1, false, a.description, sizeof a.description);
+    fmt("card.query", NULL, 0, false, a.query, sizeof a.query);
+  }
   for (int i = 0; i < F.run->n_party && a.n < ME_MAX_OPTIONS; i++) {
     const int slot = slot_of(i);
     const gc_mon* m = &F.run->party[slot];
@@ -693,7 +736,7 @@ static void open_members(void)
     a.options[a.n].ok = gc_mystery_member_ok(F.run, F.option, slot);
     a.n++;
   }
-  a.can_back = true;
+  a.can_back = stage != GC_ME_STAGE_DARBY_SOUL && stage != GC_ME_STAGE_DARBY_CARD;   /* D'Arby's soul and card pickers are the whole screen */
   a.on_pick = on_member;
   a.on_back = on_member_back;
   if (!me_screen_open(&a)) finish(F.option, 0, 0);
@@ -741,27 +784,26 @@ static void open_tutor(int cursor)
   if (!me_screen_open(&a)) finish(4, 0, 0);
 }
 
-/* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
- * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
-static void safari_sprite(const gc_mon* e, me_intro_sprite* o)
+/* a Pokemon's intro sprite (its form's, the shiny one first with the plain one as the fallback): the Safari Zone's Pokemon and D'Arby's card screen */
+static void species_sprite(int species, int form_index, bool shiny, me_intro_sprite* o)
 {
   const pr_species* sp = NULL;
   for (int lo = 0, hi = PR_SPECIES_COUNT - 1; lo <= hi && !sp;) {
     const int mid = (lo + hi) / 2;
-    if (pr_species_table[mid].id == e->b.species) sp = &pr_species_table[mid];
-    else if (pr_species_table[mid].id < e->b.species) lo = mid + 1;
+    if (pr_species_table[mid].id == species) sp = &pr_species_table[mid];
+    else if (pr_species_table[mid].id < species) lo = mid + 1;
     else hi = mid - 1;
   }
   const char* fk = "";
   if (sp && sp->nforms > 1) {
-    const int form = e->b.form >= sp->nforms ? sp->nforms - 1 : e->b.form;
+    const int form = form_index >= sp->nforms ? sp->nforms - 1 : form_index;
     if (pr_forms[sp->form0 + form].form_key) fk = pr_forms[sp->form0 + form].form_key;
   }
   char plain[ME_SPRITE_LEN];
-  if (*fk) snprintf(plain, sizeof plain, "images/pokemon/%d-%s", (int)e->b.species, fk);
-  else snprintf(plain, sizeof plain, "images/pokemon/%d", (int)e->b.species);
+  if (*fk) snprintf(plain, sizeof plain, "images/pokemon/%d-%s", species, fk);
+  else snprintf(plain, sizeof plain, "images/pokemon/%d", species);
   memset(o, 0, sizeof *o);
-  if (e->b.shiny) {
+  if (shiny) {
     snprintf(o->key, sizeof o->key, "images/pokemon/shiny/%s", plain + strlen("images/pokemon/"));
     snprintf(o->alt, sizeof o->alt, "%s", plain);
   } else {
@@ -771,6 +813,10 @@ static void safari_sprite(const gc_mon* e, me_intro_sprite* o)
   o->y = 164;
   o->scale = 1.0f;
 }
+
+/* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
+ * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
+static void safari_sprite(const gc_mon* e, me_intro_sprite* o) { species_sprite(e->b.species, e->b.form, e->b.shiny, o); }
 
 static void open_safari(int cursor)
 {
@@ -814,9 +860,50 @@ static void open_ability(int cursor)
   if (!me_screen_open(&a)) finish(1, 0, 0);
 }
 
+/* D'Arby the Gambler after the wager (custom content): the soul and card pickers are party screens of their own; after a lost hand Accept the Deal or You
+ * Cheated!; after a Standard win the six vitamins, each then asks for a Pokemon */
+static void open_darby(int cursor)
+{
+  const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage == GC_ME_STAGE_DARBY_SOUL || s->me_stage == GC_ME_STAGE_DARBY_CARD) {
+    F.option = 0;
+    open_members();
+    return;
+  }
+  static me_args a; /* static, as the others: me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  if (s->me_stage == GC_ME_STAGE_DARBY_ACCUSE) {
+    fmt("accuse.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < 2; i++) {
+      char sub[48];
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      snprintf(sub, sizeof sub, "accuse.option.%d.label", i + 1);
+      fmt(sub, NULL, 0, false, o->label, sizeof o->label);
+      snprintf(sub, sizeof sub, "accuse.option.%d.tooltip", i + 1);
+      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+    }
+  } else {   /* GC_ME_STAGE_DARBY_VITAMIN */
+    fmt("vitamin.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < s->n_options && i < 6; i++) {
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      const gm_item_ui* it = gm_item_ui_find("BASE_STAT_BOOSTER", i);
+      snprintf(o->label, sizeof o->label, "%s", it && it->name ? it->name : "Vitamin");
+      if (it && it->desc) snprintf(o->tooltip, sizeof o->tooltip, "%s", it->desc);
+    }
+  }
+  a.cursor = cursor >= 0 && cursor < a.n ? cursor : 0;
+  a.can_back = false;
+  a.on_pick = on_option;
+  if (!me_screen_open(&a)) finish(0, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage >= GC_ME_STAGE_DARBY_SOUL) { open_darby(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_ABILITY) { open_ability(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }
@@ -862,6 +949,10 @@ static void open_question(int cursor)
     }
   if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites(F.run, 160, 164, a.intro, ME_MAX_INTRO);
   else if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
+  if (F.type == GC_ME_DARBY && a.n_intro > 0) {   /* lorenzo 2026-11-17: the platform shows darby.png, the encounter screen his more expressive darby_screen.png (the platform one if it is missing) */
+    snprintf(a.intro[0].alt, sizeof a.intro[0].alt, "%s", a.intro[0].key);
+    snprintf(a.intro[0].key, sizeof a.intro[0].key, "images/trainer/custom/darby_screen");
+  }
   a.can_back = false;
   a.on_pick = on_option;
   if (!me_screen_open(&a)) finish(0, 0, 0);

@@ -1,5 +1,5 @@
 /* The developer hook gc_debug_force_mystery (rundriver.txt "mystery="): off by default, forces one chosen encounter once per run on the first plain wave from min_wave on,
- * never on a multiple of 10, only when the encounter's own party rules hold, and never in a custom run. */
+ * never on a multiple of 10, only when the encounter's own party rules hold, and never in a custom run except for lorenzo's own encounters (mystery_darby_test test_forced). */
 #include "../src/internal.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -12,7 +12,8 @@
  * A line "mystery=<name or number>[,<wave>]" (for example "mystery=weirdDream" or "mystery=weirdDream,30") makes the first plain wave from <wave>
  * on (default 1, never a multiple of 10) that encounter, once per run, whatever its own wave window or rarity, so a Rogue-tier one can be played
  * without waiting for the draw; its party rules still apply (Weird Dream needs three Pokemon). The name is the locale namespace (me_flow.c).
- * Classic runs only; Custom runs ignore it. Debug only: the line is absent on a normal install.
+ * Classic runs only; Custom runs ignore it, except for lorenzo's own Bizarre encounters ("mystery=darby,5" in a Bizarre run with four Pokemon).
+ * Debug only: the line is absent on a normal install.
  * With no such line the encounters spawn by upstream's own rules (waves, weights, biomes, spawn chance): the hook is off.
  *
  * START + SELECT quits.

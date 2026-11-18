@@ -469,6 +469,11 @@ static bv_mon make_mon(const gc_mon* m, bool player) {
   return out;
 }
 
+static void field_sprites(void) {
+  static me_intro_sprite me_sp[ME_MAX_INTRO];
+  bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
+}
+
 static void preload_moves(void) {
   for (int i = 0; i < G.run.n_party; i++)
     for (int k = 0; k < PR_N_MOVES(&G.run.party[i].b); k++) ba_preload_move(PR_MOVES(&G.run.party[i].b)[k]);
@@ -584,10 +589,7 @@ static void wave_black(void* arg) {
   }
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
-  if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) {   /* the encounter's own sprites on the platform */
-    static me_intro_sprite me_sp[ME_MAX_INTRO];
-    bv_me_intro(me_sp, me_flow_field_sprites(&G.run, me_sp, ME_MAX_INTRO));
-  }
+  if (mystery && G.run.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !G.run.me_battle) field_sprites();   /* the encounter's own sprites on the platform */
   /* after the Pokemon's sprites, which need texture memory in big pieces: the preload is only a guess at what will play */
   preload_moves();
   refresh_item_bars();
@@ -736,6 +738,27 @@ static bool handle_event(int i) {
         break;
       }
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
+      /* D'Arby's table: his first line deals the two face-down cards (he slides off), each reveal line turns its card over */
+      if (msg_is(e, "mysteryEncounters/darby:line.1") || msg_is(e, "mysteryEncounters/darby:line.2")) {
+        int idx, species, form;
+        if (gc_darby_table(&G.run, &idx, &species, &form)) {
+          bv_mon mine, his;
+          memset(&his, 0, sizeof his);
+          mine = idx >= 0 && idx < G.run.n_party ? make_mon(&G.run.party[idx], true) : his;
+          his.species = species;
+          his.form = form;
+          bv_darby_deal(&mine, &his);
+        }
+      }
+      if (msg_is(e, "mysteryEncounters/darby:reveal.player")) bv_darby_reveal(0);
+      if (msg_is(e, "mysteryEncounters/darby:reveal.darby")) bv_darby_reveal(1);
+      /* D'Arby on the platform after the callout (lorenzo 2026-11-17): his Stand beside him when the player loses (the souls are taken, or a false
+       * call), collapsed when the player wins (a straight win, or a caught cheat) */
+      {
+        const bool lost = msg_is(e, "mysteryEncounters/darby:result.soulTaken") || msg_is(e, "mysteryEncounters/darby:result.falseCall");
+        const bool won = msg_is(e, "mysteryEncounters/darby:result.win") || msg_is(e, "mysteryEncounters/darby:result.caught");
+        if (lost || won) { bv_darby_clear(); me_flow_set_darby_pose(won ? 2 : 1); field_sprites(); }   /* the cards go, he slides back in */
+      }
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
 
@@ -759,6 +782,7 @@ static bool handle_event(int i) {
       break;
 
     case GC_EV_WAVE:
+      me_flow_set_darby_pose(0);   /* a new wave: D'Arby sits at his table again (the pose is only for his result lines) */
       begin_wave(i);
       return true;
 
@@ -940,6 +964,7 @@ static bool handle_event(int i) {
     }
 
     case GC_EV_MYSTERY: /* the encounter's own intro is said when its screen comes (mystery_screen) */
+      me_flow_set_darby_pose(0);
       break;
 
     case GC_EV_SAVE_POINT:

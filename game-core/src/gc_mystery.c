@@ -50,6 +50,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,1,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,1,4,(1u<<9),0,0},
     [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
+    [GC_ME_DARBY]                   = {GC_ME_ULTRA, 40,INT16_MAX,1,4,0,0,0},   /* lorenzo's own (Bizarre runs): wave 40+, no last wave, any biome, a party of four, once per run */
 };
 
 /* mysteryEncountersByBiome (mystery-encounter-biomes.ts): the biome's own entries, then the non-extreme, human-transitable, civilization and any-biome groups. Compared with
@@ -79,6 +80,7 @@ static bool biome_has_id(int b, int type)
     case GC_ME_TRAINING_SESSION: case GC_ME_DELIBIRDY: case GC_ME_A_TRAINERS_TEST:
     case GC_ME_TRASH_TO_TREASURE: case GC_ME_BERRIES_ABOUND: case GC_ME_CLOWNING_AROUND:
     case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS: case GC_ME_UNCOMMON_BREED:
+    case GC_ME_DARBY:
         return true; /* all biomes */
     case GC_ME_SLUMBERING_SNORLAX:
         return b == BIOME_ID_PLAINS || b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS;
@@ -167,6 +169,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_BUG_TYPE_SUPERFAN && option == 2) return gc_superfan_pick_ok(run, idx);
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);
+    if (type == GC_ME_DARBY) return gc_darby_pick_ok(run, option, idx);
     return false;
 }
 
@@ -197,7 +200,8 @@ static bool available_ex(const gc_run *r, int type, int tier, bool force)
     if (!force && q->money_mult > 0 && r->money < pr_run_get_wave_money_amount(r->wave, q->money_mult)) return false;
 
     /* Encounter-level requirements whose state already exists in game-core. */
-    if (type == GC_ME_PILLAR_MEN && !gc_pillar_offered(r)) return false;
+    /* the encounters that are lorenzo's own (Pillar Men and every type after it) are on offer only in the runs the app's hook calls Bizarre */
+    if (type >= GC_ME_UPSTREAM_COUNT && !gc_pillar_offered(r)) return false;
     if (type == GC_ME_ABSOLUTE_AVARICE && !gc_avarice_spawnable(r)) return false;
     if (type == GC_ME_SHADY_VITAMIN_DEALER && !any_over_half_hp(r)) return false;
 
@@ -214,13 +218,15 @@ static bool available_ex(const gc_run *r, int type, int tier, bool force)
 static bool available(const gc_run *r, int type, int tier) { return available_ex(r, type, tier, false); }
 
 /* Developer hook (sdmc:/3ds/pokerogue/rundriver.txt "mystery="): the first plain wave from `min_wave` on, once per run, becomes this encounter, so a Rogue-tier one can be played
- * without waiting for the draw. Off (type -1) unless the app sets it; custom runs never use it. */
+ * without waiting for the draw. Off (type -1) unless the app sets it; custom runs only use it for the custom encounters (gc_debug_mystery_custom). */
 static int force_type = -1, force_min_wave = 1;
 void gc_debug_force_mystery(int type, int min_wave)
 {
     force_type = type >= 0 && type < GC_ME_COUNT ? type : -1;
     force_min_wave = min_wave > 1 ? min_wave : 1;
 }
+/* lorenzo's own encounters (D'Arby) only exist in Bizarre runs, which are custom runs: the hook reaches custom runs for those alone */
+bool gc_debug_mystery_custom(void) { return force_type >= GC_ME_UPSTREAM_COUNT; }
 bool gc_debug_mystery_pending(const gc_run *run, int wave)
 {
     if (force_type < 0 || wave < force_min_wave || wave % 10 == 0) return false;
@@ -539,6 +545,9 @@ static void setup_texts(gc_run *run)
         screen_arg(s, name);
         break;
     }
+    case GC_ME_DARBY:
+        s->option_pick[GC_DARBY_STANDARD] = GC_PICK_MEMBER;   /* the Standard wager's one soul; All-In asks for its three after the choice */
+        break;
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -641,7 +650,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND: case GC_ME_DELIBIRDY:
-    case GC_ME_BUG_TYPE_SUPERFAN:
+    case GC_ME_BUG_TYPE_SUPERFAN: case GC_ME_DARBY:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -1433,6 +1442,11 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         gc_pillar_execute(run, option);
         return true;
 
+    case GC_ME_DARBY:
+        if (option == GC_DARBY_STANDARD && !gc_darby_pick_ok(run, option, b)) { *why = "no such Pokemon"; *ok = false; return false; }
+        gc_darby_execute(run, option, option == GC_DARBY_STANDARD ? b : -1);
+        return true;
+
     case GC_ME_MYSTERIOUS_CHALLENGERS:
         gc_mc_execute(run, option);
         return true;
@@ -1581,6 +1595,7 @@ void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }
 void gc_me_apply_damage(gc_mon *m, int damage) { me_apply_damage(m, damage); }
 
 void gc_me_leave(gc_run *run) { end_mystery_encounter_leave(run); }
+void gc_me_give_vitamin(gc_run *run, int idx, int stat) { if (idx >= 0 && idx < run->n_party && stat >= 0 && stat < 6) me_give_vitamin(run, idx, stat); }
 
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move)
 {

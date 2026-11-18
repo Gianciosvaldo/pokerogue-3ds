@@ -193,6 +193,8 @@ static struct {
   bool trainer_visible;
   me_intro_sprite me_sp[ME_MAX_INTRO];   /* bv_me_intro */
   int me_n;
+  /* D'Arby's table (bv_darby_*): the two face-down cards on the platforms, the Pokemon each one hides, D'Arby sliding off and back */
+  struct { bool on; char key[2][96]; float scale[2]; double t_deal, t_back, t_reveal[2]; } darby;
   float trainer_show_ms; /* BEV_TRAINER_SHOW: ms into the defeated trainer's slide back in, 0 = not sliding */
   bool player_trainer_visible, opening_summon;
   /* BEV_DIALOGUE: the talk's copies of its strings (one per event of a chunk), the darkening of the field behind the portrait
@@ -854,6 +856,67 @@ static void draw_trainers(void) {
 
 /* The encounter's intro sprites: the container is at (228, 76) once it has slid in with the enemy platform (+300 from -72, EncounterPhase), the sprites
  * at their own offsets from it. me_flow places them for a 320 wide field with the feet at y 164 and the container's x at 160 (its +4 origin included). */
+/* D'Arby's table (lorenzo 2026-11-17): when the cards are dealt he slides off to the right and a face-down card lies on each platform (his turned
+ * 180 degrees, so the two face each other); each reveal line fades its card away and the Pokemon under it stands on the platform; when the
+ * result comes the cards and Pokemon are gone and he slides back in (with his victorious or defeated pose). Times in ui_now() ms. */
+#define DARBY_SLIDE_MS 500.0
+#define DARBY_FADE_MS 400.0
+static float darby_u(double t0, double ms) {
+  if (t0 <= 0) return 0;
+  const double u = (ui_now() - t0) / ms;
+  return u <= 0 ? 0 : u >= 1 ? 1 : (float)u;
+}
+/* how far right of his place D'Arby's sprites are: off the screen while the cards are on the table */
+static float darby_slide(void) {
+  if (B.darby.on) return 200 * ease(EASE_CUBIC_IN_OUT, darby_u(B.darby.t_deal, DARBY_SLIDE_MS));
+  if (B.darby.t_back > 0) return 200 * (1 - ease(EASE_CUBIC_IN_OUT, darby_u(B.darby.t_back, DARBY_SLIDE_MS)));
+  return 0;
+}
+/* one platform's card and the Pokemon under it: k 0 the player's (back sprite), 1 his */
+static void draw_darby_spot(int k) {
+  if (!B.darby.on) return;
+  const bool player = k == 0;
+  const float x = player ? 106 : 236 + B.enemy_slide, y = player ? PLAYER_Y : 84 - foe_raise();
+  const float fade = darby_u(B.darby.t_reveal[k], DARBY_FADE_MS);
+  if (B.darby.t_reveal[k] > 0 && B.darby.key[k][0]) {
+    const rr_frame* f = img_anim_frame(B.darby.key[k], (int)(ui_now() * 10 / 1000));
+    if (f) {
+      rr_draw_opts o = RR_DEFAULT_OPTS;
+      o.origin_x = 0.5f;
+      o.origin_y = 1;
+      o.scale_x = o.scale_y = B.darby.scale[k];
+      rr_draw(f, x, y, &o);
+    }
+  }
+  if (fade >= 1) return;
+  const rr_frame* c = img_anim_frame(player ? "images/trainer/custom/darby_card" : "images/trainer/custom/darby_card_his", 0);
+  if (!c) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = o.origin_y = 0.5f;   /* the card lies on the platform, centred where the Pokemon's feet go */
+  o.tint = RR_RGBA(255, 255, 255, (int)(255 * (1 - fade) + 0.5f));
+  const float z = field_zoom_cur;   /* lorenzo's art 1:1 (draw_me_intro) */
+  if (z != 1) rr_set_zoom(1, 160, 132);
+  rr_draw(c, 160 + (x - 160) * z, 132 + (y - 132) * z, &o);
+  if (z != 1) rr_set_zoom(z, 160, 132);
+}
+
+void bv_darby_deal(const bv_mon* mine, const bv_mon* his) {
+  memset(&B.darby, 0, sizeof B.darby);
+  B.darby.on = true;
+  B.darby.t_deal = ui_now();
+  if (mine && mine->species > 0) { sprite_key(mine, true, B.darby.key[0], sizeof B.darby.key[0]); B.darby.scale[0] = get_mon_scale(mine); }
+  if (his && his->species > 0) { sprite_key(his, false, B.darby.key[1], sizeof B.darby.key[1]); B.darby.scale[1] = get_mon_scale(his); }
+}
+void bv_darby_reveal(int k) {
+  if (B.darby.on && k >= 0 && k < 2 && B.darby.t_reveal[k] <= 0) B.darby.t_reveal[k] = ui_now();
+}
+void bv_darby_clear(void) {
+  if (!B.darby.on) return;
+  memset(&B.darby, 0, sizeof B.darby);
+  B.darby.t_back = ui_now();
+}
+bool bv_darby_table(void) { return B.darby.on; }
+
 static void draw_me_intro(void) {
   for (int i = 0; i < B.me_n; i++) {
     const me_intro_sprite* s = &B.me_sp[i];
@@ -866,7 +929,16 @@ static void draw_me_intro(void) {
     o.scale_x = o.scale_y = s->scale > 0 ? s->scale : 1;
     const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
     o.tint = RR_RGBA(v, v, v, 255);
-    rr_draw(f, 228 + B.enemy_slide + (s->x - 160), 76 + (s->y - 164), &o);
+    const float x = 228 + B.enemy_slide + darby_slide() + (s->x - 160), y = 76 + (s->y - 164);
+    if (!strncmp(s->key, "images/trainer/custom/", 22)) {
+      /* lorenzo's own encounter art (D'Arby) is drawn 1:1 like his JoJo trainers (draw_trainers): feet where the zoom puts them, up to 99 px tall */
+      const float z = field_zoom_cur;
+      if (z != 1) rr_set_zoom(1, 160, 132);
+      rr_draw(f, 160 + (x - 160) * z, 132 + (y - 132) * z, &o);
+      if (z != 1) rr_set_zoom(z, 160, 132);
+      continue;
+    }
+    rr_draw(f, x, y, &o);
   }
 }
 
@@ -985,7 +1057,8 @@ static void draw_field_player(void) {
   draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
-  draw_sprite(pl, true);draw_sparkle(pl,true);
+  if (B.darby.on) draw_darby_spot(0);   /* the player's card (and the Pokemon played) stand in for the lead */
+  else { draw_sprite(pl, true);draw_sparkle(pl,true); }
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   side *ally=&B.s[2];
   if(ally->present&&ally->sub_on)draw_sub(ally,true,false);
@@ -999,6 +1072,7 @@ static void draw_field_foes(void) {
   if (B.ball.behind) draw_ball();
   draw_trainers();
   draw_me_intro();
+  draw_darby_spot(1);
   draw_world_dio();
   draw_perfect_kars();
   for(int i=0;i<2;i++){

@@ -495,14 +495,28 @@ static bool side_ok(int battler, const char* what) {
   return true;
 }
 
+static bool me_scene_up;   /* an encounter scene got its sprites: D'Arby's result pose may give them again (run_screen field_sprites) */
+static int n_darby_deals, n_darby_reveals, n_darby_clears;
+static bool darby_dealt;
 void bv_me_intro(const me_intro_sprite* sprites, int n) {
-  if (!me_scene_open) BAD("intro sprites given with no encounter scene waiting for them");
+  if (!me_scene_open && !me_scene_up) BAD("intro sprites given with no encounter scene waiting for them");
+  if (me_scene_open) n_me_intro_calls++;
   me_scene_open = false;
-  n_me_intro_calls++;
+  me_scene_up = true;
   for (int i = 0; i < n; i++) if (!sprites[i].key[0] || sprites[i].scale <= 0) BAD("an intro sprite with no key or no size");
 }
+/* D'Arby's table: the cards are dealt on an encounter scene, revealed only once dealt, cleared once */
+void bv_darby_deal(const bv_mon* mine, const bv_mon* his) {
+  if (!me_scene_up) BAD("D'Arby's cards dealt with no encounter scene");
+  if (!mine || mine->species <= 0 || !his || his->species <= 0) BAD("a D'Arby card with no Pokemon under it");
+  darby_dealt = true; n_darby_deals++;
+}
+void bv_darby_reveal(int k) { if (!darby_dealt || k < 0 || k > 1) BAD("a D'Arby card turned before the deal"); n_darby_reveals++; }
+void bv_darby_clear(void) { if (darby_dealt) n_darby_clears++; darby_dealt = false; }
+bool bv_darby_table(void) { return darby_dealt; }
 
 void bv_begin(const bv_setup* setup) {
+  me_scene_up = darby_dealt = false;
   if (me_scene_open) BAD("an encounter scene got no call for its intro sprites");
   me_scene_open = rs_run()->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER && !rs_run()->me_battle;
   n_me_scenes += me_scene_open;
@@ -2228,6 +2242,8 @@ int main(int argc, char** argv) {
     cfg.save_sys = save_sys_check;
     for (int i = 0; i <= GC_MAX_SPECIES_ID; i++) caught_at_start += g_sys.dex[i].caught_attr != 0;
   }
+  /* RUNTEST_DARBY (with RUNTEST_CUSTOM): the playtest hook forces D'Arby from wave 5 (rundriver "mystery=darby,5") so his table is played */
+  if (getenv("RUNTEST_DARBY")) gc_debug_force_mystery(GC_ME_DARBY, 5);
   const char* custom_mode = getenv("RUNTEST_CUSTOM");
   custom_on = custom_mode && *custom_mode;
   custom_strong = custom_on && !strcmp(custom_mode, "strong");
@@ -2477,6 +2493,8 @@ int main(int argc, char** argv) {
   if(n_mystery_trainer_scenes<st->mystery_trainers)BAD("a mystery trainer scene was not rebuilt with trainer art");
   if (n_me_intro_calls != n_me_scenes - (me_scene_open ? 1 : 0)) BAD("%d encounter scenes, %d intro sprite calls", n_me_scenes, n_me_intro_calls);
   printf("encounter scenes: %d, each given its intro sprites on the platform\n", n_me_intro_calls);
+  printf("D'Arby's table: %d deals, %d cards turned, %d cleared\n", n_darby_deals, n_darby_reveals, n_darby_clears);
+  if (getenv("RUNTEST_DARBY") && custom_on && runs >= 10 && (!n_darby_deals || n_darby_reveals < 2 * n_darby_deals || !n_darby_clears)) BAD("D'Arby's table was not played through");
   if(custom_strong&&runs>=200&&!st->mystery_trainers)BAD("no same-wave mystery trainer scene was exercised");
   printf("mystery trainers: %d same-wave scenes rebuilt with trainer art and encounter music\n",n_mystery_trainer_scenes);
   printf("victory music: %d trainer slide-backs checked against the beaten trainer's own track\n", M.slide_backs);

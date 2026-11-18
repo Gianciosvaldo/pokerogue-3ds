@@ -48,9 +48,12 @@ enum {
     RP_ME_BEFORE_REWARDS, /* a mystery encounter's callback before the rewards (Training Session: the Pokemon comes back changed; Berries Abound: the berries) */
     RP_SAFARI,           /* the Safari Zone after a catch: the next Pokemon (and its four actions) or the way out; waits on the actions' screen */
     RP_WINSTRATE,        /* The Winstrate Challenge's MysteryEncounterRewardsPhase: doContinueEncounter, the next trainer or the end */
+    RP_DARBY,            /* D'Arby the Gambler's stages (custom content): a = gc_darby_stage; waits on a MYSTERY screen, except the shop stage */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
+#define GC_DARBY_DECK 6
+typedef struct { uint16_t species; uint8_t form; } gc_darby_card;   /* one of D'Arby's cards, or the player's (gc_darby.c) */
 #define GC_RQ_LEVELS 12
 #define GC_RQ_CAP 24
 typedef struct {
@@ -151,6 +154,8 @@ typedef struct {
      * held items wait here until the rewards callback or onGameOver puts them back. Not saved: the only save point is the encounter's start. */
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
     struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
+    struct { uint8_t wager, n_souls; int8_t souls[3]; bool dealt; gc_darby_card deck[6]; int16_t level; int8_t fair, shown, card, detector; bool cheated, won;
+             uint8_t vitamins_left; pr_rng r; } darby;   /* D'Arby the Gambler's hand (gc_darby.c). Not saved, as the other encounters' middle states */
     /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
      * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
     struct { bool valid, fight, reward; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;
@@ -352,6 +357,7 @@ void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scen
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
 bool gc_mystery_select(gc_run *run, int *type, int *tier);
+bool gc_debug_mystery_custom(void);   /* the forced encounter is one of lorenzo's own: it may be forced in a custom (Bizarre) run */
 bool gc_debug_mystery_pending(const gc_run *run, int wave);   /* the developer hook below: this wave becomes the forced encounter */
 bool gc_mystery_in_biome(int biome, int type);   /* mysteryEncountersByBiome */
 bool gc_mystery_rule(int type, int *tier, int *min_wave, int *max_wave, int *max_seen, int *min_party, int *challenges, double *money, int *mod_mask);
@@ -487,6 +493,7 @@ int gc_training_abilities(const gc_run *run, int member, int slots[3], bool is_n
 const char *gc_nature_key(int nature);
 void gc_me_steal_exp(gc_run *run, int primary, int species);    /* setEncounterExp(primary.id, species.baseExp) */                               /* the fight is won: the item's shop, then the next wave */
 bool gc_fof_preview(gc_run *run, int *species, int *form, bool *shiny, int *variant, const char **item_key);   /* what onInit made, for the question screen; false when it could not */
+void gc_me_give_vitamin(gc_run *run, int idx, int stat);       /* applyModifierTypeToPlayerPokemon(BASE_STAT_BOOSTER of `stat`) */
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
 void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */
 
@@ -594,6 +601,20 @@ void gc_chest_execute(gc_run *run, int option);
 /* the Pillar Men (src/gc_pillar.c, custom runs) */
 bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
 void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */
+/* D'Arby the Gambler's hand (src/gc_darby.c, Bizarre runs only, lorenzo's spec) */
+int gc_darby_base_speed(const gc_darby_card *c);
+int gc_darby_score4(const gc_darby_card *a, const gc_darby_card *b);     /* max-STAB effectiveness of a against b, in quarters (4 = 1x) */
+int gc_darby_compare(const gc_darby_card *a, const gc_darby_card *b);    /* +1 a wins, -1 b wins, 0 a tie down to the base Speed */
+int gc_darby_reveal(const gc_darby_card deck[GC_DARBY_DECK], int fair, const gc_darby_card *player, pr_rng *r, bool *cheated);
+bool gc_darby_player_wins(const gc_darby_card *player, const gc_darby_card *darby, pr_rng *r);
+enum { GC_DARBY_STANDARD = 0, GC_DARBY_ALL_IN = 1, GC_DARBY_WALK_AWAY = 2 };   /* the first screen's options */
+enum { GC_DARBY_STAGE_SOUL, GC_DARBY_STAGE_CARD, GC_DARBY_STAGE_ACCUSE, GC_DARBY_STAGE_VITAMIN, GC_DARBY_STAGE_SHOP, GC_DARBY_STAGE_GIVE };   /* RP_DARBY's a */
+void gc_darby_execute(gc_run *run, int option, int member);   /* the wager (member: the soul the Standard wager's party screen picked, -1 = ask) */
+bool gc_darby_stage_start(gc_run *run, const gc_rphase *p);   /* false = waits on its screen */
+bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
+bool gc_darby_pick_ok(const gc_run *run, int option, int idx);   /* the party screen's filter of the screen on now */
+int gc_darby_detector(const gc_run *run, int *ability, int *move);   /* the lie detector: the first conscious party member (storage index) with one of the abilities or moves, -1 = none */
+void gc_darby_deal(gc_run *run);                                /* the six cards (any species, distinct, face up), the fair one, their level */
 void gc_mc_execute(gc_run *run, int option);                /* its option chosen: the fight starts (victory is gc_pillar_victory) */
 void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */
 void gc_me_end_with_shop(gc_run *run);                      /* the shop in me_custom, then on to the next wave (end_mystery_encounter_shop) */

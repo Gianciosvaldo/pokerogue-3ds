@@ -183,11 +183,14 @@ static const char* const POKEMON = "{\"pikachu\":\"Pikachu\",\"lapras\":\"Lapras
 static const char* const MOVE = "{\"surf\":{\"name\":\"Surf\"},\"fly\":{\"name\":\"Fly\"}}";
 
 #include "fixtures/mystery-encounters-en.inc"
+#include "../source/custom_texts.h"
 static bool use_source_locales;
 
 static const char* locale_get(void* ctx, const char* file, int fallback, size_t* len) {
   (void)ctx;
   const char* r = NULL;
+  const char* own = custom_text_file(file, len);   /* lorenzo's own encounters: compiled in, as battle_events.c's text source does */
+  if (own) return fallback ? NULL : own;
   if (fallback) return NULL;
   if (use_source_locales)
     for (size_t i = 0; i < sizeof source_locales / sizeof *source_locales; i++)
@@ -455,6 +458,106 @@ int main(void) {
   CHECK(strstr(got.selected, "Pikachu") && strstr(got.selected, "shows off swordsDance"), "the move is named (the fake locale has no move names, so by its key): %s", got.selected);
   use_source_locales = false;
 
+  /* D'Arby the Gambler: the first screen (Standard asks for its soul), then the stages after the wager: the soul and card pickers are party screens with
+   * their own query (the card one shows the deck), the accusation's two buttons and the six vitamins; every stage leaves its lines to the core */
+  run_at(GC_ME_DARBY, 3);
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(strstr(intro, "shuffling a deck of cards") != NULL, "darby intro: %s", intro);
+  CHECK(me_flow_open(&R, chosen, NULL), "darby opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil >= 1 && !strcmp(g_sil_key[0], "images/trainer/custom/darby_screen"), "darby: the encounter screen draws his expressive sprite: %d %s", n_sil, g_sil_key[0]);
+  {
+    me_intro_sprite fs[ME_MAX_INTRO];
+    CHECK(me_flow_intro_sprites(GC_ME_DARBY, 160, 164, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, "images/trainer/custom/darby"), "darby: the platform keeps darby.png: %s", fs[0].key);
+    /* his result poses on the platform: the Stand beside him after the player's lost hand, collapsed after the player's win, both falling back to darby.png */
+    const int8_t type_was = R.mystery_type;
+    R.mystery_type = GC_ME_DARBY;
+    static const char* const POSE[3] = {"images/trainer/custom/darby", "images/trainer/custom/darby_victorious", "images/trainer/custom/darby_defeated"};
+    for (int pose = 2; pose >= 0; pose--) {
+      me_flow_set_darby_pose(pose);
+      memset(fs, 0, sizeof fs);
+      CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]) && (pose == 0 || !strcmp(fs[0].alt, POSE[0])),
+            "darby pose %d: %s (alt %s)", pose, fs[0].key, fs[0].alt);
+    }
+    R.mystery_type = type_was;
+  }
+  CHECK(has_text(0, "D'Arby the Gambler") && has_text(0, "Will you play?"), "darby: title and query");
+  draw(1);
+  CHECK(has_text(1, "Wager one soul") && has_text(1, "Go all in") && has_text(1, "Walk away") && !find_text(1, "{{"), "darby: the three wagers");
+  press(BTN_ACTION);   /* Standard: the party screen */
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 0 && got.b == 0, "darby: Standard with its soul %d %d", got.option, got.b);
+  g_depth = n_got = 0;
+  CHECK(me_flow_open(&R, chosen, NULL), "darby reopens");
+  press(BTN_DOWN);
+  press(BTN_ACTION);   /* All-In: no party screen here, its souls come after */
+  CHECK(n_got == 1 && got.option == 1, "darby: All-In %d", got.option);
+  g_depth = n_got = 0;
+  CHECK(me_flow_open(&R, chosen, NULL), "darby reopens again");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && !strcmp(got.selected, "You leave D'Arby to his cards."), "darby: walk away '%s'", got.selected);
+  /* the soul stage */
+  run_at(GC_ME_DARBY, 1);
+  R.screen.me_stage = GC_ME_STAGE_DARBY_SOUL;
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  R.screen.me_args[0] = pr_arg_int("soulsLeft", 2);
+  R.screen.n_me_args = 1;
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(!intro[0], "darby stages have no intro");
+  CHECK(me_flow_open(&R, chosen, NULL), "darby soul stage opens");
+  draw(0);
+  bool q0 = has_text(0, "(2 left)");
+  draw(1);
+  CHECK((q0 || has_text(1, "(2 left)")) && has_text(1, "Pikachu"), "darby: the soul picker");
+  press(BTN_CANCEL);
+  CHECK(n_got == 0, "darby: the soul picker cannot be backed out of");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 0 && got.b == 1 && !got.selected[0], "darby: soul %d %d '%s'", got.option, got.b, got.selected);
+  /* the card stage: the deck in the description */
+  run_at(GC_ME_DARBY, 1);
+  R.screen.me_stage = GC_ME_STAGE_DARBY_CARD;
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  static const int deck[6] = {25, 131, 76, 9, 143, 65};   /* the test's species names know Pikachu and Lapras */
+  static const char* const names[6] = {"card1", "card2", "card3", "card4", "card5", "card6"};
+  for (int k = 0; k < 6; k++) R.screen.me_args[k] = (pr_msg_arg){names[k], PR_ARG_POKEMON_NAME, pr_msg_pokemon((uint16_t)deck[k], 0, 0), NULL, 0};
+  R.screen.me_args[6] = pr_arg_int("cardLevel", 52);
+  R.screen.n_me_args = 7;
+  CHECK(me_flow_open(&R, chosen, NULL), "darby card stage opens");
+  draw(0);
+  bool deck0 = has_text(0, "face up: Pikachu, Lapras, ") && has_text(0, "Lv. 52"), raw0 = find_text(0, "{{") != NULL;
+  draw(1);
+  CHECK(deck0, "darby: the deck is shown, the six names joined by the app");
+  CHECK(!raw0 && !find_text(1, "{{"), "darby: no raw token in the card screen");
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 0 && got.b == 0, "darby: card %d %d", got.option, got.b);
+  /* the accusation */
+  run_at(GC_ME_DARBY, 2);
+  R.screen.me_stage = GC_ME_STAGE_DARBY_ACCUSE;
+  CHECK(me_flow_open(&R, chosen, NULL), "darby accusation opens");
+  draw(1);
+  CHECK(has_text(1, "Accept the Deal") && has_text(1, "You Cheated!"), "darby: the two buttons");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 1 && !got.selected[0], "darby: You Cheated! %d", got.option);
+  /* the vitamins */
+  run_at(GC_ME_DARBY, 6);
+  R.screen.me_stage = GC_ME_STAGE_DARBY_VITAMIN;
+  for (int i = 0; i < 6; i++) R.screen.option_pick[i] = GC_PICK_MEMBER;
+  R.screen.option_ok[0] = false;
+  CHECK(me_flow_open(&R, chosen, NULL), "darby vitamins open");
+  draw(1);
+  CHECK(has_text(1, "Protein") && has_text(1, "Carbos"), "darby: the vitamins by their item names");
+  press(BTN_ACTION);   /* the cursor starts on Protein (HP Up is shut): its party screen */
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 1 && got.b == 1, "darby: Protein on Eevee? %d %d", got.option, got.b);
+  g_depth = n_got = 0;
+
   /* the Pillar Men: their own texts, three plain options, and three black silhouettes of the fighters on the top screen */
   run_at(GC_ME_PILLAR_MEN, 3);
   me_flow_intro(&R, intro, sizeof intro);
@@ -537,7 +640,7 @@ int main(void) {
                   (!strncmp(sp[i].key, "images/", 7) || !strcmp(sp[i].key, "items")),
               "sprite %d of encounter %d placed on the screen: %s %g %g", i, t, sp[i].key, sp[i].x, sp[i].y);
     }
-    CHECK(drawn == 24, "24 encounters draw an intro: %d", drawn);
+    CHECK(drawn == 25, "25 encounters draw an intro (24 upstream ones and D'Arby): %d", drawn);
   }
 
   /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */

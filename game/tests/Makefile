@@ -442,9 +442,9 @@ party_item_test: build/party_item_test
 .PHONY: party_item_test
 
 # Actual battle-view draw paths with captured GPU calls; discard unrelated UI.
-build/trainer_render_test: trainer_render_test.c ../source/battle_view.c ../source/tween.c
+build/trainer_render_test: trainer_render_test.c ../source/battle_view.c ../source/tween.c ../../battle-core/gen/out/pr_data.c
 	@mkdir -p build
-	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections trainer_render_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections trainer_render_test.c ../source/tween.c ../../battle-core/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
 trainer_render_test: build/trainer_render_test
 .PHONY: trainer_render_test
 

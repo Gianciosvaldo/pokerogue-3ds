@@ -53,3 +53,4 @@ int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max) {
   out->scale = 1;
   return 1;
 }
+void me_flow_set_darby_pose(int pose) { (void)pose; }

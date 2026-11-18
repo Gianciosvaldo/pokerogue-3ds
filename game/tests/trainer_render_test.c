@@ -22,7 +22,9 @@ void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o) {
   assert(f==&frame);draws++;px=x;py=y;opts=*o;
 }
 static void near(float x,float y) { assert(fabsf(x-y)<0.001f); }
-void rr_set_zoom(float z,float cx,float cy) { (void)z;(void)cx;(void)cy; } /* draw_trainers drops the field zoom for a JoJo challenger */
+static float g_now=1000; float ui_now(void) { return g_now; }   /* D'Arby's table runs on the screens' clock */
+static float zoom_now=1; static int zoom_sets;
+void rr_set_zoom(float z,float cx,float cy) { (void)cx;(void)cy;zoom_now=z;zoom_sets++; } /* draw_trainers drops the field zoom for a JoJo challenger */
 int mui_reclaim_images(void) { return 0; } /* battle_view.c frees the menus' idle icon sheets before giving up on a sprite */
 void ba_debug_text(char* out, size_t n) { if (n) out[0] = 0; } /* battle_view.c's debug row asks battle_anim.c */
 static bool stage_files = true;   /* whether the pack has Pucci's stage sprites */
@@ -98,6 +100,35 @@ int main(void) {
   assert(!strcmp(atlas,"images/trainer/custom/dio_world"));near(px,160+124*z);near(py,132-52*z);near(opts.origin_y,1);
   B.world.slide=0;draw_world_dio();near(px,160+124*z+140);
   B.world.on=false;before=draws;draw_world_dio();assert(draws==before);
+  /* an encounter's intro sprites on the enemy platform: upstream's at the field's zoom; lorenzo's own art (images/trainer/custom/, D'Arby) 1:1 like his
+   * JoJo trainers, its feet where the zoom puts them */
+  field_zoom_cur=FIELD_ZOOM;   /* field_zoom(true) at scale 1, without its fit (that pulls in the image cache) */
+  const float fz=field_zoom_cur;assert(fz>1);
+  memset(B.me_sp,0,sizeof B.me_sp);B.me_n=1;B.enemy_slide=0;
+  strcpy(B.me_sp[0].key,"images/mystery-encounters/dark_deal_scientist");B.me_sp[0].x=160;B.me_sp[0].y=164;B.me_sp[0].scale=1;
+  int sets=zoom_sets;draw_me_intro();near(px,228);near(py,76);assert(zoom_sets==sets);
+  strcpy(B.me_sp[0].key,"images/trainer/custom/darby");
+  draw_me_intro();near(px,160+68*fz);near(py,132-56*fz);assert(zoom_sets==sets+2&&zoom_now==fz);
+  /* D'Arby's table (lorenzo 2026-11-17): the deal slides him off to the right over 500 ms and lays a face-down card on each platform (his turned
+   * one on his); a reveal fades its card over 400 ms over the Pokemon it hid (the player's from the back); the result clears both and slides him back */
+  B.me_sp[0].x=160;B.me_sp[0].y=164;
+  bv_mon mine,his;memset(&mine,0,sizeof mine);memset(&his,0,sizeof his);mine.species=25;his.species=143;
+  g_now=1000;bv_darby_deal(&mine,&his);assert(bv_darby_table());
+  draw_me_intro();near(px,160+68*fz);
+  g_now=1500;draw_me_intro();near(px,160+(68+200)*fz);
+  before=draws;draw_darby_spot(1);assert(draws==before+1&&!strcmp(atlas,"images/trainer/custom/darby_card_his"));
+  assert((opts.tint&0xff)==255);near(opts.origin_y,.5f);near(px,160+(236-160)*fz);near(py,132+(84-132)*fz);
+  before=draws;draw_darby_spot(0);assert(draws==before+1&&!strcmp(atlas,"images/trainer/custom/darby_card"));near(px,160+(106-160)*fz);
+  bv_darby_reveal(1);g_now=1700;before=draws;draw_darby_spot(1);assert(draws==before+2&&!strcmp(atlas,"images/trainer/custom/darby_card_his"));
+  assert((opts.tint&0xff)==128);
+  g_now=1900;before=draws;draw_darby_spot(1);assert(draws==before+1&&!strcmp(atlas,"images/pokemon/143"));near(px,236);near(py,84);near(opts.origin_y,1);
+  before=draws;draw_darby_spot(0);assert(draws==before+1&&!strcmp(atlas,"images/trainer/custom/darby_card"));   /* the player's card waits for its line */
+  bv_darby_reveal(0);g_now=2400;before=draws;draw_darby_spot(0);assert(draws==before+1&&!strcmp(atlas,"images/pokemon/back/25"));near(px,106);near(py,PLAYER_Y);
+  bv_darby_clear();assert(!bv_darby_table());
+  before=draws;draw_darby_spot(0);draw_darby_spot(1);assert(draws==before);
+  draw_me_intro();near(px,160+(68+200)*fz);
+  g_now=2900;draw_me_intro();near(px,160+68*fz);
+  field_zoom_cur=1;
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;
 }
