@@ -347,7 +347,7 @@ bool gc_darby_stage_start(gc_run *run, const gc_rphase *p)
         if (n > GC_MAX_OPTIONS) n = GC_MAX_OPTIONS;
         for (int i = 0; i < n; i++) c->tiers[c->n_tiers++] = MODIFIER_TIER_MASTER;
         c->fill_remaining = false;
-        c->reroll_multiplier = NAN;
+        c->reroll_multiplier = -1;   /* no Reroll on a Master screen (lorenzo 2026-11-18: the button turned it into Lure and Berries) */
         c->allow_luck_upgrades = true;
         in->reward.me_round = in->darby.shops++;   /* the second screen is not the first again */
         gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 2, 0, 0));
