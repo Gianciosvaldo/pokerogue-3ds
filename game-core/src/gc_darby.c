@@ -6,6 +6,7 @@
  *   coin), he plays fair. If it loses and a card on his bench beats the player's pick strictly (score, then base Speed; a coin flip is no win),
  *   he cheats with 75% and swaps to the card with the largest score margin (ties: the highest base Speed), else he plays fair.
  * The encounter flow (wagers, deck, reveal, accusation, rewards) is built on these. */
+#include "gc/achv.h"
 #include "internal.h"
 #include <math.h>
 #include <string.h>
@@ -243,6 +244,7 @@ static void take_souls(gc_run *run)
 static void darby_win(gc_run *run)
 {
     gc_internal *in = gc_int(run);
+    gc_achv_darby_won(run->sys);   /* either wager, a won hand or a caught cheat */
     darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.win", 0));
     gc_rphase p = gc_rp(RP_DARBY, GC_DARBY_STAGE_GIVE, 0, 0);
     if (in->darby.wager == GC_DARBY_STANDARD) {

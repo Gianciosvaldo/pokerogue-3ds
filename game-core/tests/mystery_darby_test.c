@@ -426,6 +426,7 @@ static void test_all_in(void)
     const double money = run.money;
     assert(choose(0, 0));
     assert(run.money > money);   /* the Big Nugget */
+    assert(sys.achv.darby_wins == 1);   /* a won hand is one win for the achievement */
     pr_reward_ctx *ctx = gc_reward_ctx(&run);
     const int want = pr_reward_get_modifier_count(ctx, NULL);
     for (int shop = 0; shop < 2; shop++) {
@@ -446,6 +447,7 @@ static void test_all_in(void)
     assert(choose(0, 0));
     assert(choose(0, 0));
     assert(run.n_party == 1 && run.party[0].b.id == keep);
+    assert(sys.achv.darby_wins == 0);   /* a lost one is none */
     printf("ok All-In (three distinct souls; a win: a Big Nugget and two screens of %d Master-tier items; a loss takes all three)\n", want);
 }
 

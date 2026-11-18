@@ -176,6 +176,8 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Flawless Josuke Higashikata", "Defeat Josuke Higashikata without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Flawless Rohan Kishibe", "Defeat Rohan Kishibe without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Flawless Giorno Giovanna", "Defeat Giorno Giovanna without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    /* 152: lorenzo 2026-11-18, one achievement for beating D'Arby at either wager; his reward is two Regular vouchers */
+    {"Gambler's Downfall", "Beat D'Arby the Gambler at Soul Poker.", RUN, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -414,6 +416,11 @@ void gc_achv_football_won(gc_system *sys, unsigned wins, unsigned titles, unsign
     add_sat(&sys->achv.fb_blowouts, blowouts);
 }
 
+void gc_achv_darby_won(gc_system *sys)
+{
+    if (sys) add_sat(&sys->achv.darby_wins, 1);
+}
+
 void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats)
 {
     if (!sys) return;
@@ -479,6 +486,7 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
         break;
     }
     case GC_ACHV_GRAND_TOUR: h = regions_done(sys); n = GC_REGION_COUNT; break;
+    case GC_ACHV_DARBY: h = a->darby_wins; n = 1; break;
     case 91: h = a->fb_wins; n = 1; break;
     case 92: h = a->fb_wins; n = 10; break;
     case 93: h = a->fb_wins; n = 50; break;

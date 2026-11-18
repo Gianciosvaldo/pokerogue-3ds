@@ -19,6 +19,7 @@ static struct {
   int balls;        /* Poke Balls thrown this run */
   bool loaded;      /* the run was resumed from a save: what happened before is unknown */
   bool ended;       /* the run's end was told */
+  uint32_t darby_seen; /* the profile's D'Arby wins as of the last screen: a change is evaluated at once */
   uint8_t q[QUEUE]; /* the ids unlocked and not yet taken */
   int nq, qi;
 } H;
@@ -91,6 +92,11 @@ bool ach_on_screen(const gc_run* run, int kind, int jojo, bool bizarre)
       H.counted = false;
       changed |= evaluate(sys, run); /* the Pokedex of the profile may have grown since the last wave */
     }
+  }
+  /* D'Arby was beaten (game-core counts it when the hand is won): his achievement is told on the next screen */
+  if (sys->achv.darby_wins != H.darby_seen) {
+    H.darby_seen = sys->achv.darby_wins;
+    changed |= evaluate(sys, run);
   }
   /* a new best wave (waves reached in any run) */
   if (run->wave > 0 && (uint32_t)run->wave > sys->achv.best_wave) {
