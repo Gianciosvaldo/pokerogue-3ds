@@ -91,7 +91,7 @@ bool gc_darby_player_wins(const gc_darby_card *player, const gc_darby_card *darb
  * Pokemon; the fair one drawn from the six in secret), the player's card (a party member; independent of the souls), the reveal. A win pays at once; a
  * loss offers Accept the Deal or You Cheated! (and only then the lie detector's line). No ordinary shop after any result.
  *   Standard win: 2 Rarer Candy, then two vitamins, the player picking the vitamin and the Pokemon for each.
- *   All-In win: a Big Nugget, then two reward screens of Master-tier items only, as many as the shop would offer now.
+ *   All-In win: a Big Nugget, then a reward screen of Master-tier items and one of Rogue-tier items, as many as the shop would offer now.
  *   A loss: the souls leave the party with their held items. A false accusation also takes all of the player's money. */
 #define DARBY_FAINTED_CARD_OK 1   /* a fainted Pokemon may be played as the card (asked 2026-11-17, unanswered; one switch) */
 
@@ -339,17 +339,18 @@ bool gc_darby_stage_start(gc_run *run, const gc_rphase *p)
         return true;
     }
     case GC_DARBY_STAGE_SHOP: {
-        /* a reward screen of Master-tier items only, as many as the shop offers now (getModifierCount) */
+        /* the first reward screen is Master-tier items, the second Rogue-tier (lorenzo 2026-11-18: two Master screens were too strong), as many as the shop offers now (getModifierCount) */
         pr_reward_custom *c = &in->reward.me_custom;
         memset(c, 0, sizeof *c);
         int n = pr_reward_get_modifier_count(gc_reward_ctx(run), NULL);
         if (n > PR_REWARD_MAX_OPTIONS) n = PR_REWARD_MAX_OPTIONS;
         if (n > GC_MAX_OPTIONS) n = GC_MAX_OPTIONS;
-        for (int i = 0; i < n; i++) c->tiers[c->n_tiers++] = MODIFIER_TIER_MASTER;
+        const int tier = in->darby.shops == 0 ? MODIFIER_TIER_MASTER : MODIFIER_TIER_ROGUE;
+        for (int i = 0; i < n; i++) c->tiers[c->n_tiers++] = tier;
         c->fill_remaining = false;
         c->reroll_multiplier = -1;   /* no Reroll on a Master screen (lorenzo 2026-11-18: the button turned it into Lure and Berries) */
         c->allow_luck_upgrades = true;
-        in->reward.me_round = in->darby.shops++;   /* the second screen is not the first again */
+        in->reward.me_round = in->darby.shops++;   /* the second screen is a new roll, not the first again */
         gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 2, 0, 0));
         return true;
     }

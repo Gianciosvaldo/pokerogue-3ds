@@ -124,7 +124,10 @@ int main(void) {
   g_now=1900;before=draws;draw_darby_spot(1);assert(draws==before+1&&!strcmp(atlas,"images/pokemon/143"));near(px,236);near(py,84);near(opts.origin_y,1);
   before=draws;draw_darby_spot(0);assert(draws==before+1&&!strcmp(atlas,"images/trainer/custom/darby_card"));   /* the player's card waits for its line */
   bv_darby_reveal(0);g_now=2400;before=draws;draw_darby_spot(0);assert(draws==before+1&&!strcmp(atlas,"images/pokemon/back/25"));near(px,106);near(py,PLAYER_Y);
+  /* the trainer's back sprite steps out while the table is on, so the player's card does not sit on it (lorenzo 2026-11-18), and comes back after */
+  B.player_trainer_visible=true;B.player_throw_ms=-1;before=draws;draw_player_trainer();assert(draws==before);
   bv_darby_clear();assert(!bv_darby_table());
+  before=draws;draw_player_trainer();assert(draws==before+1);B.player_trainer_visible=false;
   before=draws;draw_darby_spot(0);draw_darby_spot(1);assert(draws==before);
   draw_me_intro();near(px,160+(68+200)*fz);
   g_now=2900;draw_me_intro();near(px,160+68*fz);

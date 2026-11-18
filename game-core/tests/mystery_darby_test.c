@@ -438,6 +438,33 @@ static void test_big_party(void)
     printf("ok six in the party: a lost All-In leaves three, a won one all six\n");
 }
 
+/* only what the Pokemon has now counts (lorenzo 2026-11-18, a Prankster Sableye): Keen Eye as its active ability does, Prankster with no listed move
+ * does not, and a listed move it knows (Foresight) does */
+static void test_detector_active_only(void)
+{
+    static const struct { int ability_index; bool default_moves; int who, ability, move; } C[] = {
+        {0, false, 0, ABILITY_ID_KEEN_EYE, -1}, {2, false, -1, -1, -1}, {1, false, -1, -1, -1}, {2, true, 0, -1, MOVE_ID_FORESIGHT}};
+    for (size_t k = 0; k < sizeof C / sizeof C[0]; k++) {
+        memset(&run, 0, sizeof run);
+        gc_run_new(&run, GAME_MODES_CLASSIC, "sableye", 7);
+        gc_system_init_defaults(&sys);
+        run.sys = &sys;
+        run.wave = 45;
+        run.n_party = 1;
+        gc_starter st;
+        memset(&st, 0, sizeof st);
+        st.species = SPECIES_ID_SABLEYE;
+        st.tera_type = -1;
+        st.ability_index = (uint8_t)C[k].ability_index;
+        if (!C[k].default_moves) st.moves[0] = MOVE_ID_TACKLE;
+        gc_mon_new_player(&run, &run.party[0], &st, 45);
+        run.party_order[0] = 0;
+        int ab, mv;
+        assert(gc_darby_detector(&run, &ab, &mv) == C[k].who && ab == C[k].ability && mv == C[k].move);
+    }
+    printf("ok lie detector reads only the active ability and the known moves (Sableye: Keen Eye yes, Prankster no, Foresight yes)\n");
+}
+
 static void test_all_in(void)
 {
     /* three souls, one by one, none twice */
@@ -459,7 +486,7 @@ static void test_all_in(void)
     for (int shop = 0; shop < 2; shop++) {
         assert(run.screen.kind == GC_SCREEN_REWARD);
         assert(run.screen.n_options == want);
-        for (int i = 0; i < run.screen.n_options; i++) assert(run.screen.options[i].tier == MODIFIER_TIER_MASTER);
+        for (int i = 0; i < run.screen.n_options; i++) assert(run.screen.options[i].tier == (shop == 0 ? MODIFIER_TIER_MASTER : MODIFIER_TIER_ROGUE));
         gc_choice c = {GC_CH_SKIP, 0, 0, 0};
         const char *why;
         assert(gc_run_choose(&run, &c, &why));
@@ -517,6 +544,7 @@ int main(void)
     test_loss_accept();
     test_accusations();
     test_detector();
+    test_detector_active_only();
     test_all_in();
     test_big_party();
     test_two_screens_differ();
