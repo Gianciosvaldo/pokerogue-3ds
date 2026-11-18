@@ -784,8 +784,7 @@ static void open_tutor(int cursor)
   if (!me_screen_open(&a)) finish(4, 0, 0);
 }
 
-/* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
- * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
+/* a Pokemon's intro sprite (its form's, the shiny one first with the plain one as the fallback): the Safari Zone's Pokemon and D'Arby's card screen */
 static void species_sprite(int species, int form_index, bool shiny, me_intro_sprite* o)
 {
   const pr_species* sp = NULL;
@@ -815,6 +814,8 @@ static void species_sprite(int species, int form_index, bool shiny, me_intro_spr
   o->scale = 1.0f;
 }
 
+/* the Safari Zone's four actions on the Pokemon in front of the player (SafariZoneEncounter's safari.N options): ball, bait, mud, run; the cursor is where
+ * the core left it (the action just taken) and the Pokemon is the enemy the core summoned */
 static void safari_sprite(const gc_mon* e, me_intro_sprite* o) { species_sprite(e->b.species, e->b.form, e->b.shiny, o); }
 
 static void open_safari(int cursor)

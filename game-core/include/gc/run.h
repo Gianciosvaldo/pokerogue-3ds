@@ -561,6 +561,10 @@ double gc_exp_level_fraction(const gc_mon *m);            /* 0..1 of the way thr
 
 /* Developer hook: from wave `min_wave` on, the first plain wave of each run (not a multiple of 10, no earlier encounter of that kind in the run) is mystery encounter
  * `type` (a gc_mystery_type), whatever its own wave window; -1 turns it off (the default). The app sets it from rundriver.txt. Custom runs ignore it. */
+/* D'Arby the Gambler's table, for the app's cards (custom content): once the hand is revealed, the party index of the Pokemon the player played and
+ * the species and form of his card. False before. It stays readable after the encounter has ended (a straight win can run on to the next wave
+ * before the app plays the reveal lines). */
+bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form);
 void gc_debug_force_mystery(int type, int min_wave);
 
 #endif

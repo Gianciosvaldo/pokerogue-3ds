@@ -419,3 +419,13 @@ bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, 
         return false;
     }
 }
+
+bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form)
+{
+    const gc_internal *in = gc_int((gc_run *)run);
+    if (!in->darby.dealt || in->darby.shown < 0 || in->darby.shown >= GC_DARBY_DECK || in->darby.card < 0) return false;
+    *party_index = in->darby.card;
+    *species = in->darby.deck[in->darby.shown].species;
+    *form = in->darby.deck[in->darby.shown].form;
+    return true;
+}

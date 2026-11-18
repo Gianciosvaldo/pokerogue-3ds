@@ -738,12 +738,26 @@ static bool handle_event(int i) {
         break;
       }
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
+      /* D'Arby's table: his first line deals the two face-down cards (he slides off), each reveal line turns its card over */
+      if (msg_is(e, "mysteryEncounters/darby:line.1") || msg_is(e, "mysteryEncounters/darby:line.2")) {
+        int idx, species, form;
+        if (gc_darby_table(&G.run, &idx, &species, &form)) {
+          bv_mon mine, his;
+          memset(&his, 0, sizeof his);
+          mine = idx >= 0 && idx < G.run.n_party ? make_mon(&G.run.party[idx], true) : his;
+          his.species = species;
+          his.form = form;
+          bv_darby_deal(&mine, &his);
+        }
+      }
+      if (msg_is(e, "mysteryEncounters/darby:reveal.player")) bv_darby_reveal(0);
+      if (msg_is(e, "mysteryEncounters/darby:reveal.darby")) bv_darby_reveal(1);
       /* D'Arby on the platform after the callout (lorenzo 2026-11-17): his Stand beside him when the player loses (the souls are taken, or a false
        * call), collapsed when the player wins (a straight win, or a caught cheat) */
       {
         const bool lost = msg_is(e, "mysteryEncounters/darby:result.soulTaken") || msg_is(e, "mysteryEncounters/darby:result.falseCall");
         const bool won = msg_is(e, "mysteryEncounters/darby:result.win") || msg_is(e, "mysteryEncounters/darby:result.caught");
-        if (lost || won) { me_flow_set_darby_pose(won ? 2 : 1); field_sprites(); }
+        if (lost || won) { bv_darby_clear(); me_flow_set_darby_pose(won ? 2 : 1); field_sprites(); }   /* the cards go, he slides back in */
       }
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;

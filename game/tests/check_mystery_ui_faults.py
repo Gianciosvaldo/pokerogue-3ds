@@ -68,8 +68,8 @@ FAULTS = [
  ('safari-actions-not-opened', UI[0], 'if (s->me_stage == GC_ME_STAGE_SAFARI) { open_safari(s->slot); return; }', 'if (0) { open_safari(s->slot); return; }'),
  ('safari-cursor-reset', UI[0], 'a.cursor = cursor >= 0 && cursor < 4 ? cursor : 0;', 'a.cursor = 0;'),
  ('safari-no-pokemon', UI[0], 'a.n_intro = 1;\n  }\n  a.can_back = false;', 'a.n_intro = 0;\n  }\n  a.can_back = false;'),
- ('safari-wrong-species', UI[0], 'snprintf(plain, sizeof plain, "images/pokemon/%d", (int)e->b.species);', 'snprintf(plain, sizeof plain, "images/pokemon/%d", 1);'),
- ('safari-shiny-ignored', UI[0], 'if (e->b.shiny) {\n    snprintf(o->key', 'if (0) {\n    snprintf(o->key'),
+ ('safari-wrong-species', UI[0], 'else snprintf(plain, sizeof plain, "images/pokemon/%d", species);', 'else snprintf(plain, sizeof plain, "images/pokemon/%d", 1);'),   # species_sprite (shared with D\'Arby\'s card screen)
+ ('safari-shiny-ignored', UI[0], 'if (shiny) {\n    snprintf(o->key', 'if (0) {\n    snprintf(o->key'),
  ('safari-labels', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);', 'snprintf(sub, sizeof sub, "option.%d.label", i + 1);'),
  ('safari-tooltips', UI[0], 'snprintf(sub, sizeof sub, "safari.%d.tooltip", i + 1);', 'snprintf(sub, sizeof sub, "safari.%d.label", i + 1);'),
  ('trtest-pick-ignored', UI[0], 'return (int)s->me_args[i].v;', 'return 0;'),
