@@ -724,6 +724,7 @@ static void open_members(void)
         species_sprite((int)(sc->me_args[i].v >> 16), (int)((sc->me_args[i].v >> 8) & 0xff), false, o);
         o->x = 160 + (k++ - 2.5f) * 52;
         o->scale = 0.5f;
+        o->fit = 44;   /* one size for all six (lorenzo 2026-11-18: they were uneven), on one line */
       }
     const pr_msg_arg deck = {.name = "cards", .kind = PR_ARG_STR, .s = cards};
     fmt("card.description", &deck, 1, false, a.description, sizeof a.description);

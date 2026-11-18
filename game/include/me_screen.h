@@ -42,6 +42,7 @@ typedef struct {
   char alt[ME_SPRITE_LEN];   /* drawn when key has no image (a shiny's or a form's sprite the pack lacks); "" = none */
   float x, y, scale;         /* x centre and y feet on the screen; scale 1 = native */
   float dark;                /* 0..1: how far the sprite is shaded toward black (upstream's tint) */
+  float fit;                 /* > 0: scale the sprite's drawn pixels (not its padded canvas) to this many px on the longer side, feet and centre on x/y: a row of icons of one size */
 } me_intro_sprite;
 
 typedef struct {

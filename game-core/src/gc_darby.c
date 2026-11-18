@@ -105,7 +105,8 @@ static pr_msg_arg darby_species_arg(const char *name, const gc_darby_card *c)
     return a;
 }
 
-/* The lie detector and result lines wait for A, so a fast game speed cannot skip what happened (lorenzo 2026-11-18). */
+/* The deal, the reveal, the lie detector and result lines wait for A, so a fast game speed cannot skip what happened and the cards stay up
+ * long enough to see (lorenzo 2026-11-18). */
 static void darby_ev_prompt(gc_event *ev)
 {
     if (ev) ev->prompt = true;
@@ -346,6 +347,7 @@ bool gc_darby_stage_start(gc_run *run, const gc_rphase *p)
         c->fill_remaining = false;
         c->reroll_multiplier = NAN;
         c->allow_luck_upgrades = true;
+        in->reward.me_round = in->darby.shops++;   /* the second screen is not the first again */
         gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 2, 0, 0));
         return true;
     }
@@ -363,13 +365,13 @@ static void reveal(gc_run *run)
     in->darby.shown = (int8_t)gc_darby_reveal(in->darby.deck, in->darby.fair, &player, &in->darby.r, &cheated);
     in->darby.cheated = cheated;
     const gc_darby_card *his = &in->darby.deck[in->darby.shown];
-    gc_ev_msg(run, DARBY_LINES[pr_rng_seed_int(&in->darby.r, (int)(sizeof DARBY_LINES / sizeof DARBY_LINES[0]), 0)], 0);
-    gc_ev_msg(run, "mysteryEncounters/darby:reveal.player", 2, pr_arg_pokemon_name(&run->bt, "pokemonName", &run->party[in->darby.card].b),
-              darby_x_arg("multiplier", gc_darby_score4(&player, his)));
-    gc_ev_msg(run, "mysteryEncounters/darby:reveal.darby", 2, darby_species_arg("pokemonName", his), darby_x_arg("multiplier", gc_darby_score4(his, &player)));
+    darby_ev_prompt(gc_ev_msg(run, DARBY_LINES[pr_rng_seed_int(&in->darby.r, (int)(sizeof DARBY_LINES / sizeof DARBY_LINES[0]), 0)], 0));
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.player", 2, pr_arg_pokemon_name(&run->bt, "pokemonName", &run->party[in->darby.card].b),
+              darby_x_arg("multiplier", gc_darby_score4(&player, his))));
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.darby", 2, darby_species_arg("pokemonName", his), darby_x_arg("multiplier", gc_darby_score4(his, &player))));
     if (gc_darby_score4(&player, his) == gc_darby_score4(his, &player)) {
-        gc_ev_msg(run, "mysteryEncounters/darby:reveal.speedTie", 0);
-        if (gc_darby_base_speed(&player) == gc_darby_base_speed(his)) gc_ev_msg(run, "mysteryEncounters/darby:reveal.coin", 0);
+        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.speedTie", 0));
+        if (gc_darby_base_speed(&player) == gc_darby_base_speed(his)) darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.coin", 0));
     }
     in->darby.won = gc_darby_player_wins(&player, his, &in->darby.r);
     if (in->darby.won) { darby_win(run); return; }

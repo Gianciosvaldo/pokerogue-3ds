@@ -172,7 +172,7 @@ static int said(const char *key)
     int n = 0;
     gc_event e;
     while (gc_run_next_event(&run, &e)) {
-        if (e.kind == GC_EV_MESSAGE && e.msg.key && (strstr(e.msg.key, "darby:detector.") || strstr(e.msg.key, "darby:result.") || strstr(e.msg.key, "darby:outro")))
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && (strstr(e.msg.key, "darby:detector.") || strstr(e.msg.key, "darby:reveal.") || strstr(e.msg.key, "darby:line.") || strstr(e.msg.key, "darby:result.") || strstr(e.msg.key, "darby:outro")))
             assert(e.prompt);   /* the lie detector and the result lines wait for A (lorenzo 2026-11-18: on a fast speed they could not be read) */
         if (e.kind == GC_EV_MESSAGE && e.msg.key && !strcmp(e.msg.key, key)) n++;
     }
@@ -382,6 +382,35 @@ static void test_detector(void)
     printf("ok lie detector (after a loss only: %d caught, %d clean, %d wins without it; conscious members only)\n", caught, clean, none);
 }
 
+/* the two Master screens of an All-In win are two rolls (lorenzo 2026-11-18: both showed the same items): over several runs they are not the same
+ * three every time. A first roll resets the seed to the wave's, so the second screen starts as a reroll. */
+static void test_two_screens_differ(void)
+{
+    int same = 0, runs = 12;
+    for (int sd = 0; sd < runs; sd++) {
+        char nm[16];
+        snprintf(nm, sizeof nm, "two%d", sd);
+        start(nm);
+        assert(choose(GC_DARBY_ALL_IN, 0));
+        for (int k = 0; k < 3; k++) assert(choose(0, k));
+        set_deck(WEAK, 0, 4);
+        assert(choose(0, 0));
+        const char *first[GC_MAX_OPTIONS];
+        int n0 = run.screen.n_options;
+        for (int i = 0; i < n0; i++) first[i] = run.screen.options[i].key;
+        gc_choice c = {GC_CH_SKIP, 0, 0, 0};
+        const char *why;
+        assert(gc_run_choose(&run, &c, &why));
+        assert(run.screen.kind == GC_SCREEN_REWARD && run.screen.n_options == n0);
+        bool eq = true;
+        for (int i = 0; i < n0; i++) eq = eq && !strcmp(first[i], run.screen.options[i].key);
+        same += eq;
+        assert(gc_run_choose(&run, &c, &why));
+    }
+    assert(same <= runs / 3);   /* 3 of 7 weighted Master items: the same three in the same order is rare, not the rule */
+    printf("ok two Master screens: the same in %d of %d runs\n", same, runs);
+}
+
 static void test_all_in(void)
 {
     /* three souls, one by one, none twice */
@@ -460,6 +489,7 @@ int main(void)
     test_accusations();
     test_detector();
     test_all_in();
+    test_two_screens_differ();
     puts("mystery_darby_test: all passed");
     return 0;
 }
