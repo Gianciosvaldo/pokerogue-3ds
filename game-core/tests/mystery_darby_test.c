@@ -149,9 +149,9 @@ static void make_run(const char *seed, bool with_hook, int n_party, int wave)
     gc_items_to_battle(&run);
 }
 
-static void start(const char *seed)
+static void start_n(const char *seed, int n_party)
 {
-    make_run(seed, true, 4, 45);
+    make_run(seed, true, n_party, 45);
     gc_rq_reset(&gc_int(&run)->rq);
     run.mystery_type = GC_ME_DARBY;
     gc_rq_unshift(&run, gc_rp(RP_MYSTERY, GC_ME_DARBY, GC_ME_ULTRA, 0));
@@ -159,6 +159,8 @@ static void start(const char *seed)
     assert(run.screen.kind == GC_SCREEN_MYSTERY && run.screen.mystery_type == GC_ME_DARBY && run.screen.n_options == 3);
     assert(run.screen.option_pick[GC_DARBY_STANDARD] == GC_PICK_MEMBER && run.screen.option_pick[GC_DARBY_ALL_IN] == GC_PICK_NONE);
 }
+
+static void start(const char *seed) { start_n(seed, 4); }
 
 static bool choose(int a, int b)
 {
@@ -171,7 +173,11 @@ static int said(const char *key)
 {
     int n = 0;
     gc_event e;
-    while (gc_run_next_event(&run, &e)) if (e.kind == GC_EV_MESSAGE && e.msg.key && !strcmp(e.msg.key, key)) n++;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && (strstr(e.msg.key, "darby:detector.") || strstr(e.msg.key, "darby:reveal.") || strstr(e.msg.key, "darby:line.") || strstr(e.msg.key, "darby:result.") || strstr(e.msg.key, "darby:outro")))
+            assert(e.prompt);   /* the lie detector and the result lines wait for A (lorenzo 2026-11-18: on a fast speed they could not be read) */
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && !strcmp(e.msg.key, key)) n++;
+    }
     return n;
 }
 
@@ -378,6 +384,60 @@ static void test_detector(void)
     printf("ok lie detector (after a loss only: %d caught, %d clean, %d wins without it; conscious members only)\n", caught, clean, none);
 }
 
+/* the two Master screens of an All-In win are two rolls (lorenzo 2026-11-18: both showed the same items): over several runs they are not the same
+ * three every time. A first roll resets the seed to the wave's, so the second screen starts as a reroll. */
+static void test_two_screens_differ(void)
+{
+    int same = 0, runs = 12;
+    for (int sd = 0; sd < runs; sd++) {
+        char nm[16];
+        snprintf(nm, sizeof nm, "two%d", sd);
+        start(nm);
+        assert(choose(GC_DARBY_ALL_IN, 0));
+        for (int k = 0; k < 3; k++) assert(choose(0, k));
+        set_deck(WEAK, 0, 4);
+        assert(choose(0, 0));
+        {   /* no Reroll button on a Master screen: it was a paid way to swap them for Lure and Berries */
+            gc_choice rr = {GC_CH_REROLL, 0, 0, 0};
+            const char *rwhy = "";
+            const double money_before = run.money;
+            assert(!gc_run_choose(&run, &rr, &rwhy) && run.money == money_before);
+        }
+        const char *first[GC_MAX_OPTIONS];
+        int n0 = run.screen.n_options;
+        for (int i = 0; i < n0; i++) first[i] = run.screen.options[i].key;
+        gc_choice c = {GC_CH_SKIP, 0, 0, 0};
+        const char *why;
+        assert(gc_run_choose(&run, &c, &why));
+        assert(run.screen.kind == GC_SCREEN_REWARD && run.screen.n_options == n0);
+        bool eq = true;
+        for (int i = 0; i < n0; i++) eq = eq && !strcmp(first[i], run.screen.options[i].key);
+        same += eq;
+        assert(gc_run_choose(&run, &c, &why));
+    }
+    assert(same <= runs / 3);   /* 3 of 7 weighted Master items: the same three in the same order is rare, not the rule */
+    printf("ok two Master screens: the same in %d of %d runs\n", same, runs);
+}
+
+/* four or more Pokemon qualify (lorenzo 2026-11-18): six in the party, All-In lost takes three and leaves three; won, all six stay */
+static void test_big_party(void)
+{
+    start_n("big1", 6);
+    assert(choose(GC_DARBY_ALL_IN, 0));
+    for (int k = 1; k <= 3; k++) assert(choose(0, k));
+    set_deck(FAIR_WINS, 0, 6);
+    assert(choose(0, 0));
+    assert(choose(0, 0));
+    assert(run.n_party == 3);
+    start_n("big2", 6);
+    assert(choose(GC_DARBY_ALL_IN, 0));
+    for (int k = 1; k <= 3; k++) assert(choose(0, k));
+    set_deck(WEAK, 0, 4);
+    assert(choose(0, 0));
+    assert(run.n_party == 6 && sys.achv.darby_wins == 1);
+    printf("ok six in the party: a lost All-In leaves three, a won one all six\n");
+}
+
 static void test_all_in(void)
 {
     /* three souls, one by one, none twice */
@@ -393,6 +453,7 @@ static void test_all_in(void)
     const double money = run.money;
     assert(choose(0, 0));
     assert(run.money > money);   /* the Big Nugget */
+    assert(sys.achv.darby_wins == 1);   /* a won hand is one win for the achievement */
     pr_reward_ctx *ctx = gc_reward_ctx(&run);
     const int want = pr_reward_get_modifier_count(ctx, NULL);
     for (int shop = 0; shop < 2; shop++) {
@@ -413,6 +474,7 @@ static void test_all_in(void)
     assert(choose(0, 0));
     assert(choose(0, 0));
     assert(run.n_party == 1 && run.party[0].b.id == keep);
+    assert(sys.achv.darby_wins == 0);   /* a lost one is none */
     printf("ok All-In (three distinct souls; a win: a Big Nugget and two screens of %d Master-tier items; a loss takes all three)\n", want);
 }
 
@@ -420,8 +482,8 @@ static void test_all_in(void)
  * in a plain run (no pillar hook: the encounter does not exist there) */
 static void test_forced(void)
 {
-    const struct { bool hook; int party; bool me; } C[] = {{true, 4, true}, {true, 3, false}, {false, 4, false}};
-    for (int k = 0; k < 3; k++) {
+    const struct { bool hook; int party; bool me; } C[] = {{true, 4, true}, {true, 3, false}, {false, 4, false}, {true, 6, true}};   /* four or more (lorenzo 2026-11-18) */
+    for (int k = 0; k < 4; k++) {
         gc_debug_force_mystery(GC_ME_DARBY, 5);
         make_run("darby-forced", C[k].hook, C[k].party, 3);
         run.wave = 3; gc_new_battle(&run);
@@ -456,6 +518,8 @@ int main(void)
     test_accusations();
     test_detector();
     test_all_in();
+    test_big_party();
+    test_two_screens_differ();
     puts("mystery_darby_test: all passed");
     return 0;
 }

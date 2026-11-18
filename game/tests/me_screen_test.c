@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 
 #include "../../game-core/src/internal.h"
@@ -63,7 +64,7 @@ static rr_frame g_frame;
 #define N_REC 16
 static char g_sil_key[N_REC][ME_SPRITE_LEN];
 static unsigned g_sil_tint[N_REC];
-static float g_sil_x[N_REC], g_sil_y[N_REC], g_sil_scale[N_REC];
+static float g_sil_x[N_REC], g_sil_y[N_REC], g_sil_scale[N_REC], g_sil_ox[N_REC], g_sil_oy[N_REC];
 static int n_sil;
 const rr_frame* img_anim_frame(const char* key, int i) {
   (void)i;
@@ -82,6 +83,8 @@ void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o) {
     g_sil_x[n_sil] = z > 0 ? 160 + (x - 200) / z : x;
     g_sil_y[n_sil] = z > 0 ? 164 + (y - 226) / z : y;
     g_sil_scale[n_sil] = z > 0 ? o->scale_x / z : o->scale_x;
+    g_sil_ox[n_sil] = o->origin_x;
+    g_sil_oy[n_sil] = o->origin_y;
   }
   n_sil++;
 }
@@ -481,6 +484,14 @@ int main(void) {
       CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]) && (pose == 0 || !strcmp(fs[0].alt, POSE[0])),
             "darby pose %d: %s (alt %s)", pose, fs[0].key, fs[0].alt);
     }
+    /* the result lines are shown after game-core has left the encounter: the pose alone must still give his sprite (lorenzo 2026-11-18: they never showed) */
+    R.mystery_type = -1;
+    for (int pose = 2; pose >= 1; pose--) {
+      me_flow_set_darby_pose(pose);
+      memset(fs, 0, sizeof fs);
+      CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]), "darby pose %d after the encounter ended: %s", pose, fs[0].key);
+    }
+    me_flow_set_darby_pose(0);
     R.mystery_type = type_was;
   }
   CHECK(has_text(0, "D'Arby the Gambler") && has_text(0, "Will you play?"), "darby: title and query");
@@ -531,6 +542,16 @@ int main(void) {
   draw(0);
   bool deck0 = has_text(0, "face up: Pikachu, Lapras, ") && has_text(0, "Lv. 52"), raw0 = find_text(0, "{{") != NULL;
   draw(1);
+  /* the six icons are one size on one line whatever their canvas (lorenzo 2026-11-18: uneven): a 40x20 drawing in a 96x96 canvas at (10, 30) */
+  g_frame = (rr_frame){.w = 40, .h = 20, .src_w = 96, .src_h = 96, .off_x = 10, .off_y = 30};
+  draw(0);
+  {
+    int n_ok = 0;
+    for (int i = 0; i < n_sil && i < N_REC; i++)
+      if (fabsf(g_sil_scale[i] - 44.0f / 40.0f) < 1e-4f && fabsf(g_sil_ox[i] - 30.0f / 96.0f) < 1e-4f && fabsf(g_sil_oy[i] - 50.0f / 96.0f) < 1e-4f) n_ok++;
+    CHECK(n_ok == 6, "darby: the six deck icons are fitted to 44 px by their drawn pixels, feet on the drawing's bottom (%d of 6)", n_ok);
+  }
+  memset(&g_frame, 0, sizeof g_frame);
   CHECK(deck0, "darby: the deck is shown, the six names joined by the app");
   CHECK(!raw0 && !find_text(1, "{{"), "darby: no raw token in the card screen");
   press(BTN_ACTION);

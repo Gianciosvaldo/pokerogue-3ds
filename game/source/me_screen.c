@@ -233,12 +233,32 @@ static bool ms_touch(ui_screen* s, float x, float y)
 
 /* the intro sprites are laid out for a 320 wide field with the feet at y 164 (me_flow_intro_sprites): here they are drawn on the whole top screen,
  * all zoomed by the same factor about the bottom centre so they keep their places, as big as the room under the texts allows */
+/* How an intro sprite is drawn before the zoom: its scale and the origin inside its padded canvas. A fitted sprite (fit > 0) is sized and placed by its
+ * drawn pixels, so a Pokemon with a lot of empty canvas is as big as one without and every one stands on the same line. */
+static void intro_geom(const me_intro_sprite* s, const rr_frame* f, float* scale, float* ox, float* oy, float* w, float* h)
+{
+  if (s->fit > 0 && f->w > 0 && f->h > 0 && f->src_w > 0 && f->src_h > 0) {
+    *scale = s->fit / (float)(f->w > f->h ? f->w : f->h);
+    *ox = ((float)f->off_x + (float)f->w / 2) / (float)f->src_w;
+    *oy = (float)(f->off_y + f->h) / (float)f->src_h;
+    *w = (float)f->w * *scale;
+    *h = (float)f->h * *scale;
+    return;
+  }
+  *scale = s->scale;
+  *ox = 0.5f;
+  *oy = 1;
+  *w = (float)f->src_w * s->scale;
+  *h = (float)f->src_h * s->scale;
+}
+
 static float sprite_zoom(const rr_frame* const* fr, const me_intro_sprite* sp, int n, float art_top)
 {
   float z = SPRITE_ZOOM_MAX;
   for (int i = 0; i < n; i++) {
     if (!fr[i]) continue;
-    const float h = (float)fr[i]->src_h * sp[i].scale, w = (float)fr[i]->src_w * sp[i].scale;
+    float sc, ox, oy, w, h;
+    intro_geom(&sp[i], fr[i], &sc, &ox, &oy, &w, &h);
     const float up = (164.0f - sp[i].y) + h;   /* from the feet line to the sprite's top, at zoom 1 */
     if (up > 0 && (TOP_FLOOR - art_top) / up < z) z = (TOP_FLOOR - art_top) / up;
     const float side = (sp[i].x > 160 ? sp[i].x - 160 : 160 - sp[i].x) + w / 2;
@@ -301,9 +321,11 @@ static void draw_top(void)
     const rr_frame* f = intro_frame(s);
     if (!f) continue;
     rr_draw_opts d = RR_DEFAULT_OPTS;
-    d.origin_x = 0.5f;
-    d.origin_y = 1;
-    d.scale_x = d.scale_y = s->scale * zoom;
+    float sc, ox, oy, gw, gh;
+    intro_geom(s, f, &sc, &ox, &oy, &gw, &gh);
+    d.origin_x = ox;
+    d.origin_y = oy;
+    d.scale_x = d.scale_y = sc * zoom;
     const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
     d.tint = RR_RGBA(v, v, v, 255);
     rr_draw(f, 200 + (s->x - 160) * zoom, TOP_FLOOR + (s->y - 164) * zoom, &d);

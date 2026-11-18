@@ -6,6 +6,7 @@
  *   coin), he plays fair. If it loses and a card on his bench beats the player's pick strictly (score, then base Speed; a coin flip is no win),
  *   he cheats with 75% and swaps to the card with the largest score margin (ties: the highest base Speed), else he plays fair.
  * The encounter flow (wagers, deck, reveal, accusation, rewards) is built on these. */
+#include "gc/achv.h"
 #include "internal.h"
 #include <math.h>
 #include <string.h>
@@ -103,6 +104,13 @@ static pr_msg_arg darby_species_arg(const char *name, const gc_darby_card *c)
     a.kind = PR_ARG_POKEMON_NAME;
     a.v = pr_msg_pokemon(c->species, c->form, 0);
     return a;
+}
+
+/* The deal, the reveal, the lie detector and result lines wait for A, so a fast game speed cannot skip what happened and the cards stay up
+ * long enough to see (lorenzo 2026-11-18). */
+static void darby_ev_prompt(gc_event *ev)
+{
+    if (ev) ev->prompt = true;
 }
 
 static pr_msg_arg darby_x_arg(const char *name, int score4)
@@ -208,7 +216,7 @@ static void push_stage(gc_run *run, int stage) { gc_rq_push(run, gc_rp(RP_DARBY,
 
 static void darby_end(gc_run *run)
 {
-    gc_ev_msg(run, "mysteryEncounters/darby:outro", 0);
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:outro", 0));
     gc_me_leave(run);   /* no ordinary shop after any result */
 }
 
@@ -226,7 +234,7 @@ static void take_souls(gc_run *run)
         if (s[i] < 0 || s[i] >= run->n_party) continue;
         gc_mon *m = &run->party[s[i]];
         m->b.hp = 0;   /* it faints */
-        gc_ev_msg(run, "mysteryEncounters/darby:result.soulTaken", 1, pr_arg_pokemon_name(&run->bt, "pokemonName", &m->b));
+        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.soulTaken", 1, pr_arg_pokemon_name(&run->bt, "pokemonName", &m->b)));
         gc_party_remove(run, s[i]);
     }
     gc_me_prune_items(run);
@@ -236,7 +244,8 @@ static void take_souls(gc_run *run)
 static void darby_win(gc_run *run)
 {
     gc_internal *in = gc_int(run);
-    gc_ev_msg(run, "mysteryEncounters/darby:result.win", 0);
+    gc_achv_darby_won(run->sys);   /* either wager, a won hand or a caught cheat */
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.win", 0));
     gc_rphase p = gc_rp(RP_DARBY, GC_DARBY_STAGE_GIVE, 0, 0);
     if (in->darby.wager == GC_DARBY_STANDARD) {
         p.key = "RARER_CANDY";
@@ -261,7 +270,7 @@ static void darby_lose(gc_run *run, bool false_call)
         const double before = run->money;
         run->money = 0;
         gc_ev_money(run, -before);
-        gc_ev_msg(run, "mysteryEncounters/darby:result.moneyGone", 0);
+        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.moneyGone", 0));
     }
     darby_end(run);
 }
@@ -338,8 +347,9 @@ bool gc_darby_stage_start(gc_run *run, const gc_rphase *p)
         if (n > GC_MAX_OPTIONS) n = GC_MAX_OPTIONS;
         for (int i = 0; i < n; i++) c->tiers[c->n_tiers++] = MODIFIER_TIER_MASTER;
         c->fill_remaining = false;
-        c->reroll_multiplier = NAN;
+        c->reroll_multiplier = -1;   /* no Reroll on a Master screen (lorenzo 2026-11-18: the button turned it into Lure and Berries) */
         c->allow_luck_upgrades = true;
+        in->reward.me_round = in->darby.shops++;   /* the second screen is not the first again */
         gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 2, 0, 0));
         return true;
     }
@@ -357,26 +367,26 @@ static void reveal(gc_run *run)
     in->darby.shown = (int8_t)gc_darby_reveal(in->darby.deck, in->darby.fair, &player, &in->darby.r, &cheated);
     in->darby.cheated = cheated;
     const gc_darby_card *his = &in->darby.deck[in->darby.shown];
-    gc_ev_msg(run, DARBY_LINES[pr_rng_seed_int(&in->darby.r, (int)(sizeof DARBY_LINES / sizeof DARBY_LINES[0]), 0)], 0);
-    gc_ev_msg(run, "mysteryEncounters/darby:reveal.player", 2, pr_arg_pokemon_name(&run->bt, "pokemonName", &run->party[in->darby.card].b),
-              darby_x_arg("multiplier", gc_darby_score4(&player, his)));
-    gc_ev_msg(run, "mysteryEncounters/darby:reveal.darby", 2, darby_species_arg("pokemonName", his), darby_x_arg("multiplier", gc_darby_score4(his, &player)));
+    darby_ev_prompt(gc_ev_msg(run, DARBY_LINES[pr_rng_seed_int(&in->darby.r, (int)(sizeof DARBY_LINES / sizeof DARBY_LINES[0]), 0)], 0));
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.player", 2, pr_arg_pokemon_name(&run->bt, "pokemonName", &run->party[in->darby.card].b),
+              darby_x_arg("multiplier", gc_darby_score4(&player, his))));
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.darby", 2, darby_species_arg("pokemonName", his), darby_x_arg("multiplier", gc_darby_score4(his, &player))));
     if (gc_darby_score4(&player, his) == gc_darby_score4(his, &player)) {
-        gc_ev_msg(run, "mysteryEncounters/darby:reveal.speedTie", 0);
-        if (gc_darby_base_speed(&player) == gc_darby_base_speed(his)) gc_ev_msg(run, "mysteryEncounters/darby:reveal.coin", 0);
+        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.speedTie", 0));
+        if (gc_darby_base_speed(&player) == gc_darby_base_speed(his)) darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:reveal.coin", 0));
     }
     in->darby.won = gc_darby_player_wins(&player, his, &in->darby.r);
     if (in->darby.won) { darby_win(run); return; }
-    gc_ev_msg(run, "mysteryEncounters/darby:result.handLost", 0);
+    darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.handLost", 0));
     /* the lie detector, only after a loss */
     int ability, move;
     in->darby.detector = (int8_t)gc_darby_detector(run, &ability, &move);
     if (in->darby.detector >= 0) {
         const pr_msg_arg who = pr_arg_pokemon_name(&run->bt, "pokemonName", &run->party[in->darby.detector].b);
         if (in->darby.cheated)
-            gc_ev_msg(run, "mysteryEncounters/darby:detector.caught", 2, who, ability >= 0 ? pr_arg_ability("source", ability) : pr_arg_move("source", move | PR_MSG_MOVE_BARE));
+            darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:detector.caught", 2, who, ability >= 0 ? pr_arg_ability("source", ability) : pr_arg_move("source", move | PR_MSG_MOVE_BARE)));
         else
-            gc_ev_msg(run, "mysteryEncounters/darby:detector.clean", 1, who);
+            darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:detector.clean", 1, who));
     }
     push_stage(run, GC_DARBY_STAGE_ACCUSE);
 }
@@ -402,10 +412,10 @@ bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, 
     case GC_DARBY_STAGE_ACCUSE:
         if (c->a == 0) { darby_lose(run, false); return true; }
         if (in->darby.cheated) {
-            gc_ev_msg(run, "mysteryEncounters/darby:result.caught", 0);
+            darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.caught", 0));
             darby_win(run);
         } else {
-            gc_ev_msg(run, "mysteryEncounters/darby:result.falseCall", 0);
+            darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.falseCall", 0));
             darby_lose(run, true);
         }
         return true;

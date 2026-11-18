@@ -399,6 +399,9 @@ int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], 
         if (kind == GC_REWARD_CUSTOM) {
             rs->custom = rs->me_custom;
             memset(&rs->me_custom, 0, sizeof rs->me_custom);
+            /* a first roll resets the seed to the wave's (updateSeed), so two custom screens in one wave would offer the same items: a later one starts as a reroll */
+            in->reroll_count = sel.reroll_count = rs->me_round;
+            rs->me_round = 0;
         }
         break;
     }

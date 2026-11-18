@@ -99,6 +99,7 @@ typedef struct {
     uint8_t hatch_feats;    /* GC_HATCH_* bits: hatched an Epic egg / a Legendary egg / a shiny from an egg */
     uint32_t fb_wins, fb_titles, fb_shutouts, fb_blowouts; /* football playoff matches won / titles won / wins conceding nothing / wins by 21 or more */
     uint32_t jojo_clean_mask, jojo_clean_mask_hi; /* bit i (i - 32 in the second word): challenger i was beaten with none of the party fainted (a profile saved before: 0) */
+    uint32_t darby_wins;    /* D'Arby the Gambler beaten (a profile saved before: 0) */
 } gc_achv_progress;
 
 /* Overall system data (upstream GameData) */

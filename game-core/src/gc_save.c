@@ -1526,6 +1526,7 @@ static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, custom_wins), SF(gc_achv_progress, best_wave), SF(gc_achv_progress, feats), SF(gc_achv_progress, hatch_feats),
     SF(gc_achv_progress, fb_wins), SF(gc_achv_progress, fb_titles), SF(gc_achv_progress, fb_shutouts), SF(gc_achv_progress, fb_blowouts),
     SF(gc_achv_progress, jojo_clean_mask), SF(gc_achv_progress, jojo_clean_mask_hi),   /* appended last: a save without them loads with 0 */
+    SF(gc_achv_progress, darby_wins),
 };
 
 static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};

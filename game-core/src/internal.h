@@ -79,6 +79,7 @@ typedef struct {
     pr_reward_option copy_options[PR_REWARD_MAX_OPTIONS];
     int n_copy_options;
     pr_reward_custom me_custom; /* the customModifierSettings of a mystery encounter's setEncounterRewards, until its screen opens */
+    int me_round;               /* the custom screen to open starts as this reroll (0 = a first roll that resets the seed): D'Arby's second Master screen must not repeat the first */
 } gc_reward_state;
 
 /* run-level state that isn't part of the public struct */
@@ -155,7 +156,7 @@ typedef struct {
     struct { uint16_t tutor[4]; bool tutor_pending; } superfan;   /* the Bug-Type Superfan's four Bug-type moves the winner may learn (physical, special, status, misc). Not saved, as fg */
     struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
     struct { uint8_t wager, n_souls; int8_t souls[3]; bool dealt; gc_darby_card deck[6]; int16_t level; int8_t fair, shown, card, detector; bool cheated, won;
-             uint8_t vitamins_left; pr_rng r; } darby;   /* D'Arby the Gambler's hand (gc_darby.c). Not saved, as the other encounters' middle states */
+             uint8_t vitamins_left, shops; pr_rng r; } darby;   /* D'Arby the Gambler's hand (gc_darby.c). Not saved, as the other encounters' middle states */
     /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
      * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
     struct { bool valid, fight, reward; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;

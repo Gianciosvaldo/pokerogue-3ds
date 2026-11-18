@@ -146,6 +146,18 @@ int main(void)
   ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
   CHECK(S.achv.best_wave == 50, "a lower wave in another run keeps the best");
 
+  /* D'Arby beaten (game-core counts it when the hand is won): the next screen unlocks and queues his achievement, once (lorenzo 2026-11-18) */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(60, 'd');
+  ach_on_screen(&R, GC_SCREEN_MYSTERY, -1, true);   /* wave 60 is a new best: Wave 50 unlocks and queues */
+  while (ach_take_unlock() >= 0) {}
+  CHECK(!ach_on_screen(&R, GC_SCREEN_MYSTERY, -1, true) && !gc_achv_unlocked(&S, GC_ACHV_DARBY), "no win over D'Arby, nothing");
+  gc_achv_darby_won(&S);
+  CHECK(ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && gc_achv_unlocked(&S, GC_ACHV_DARBY), "his win unlocks the achievement and asks for a write");
+  CHECK(next_is(GC_ACHV_DARBY, "Gambler's Downfall", "2 Egg Vouchers"), "and queues it with its reward");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && ach_take_unlock() == -1, "told once");
+
   /* a win: solo (one Pokemon ever fielded), no ball, six that can evolve */
   gc_system_init_defaults(&S);
   ach_reset();
