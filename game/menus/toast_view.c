@@ -8,6 +8,8 @@
 
 #define FONT TSX_PIXEL_8
 #define FIELD_W 320.0f
+/* the top screen's right edge (400 px) in the field canvas, which starts 40 px in (mui_set_origin below): the bar stays on the screen's edge */
+#define TOP_RIGHT 360.0f
 
 /* the art: 92 x 40, borders left 41, right 6, top 16, bottom 4 (NineSlice(0, 0, "achv_bar", undefined, w, h, 41, 6, 16, 4)) */
 #define ART_W 92.0f
@@ -34,7 +36,7 @@ void tv_draw(const tv_info* t, float slide) {
   mui_wrap(FONT, t->desc, w - 32.0f - 16.0f - 3.0f, wrapped, sizeof wrapped);
   float h = 18.0f + mui_text_height(FONT, wrapped) + 4.0f;
   if (h < BAR_MIN_H) h = BAR_MIN_H;
-  const float x = FIELD_W - w * slide;
+  const float x = TOP_RIGHT - w * slide;
 
   char key[24];
   snprintf(key, sizeof key, t->tier > 0 ? "ui/achv_bar_%d" : "ui/achv_bar", t->tier + 1);

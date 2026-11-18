@@ -951,6 +951,8 @@ void bv_me_intro(const me_intro_sprite* sprites, int n) {
  * Keep this separate from the capture ball and ordinary switch summons. */
 static void draw_player_trainer(void) {
   if (!B.player_trainer_visible) return;
+  /* D'Arby's table: his face-down card stands where the back sprite's feet are, so the trainer steps out of the way (lorenzo 2026-11-18: the two collided) */
+  if (B.darby.on) return;
   char key[64];
   bool throwing=B.player_throw_ms>=0;
   snprintf(key,sizeof key,"images/trainer/trainer_%c_back%s",

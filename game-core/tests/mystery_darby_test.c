@@ -459,7 +459,7 @@ static void test_all_in(void)
     for (int shop = 0; shop < 2; shop++) {
         assert(run.screen.kind == GC_SCREEN_REWARD);
         assert(run.screen.n_options == want);
-        for (int i = 0; i < run.screen.n_options; i++) assert(run.screen.options[i].tier == MODIFIER_TIER_MASTER);
+        for (int i = 0; i < run.screen.n_options; i++) assert(run.screen.options[i].tier == (shop == 0 ? MODIFIER_TIER_MASTER : MODIFIER_TIER_ROGUE));
         gc_choice c = {GC_CH_SKIP, 0, 0, 0};
         const char *why;
         assert(gc_run_choose(&run, &c, &why));
