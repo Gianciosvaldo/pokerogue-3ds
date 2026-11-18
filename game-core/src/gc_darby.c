@@ -488,10 +488,10 @@ bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form
 #define DARBY_REMATCH_LAST_WAVE 172
 
 /* D'Arby's own three (lorenzo 2026-11-18). Klefki's Switcheroo is not in the battle layer yet (pr_moves unimplemented, gc_custom_team_check refuses
- * it); lorenzo asked for a fitting fourth move instead: Spikes. Dazzling Gleam replaces Foul Play (lorenzo 2026-11-18). Ability slots: Thievul's Stakeout is its hidden one, Klefki's Prankster and Cofagrigus's Mummy slot 0. */
+ * it); lorenzo asked for a fitting fourth move instead: Spikes, and no item (no way to pass the Toxic Orb on, lorenzo removed it). Dazzling Gleam replaces Foul Play (lorenzo 2026-11-18). Ability slots: Thievul's Stakeout is its hidden one, Klefki's Prankster and Cofagrigus's Mummy slot 0. */
 static const gc_custom_team_member DARBY_OWN[3] = {
     {SPECIES_ID_THIEVUL, 0, 2, false, 0, {MOVE_ID_PARTING_SHOT, MOVE_ID_DARK_PULSE, MOVE_ID_BURNING_JEALOUSY, MOVE_ID_FOUL_PLAY}, 0, {{0}}},
-    {SPECIES_ID_KLEFKI, 0, 0, false, 0, {MOVE_ID_DAZZLING_GLEAM, MOVE_ID_SWAGGER, MOVE_ID_THUNDER_WAVE, MOVE_ID_SPIKES}, 1, {{"TOXIC_ORB", -1, 1}}},
+    {SPECIES_ID_KLEFKI, 0, 0, false, 0, {MOVE_ID_DAZZLING_GLEAM, MOVE_ID_SWAGGER, MOVE_ID_THUNDER_WAVE, MOVE_ID_SPIKES}, 0, {{0}}},
     {SPECIES_ID_COFAGRIGUS, 0, 0, false, 0, {MOVE_ID_WILL_O_WISP, MOVE_ID_HEX, MOVE_ID_PAIN_SPLIT, MOVE_ID_DESTINY_BOND}, 1, {{"LEFTOVERS", -1, 1}}},
 };
 

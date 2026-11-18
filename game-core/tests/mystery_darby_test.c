@@ -605,10 +605,10 @@ static void test_rematch(void)
     assert(held == 1);
     int orb = 0, left = 0;
     for (int i = 0; i < run.n_enemy_items; i++) {
-        orb += run.enemy_items[i].pokemon_id == run.enemy[1].b.id && !strcmp(run.enemy_items[i].key, "TOXIC_ORB");
+        orb += run.enemy_items[i].pokemon_id == run.enemy[1].b.id;   /* Klefki holds nothing (lorenzo removed the Toxic Orb) */
         left += run.enemy_items[i].pokemon_id == run.enemy[2].b.id && !strcmp(run.enemy_items[i].key, "LEFTOVERS");
     }
-    assert(orb == 1 && left == 1);
+    assert(orb == 0 && left == 1);
     assert(!gc_darby_rematch_due(&run, 167));   /* never twice */
 
     /* the chips survive a save and load (a real save point: wave 1's command screen), the battle flag and a fused soul's half included */
