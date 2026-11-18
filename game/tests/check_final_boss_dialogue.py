@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[2];APP=ROOT/'game';TESTS=APP/'tests'
 p=argparse.ArgumentParser();p.add_argument('--library',type=Path);a=p.parse_args();lib=(a.library or TESTS/'build/ptx_core.a').resolve()
 if not lib.exists():subprocess.run(['make','-C',str(TESTS),'build/ptx_core.a'],check=True)
 cc=os.environ.get('CC','cc')
-includes=['game/tests','game/include','game/menus','game/gen','game-core/include','run-core/include','reward-core/include','ai-core/include','ai-core/gen/out','battle-core/include','battle-core/gen/out','assets-pipeline/app-src/include']
+includes=['game/tests','game/include','game/source','game/menus','game/gen','game-core/include','run-core/include','reward-core/include','ai-core/include','ai-core/gen/out','battle-core/include','battle-core/gen/out','assets-pipeline/app-src/include']
 flags=['-O1','-std=gnu11','-ffp-contract=off','-ffunction-sections','-fdata-sections','-Wl,--strip-debug',*['-I'+str(ROOT/x) for x in includes]]
 converter=(APP/'source/battle_events.c').read_text();player=(APP/'source/battle_view.c').read_text()
 controls={
