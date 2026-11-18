@@ -488,10 +488,10 @@ bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form
 #define DARBY_REMATCH_LAST_WAVE 172
 
 /* D'Arby's own three (lorenzo 2026-11-18). Klefki's Switcheroo is not in the battle layer yet (pr_moves unimplemented, gc_custom_team_check refuses
- * it), so its slot is empty; Dazzling Gleam replaces Foul Play (lorenzo 2026-11-18). Ability slots: Thievul's Stakeout is its hidden one, Klefki's Prankster and Cofagrigus's Mummy slot 0. */
+ * it); lorenzo asked for a fitting fourth move instead: Spikes. Dazzling Gleam replaces Foul Play (lorenzo 2026-11-18). Ability slots: Thievul's Stakeout is its hidden one, Klefki's Prankster and Cofagrigus's Mummy slot 0. */
 static const gc_custom_team_member DARBY_OWN[3] = {
     {SPECIES_ID_THIEVUL, 0, 2, false, 0, {MOVE_ID_PARTING_SHOT, MOVE_ID_DARK_PULSE, MOVE_ID_BURNING_JEALOUSY, MOVE_ID_FOUL_PLAY}, 0, {{0}}},
-    {SPECIES_ID_KLEFKI, 0, 0, false, 0, {MOVE_ID_DAZZLING_GLEAM, MOVE_ID_SWAGGER, MOVE_ID_THUNDER_WAVE, 0}, 1, {{"TOXIC_ORB", -1, 1}}},
+    {SPECIES_ID_KLEFKI, 0, 0, false, 0, {MOVE_ID_DAZZLING_GLEAM, MOVE_ID_SWAGGER, MOVE_ID_THUNDER_WAVE, MOVE_ID_SPIKES}, 1, {{"TOXIC_ORB", -1, 1}}},
     {SPECIES_ID_COFAGRIGUS, 0, 0, false, 0, {MOVE_ID_WILL_O_WISP, MOVE_ID_HEX, MOVE_ID_PAIN_SPLIT, MOVE_ID_DESTINY_BOND}, 1, {{"LEFTOVERS", -1, 1}}},
 };
 
@@ -587,10 +587,11 @@ static void chip_answer(gc_run *run, int k, bool take, int replace)
         const int level = in->chips.level[k] > 0 ? in->chips.level[k] : m.b.level;
         m.b.level = level;
         m.exp = gc_level_total_exp(level, sp ? sp->growth_rate : 0);
-        const int32_t hp = m.b.hp, max = m.b.stats[STAT_HP];
         gc_mon_recalc(run, &m);
-        m.b.hp = max > 0 ? (int32_t)((int64_t)hp * m.b.stats[STAT_HP] / max) : m.b.stats[STAT_HP];   /* the HP it was sealed with, scaled to its new maximum */
-        if (hp > 0 && m.b.hp < 1) m.b.hp = 1;
+        m.b.hp = m.b.stats[STAT_HP];   /* lorenzo 2026-11-18: a soul comes back at full HP with no status */
+        m.b.status = m.b.pending_status = STATUS_EFFECT_NONE;
+        m.b.status_toxic_turns = 0;
+        m.b.status_sleep_turns = m.b.status_freeze_turns = -1;
         if (run->n_party < 6) {
             run->party[run->n_party] = m;
             run->party_order[run->n_party] = (int8_t)run->n_party;

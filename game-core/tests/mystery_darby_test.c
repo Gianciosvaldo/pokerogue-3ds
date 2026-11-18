@@ -597,7 +597,7 @@ static void test_rematch(void)
     for (int i = 0; i < 3; i++) assert(run.enemy[i].b.species != chip.b.species && run.enemy[i].b.level <= 62);
     /* his own three as lorenzo wrote them */
     assert(run.enemy[0].b.species == SPECIES_ID_THIEVUL && run.enemy[0].b.ability == ABILITY_ID_STAKEOUT && run.enemy[0].b.moves[0] == MOVE_ID_PARTING_SHOT && run.enemy[0].b.moves[3] == MOVE_ID_FOUL_PLAY);
-    assert(run.enemy[1].b.species == SPECIES_ID_KLEFKI && run.enemy[1].b.ability == ABILITY_ID_PRANKSTER && run.enemy[1].b.moves[0] == MOVE_ID_DAZZLING_GLEAM && run.enemy[1].b.moves[2] == MOVE_ID_THUNDER_WAVE);
+    assert(run.enemy[1].b.species == SPECIES_ID_KLEFKI && run.enemy[1].b.ability == ABILITY_ID_PRANKSTER && run.enemy[1].b.moves[0] == MOVE_ID_DAZZLING_GLEAM && run.enemy[1].b.moves[2] == MOVE_ID_THUNDER_WAVE && run.enemy[1].b.moves[3] == MOVE_ID_SPIKES);
     assert(run.enemy[2].b.species == SPECIES_ID_COFAGRIGUS && run.enemy[2].b.ability == ABILITY_ID_MUMMY && run.enemy[2].b.moves[3] == MOVE_ID_DESTINY_BOND);
     gc_custom_team_items(&run);
     int held = 0;
@@ -643,6 +643,8 @@ static void test_rematch(void)
 
     /* the win: the achievement, then the soul's screen: back at level 62 with its Leftovers */
     const uint32_t wins = sys.achv.darby_rematch_wins;
+    in->chips.mon[0].b.hp = 1;   /* sealed hurt and poisoned: it comes back healed (lorenzo 2026-11-18) */
+    in->chips.mon[0].b.status = STATUS_EFFECT_POISON;
     run.battle_type = BATTLE_TYPE_TRAINER;
     gc_rq_reset(&in->rq);
     gc_darby_rematch_won(&run);
@@ -657,6 +659,7 @@ static void test_rematch(void)
     assert(strstr(keys, "darby:rematch.back"));
     assert(run.n_party == before + 1 && run.party[run.n_party - 1].b.id == id && run.party[run.n_party - 1].b.level == 62);
     assert(run.party[run.n_party - 1].b.species == chip.b.species && run.party[run.n_party - 1].b.nature == chip.b.nature);
+    assert(run.party[run.n_party - 1].b.hp == run.party[run.n_party - 1].b.stats[STAT_HP] && run.party[run.n_party - 1].b.hp > 1 && run.party[run.n_party - 1].b.status == 0);
     int back_item = 0;
     for (int i = 0; i < run.n_items; i++) back_item += run.items[i].pokemon_id == id && !strcmp(run.items[i].key, "LEFTOVERS");
     assert(back_item == 1 && gc_darby_sealed(&run) == 0 && !gc_darby_rematch_battle(&run));
@@ -690,7 +693,7 @@ static void test_rematch(void)
     assert(choose(1, 0));
     drain(keys, sizeof keys);
     assert(strstr(keys, "darby:rematch.gone") && run.n_party == 3 && gc_darby_sealed(&run) == 0);
-    printf("ok rematch (saved and loaded; %d of %d waves before 165 drew him, sure 165..172, his three plus the soul at level 62 with its item, back after the win, replace with six, leave)\n", hits, waves);
+    printf("ok rematch (saved and loaded; %d of %d waves before 165 drew him, sure 165..172, his three plus the soul at level 62 with its item, back healed after the win, replace with six, leave)\n", hits, waves);
 }
 
 int main(void)
