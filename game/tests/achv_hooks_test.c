@@ -72,9 +72,9 @@ int main(void)
   CHECK(battle(GC_JOJO_DIO, GC_SCREEN_REWARD, 0), "the win is reported");
   CHECK(gc_achv_unlocked(&S, GC_JOJO_DIO), "DIO is unlocked");
   CHECK(gc_achv_unlocked(&S, 29), "and so is Untouched (nobody fainted)");
-  CHECK(next_is(GC_JOJO_DIO, "DIO", "1 Egg Voucher"), "the first unlock is DIO with its reward");
+  CHECK(next_is(GC_JOJO_DIO, "The World Stands Still", "1 Egg Voucher"), "the first unlock is DIO with its reward");
   CHECK(next_is(29, "Untouched", "1 Egg Voucher Plus"), "the second is Untouched");
-  CHECK(next_is(gc_achv_flawless_id(GC_JOJO_DIO), "Flawless DIO", "2 Egg Vouchers"), "the third is the clean win over DIO");
+  CHECK(next_is(gc_achv_flawless_id(GC_JOJO_DIO), "The World Couldn't Touch You", "2 Egg Vouchers"), "the third is the clean win over DIO");
   CHECK(gc_achv_unlocked(&S, gc_achv_flawless_id(GC_JOJO_DIO)), "Flawless DIO is unlocked");
   CHECK(ach_take_unlock() == -1, "nothing more");
   const uint32_t battles = S.achv.jojo_battles;

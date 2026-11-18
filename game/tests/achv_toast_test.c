@@ -254,7 +254,7 @@ int main(void) {
   atoast_push_achv(GC_JOJO_DIO);
   CHECK(atoast_active() && n_sounds == 1, "DIO's bar begins with the sound");
   drawn();
-  CHECK(!strcmp(d_title, "DIO") && !strcmp(d_desc, "Defeat DIO.\nReward: 1 Egg Voucher") && !strcmp(d_icon, "coupon") && d_tier == 0 && d_score[0] == 0,
+  CHECK(!strcmp(d_title, "The World Stands Still") && !strcmp(d_desc, "Defeat DIO.\nReward: 1 Egg Voucher") && !strcmp(d_icon, "coupon") && d_tier == 0 && d_score[0] == 0,
         "named, with what it asks and its reward: %s / %s / %s / %d", d_title, d_desc, d_icon, d_tier);
   atoast_push_achv(29);   /* Untouched: one Plus voucher */
   atoast_push_achv(32);   /* Ten Victories: one Premium voucher */
