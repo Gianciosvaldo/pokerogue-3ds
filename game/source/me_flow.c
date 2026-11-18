@@ -310,7 +310,8 @@ void me_flow_set_darby_pose(int pose) { g_darby_pose = pose; }
 
 int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max)
 {
-  const int type = run->mystery_type;
+  /* his result lines arrive after game-core has left the encounter (mystery_type back to -1): the pose says whose sprite this is */
+  const int type = g_darby_pose ? GC_ME_DARBY : run->mystery_type;
   if (type == GC_ME_A_TRAINERS_TEST) return me_flow_trtest_sprites(run, 160, 164, out, max);
   if (type == GC_ME_PILLAR_MEN) return 0;   /* its silhouettes belong to the window */
   const int n = me_flow_intro_sprites(type, 160, 164, out, max);

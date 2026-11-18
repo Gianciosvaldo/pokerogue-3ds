@@ -481,6 +481,14 @@ int main(void) {
       CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]) && (pose == 0 || !strcmp(fs[0].alt, POSE[0])),
             "darby pose %d: %s (alt %s)", pose, fs[0].key, fs[0].alt);
     }
+    /* the result lines are shown after game-core has left the encounter: the pose alone must still give his sprite (lorenzo 2026-11-18: they never showed) */
+    R.mystery_type = -1;
+    for (int pose = 2; pose >= 1; pose--) {
+      me_flow_set_darby_pose(pose);
+      memset(fs, 0, sizeof fs);
+      CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]), "darby pose %d after the encounter ended: %s", pose, fs[0].key);
+    }
+    me_flow_set_darby_pose(0);
     R.mystery_type = type_was;
   }
   CHECK(has_text(0, "D'Arby the Gambler") && has_text(0, "Will you play?"), "darby: title and query");

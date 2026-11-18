@@ -171,7 +171,11 @@ static int said(const char *key)
 {
     int n = 0;
     gc_event e;
-    while (gc_run_next_event(&run, &e)) if (e.kind == GC_EV_MESSAGE && e.msg.key && !strcmp(e.msg.key, key)) n++;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && (strstr(e.msg.key, "darby:detector.") || strstr(e.msg.key, "darby:result.") || strstr(e.msg.key, "darby:outro")))
+            assert(e.prompt);   /* the lie detector and the result lines wait for A (lorenzo 2026-11-18: on a fast speed they could not be read) */
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && !strcmp(e.msg.key, key)) n++;
+    }
     return n;
 }
 
