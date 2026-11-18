@@ -20,6 +20,7 @@ static struct {
   bool loaded;      /* the run was resumed from a save: what happened before is unknown */
   bool ended;       /* the run's end was told */
   uint32_t darby_seen; /* the profile's D'Arby wins as of the last screen: a change is evaluated at once */
+  uint32_t rematch_seen; /* the same for his rematch */
   uint8_t q[QUEUE]; /* the ids unlocked and not yet taken */
   int nq, qi;
 } H;
@@ -94,8 +95,9 @@ bool ach_on_screen(const gc_run* run, int kind, int jojo, bool bizarre)
     }
   }
   /* D'Arby was beaten (game-core counts it when the hand is won): his achievement is told on the next screen */
-  if (sys->achv.darby_wins != H.darby_seen) {
+  if (sys->achv.darby_wins != H.darby_seen || sys->achv.darby_rematch_wins != H.rematch_seen) {
     H.darby_seen = sys->achv.darby_wins;
+    H.rematch_seen = sys->achv.darby_rematch_wins;
     changed |= evaluate(sys, run);
   }
   /* a new best wave (waves reached in any run) */

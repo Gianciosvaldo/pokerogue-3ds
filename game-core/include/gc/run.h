@@ -226,9 +226,12 @@ typedef struct {
 /* D'Arby the Gambler (gc_darby.c): GC_ME_STAGE_DARBY_SOUL picks one soul of the wager (n_options 1, a party member; me_args "soulsLeft"), GC_ME_STAGE_DARBY_CARD
  * picks the Pokemon played as the card (n_options 1, a party member; me_args "card1".."card6" = his six cards face up, PR_ARG_POKEMON_NAME, and "cardLevel"),
  * GC_ME_STAGE_DARBY_ACCUSE after a lost hand (0 = Accept the Deal, 1 = You Cheated!), GC_ME_STAGE_DARBY_VITAMIN after a Standard win (options 0..5 = the
- * vitamin of HP, Atk, Def, SpAtk, SpDef, Spd, each asks for a party member; me_args "vitaminsLeft") */
+ * vitamin of HP, Atk, Def, SpAtk, SpDef, Spd, each asks for a party member; me_args "vitaminsLeft"), GC_ME_STAGE_DARBY_RETURN after his rematch is won, one per
+ * sealed soul (0 = take it back: with six in the party it asks for the member it replaces, whose held items are dropped; 1 = leave it, gone for the run;
+ * me_args "pokemonName" = the soul, PR_ARG_POKEMON_NAME, and "partyFull" 0/1) */
 enum { GC_ME_STAGE_FIRST = 0, GC_ME_STAGE_TUTOR = 1, GC_ME_STAGE_SAFARI = 2, GC_ME_STAGE_ABILITY = 3,
-       GC_ME_STAGE_DARBY_SOUL = 4, GC_ME_STAGE_DARBY_CARD = 5, GC_ME_STAGE_DARBY_ACCUSE = 6, GC_ME_STAGE_DARBY_VITAMIN = 7 };
+       GC_ME_STAGE_DARBY_SOUL = 4, GC_ME_STAGE_DARBY_CARD = 5, GC_ME_STAGE_DARBY_ACCUSE = 6, GC_ME_STAGE_DARBY_VITAMIN = 7,
+       GC_ME_STAGE_DARBY_RETURN = 8 };
 int gc_superfan_tutor_move(const gc_run *run, int k);   /* the k-th (0..3) move the Bug-Type Superfan's tutor offers */
 enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
@@ -398,7 +401,7 @@ typedef struct gc_run {
     pr_battle bt;               /* battle-core's scene: field, weather, tags, the turn's commands */
     pr_engine eng;
     gc_screen screen;           /* what gc_run_screen returns */
-    uint64_t internal_[7424];   /* game-core's own state (the run's phase queue...): opaque */
+    uint64_t internal_[8448];   /* game-core's own state (the run's phase queue...): opaque */
     /* the event queue */
     gc_event events[GC_MAX_EVENTS];
     int ev_head, ev_count;
@@ -565,6 +568,10 @@ double gc_exp_level_fraction(const gc_mon *m);            /* 0..1 of the way thr
  * the species and form of his card. False before. It stays readable after the encounter has ended (a straight win can run on to the next wave
  * before the app plays the reveal lines). */
 bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form);
+/* D'Arby's rematch (custom content): the current trainer battle is his (his sprite, his name). Saved with the run. */
+bool gc_darby_rematch_battle(const gc_run *run);
+/* the souls sealed in his chips (0..3), waiting for the rematch */
+int gc_darby_sealed(const gc_run *run);
 void gc_debug_force_mystery(int type, int min_wave);
 
 #endif

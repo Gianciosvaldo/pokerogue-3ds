@@ -24,7 +24,7 @@
   "\"1\":{\"label\":\"Wager one soul\"," \
   "\"tooltip\":\"(-) Lose 1 Pokemon if you lose (+) 2 Rarer Candy and 2 vitamins of your choice\"}," \
   "\"2\":{\"label\":\"Go all in\"," \
-  "\"tooltip\":\"(-) Lose 3 Pokemon if you lose (+) A Big Nugget and 2 Master-tier reward screens\"}," \
+  "\"tooltip\":\"(-) Lose 3 Pokemon if you lose (+) A Big Nugget, a Master-tier and a Rogue-tier reward screen\"}," \
   "\"3\":{\"label\":\"Walk away\"," \
   "\"tooltip\":\"(-) Nothing happens\"," \
   "\"selected\":\"You leave D'Arby to his cards.\"}}," \
@@ -33,8 +33,8 @@
   "\"query\":\"Choose the Pokemon you will play.\"}," \
   "\"accuse\":{\"query\":\"What will you do?\"," \
   "\"option\":{" \
-  "\"1\":{\"label\":\"Accept the Deal\",\"tooltip\":\"(-) D'Arby takes the souls you wagered\"}," \
-  "\"2\":{\"label\":\"You Cheated!\",\"tooltip\":\"(+) If he cheated, you win the full reward (-) If he didn't, you lose the souls and all your money\"}}}," \
+  "\"1\":{\"label\":\"Accept the Deal\",\"tooltip\":\"(-) D'Arby seals the souls you wagered in his chips (+) Beat him when he comes back to win them back\"}," \
+  "\"2\":{\"label\":\"You Cheated!\",\"tooltip\":\"(+) If he cheated, you win the full reward (-) If he didn't, the souls are lost for good\"}}}," \
   "\"vitamin\":{\"query\":\"Choose a vitamin to give. ({{vitaminsLeft}} left)\"}," \
   "\"line\":{\"1\":\"\\\"I've already made my move. Show me yours.\\\"\",\"2\":\"\\\"Fate has already decided this hand.\\\"\"}," \
   "\"reveal\":{" \
@@ -49,9 +49,16 @@
   "\"win\":\"You win the hand!\"," \
   "\"handLost\":\"D'Arby wins the hand.\"," \
   "\"caught\":\"The swapped card slips from D'Arby's sleeve!\"," \
-  "\"falseCall\":\"D'Arby smiles. \\\"An honest hand, trainer. That accusation costs you everything.\\\"\"," \
-  "\"moneyGone\":\"You lost all your money.\"," \
-  "\"soulTaken\":\"{{pokemonName}} faints, and its soul is sealed in one of D'Arby's cards.\"}," \
+  "\"falseCall\":\"D'Arby smiles. \\\"An honest hand, trainer. Those souls are mine for good.\\\"\"," \
+  "\"soulTaken\":\"{{pokemonName}}'s soul is lost to D'Arby for good.\"," \
+  "\"soulSealed\":\"{{pokemonName}}'s soul is sealed in one of D'Arby's poker chips.\"}," \
+  "\"rematch\":{" \
+  "\"query\":\"D'Arby's chip holds {{pokemonName}}. Take it back?\"," \
+  "\"option\":{" \
+  "\"1\":{\"label\":\"Take it back\",\"tooltip\":\"(+) {{pokemonName}} rejoins your party at the level it fought at\"}," \
+  "\"2\":{\"label\":\"Leave it\",\"tooltip\":\"(-) {{pokemonName}} is gone for the rest of the run\"}}," \
+  "\"back\":\"{{pokemonName}} is back in your party!\"," \
+  "\"gone\":\"{{pokemonName}} stays with D'Arby.\"}," \
   "\"outro\":\"D'Arby gathers his cards and is gone.\"" \
   "}"
 

@@ -182,6 +182,7 @@ static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_b
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
 static int n_dreams, n_dream_pairs, dream_pending;   /* Weird Dream: dreams played, pairs in them, pairs handed over and not played yet */
 static int n_mystery_trainer_scenes;
+static int n_darby_rematches;   /* scenes of D'Arby's rematch (sealed souls) */
 static int n_me_scenes, n_me_intro_calls;   /* the encounter waves' scenes, and the intro sprites they were given (bv_me_intro) */
 static bool me_scene_open;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
@@ -531,7 +532,15 @@ void bv_begin(const bv_setup* setup) {
     char custom_key[64] = "";
     if (foe) snprintf(custom_key, sizeof custom_key, "images/trainer/custom/%s", foe->id);
     if (foe && (strcmp(setup->trainer_keys[0], custom_key) || setup->trainer_keys[1][0])) BAD("%s is drawn as \"%s\" / \"%s\"", foe->id, setup->trainer_keys[0], setup->trainer_keys[1]);
-    if (!foe && !strncmp(setup->trainer_keys[0], "images/trainer/custom/", 22)) BAD("an ordinary trainer drawn as a JoJo one: %s", setup->trainer_keys[0]);
+    /* D'Arby's rematch (game-core gc_darby.c): his battle sprite, else his encounter one, alone, named D'Arby */
+    const bool darby = gc_darby_rematch_battle(r);
+    if (darby) {
+      n_darby_rematches++;
+      if ((strcmp(setup->trainer_keys[0], "images/trainer/custom/darby_battle") && strcmp(setup->trainer_keys[0], "images/trainer/custom/darby")) || setup->trainer_keys[1][0] || strcmp(setup->trainer_name, "D'Arby"))
+        BAD("D'Arby's rematch is drawn as \"%s\" / \"%s\" named \"%s\"", setup->trainer_keys[0], setup->trainer_keys[1], setup->trainer_name);
+      if (foe) BAD("D'Arby's rematch is also a JoJo trainer (%s)", foe->id);
+    }
+    if (!foe && !darby && !strncmp(setup->trainer_keys[0], "images/trainer/custom/", 22)) BAD("an ordinary trainer drawn as a JoJo one: %s", setup->trainer_keys[0]);
     if (r->trainer_type>=TRAINER_TYPE_RIVAL && r->trainer_type<=TRAINER_TYPE_RIVAL_6) {
       const char* expected=r->trainer_variant==TRAINER_VARIANT_FEMALE?"images/trainer/rival_f":"images/trainer/rival_m";
       if (strcmp(setup->trainer_keys[0],expected)) BAD("wrong rival sprite %s",setup->trainer_keys[0]);
@@ -2540,6 +2549,7 @@ int main(int argc, char** argv) {
            CU.commits, CU.nemeses, CU.store_refused, CU.no_finisher, cs->waves, cs->windows, cs->offers, cs->accepts, cs->declines, cs->built, cs->refused, cs->wins,
            cs->losses, cs->claims, regular, m ? m->roster.count : 0, claimed, stored, cs->runs_resumed, cs->candidates, cs->candidates_none, cs->degraded);
     printf("custom: %u eligible trainer waves, %u JoJo trainers (%d intros, %d iconic lines played)\n", cs->jojo_waves, cs->jojo_fights, n_jojo_intro, n_jojo_talk);
+    printf("custom: %d scenes of D'Arby's rematch\n", n_darby_rematches);
     if (n_jojo_intro != n_jojo_talk) BAD("%d Bizarre Foe intros but %d iconic lines", n_jojo_intro, n_jojo_talk);
     if (runs >= 200 && !n_jojo_talk) BAD("no JoJo trainer came up in %d custom runs", runs);
     printf("custom: finishers the store refused, by reason:");
