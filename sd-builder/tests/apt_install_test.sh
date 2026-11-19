@@ -43,7 +43,7 @@ check() { # DESCRIPTION CONDITION...
 
 run "ok ok" mingw-w64 zip
 check "a good apt-get installs once: exit 0, two calls (update, install)" test "$RC" -eq 0 -a "$CALLS" -eq 2
-check "the packages and -y reach apt-get untouched" grep -q -- "-y -qq mingw-w64 zip$" "$T/log"
+check "the packages and -y reach apt-get untouched" grep -q -- "install -y mingw-w64 zip$" "$T/log"
 
 run "fail ok ok" ffmpeg
 check "a failing update is tried again and then installs" test "$RC" -eq 0 -a "$CALLS" -eq 3
