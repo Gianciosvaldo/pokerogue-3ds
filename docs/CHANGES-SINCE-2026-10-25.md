@@ -1,8 +1,8 @@
 # Changes since the October 25 README
 
 This index records every first-parent commit after `414fde50cd13f6e7c03f5cd49e5550a52f7a49c2` (2026-10-25), the head the previous
-README described, through `d6abb21ef3d6825fd41b4a247dc6ccc41725b2a7` (2026-11-18).
-There are 263 entries, in landing order. Merge entries summarize the PR rather than
+README described, through `327a70ffcc7c5ac643e60fea2d514a7f29b63e37` (2026-11-19).
+There are 265 entries, in landing order. Merge entries summarize the PR rather than
 listing its internal commits; where a merge carried no title of its own, the title is the PR branch's last
 non-merge commit. Titles describe each change at the time it landed; later entries can supersede earlier
 limitations. This is a history, not an exhaustive parity or hardware acceptance claim. See the
@@ -322,3 +322,8 @@ limitations. This is a history, not an exhaustive parity or hardware acceptance 
 - [#683](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/683): D'Arby: no Reroll on the Master screens; four OR MORE Pokemon qualify (tested with six) ([commit](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/b241ea9404f09169a5b96d53d7eaac22477a9c4c)).
 - [#685](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/685): JoJo achievements: lorenzo's titles for the 34 base and 34 Flawless ([commit](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/aa494235746e8983798a0c2a2824c9bd488f8f5c)).
 - [#684](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/684): D'Arby playtest 2: Master + Rogue screens, trainer steps out at the table, achievement bar on the screen edge ([commit](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/d6abb21ef3d6825fd41b4a247dc6ccc41725b2a7)).
+
+## 2026-11-19
+
+- [#687](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/687): README: everything merged since 2026-10-25, including the custom content ([commit](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/ad4e938da864aef8a096286cbb6e705ef911acad)).
+- [#686](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/686): D'Arby: sealed chips on Accept, rematch trainer to win them back ([commit](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/327a70ffcc7c5ac643e60fea2d514a7f29b63e37)).
