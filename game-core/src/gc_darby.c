@@ -13,6 +13,8 @@
 
 #define DARBY_CHEAT_PERCENT 75
 
+static void chip_answer(gc_run *run, int k, bool take, int replace);   /* the rematch's return screens (below) */
+
 /* the types of a card (species, form): 1 or 2 */
 static int card_types(const gc_darby_card *c, int8_t t[2])
 {
@@ -92,7 +94,9 @@ bool gc_darby_player_wins(const gc_darby_card *player, const gc_darby_card *darb
  * loss offers Accept the Deal or You Cheated! (and only then the lie detector's line). No ordinary shop after any result.
  *   Standard win: 2 Rarer Candy, then two vitamins, the player picking the vitamin and the Pokemon for each.
  *   All-In win: a Big Nugget, then a reward screen of Master-tier items and one of Rogue-tier items, as many as the shop would offer now.
- *   A loss: the souls leave the party with their held items. A false accusation also takes all of the player's money. */
+ *   A loss (lorenzo 2026-11-18): Accept the Deal seals the souls in D'Arby's chips with their held items; he comes back later as a trainer
+ *   (gc_darby_rematch_*) with his own three and the sealed souls, and beating him gives each one back. A false accusation loses them for the
+ *   run, and nothing else (no money is taken any more). */
 #define DARBY_FAINTED_CARD_OK 1   /* a fainted Pokemon may be played as the card (asked 2026-11-17, unanswered; one switch) */
 
 static const char *const DARBY_X[17] = {"0x", "0.25x", "0.5x", "", "1x", "", "", "", "2x", "", "", "", "", "", "", "", "4x"};
@@ -156,6 +160,7 @@ bool gc_darby_pick_ok(const gc_run *run, int option, int idx)
     case GC_ME_STAGE_DARBY_SOUL: return option == 0 && !is_soul(run, idx);
     case GC_ME_STAGE_DARBY_CARD: return option == 0 && (DARBY_FAINTED_CARD_OK || run->party[idx].b.hp > 0);
     case GC_ME_STAGE_DARBY_VITAMIN: return vitamin_ok(run, option, idx);
+    case GC_ME_STAGE_DARBY_RETURN: return option == 0 && run->n_party >= 6;   /* the member the sealed soul replaces */
     default: return false;
     }
 }
@@ -263,15 +268,33 @@ static void darby_win(gc_run *run)
     darby_end(run);
 }
 
+/* Accept the Deal: the souls leave the party sealed in his chips, each with the held items it had (the highest storage index first, as take_souls) */
+static void seal_souls(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    int8_t s[3];
+    const int n = in->darby.n_souls;
+    memcpy(s, in->darby.souls, sizeof s);
+    for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+            if (s[j] > s[i]) { const int8_t t = s[i]; s[i] = s[j]; s[j] = t; }
+    for (int i = 0; i < n; i++) {
+        if (s[i] < 0 || s[i] >= run->n_party || in->chips.n >= 3) continue;
+        const gc_mon *m = &run->party[s[i]];
+        for (int k = 0; k < run->n_items; k++)
+            if (run->items[k].pokemon_id == m->b.id && in->chips.n_items < GC_DARBY_CHIP_ITEMS) in->chips.items[in->chips.n_items++] = run->items[k];
+        in->chips.mon[in->chips.n++] = *m;
+        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.soulSealed", 1, pr_arg_pokemon_name(&run->bt, "pokemonName", &m->b)));
+        gc_party_remove(run, s[i]);
+    }
+    gc_me_prune_items(run);   /* their items left the party with them (kept in the chips) */
+    gc_me_update_modifiers(run);
+}
+
 static void darby_lose(gc_run *run, bool false_call)
 {
-    take_souls(run);
-    if (false_call) {
-        const double before = run->money;
-        run->money = 0;
-        gc_ev_money(run, -before);
-        darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:result.moneyGone", 0));
-    }
+    if (false_call) take_souls(run);   /* lost for the run */
+    else seal_souls(run);
     darby_end(run);
 }
 
@@ -311,6 +334,15 @@ bool gc_darby_stage_start(gc_run *run, const gc_rphase *p)
     case GC_DARBY_STAGE_ACCUSE:
         open_stage(run, GC_ME_STAGE_DARBY_ACCUSE, 2);
         return false;
+    case GC_DARBY_STAGE_RETURN: {
+        if (p->b < 0 || p->b >= in->chips.n) return true;
+        open_stage(run, GC_ME_STAGE_DARBY_RETURN, 2);
+        const bool full = run->n_party >= 6;
+        if (full) s->option_pick[0] = GC_PICK_MEMBER;   /* which member it replaces */
+        s->me_args[s->n_me_args++] = pr_arg_pokemon_name(&run->bt, "pokemonName", &in->chips.mon[p->b].b);
+        s->me_args[s->n_me_args++] = pr_arg_int("partyFull", full);
+        return false;
+    }
     case GC_DARBY_STAGE_VITAMIN:
         open_stage(run, GC_ME_STAGE_DARBY_VITAMIN, 6);
         for (int i = 0; i < 6; i++) {
@@ -397,7 +429,8 @@ bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, 
     gc_internal *in = gc_int(run);
     if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
     if (c->a < 0 || c->a >= run->screen.n_options || !run->screen.option_ok[c->a]) { *why = "option not allowed"; return false; }
-    const bool picks = p->a == GC_DARBY_STAGE_SOUL || p->a == GC_DARBY_STAGE_CARD || p->a == GC_DARBY_STAGE_VITAMIN;
+    const bool picks = p->a == GC_DARBY_STAGE_SOUL || p->a == GC_DARBY_STAGE_CARD || p->a == GC_DARBY_STAGE_VITAMIN
+                       || (p->a == GC_DARBY_STAGE_RETURN && c->a == 0 && run->n_party >= 6);
     if (picks && !gc_darby_pick_ok(run, c->a, c->b)) { *why = "no such Pokemon"; return false; }
     *ok = true;
     const int b = c->b;
@@ -420,6 +453,9 @@ bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, 
             darby_lose(run, true);
         }
         return true;
+    case GC_DARBY_STAGE_RETURN:
+        chip_answer(run, p->b, c->a == 0, b);
+        return true;
     case GC_DARBY_STAGE_VITAMIN:
         gc_me_give_vitamin(run, b, c->a);
         in->darby.vitamins_left--;
@@ -439,4 +475,141 @@ bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form
     *species = in->darby.deck[in->darby.shown].species;
     *form = in->darby.deck[in->darby.shown].form;
     return true;
+}
+
+/* ---------------------------------------------------------------- the rematch (lorenzo 2026-11-18)
+ * After an accepted loss D'Arby becomes a trainer that takes an ordinary single trainer wave (gc_custom_trainer_wave) later in the run: 17.5% each
+ * (lorenzo), and every one from DARBY_REMATCH_SURE_WAVE to DARBY_REMATCH_LAST_WAVE ("the last trainer wave at or before 172").
+ * His team: his own three, then the sealed souls, all at the levels of the wave's ordinary trainer party (the souls take the last, highest ones); the
+ * souls keep everything else (species, form, moves, nature, IVs, ability, held items). Losing it is a lost trainer battle (the run ends). Winning
+ * it: "Debt Paid in Full", then one screen per soul: take it back (with six in the party it replaces a member, as a catch does) or leave it. */
+#define DARBY_REMATCH_PERMILLE 175   /* 17.5% (lorenzo 2026-11-18) */
+#define DARBY_REMATCH_SURE_WAVE 165
+#define DARBY_REMATCH_LAST_WAVE 172
+
+/* D'Arby's own three (lorenzo 2026-11-18). Klefki's Switcheroo is not in the battle layer yet (pr_moves unimplemented, gc_custom_team_check refuses
+ * it); lorenzo asked for a fitting fourth move instead: Spikes, and no item (no way to pass the Toxic Orb on, lorenzo removed it). Dazzling Gleam replaces Foul Play (lorenzo 2026-11-18). Ability slots: Thievul's Stakeout is its hidden one, Klefki's Prankster and Cofagrigus's Mummy slot 0. */
+static const gc_custom_team_member DARBY_OWN[3] = {
+    {SPECIES_ID_THIEVUL, 0, 2, false, 0, {MOVE_ID_PARTING_SHOT, MOVE_ID_DARK_PULSE, MOVE_ID_BURNING_JEALOUSY, MOVE_ID_FOUL_PLAY}, 0, {{0}}},
+    {SPECIES_ID_KLEFKI, 0, 0, false, 0, {MOVE_ID_DAZZLING_GLEAM, MOVE_ID_SWAGGER, MOVE_ID_THUNDER_WAVE, MOVE_ID_SPIKES}, 0, {{0}}},
+    {SPECIES_ID_COFAGRIGUS, 0, 0, false, 0, {MOVE_ID_WILL_O_WISP, MOVE_ID_HEX, MOVE_ID_PAIN_SPLIT, MOVE_ID_DESTINY_BOND}, 1, {{"LEFTOVERS", -1, 1}}},
+};
+
+int gc_darby_sealed(const gc_run *run) { return gc_int((gc_run *)run)->chips.n; }
+bool gc_darby_rematch_battle(const gc_run *run) { return gc_int((gc_run *)run)->chips.battle && run->battle_type == BATTLE_TYPE_TRAINER; }
+
+bool gc_darby_rematch_due(gc_run *run, int wave)
+{
+    const gc_internal *in = gc_int(run);
+    if (!in->chips.n || in->chips.battle || in->chips.taken || wave > DARBY_REMATCH_LAST_WAVE) return false;
+    if (wave >= DARBY_REMATCH_SURE_WAVE) return true;
+    /* a stream of its own (the wave's offset seed), so the run's own rolls are untouched */
+    pr_rng r = pr_run_seed_offset_rng(&run->run, wave + 0x4441, NULL);
+    return pr_rng_seed_int(&r, 1000, 0) < DARBY_REMATCH_PERMILLE;
+}
+
+/* a sealed soul as his: its own Pokemon at the slot's level, an enemy of the trainer's slot (gc_enemy_finish_party makes its stats and full HP) */
+static void chip_as_enemy(gc_mon *slot, const gc_mon *chip)
+{
+    const int level = slot->b.level;
+    gc_mon m = *chip;
+    const pr_species *sp = gc_species(m.b.species);
+    m.b.level = level;
+    m.exp = gc_level_total_exp(level, sp ? sp->growth_rate : 0);
+    m.b.is_player = false;
+    m.b.has_trainer = true;
+    m.b.trainer_slot = m.trainer_slot = TRAINER_SLOT_TRAINER;
+    m.b.on_field = false;
+    m.b.is_boss = false;
+    m.b.boss_segments = m.b.boss_segment_index = 0;
+    m.b.status = 0;
+    pr_reset_summon_data(&m.b);
+    pr_reset_turn_data(&m.b);
+    *slot = m;
+}
+
+bool gc_darby_build_rematch(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    static gc_custom_team team;
+    memset(&team, 0, sizeof team);
+    team.name = "D'Arby";
+    team.passive = -1;
+    for (int i = 0; i < 3; i++) team.member[team.n++] = DARBY_OWN[i];
+    for (int i = 0; i < in->chips.n; i++) {   /* a place for each soul (its level only): the soul itself goes in after, so a form or move of
+                                                 * its own that a written team could not hold never stops the rematch */
+        gc_custom_team_member *t = &team.member[team.n++];
+        t->species = SPECIES_ID_RATTATA;
+        t->moves[0] = MOVE_ID_TACKLE;
+    }
+    if (!gc_custom_build_trainer(run, &team)) return false;
+    for (int i = 0; i < in->chips.n; i++) {
+        chip_as_enemy(&run->enemy[3 + i], &in->chips.mon[i]);
+        in->chips.level[i] = (uint8_t)run->enemy[3 + i].b.level;
+    }
+    in->chips.battle = true;
+    return true;
+}
+
+void gc_darby_rematch_items(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (!in->chips.battle) return;
+    for (int i = 0; i < in->chips.n_items && run->n_enemy_items < GC_MAX_ITEMS; i++) {
+        gc_item *it = &run->enemy_items[run->n_enemy_items++];
+        *it = in->chips.items[i];
+        it->detached = false;
+        it->virtual_stack = 0;
+        it->type_ref = 0;
+        it->loot_ref = 0;
+    }
+}
+
+void gc_darby_rematch_won(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (!in->chips.battle) return;
+    in->chips.battle = false;
+    in->chips.taken = 0;
+    gc_achv_darby_rematch_won(run->sys);
+    for (int i = 0; i < in->chips.n; i++) gc_rq_push(run, gc_rp(RP_DARBY, GC_DARBY_STAGE_RETURN, i, 0));
+}
+
+/* one soul's answer: back in the party at the level it fought at (in place of `replace` with six), or gone; the last answer empties the chips */
+static void chip_answer(gc_run *run, int k, bool take, int replace)
+{
+    gc_internal *in = gc_int(run);
+    if (k < 0 || k >= in->chips.n) return;
+    gc_mon m = in->chips.mon[k];
+    const uint32_t id = m.b.id;
+    if (take) {
+        const pr_species *sp = gc_species(m.b.species);
+        const int level = in->chips.level[k] > 0 ? in->chips.level[k] : m.b.level;
+        m.b.level = level;
+        m.exp = gc_level_total_exp(level, sp ? sp->growth_rate : 0);
+        gc_mon_recalc(run, &m);
+        m.b.hp = m.b.stats[STAT_HP];   /* lorenzo 2026-11-18: a soul comes back at full HP with no status */
+        m.b.status = m.b.pending_status = STATUS_EFFECT_NONE;
+        m.b.status_toxic_turns = 0;
+        m.b.status_sleep_turns = m.b.status_freeze_turns = -1;
+        if (run->n_party < 6) {
+            run->party[run->n_party] = m;
+            run->party_order[run->n_party] = (int8_t)run->n_party;
+            run->n_party++;
+        } else if (replace >= 0 && replace < run->n_party) {
+            gc_ev_msg(run, "partyUiHandler:goodbye", 1, gc_m_mon(run, "pokemonName", 0, replace));
+            gc_items_drop_held_of(run, run->party[replace].b.id);
+            run->party[replace] = m;
+        } else take = false;
+        run->bt.n_party[0] = (uint8_t)run->n_party;
+        for (int i = 0; i < run->n_party; i++) run->bt.party[0][i] = &run->party[run->party_order[i]].b;
+        if (take) {
+            for (int i = 0; i < in->chips.n_items && run->n_items < GC_MAX_ITEMS; i++)
+                if (in->chips.items[i].pokemon_id == id) run->items[run->n_items++] = in->chips.items[i];
+            darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:rematch.back", 1, pr_arg_pokemon_name(&run->bt, "pokemonName", &m.b)));
+            gc_me_update_modifiers(run);
+        }
+    }
+    if (!take) darby_ev_prompt(gc_ev_msg(run, "mysteryEncounters/darby:rematch.gone", 1, pr_arg_pokemon_name(&run->bt, "pokemonName", &m.b)));
+    if (++in->chips.taken >= in->chips.n) memset(&in->chips, 0, sizeof in->chips);
 }

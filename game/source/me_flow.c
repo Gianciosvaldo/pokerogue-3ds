@@ -886,6 +886,17 @@ static void open_darby(int cursor)
       snprintf(sub, sizeof sub, "accuse.option.%d.tooltip", i + 1);
       fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
     }
+  } else if (s->me_stage == GC_ME_STAGE_DARBY_RETURN) {   /* after his rematch: one sealed soul, take it back or leave it (lorenzo 2026-11-18) */
+    fmt("rematch.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < 2; i++) {
+      char sub[48];
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      snprintf(sub, sizeof sub, "rematch.option.%d.label", i + 1);
+      fmt(sub, NULL, 0, false, o->label, sizeof o->label);
+      snprintf(sub, sizeof sub, "rematch.option.%d.tooltip", i + 1);
+      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+    }
   } else {   /* GC_ME_STAGE_DARBY_VITAMIN */
     fmt("vitamin.query", NULL, 0, false, a.query, sizeof a.query);
     for (int i = 0; i < s->n_options && i < 6; i++) {

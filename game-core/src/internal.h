@@ -54,6 +54,7 @@ enum {
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
 #define GC_DARBY_DECK 6
 typedef struct { uint16_t species; uint8_t form; } gc_darby_card;   /* one of D'Arby's cards, or the player's (gc_darby.c) */
+#define GC_DARBY_CHIP_ITEMS 24   /* the held items the sealed souls keep (three Pokemon) */
 #define GC_RQ_LEVELS 12
 #define GC_RQ_CAP 24
 typedef struct {
@@ -157,6 +158,9 @@ typedef struct {
     struct { bool active; } clown;   /* Clowning Around: the fight is running. Not saved, as trtest */
     struct { uint8_t wager, n_souls; int8_t souls[3]; bool dealt; gc_darby_card deck[6]; int16_t level; int8_t fair, shown, card, detector; bool cheated, won;
              uint8_t vitamins_left, shops; pr_rng r; } darby;   /* D'Arby the Gambler's hand (gc_darby.c). Not saved, as the other encounters' middle states */
+    /* D'Arby's chips (lorenzo 2026-11-18): the souls of an accepted loss, sealed with their held items until his rematch. Saved (gc_save.c "darby_chips").
+     * battle: the rematch is being fought (his team holds them); taken: the chips the win's screens have answered */
+    struct { uint8_t n, n_items, taken; bool battle; uint8_t level[3]; gc_mon mon[3]; gc_item items[GC_DARBY_CHIP_ITEMS]; } chips;   /* level: the one each fought at (it comes back with it) */
     /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
      * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
     struct { bool valid, fight, reward; uint8_t n; int16_t wave; uint16_t species[6]; pr_rng s1; } weird;
@@ -609,13 +613,18 @@ int gc_darby_compare(const gc_darby_card *a, const gc_darby_card *b);    /* +1 a
 int gc_darby_reveal(const gc_darby_card deck[GC_DARBY_DECK], int fair, const gc_darby_card *player, pr_rng *r, bool *cheated);
 bool gc_darby_player_wins(const gc_darby_card *player, const gc_darby_card *darby, pr_rng *r);
 enum { GC_DARBY_STANDARD = 0, GC_DARBY_ALL_IN = 1, GC_DARBY_WALK_AWAY = 2 };   /* the first screen's options */
-enum { GC_DARBY_STAGE_SOUL, GC_DARBY_STAGE_CARD, GC_DARBY_STAGE_ACCUSE, GC_DARBY_STAGE_VITAMIN, GC_DARBY_STAGE_SHOP, GC_DARBY_STAGE_GIVE };   /* RP_DARBY's a */
+enum { GC_DARBY_STAGE_SOUL, GC_DARBY_STAGE_CARD, GC_DARBY_STAGE_ACCUSE, GC_DARBY_STAGE_VITAMIN, GC_DARBY_STAGE_SHOP, GC_DARBY_STAGE_GIVE, GC_DARBY_STAGE_RETURN };   /* RP_DARBY's a */
 void gc_darby_execute(gc_run *run, int option, int member);   /* the wager (member: the soul the Standard wager's party screen picked, -1 = ask) */
 bool gc_darby_stage_start(gc_run *run, const gc_rphase *p);   /* false = waits on its screen */
 bool gc_darby_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
 bool gc_darby_pick_ok(const gc_run *run, int option, int idx);   /* the party screen's filter of the screen on now */
 int gc_darby_detector(const gc_run *run, int *ability, int *move);   /* the lie detector: the first conscious party member (storage index) with one of the abilities or moves, -1 = none */
 void gc_darby_deal(gc_run *run);                                /* the six cards (any species, distinct, face up), the fair one, their level */
+/* D'Arby's rematch (lorenzo 2026-11-18): after an accepted loss he takes a later ordinary trainer wave with his own three and the sealed souls */
+bool gc_darby_rematch_due(gc_run *run, int wave);               /* this eligible trainer wave is his (the chance, or the sure window) */
+bool gc_darby_build_rematch(gc_run *run);                       /* the wave's party becomes his team; false = it stays */
+void gc_darby_rematch_items(gc_run *run);                       /* enemy_items: the sealed souls hold their own items (gc_custom_team_items) */
+void gc_darby_rematch_won(gc_run *run);                         /* the trainer victory of his rematch: one screen per chip, the achievement */
 void gc_mc_execute(gc_run *run, int option);                /* its option chosen: the fight starts (victory is gc_pillar_victory) */
 void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */
 void gc_me_end_with_shop(gc_run *run);                      /* the shop in me_custom, then on to the next wave (end_mystery_encounter_shop) */

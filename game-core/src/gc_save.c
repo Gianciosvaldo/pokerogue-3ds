@@ -86,6 +86,10 @@ static const sfield enemy_tera_fields[]={SF(gc_mon,tera_instant)};
  * so a save from before it loads with no custom types and counts nothing as dropped */
 static const sfield custom_type_fields[]={SF(pr_pokemon,custom_types),SF(pr_pokemon,fusion_custom_types)};
 static const sfield fusion_fields[]={SF(gc_mon,fusion_shiny),SF(gc_mon,fusion_variant),SF(gc_mon,fusion_luck)};
+/* D'Arby's chips (gc_darby.c): the sealed souls, their items and the rematch state. Sections of their own, written only while a soul is sealed, so
+ * older saves load with none */
+typedef struct { uint8_t n, n_items, taken, battle; uint8_t level[3]; } sv_darby;
+static const sfield darby_fields[]={SF(sv_darby,n),SF(sv_darby,n_items),SF(sv_darby,taken),SF(sv_darby,battle),SF(sv_darby,level)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -663,6 +667,16 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     s = section_start(&w, "stats");
     put_block(&w, stat_fields, NF(stat_fields), run, sizeof *run, 1);
     section_end(&w, s);
+    if (in->chips.n) {
+        sv_darby d={in->chips.n,in->chips.n_items,in->chips.taken,in->chips.battle,{in->chips.level[0],in->chips.level[1],in->chips.level[2]}};
+        s=section_start(&w,"darby_chips");put_block(&w,darby_fields,NF(darby_fields),&d,sizeof d,1);section_end(&w,s);
+        put_mons(&w,"darby_mons",in->chips.mon,in->chips.n);
+        put_items(&w,"darby_items",in->chips.items,in->chips.n_items);
+        s=section_start(&w,"darby_extra");
+        put_block(&w,fusion_fields,NF(fusion_fields),in->chips.mon,sizeof(gc_mon),in->chips.n);
+        put_block(&w,custom_type_fields,NF(custom_type_fields),&in->chips.mon[0].b,sizeof(gc_mon),in->chips.n);
+        section_end(&w,s);
+    }
     if (run->terminal_result) {
         sv_terminal terminal={run->terminal_result};
         s=section_start(&w,"terminal");put_block(&w,terminal_fields,NF(terminal_fields),&terminal,sizeof terminal,1);section_end(&w,s);
@@ -1242,6 +1256,25 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         return false;
     }
 
+    /* D'Arby's chips: none in an older save */
+    memset(&in->chips,0,sizeof in->chips);
+    reader darby_r=section(&body,"darby_chips");
+    if(!darby_r.bad){
+        sv_darby d;memset(&d,0,sizeof d);
+        static gc_mon chip_mons[6];
+        if(get_block(&darby_r,darby_fields,NF(darby_fields),&d,sizeof d,1,&dropped)!=1||d.n<1||d.n>3||d.n_items>GC_DARBY_CHIP_ITEMS||d.taken>=d.n||d.battle>1
+           ||!get_mons(&body,"darby_mons",chip_mons,d.n,&dropped)||!get_items(&body,"darby_items",in->chips.items,d.n_items,&dropped)){
+            memset(run,0,sizeof *run);*why="the stored D'Arby chips are damaged";return false;
+        }
+        reader extra=section(&body,"darby_extra");
+        if(!extra.bad&&(get_block(&extra,fusion_fields,NF(fusion_fields),chip_mons,sizeof(gc_mon),d.n,&dropped)!=d.n
+                        ||get_block(&extra,custom_type_fields,NF(custom_type_fields),&chip_mons[0].b,sizeof(gc_mon),d.n,&dropped)!=d.n)){
+            memset(run,0,sizeof *run);*why="the stored D'Arby chips are damaged";return false;
+        }
+        for(int i=0;i<d.n;i++){in->chips.mon[i]=chip_mons[i];in->chips.level[i]=d.level[i];}
+        in->chips.n=d.n;in->chips.n_items=d.n_items;in->chips.taken=d.taken;in->chips.battle=d.battle!=0;
+    }
+
     reader multi_storage=section(&body,"multi_lens_storage");
     if(multi_storage.bad)repair_legacy_multi_lenses(run);
     else if(multi_storage.n!=1||multi_storage.p[0]!=1){*why="the stored Multi Lens compatibility marker is damaged";return false;}
@@ -1527,6 +1560,7 @@ static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, fb_wins), SF(gc_achv_progress, fb_titles), SF(gc_achv_progress, fb_shutouts), SF(gc_achv_progress, fb_blowouts),
     SF(gc_achv_progress, jojo_clean_mask), SF(gc_achv_progress, jojo_clean_mask_hi),   /* appended last: a save without them loads with 0 */
     SF(gc_achv_progress, darby_wins),
+    SF(gc_achv_progress, darby_rematch_wins),
 };
 
 static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};

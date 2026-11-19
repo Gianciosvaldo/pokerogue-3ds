@@ -950,7 +950,9 @@ void gc_new_battle(gc_run *run)
     }
     /* custom content: an eligible ordinary trainer wave may become a custom team's (gc/custom.h, trainer()); before the party is finished,
      * so the dex, the items and the AI see only the party that fights */
-    if (in->custom && !stand_in && gc_custom_trainer_wave(run, wave)) {
+    /* D'Arby's rematch (custom content, Bizarre runs): only with sealed souls, which only his encounter makes; it takes the wave before the app's hook */
+    const bool darby = !stand_in && gc_darby_sealed(run) && gc_custom_trainer_wave(run, wave) && gc_darby_rematch_due(run, wave) && gc_darby_build_rematch(run);
+    if (!darby && in->custom && !stand_in && gc_custom_trainer_wave(run, wave)) {
         gc_custom_encounter enc;
         memset(&enc, 0, sizeof enc);
         enc.wave = wave;

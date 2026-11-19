@@ -43,6 +43,7 @@ void gc_queue_battle_end(gc_run *run)
     }
     gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
     if (run->battle_type == BATTLE_TYPE_TRAINER) gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
+    gc_darby_rematch_won(run);   /* D'Arby's rematch: after his money and rewards, a screen for each sealed soul */
     const int mode = run->run.mode, wave = run->wave;
     const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
     const bool classic = mode == GAME_MODES_CLASSIC;

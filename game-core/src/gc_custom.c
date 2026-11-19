@@ -348,6 +348,7 @@ void gc_custom_team_items(gc_run *run)
             it->pokemon_id = run->enemy[e].b.id;
         }
     }
+    gc_darby_rematch_items(run);   /* the sealed souls of D'Arby's rematch hold their own items */
 }
 
 /* Whether the wave just generated is one where a team may replace the party: an ordinary random single trainer wave. Not a double, a boss, the

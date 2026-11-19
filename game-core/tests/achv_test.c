@@ -45,7 +45,7 @@ int main(void)
 
     /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
     {
-        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_FLAWLESS_FIRST + GC_JOJO_COUNT + 1 && GC_ACHV_DARBY == GC_ACHV_COUNT - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
+        assert(GC_JOJO_COUNT == 34 && GC_JOJO_CAESAR == 17 && GC_ACHV_COUNT == GC_ACHV_FLAWLESS_FIRST + GC_JOJO_COUNT + 2 && GC_ACHV_DARBY == GC_ACHV_COUNT - 2 && GC_ACHV_DARBY_REMATCH == GC_ACHV_COUNT - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
                GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17);
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
@@ -214,7 +214,8 @@ int main(void)
         }
         /* everything else in id order, from the runs */
         for (int id = 30; id < GC_ACHV_JOJO2_FIRST; id++) assert(gc_achv_order(pos++) == id);
-        assert(gc_achv_order(pos++) == GC_ACHV_DARBY);   /* D'Arby's, the only non-JoJo one after 99 */
+        assert(gc_achv_order(pos++) == GC_ACHV_DARBY);   /* D'Arby's two, the only non-JoJo ones after 99 */
+        assert(gc_achv_order(pos++) == GC_ACHV_DARBY_REMATCH);
         assert(pos == GC_ACHV_COUNT);
     }
 
@@ -347,6 +348,18 @@ int main(void)
         gc_achv_darby_won(NULL);
         eval(NULL);
         assert(vouchers() == before + 2 && S.achv.darby_wins == 2);
+        /* his rematch won (lorenzo 2026-11-18): "Debt Paid in Full", the Flawless JoJo reward (two Regular vouchers), once; the hand's wins never give it */
+        assert(!gc_achv_unlocked(&S, GC_ACHV_DARBY_REMATCH) && !strcmp(gc_achv_defs[GC_ACHV_DARBY_REMATCH].name, "Debt Paid in Full"));
+        assert(gc_achv_defs[GC_ACHV_DARBY_REMATCH].reward == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].reward && gc_achv_defs[GC_ACHV_DARBY_REMATCH].arg == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].arg
+               && gc_achv_defs[GC_ACHV_DARBY_REMATCH].n == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].n);
+        const uint32_t before2 = vouchers();
+        gc_achv_darby_rematch_won(&S);
+        gc_achv_darby_rematch_won(NULL);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, GC_ACHV_DARBY_REMATCH) && S.achv.darby_rematch_wins == 1 && vouchers() == before2 + 2);
+        gc_achv_darby_rematch_won(&S);
+        eval(NULL);
+        assert(vouchers() == before2 + 2);
     }
     /* waves: only the best is kept, and a lower wave never lowers it */
     {

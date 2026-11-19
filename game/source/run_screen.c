@@ -562,6 +562,13 @@ static void wave_black(void* arg) {
     }
     if (heaven) s.heaven = heaven_faints >= PR_MADE_IN_HEAVEN_FAINTS ? 2 : heaven_faints;
   }
+  /* D'Arby's rematch (game-core gc_darby.c): his own battle sprite, else his encounter sprite */
+  if (trainer && gc_darby_rematch_battle(&G.run)) {
+    const char* key = img_has("images/trainer/custom/darby_battle") ? "images/trainer/custom/darby_battle" : "images/trainer/custom/darby";
+    if (img_has(key)) snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);
+    s.trainer_keys[1][0] = 0;
+    snprintf(s.trainer_name, sizeof s.trainer_name, "%s", "D'Arby");
+  }
   /* When only the old right ally survives, the next encounter promotes it to
    * the lead. Carry its already-visible sprite into slot 0 rather than duplicating
    * it or waiting for a SummonPhase that native correctly does not run. */

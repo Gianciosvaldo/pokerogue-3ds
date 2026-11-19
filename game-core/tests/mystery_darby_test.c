@@ -217,13 +217,13 @@ static void test_offer(void)
         make_run(seed, true, 4, 10 + i % 30); pr_run_reset_seed(&run.run, run.wave); assert(gc_mystery_select(&run, &t, &tier)); early += t == GC_ME_DARBY;
     }
     assert(bizarre > 0 && plain == 0 && small == 0 && early == 0);
-    /* no last wave: still offered at 190 */
+    /* waves 40..160 (lorenzo 2026-11-18: the rematch needs trainer waves up to 172) */
     int tier, minw, maxw, seen, party, ch, mask;
     double money;
     assert(gc_mystery_rule(GC_ME_DARBY, &tier, &minw, &maxw, &seen, &party, &ch, &money, &mask));
-    assert(tier == GC_ME_ULTRA && minw == 40 && maxw >= 200 && seen == 1 && party == 4);
+    assert(tier == GC_ME_ULTRA && minw == 40 && maxw == 160 && seen == 1 && party == 4);
     for (int b = 0; b < 60; b++) assert(gc_mystery_in_biome(b, GC_ME_DARBY) || b >= BIOME_ID_END + 1);
-    printf("ok offer (Bizarre only, wave 40+, a party of four, Ultra: drawn %d of 400; never plain, three Pokemon or before wave 40)\n", bizarre);
+    printf("ok offer (Bizarre only, waves 40..160, a party of four, Ultra: drawn %d of 400; never plain, three Pokemon or before wave 40)\n", bizarre);
 }
 
 static void test_walk_away(void)
@@ -311,24 +311,28 @@ static void test_loss_accept(void)
     assert(run.n_party == 3 && run.money == 5000);
     for (int i = 0; i < run.n_party; i++) assert(run.party[i].b.id != lapras);
     for (int i = 0; i < run.n_items; i++) assert(run.items[i].pokemon_id != lapras);
+    /* sealed in his chips with its Leftovers, not gone (lorenzo 2026-11-18) */
+    const gc_internal *in = gc_int(&run);
+    assert(in->chips.n == 1 && in->chips.mon[0].b.id == lapras && !in->chips.battle && gc_darby_sealed(&run) == 1);
+    assert(in->chips.n_items == 1 && !strcmp(in->chips.items[0].key, "LEFTOVERS") && in->chips.items[0].pokemon_id == lapras);
     assert(run.screen.kind != GC_SCREEN_REWARD);
     /* a fainted soul */
     start("dlf");
     run.party[1].b.hp = 0;
     assert(gc_darby_pick_ok(&run, GC_DARBY_STANDARD, 1));
     assert(choose(GC_DARBY_STANDARD, 1));
-    puts("ok loss, accepted (the soul leaves with its held items, money kept, no shop; a fainted Pokemon can be wagered)");
+    puts("ok loss, accepted (the soul is sealed in a chip with its held items, money kept, no shop; a fainted Pokemon can be wagered)");
 }
 
 static void test_accusations(void)
 {
-    /* a false call: he played fair and won: the soul and all the money go */
+    /* a false call: he played fair and won: the soul is lost for the run, the money stays (lorenzo 2026-11-18), nothing is sealed */
     to_card("dfc", 1);
     set_deck(FAIR_WINS, 0, 3);
     assert(choose(0, 0));
     assert(!gc_int(&run)->darby.cheated && run.screen.me_stage == GC_ME_STAGE_DARBY_ACCUSE);
     assert(choose(1, 0));
-    assert(run.n_party == 3 && run.money == 0);
+    assert(run.n_party == 3 && run.money == 5000 && gc_darby_sealed(&run) == 0);
     /* a true call: he swapped: the full reward, nothing lost */
     int caught = 0;
     for (unsigned sd = 0; sd < 40 && !caught; sd++) {
@@ -347,7 +351,7 @@ static void test_accusations(void)
         caught = 1;
     }
     assert(caught);
-    puts("ok accusations (a false call costs the soul and all the money; catching the swap wins the full reward)");
+    puts("ok accusations (a false call loses the soul for good, the money stays; catching the swap wins the full reward)");
 }
 
 static void test_detector(void)
@@ -416,7 +420,7 @@ static void test_two_screens_differ(void)
         assert(gc_run_choose(&run, &c, &why));
     }
     assert(same <= runs / 3);   /* 3 of 7 weighted Master items: the same three in the same order is rare, not the rule */
-    printf("ok two Master screens: the same in %d of %d runs\n", same, runs);
+    printf("ok two reward screens (Master, then Rogue): the same in %d of %d runs\n", same, runs);
 }
 
 /* four or more Pokemon qualify (lorenzo 2026-11-18): six in the party, All-In lost takes three and leaves three; won, all six stay */
@@ -531,6 +535,167 @@ static void test_forced(void)
     puts("ok forced (rundriver mystery=darby,5: the first non-trainer wave from 5, Bizarre with four Pokemon only)");
 }
 
+
+/* lorenzo 2026-11-18: Accept the Deal seals the souls; D'Arby comes back on an ordinary trainer wave (17.5% each, sure from 165, none after 172) with
+ * his three and the souls at the wave's trainer levels; beating him gives each back (in place of a member with six), or it can be left. */
+static void seal_one(const char *seed, int n_party, int soul)
+{
+    start_n(seed, n_party);
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[soul].b.id, 1);
+    assert(choose(GC_DARBY_STANDARD, soul));
+    set_deck(FAIR_WINS, 0, 2);
+    assert(choose(0, 0));
+    assert(run.screen.me_stage == GC_ME_STAGE_DARBY_ACCUSE);
+    assert(choose(0, 0));   /* Accept the Deal */
+    assert(gc_darby_sealed(&run) == 1);
+}
+
+/* an ordinary trainer wave's generated party, as gc_custom_build_trainer finds it: three at levels 60..62 */
+static void fake_trainer_wave(int wave)
+{
+    run.wave = wave;
+    run.battle_type = BATTLE_TYPE_TRAINER;
+    run.double_battle = false;
+    run.n_enemy = 3;
+    for (int i = 0; i < 3; i++) {
+        pr_enemy_gen g;
+        memset(&g, 0, sizeof g);
+        g.id = 9000u + (uint32_t)i;
+        for (int k = 0; k < 6; k++) g.ivs[k] = 3;
+        g.fusion_species = -1;
+        g.friendship = -1;
+        gc_mon_new_enemy(&run, &run.enemy[i], SPECIES_ID_RATTATA, 60 + i, &g, TRAINER_SLOT_TRAINER);
+        gc_mon_set_move(&run.enemy[i], 0, MOVE_ID_TACKLE);
+    }
+    run.n_enemy_items = 0;
+}
+
+static void test_rematch(void)
+{
+    /* the chance: none without a soul, 17.5% of the waves before 165, every one from 165 to 172, none after */
+    make_run("drc", true, 4, 50);
+    for (int w = 41; w <= 180; w++) assert(!gc_darby_rematch_due(&run, w));
+    seal_one("drc", 4, 2);
+    int hits = 0, waves = 0;
+    for (int w = 41; w < 165; w++) { hits += gc_darby_rematch_due(&run, w); waves++; }
+    for (int w = 165; w <= 172; w++) assert(gc_darby_rematch_due(&run, w));
+    for (int w = 173; w <= 200; w++) assert(!gc_darby_rematch_due(&run, w));
+    assert(hits * 1000 > waves * 100 && hits * 1000 < waves * 260);   /* about 175 per 1000 */
+
+    /* his team: his three, then the soul at the highest level (62), the soul's own species, moves, nature, IVs and held item */
+    seal_one("drt", 4, 2);
+    gc_internal *in = gc_int(&run);
+    const gc_mon chip = in->chips.mon[0];
+    const uint32_t id = chip.b.id;
+    assert(in->chips.n_items == 1 && !strcmp(in->chips.items[0].key, "LEFTOVERS") && in->chips.items[0].pokemon_id == id);
+    fake_trainer_wave(166);
+    assert(gc_darby_rematch_due(&run, 166) && gc_darby_build_rematch(&run));
+    assert(run.n_enemy == 4 && gc_darby_rematch_battle(&run) && in->chips.battle && in->chips.level[0] == 62);
+    const gc_mon *e = &run.enemy[3];
+    assert(e->b.id == id && e->b.species == chip.b.species && e->b.level == 62 && !e->b.is_player && e->b.trainer_slot == TRAINER_SLOT_TRAINER);
+    assert(e->b.nature == chip.b.nature && !memcmp(e->b.ivs, chip.b.ivs, 6) && e->b.n_moves == chip.b.n_moves && e->b.moves[0] == chip.b.moves[0]);
+    for (int i = 0; i < 3; i++) assert(run.enemy[i].b.species != chip.b.species && run.enemy[i].b.level <= 62);
+    /* his own three as lorenzo wrote them */
+    assert(run.enemy[0].b.species == SPECIES_ID_THIEVUL && run.enemy[0].b.ability == ABILITY_ID_STAKEOUT && run.enemy[0].b.moves[0] == MOVE_ID_PARTING_SHOT && run.enemy[0].b.moves[3] == MOVE_ID_FOUL_PLAY);
+    assert(run.enemy[1].b.species == SPECIES_ID_KLEFKI && run.enemy[1].b.ability == ABILITY_ID_PRANKSTER && run.enemy[1].b.moves[0] == MOVE_ID_DAZZLING_GLEAM && run.enemy[1].b.moves[2] == MOVE_ID_THUNDER_WAVE && run.enemy[1].b.moves[3] == MOVE_ID_SPIKES);
+    assert(run.enemy[2].b.species == SPECIES_ID_COFAGRIGUS && run.enemy[2].b.ability == ABILITY_ID_MUMMY && run.enemy[2].b.moves[3] == MOVE_ID_DESTINY_BOND);
+    gc_custom_team_items(&run);
+    int held = 0;
+    for (int i = 0; i < run.n_enemy_items; i++) held += run.enemy_items[i].pokemon_id == id && !strcmp(run.enemy_items[i].key, "LEFTOVERS");
+    assert(held == 1);
+    int orb = 0, left = 0;
+    for (int i = 0; i < run.n_enemy_items; i++) {
+        orb += run.enemy_items[i].pokemon_id == run.enemy[1].b.id;   /* Klefki holds nothing (lorenzo removed the Toxic Orb) */
+        left += run.enemy_items[i].pokemon_id == run.enemy[2].b.id && !strcmp(run.enemy_items[i].key, "LEFTOVERS");
+    }
+    assert(orb == 0 && left == 1);
+    assert(!gc_darby_rematch_due(&run, 167));   /* never twice */
+
+    /* the chips survive a save and load (a real save point: wave 1's command screen), the battle flag and a fused soul's half included */
+    {
+        static gc_run live, back;
+        static uint8_t buf[GC_SAVE_MAX];
+        const char *why = NULL;
+        gc_run_new(&live, GAME_MODES_CLASSIC, "darby-chips-save", 7);
+        gc_starter st[2] = {{.species = SPECIES_ID_BULBASAUR, .tera_type = -1, .moves = {MOVE_ID_TACKLE}}, {.species = SPECIES_ID_CHARMANDER, .tera_type = -1, .moves = {MOVE_ID_TACKLE}}};
+        for (int k = 0; k < 2; k++) memset(st[k].ivs, 15, sizeof st[k].ivs);
+        assert(gc_run_set_starters(&live, st, 2, &why));
+        gc_event ev;
+        while (gc_run_next_event(&live, &ev)) {}
+        gc_internal *li = gc_int(&live);
+        li->chips = in->chips;   /* the sealed Lapras with its Leftovers, mid-rematch */
+        li->chips.mon[0].fusion_shiny = true;
+        assert(gc_run_can_save(&live));
+        const size_t n = gc_run_save(&live, buf, sizeof buf);
+        assert(n > 0);
+        memset(&back, 0, sizeof back);
+        assert(gc_run_load(&back, buf, n, &why) && !back.load_dropped);
+        const gc_internal *bi = gc_int(&back);
+        assert(bi->chips.n == 1 && bi->chips.battle && bi->chips.level[0] == 62 && bi->chips.n_items == 1 && bi->chips.taken == 0);
+        assert(bi->chips.mon[0].b.id == id && bi->chips.mon[0].b.species == chip.b.species && bi->chips.mon[0].b.nature == chip.b.nature);
+        assert(!memcmp(bi->chips.mon[0].b.ivs, chip.b.ivs, 6) && bi->chips.mon[0].b.moves[0] == chip.b.moves[0] && bi->chips.mon[0].fusion_shiny);
+        assert(!strcmp(bi->chips.items[0].key, "LEFTOVERS") && bi->chips.items[0].pokemon_id == id);
+        /* none sealed: no section, none loaded */
+        li->chips.n = 0;
+        const size_t n0 = gc_run_save(&live, buf, sizeof buf);
+        assert(n0 > 0 && n0 < n && gc_run_load(&back, buf, n0, &why) && gc_darby_sealed(&back) == 0);
+    }
+
+    /* the win: the achievement, then the soul's screen: back at level 62 with its Leftovers */
+    const uint32_t wins = sys.achv.darby_rematch_wins;
+    in->chips.mon[0].b.hp = 1;   /* sealed hurt and poisoned: it comes back healed (lorenzo 2026-11-18) */
+    in->chips.mon[0].b.status = STATUS_EFFECT_POISON;
+    run.battle_type = BATTLE_TYPE_TRAINER;
+    gc_rq_reset(&in->rq);
+    gc_darby_rematch_won(&run);
+    assert(sys.achv.darby_rematch_wins == wins + 1 && !in->chips.battle);
+    gc_run_until_screen(&run);
+    assert(run.screen.kind == GC_SCREEN_MYSTERY && run.screen.me_stage == GC_ME_STAGE_DARBY_RETURN && run.screen.n_options == 2);
+    assert(run.screen.option_pick[0] == GC_PICK_NONE);   /* three in the party: no member to replace */
+    const int before = run.n_party;
+    assert(choose(0, 0));
+    char keys[2048];
+    drain(keys, sizeof keys);
+    assert(strstr(keys, "darby:rematch.back"));
+    assert(run.n_party == before + 1 && run.party[run.n_party - 1].b.id == id && run.party[run.n_party - 1].b.level == 62);
+    assert(run.party[run.n_party - 1].b.species == chip.b.species && run.party[run.n_party - 1].b.nature == chip.b.nature);
+    assert(run.party[run.n_party - 1].b.hp == run.party[run.n_party - 1].b.stats[STAT_HP] && run.party[run.n_party - 1].b.hp > 1 && run.party[run.n_party - 1].b.status == 0);
+    int back_item = 0;
+    for (int i = 0; i < run.n_items; i++) back_item += run.items[i].pokemon_id == id && !strcmp(run.items[i].key, "LEFTOVERS");
+    assert(back_item == 1 && gc_darby_sealed(&run) == 0 && !gc_darby_rematch_battle(&run));
+
+    /* six in the party: it replaces the member picked; or it is left */
+    seal_one("drf", 6, 4);
+    in = gc_int(&run);
+    const uint32_t id6 = in->chips.mon[0].b.id;
+    run.party[5] = run.party[0];   /* back to six (a stand-in sixth member) */
+    run.party[5].b.id ^= 0x5a5a5a5au;
+    run.party_order[5] = 5;
+    run.n_party = 6;
+    const uint32_t gone = run.party[1].b.id;
+    fake_trainer_wave(170);
+    assert(gc_darby_build_rematch(&run));
+    gc_rq_reset(&in->rq);
+    gc_darby_rematch_won(&run);
+    gc_run_until_screen(&run);
+    assert(run.screen.me_stage == GC_ME_STAGE_DARBY_RETURN && run.screen.option_pick[0] == GC_PICK_MEMBER);
+    assert(!choose(0, 9));
+    assert(choose(0, 1));
+    assert(run.n_party == 6 && run.party[1].b.id == id6);
+    for (int i = 0; i < run.n_party; i++) assert(run.party[i].b.id != gone);
+    seal_one("drl", 4, 1);
+    in = gc_int(&run);
+    fake_trainer_wave(168);
+    assert(gc_darby_build_rematch(&run));
+    gc_rq_reset(&in->rq);
+    gc_darby_rematch_won(&run);
+    gc_run_until_screen(&run);
+    assert(choose(1, 0));
+    drain(keys, sizeof keys);
+    assert(strstr(keys, "darby:rematch.gone") && run.n_party == 3 && gc_darby_sealed(&run) == 0);
+    printf("ok rematch (saved and loaded; %d of %d waves before 165 drew him, sure 165..172, his three plus the soul at level 62 with its item, back healed after the win, replace with six, leave)\n", hits, waves);
+}
+
 int main(void)
 {
     test_forced();
@@ -548,6 +713,7 @@ int main(void)
     test_all_in();
     test_big_party();
     test_two_screens_differ();
+    test_rematch();
     puts("mystery_darby_test: all passed");
     return 0;
 }

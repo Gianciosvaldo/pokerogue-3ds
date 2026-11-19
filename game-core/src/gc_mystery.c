@@ -50,7 +50,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,1,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,1,4,(1u<<9),0,0},
     [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
-    [GC_ME_DARBY]                   = {GC_ME_ULTRA, 40,INT16_MAX,1,4,0,0,0},   /* lorenzo's own (Bizarre runs): wave 40+, no last wave, any biome, a party of four, once per run */
+    [GC_ME_DARBY]                   = {GC_ME_ULTRA, 40,160,1,4,0,0,0},   /* lorenzo's own (Bizarre runs): waves 40..160 (the rematch needs trainer waves up to 172), any biome, a party of four, once per run */
 };
 
 /* mysteryEncountersByBiome (mystery-encounter-biomes.ts): the biome's own entries, then the non-extreme, human-transitable, civilization and any-biome groups. Compared with
