@@ -20,7 +20,8 @@ for try in 1 2 3; do
   if sudo timeout -k 10 "$UPDATE_TIMEOUT" apt-get $APT update -qq; then
     echo "$(now) apt-get install $* (try $try of 3, stopped after ${INSTALL_TIMEOUT}s)"
     # shellcheck disable=SC2086
-    if sudo timeout -k 10 "$INSTALL_TIMEOUT" apt-get $APT install -y -qq "$@"; then
+    # no -qq here: apt names each package as it downloads and unpacks it, so a stall shows WHICH package it stopped on
+    if sudo timeout -k 10 "$INSTALL_TIMEOUT" apt-get $APT -o Dpkg::Use-Pty=0 install -y "$@"; then
       echo "$(now) installed: $*"
       exit 0
     fi
