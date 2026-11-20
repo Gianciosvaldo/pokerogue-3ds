@@ -1089,7 +1089,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
         for (pr_pokemon *q; (q = pr_speed_iter_next(bt, &it));)
             pr_queue_msg(bt, c->e, pr_msg3("abilityTriggers:frisk", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
-                                           pr_arg_pokemon_name(bt, "opponentName", q),
+                                           pr_arg_pokemon_plain_name(bt, "opponentName", q),
                                            pr_arg_ability("opponentAbilityName", q->ability)));
         return 1;
     }
@@ -1176,7 +1176,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
                 PR_HEAL_MESSAGE | (x->showAnim ? 0 : PR_HEAL_SKIP_ANIM),
                 pr_msg2("abilityTriggers:postSummonAllyHeal",
                     pr_arg_pokemon(bt, "pokemonNameWithAffix", ally),
-                    pr_arg_pokemon_name(bt, "pokemonName", &identity)));
+                    pr_arg_pokemon_plain_name(bt, "pokemonName", &identity)));
         }
         return 1;
     }

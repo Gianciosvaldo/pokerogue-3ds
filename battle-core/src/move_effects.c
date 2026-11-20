@@ -186,8 +186,8 @@ bool pr_apply_eat_berry_move(pr_battle *bt,pr_engine *e,pr_pokemon *user,
         pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);
         const char *name=pr_held_item_name_key(&chosen);
         if(!name){pr_note_unported(bt,PR_FEAT_MODIFIERS);return false;}
-        pr_queue_msg(bt,e,pr_msg3("battle:stealEatBerry",pr_arg_pokemon_name(bt,"pokemonName",user),
-            pr_arg_pokemon_name(bt,"targetName",target),pr_arg_key("berryName",name)));
+        pr_queue_msg(bt,e,pr_msg3("battle:stealEatBerry",pr_arg_pokemon_plain_name(bt,"pokemonName",user),
+            pr_arg_pokemon_plain_name(bt,"targetName",target),pr_arg_key("berryName",name)));
     }else{
         for(int k=0;k<bt->n_mods[side];k++){
             const pr_modifier *pouch=&bt->mods[side][k];

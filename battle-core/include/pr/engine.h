@@ -327,7 +327,10 @@ pr_msg pr_msg2(const char *key, pr_msg_arg a, pr_msg_arg b);
 pr_msg pr_msg3(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c);
 pr_msg pr_msg4(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c, pr_msg_arg d);
 pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p);   /* with affix */
-pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
+pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);   /* getNameToRender(): the nickname, else the species name */
+/* pokemon.name, for the messages upstream builds from it and not from getNameToRender: the species name (with its form prefix and fusion
+ * blend) even for a nicknamed Pokemon */
+pr_msg_arg pr_arg_pokemon_plain_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
 pr_msg_arg pr_arg_int(const char *name, int32_t v);
 pr_msg_arg pr_arg_int64(const char *name, int64_t v);
 pr_msg_arg pr_arg_money_en_us(const char *name, double v);

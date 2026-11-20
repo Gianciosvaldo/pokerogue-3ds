@@ -413,17 +413,23 @@ static void species_name(obuf *o, const pr_text_source *src, uint16_t id, uint8_
     format_key(o, key, &m, src, 1);
 }
 
-/* getPokemonNameWithAffix */
-static void pokemon_name(obuf *o, const pr_text_source *src, uint32_t v, uint32_t fusion_v, bool affix)
+/* getPokemonNameWithAffix; `nick` is getNameToRender's nickname when the Pokemon has one (it replaces the species name and the fusion's blend),
+ * which the Wild/Foe affix of an enemy then wraps as it wraps any name */
+static void pokemon_name(obuf *o, const pr_text_source *src, uint32_t v, uint32_t fusion_v, bool affix, const char *nick)
 {
     uint16_t species = (uint16_t)(v >> 16);
     uint8_t form = (uint8_t)(v >> 8), flags = (uint8_t)v;
-    if (!fusion_v && (!affix || !(flags & PR_MSG_POKEMON_ENEMY))) { species_name(o, src, species, form); return; }
+    const bool has_nick = nick && nick[0];
+    if (!has_nick && !fusion_v && (!affix || !(flags & PR_MSG_POKEMON_ENEMY))) { species_name(o, src, species, form); return; }
     char name[1024];
     obuf nb = {name, sizeof name, 0};
-    species_name(&nb, src, species, form);
+    if (has_nick) {
+        puts_(&nb, nick);
+    } else {
+        species_name(&nb, src, species, form);
+    }
     end(&nb);
-    if (fusion_v >> 16) {
+    if (!has_nick && fusion_v >> 16) {
         char second[512], fused[1024];
         obuf fb = {second, sizeof second, 0};
         species_name(&fb, src, (uint16_t)(fusion_v >> 16), (uint8_t)(fusion_v >> 8)); end(&fb);
@@ -489,8 +495,8 @@ static void put_arg(obuf *o, const pr_msg_arg *a, const pr_msg *m, const pr_text
         puts_(o, b);
         break;
     }
-    case PR_ARG_POKEMON: pokemon_name(o, src, a->v, a->fusion_v, true); break;
-    case PR_ARG_POKEMON_NAME: pokemon_name(o, src, a->v, a->fusion_v, false); break;
+    case PR_ARG_POKEMON: pokemon_name(o, src, a->v, a->fusion_v, true, a->s); break;
+    case PR_ARG_POKEMON_NAME: pokemon_name(o, src, a->v, a->fusion_v, false, a->s); break;
     case PR_ARG_MOVE: {
         uint32_t id = a->v & ~PR_MSG_MOVE_BARE;
         if (!id || id >= PR_MOVE_COUNT) break;   /* MoveId.NONE's name is "" */

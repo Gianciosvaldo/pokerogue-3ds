@@ -28,6 +28,8 @@ jobs:
         run: python3 battle-core/tools/check-final-boss-dialogue-proof.py
       - name: Check Classic and Challenge final-boss message names
         run: make -C battle-core build/final-boss-name-test && battle-core/build/final-boss-name-test
+      - name: Check nicknames in battle messages (Wild/Foe affix, disguise, species name kept, snapshot pool)
+        run: make -C battle-core build/nickname-test && battle-core/build/nickname-test
       - name: Check the final-boss Inverse Battle moveset
         run: make -C battle-core build/final-boss-inverse-moves-test && battle-core/build/final-boss-inverse-moves-test
       - name: Check dynamic doubles move targets against pinned-source observations
