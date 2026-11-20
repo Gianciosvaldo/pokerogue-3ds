@@ -388,7 +388,7 @@ static void evolve(gc_run *run, gc_rphase *p)
     gc_mon_evolve_target(run, m, p->b, fusion);
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
     if (ev) { ev->a = p->a; ev->b = before; ev->c = fusion ? m->b.fusion_species : m->b.species; }
-    gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_name(&run->bt, "evolvedPokemonName", &m->b));
+    gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_plain_name(&run->bt, "evolvedPokemonName", &m->b)); /* upstream: this.pokemon.name, not the nickname */
     /* postEvolve: getLevelMoves({startingLevel: lastLevel + 1, includeEvolutionMoves}) filtered to the evolution moves
      * (level 0) of the evolved form, one LearnMovePhase each */
     uint16_t learned[64];

@@ -460,6 +460,7 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
     double cost = 0;
     for (int i = 0; i < n; i++) {
         double c = 0;
+        if (!gc_nickname_valid(starters[i].nickname)) { *why = "the starter's nickname is not valid"; return false; }
         if (!gc_starter_is_available(run->sys, &starters[i], &c, why)) return false;
         for (int k = 0; k < i; k++)
             if (starters[k].species == starters[i].species) { *why = "the same species twice"; return false; }

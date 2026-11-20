@@ -328,6 +328,8 @@ typedef struct {
     int8_t tera_type;           /* -1 = the species' first type */
     uint8_t ivs[6];
     uint16_t moves[4];          /* 0 = empty; all 0 = the default moveset (gc_starter_default_moves) */
+    char nickname[PR_NICKNAME_BYTES]; /* StarterPreferences.nickname as the select screen hands it over (SelectStarterPhase: starterPokemon.nickname
+                                 * = starter.nickname when set); "" = none. Must pass gc_nickname_valid */
 } gc_starter;
 
 #define GC_MAX_EVENTS 256
@@ -477,6 +479,15 @@ void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy);
  * builds the party, and runs to the first screen. false (and *why, an i18n key or a plain reason) if
  * the list isn't allowed. */
 bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const char **why);
+
+/* Pokemon.nickname (upstream: PartyUiHandler.processRenameOption sets pokemon.nickname to the rename form's text; the form's input has maxLength 20 and
+ * trims what it submits). `text` is UTF-8 and must be what gc_nickname_valid accepts: at most 20 UTF-16 code units (an emoji counts two, as the input's
+ * maxLength does), no control characters, valid UTF-8. The caller trims it, as the form does (a nickname keeps the spaces it is given). "" or NULL clears the
+ * nickname, which falls back to the species name, as an empty submit does upstream. */
+bool gc_nickname_valid(const char *text);
+/* Sets (or clears) the nickname of party[idx] (storage index). False, and nothing changed, for a bad index or text. Not an event: the app redraws what it
+ * shows (the names read the nickname). It reaches the next save through the nickname section of gc_run_save. */
+bool gc_run_set_nickname(gc_run *run, int idx, const char *text);
 
 /* The next event to show, oldest first; false when there are none left. */
 bool gc_run_next_event(gc_run *run, gc_event *out);
