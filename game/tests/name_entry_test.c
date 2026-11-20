@@ -37,11 +37,16 @@ static int checks, failed;
 /* ------------------------------------------------------------------ fakes */
 
 static ui_screen* g_screen;
-static int n_set, n_select, n_error;
+static int n_set, n_push, n_pop, n_select, n_error;
 void ui_set(ui_screen* s) {
   g_screen = s;
   n_set++;
 }
+void ui_push(ui_screen* s) {
+  g_screen = s;
+  n_push++;
+}
+void ui_pop(void) { n_pop++; }
 void ui_play_select(void) { n_select++; }
 void ui_play_error(void) { n_error++; }
 
@@ -128,13 +133,14 @@ static void on_done(const char* text, void* arg) {
   snprintf(result, sizeof result, "%s", text ? text : "<cancelled>");
 }
 
-static void open_entry(int max_chars) {
+static void open_entry_with(int max_chars, const char* initial, bool overlay) {
   n_done = 0;
   got_text = false;
   result[0] = '\0';
-  const name_entry_args a = {"menu:renameRun", "menu:runName", "menu:rename", "menu:cancel", max_chars, on_done, NULL};
+  name_entry_args a = {"menu:renameRun", "menu:runName", "menu:rename", "menu:cancel", max_chars, on_done, NULL, initial, overlay};
   name_entry_open(&a);
 }
+static void open_entry(int max_chars) { open_entry_with(max_chars, NULL, false); }
 
 static bool press(ui_button b) { return g_screen->input(g_screen, b); }
 static bool tap(float x, float y) { return g_screen->touch(g_screen, x, y); }
@@ -161,6 +167,12 @@ static int cur_row, cur_col;
 static void home(void) {
   open_entry(20);
   cur_row = 1; /* the first letter */
+  cur_col = 0;
+}
+
+/* the cursor of an entry that is open already (home() opens a new one) */
+static void at_start(void) {
+  cur_row = 1;
   cur_col = 0;
 }
 
@@ -664,6 +676,81 @@ int main(void) {
   g_screen->update(g_screen, 600);
   draw_both();
   CHECK(n_rects == caret_on - 1, "the caret blinks (%d, then %d rectangles)", caret_on, n_rects);
+
+  /* ---- a starting text (Rename Pokemon: upstream's form is filled with the name the Pokemon shows) */
+  open_entry_with(20, "Sparky", false);
+  press(BTN_MENU);
+  CHECK(n_done == 1 && got_text && !strcmp(result, "Sparky"), "the starting text is handed over as it is: \"%s\"", result);
+  open_entry_with(20, "Sparky", false);
+  at_start();
+  type_text("2");
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "Sparky2"), "typing goes on after it: \"%s\"", result);
+  open_entry_with(20, "Sparky", false);
+  draw_both();
+  CHECK(drew("Sparky") && drew("6/20"), "the starting text and its count are drawn");
+  open_entry_with(20, "Sparky", false);
+  press(BTN_CANCEL);
+  press(BTN_CANCEL);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "Spar") && n_done == 1, "B deletes it a character at a time: \"%s\"", result);
+  open_entry_with(20, "\xC3\x91" "and\xC3\xBA", false); /* Ñandú: two two-byte characters */
+  press(BTN_CANCEL);
+  press(BTN_CANCEL);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "\xC3\x91" "an") && n_done == 1, "B deletes a whole UTF-8 character of it: \"%s\"", result);
+  open_entry_with(20, "\xC3\x91" "and\xC3\xBA", false);
+  draw_both();
+  CHECK(drew("5/20"), "a character is one, not one per byte");
+  open_entry_with(5, "abcdefghij", false);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "abcde"), "it is cut to max_chars: \"%s\"", result);
+  open_entry_with(5, "abcde", false);
+  at_start();
+  const int err_full = n_error;
+  type_text("f");
+  CHECK(n_error == err_full + 1, "a text that fills the limit takes no more");
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "abcde"), "and stays as it was: \"%s\"", result);
+  /* what is not a whole character is left out: a cut-short sequence, a continuation byte alone */
+  open_entry_with(20, "ab\xC3", false);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "ab"), "a cut-short character is dropped: \"%s\"", result);
+  open_entry_with(20, "ab\xE3\x81", false);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "ab"), "so is a three-byte one cut after two: \"%s\"", result);
+  open_entry_with(20, "ab\x80" "cd", false);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "ab"), "and the text stops at a stray continuation byte: \"%s\"", result);
+  open_entry_with(20, "", false);
+  press(BTN_MENU);
+  CHECK(got_text && result[0] == '\0', "an empty starting text is no text");
+  open_entry_with(20, "  padded  ", false);
+  press(BTN_MENU);
+  CHECK(!strcmp(result, "padded"), "the starting text is trimmed like typed text: \"%s\"", result);
+  open_entry_with(20, "Sparky", false);
+  at_start();
+  btn_cancel(5);
+  CHECK(n_done == 1 && !got_text, "cancel still hands over NULL with a starting text");
+  /* a longer text than the buffer holds: 31 four-byte characters, max_chars 31 (the largest) */
+  {
+    char big[200] = "";
+    for (int i = 0; i < 40; i++) strcat(big, "\xF0\x9F\x94\xA5");
+    open_entry_with(NE_MAX_BYTES / 4 - 1, big, false);
+    press(BTN_MENU);
+    CHECK(count_chars(result) == NE_MAX_BYTES / 4 - 1 && strlen(result) < NE_MAX_BYTES, "a starting text never overruns the buffer (%zu bytes)", strlen(result));
+  }
+
+  /* ---- as an overlay (the party screen is under it, and the battle under that: ui_set would drop them) */
+  {
+    const int sets = n_set, pushes = n_push, pops = n_pop;
+    open_entry_with(20, "Sparky", true);
+    CHECK(n_push == pushes + 1 && n_set == sets && g_screen && !strcmp(g_screen->name, "name-entry"), "the overlay is pushed, not set");
+    press(BTN_MENU);
+    CHECK(n_done == 1 && !strcmp(result, "Sparky") && n_pop == pops, "the owner pops it: the screen does not");
+    open_entry_with(20, "Sparky", false);
+    CHECK(n_set == sets + 1 && n_push == pushes + 1, "without it, it is set as before");
+  }
 
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

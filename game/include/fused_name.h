@@ -24,4 +24,13 @@ static inline void fused_mon_name(char* out, size_t cap, int species, int fusion
   snprintf(out, cap, "%s", a);
 }
 
+/* getNameToRender(): the nickname when the Pokemon has one (battle-core's pr_pokemon.nickname, plain UTF-8, "" = none), else its species name or the
+ * fusion's blended name. A disguise hides the nickname: pass NULL for it. */
+static inline void mon_display_name(char* out, size_t cap, int species, int fusion_species, const char* nickname) {
+  if (nickname && nickname[0])
+    snprintf(out, cap, "%s", nickname);
+  else
+    fused_mon_name(out, cap, species, fusion_species);
+}
+
 #endif

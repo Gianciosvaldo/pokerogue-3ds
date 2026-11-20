@@ -9,7 +9,7 @@
  * Buttons: the D-pad moves over the keys, A presses one. B deletes the last character and, with nothing typed, cancels. START presses the ok
  * button. L / R switch Shift (off, the next letter only, all letters), X types a space, Y deletes (the same as the keys they stand for).
  * The text is at most `max_chars` characters (a key that does not fit gives the error sound) and, as upstream's submit does, is trimmed
- * (sanitizeInputs) before it is handed over.
+ * (sanitizeInputs) before it is handed over. It can start with a text (`initial`): B and Y delete it a character at a time like what was typed.
  *
  * The keys: digits, letters (Shift makes them capitals), the apostrophe, comma, full stop, hyphen, the accented vowels of the Romance
  * languages and a few marks. The characters are UTF-8; Shift's capitals for the accented ones are the Latin-1 ones.
@@ -36,9 +36,16 @@ typedef struct {
    * with nothing typed). The screen has not been replaced: the callback does that (ui_set), and no input is taken after it was called. */
   void (*on_done)(const char* text, void* arg);
   void* arg;
+  /* The text the field starts with, NULL = empty (upstream's RenameFormUiHandler fills the form with the Pokemon's getNameToRender()). UTF-8; cut to
+   * max_chars characters (upstream's input does not cut a text set from code; a nickname longer than 20 is not valid here) and to the characters a
+   * well-formed sequence is made of. */
+  const char* initial;
+  /* ui_push instead of ui_set: the screen goes over the one that opened it, which the callback gets back with ui_pop (the party screen is an
+   * overlay over the battle, ui_set would drop the battle with it) */
+  bool overlay;
 } name_entry_args;
 
-/* Makes the entry the screen (ui_set, with a fade). */
+/* Makes the entry the screen (ui_set, with a fade; ui_push when a.overlay). */
 void name_entry_open(const name_entry_args* a);
 
 #ifdef __cplusplus

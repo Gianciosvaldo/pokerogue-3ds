@@ -140,6 +140,8 @@ jobs:
         run: python3 game-core/tools/nickname-guards.py
       - name: Check mystery encounter UI and reward failure controls
         run: python3 game/tests/check_mystery_ui_faults.py
+      - name: Check the app's nickname tests catch their planted faults
+        run: python3 game/tests/check_nickname_ui_faults.py
       - name: Check custom record policy and sanitized module tests
         run: |
           make -C custom-core unit-test san-test

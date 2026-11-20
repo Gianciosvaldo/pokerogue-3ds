@@ -733,7 +733,7 @@ static void open_members(void)
   for (int i = 0; i < F.run->n_party && a.n < ME_MAX_OPTIONS; i++) {
     const int slot = slot_of(i);
     const gc_mon* m = &F.run->party[slot];
-    snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s  Lv.%d  %d/%d", i18n_species_name(m->b.species), (int)m->b.level, (int)m->b.hp,
+    snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s  Lv.%d  %d/%d", m->b.nickname[0] ? m->b.nickname : i18n_species_name(m->b.species), (int)m->b.level, (int)m->b.hp,
              (int)m->b.stats[0]);
     a.options[a.n].ok = gc_mystery_member_ok(F.run, F.option, slot);
     a.n++;

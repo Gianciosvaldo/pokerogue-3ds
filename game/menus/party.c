@@ -4,8 +4,9 @@
  * bottom (y 180), so every upstream y here is written as Y(upstream y).
  *
  * Not ported yet (hidden, not faked): the Pokedex option (no Pokedex screen
- * yet), Rename (needs a keyboard), and the move info overlay beside the
- * Memory Mushroom move list.
+ * yet) and the move info overlay beside the Memory Mushroom move list.
+ * Rename is shown when the caller gives party_events.on_rename (it opens the
+ * text entry, name_entry.h).
  */
 #include <math.h>
 #include <stdio.h>
@@ -233,7 +234,8 @@ static void option_label(int opt, char* out, size_t n, rr_color* col, rr_color* 
 
 static void add_common_options(const menu_mon* m) {
   if (P.ev.on_summary) P.options[P.nopt++] = PO_SUMMARY;
-  /* PO_POKEDEX and PO_RENAME: not ported yet (see the file comment) */
+  /* PO_POKEDEX: not ported yet (see the file comment). Upstream's order is Summary, Pokedex, Rename */
+  if (P.ev.on_rename) P.options[P.nopt++] = PO_RENAME;
   if (m->has_evolutions) P.options[P.nopt++] = PO_UNPAUSE_EVOLUTION;
 }
 
@@ -495,6 +497,14 @@ static void summary_option(void) {
   P.ev.on_summary(P.ev.ctx, P.cursor);
 }
 
+/* processRenameOption: the caller shows the text entry; the screen waits (as under the summary) until it calls party_resume */
+static void rename_option(void) {
+  play_select();
+  clear_options();
+  P.suspended = true;
+  P.ev.on_rename(P.ev.ctx, P.cursor);
+}
+
 static void unpause_option(void) {
   menu_mon* m = &P.party[P.cursor];
   clear_options();
@@ -684,6 +694,10 @@ static bool modifier_transfer_input(void) {
     unpause_option();
     return true;
   }
+  if (option == PO_RENAME && P.ev.on_rename) {
+    rename_option();
+    return true;
+  }
   return false;
 }
 
@@ -762,6 +776,10 @@ static bool action_for_option(int option) {
   }
   if (option == PO_UNPAUSE_EVOLUTION) {
     unpause_option();
+    return true;
+  }
+  if (option == PO_RENAME && P.ev.on_rename) {
+    rename_option();
     return true;
   }
   if (option == PO_UNSPLICE) {
@@ -1081,7 +1099,7 @@ static void draw_slot(int i) {
   float bob = toggled ? (selected ? -2 : -1) : 0;
   menu_draw_icon(m, sx + pbx, sy + pby + bob, 0.5f, 0.5f);
 
-  char name[48];
+  char name[MENU_NAME_BYTES];
   snprintf(name, sizeof name, "%s", m->name);
   mui_fit_name(TS_PARTY, name, max_name);
   mui_text(TS_PARTY, sx + namex, sy + namey, name);
