@@ -982,7 +982,7 @@ void pr_finish_revival_choice(pr_battle *bt, pr_engine *e, pr_pokemon *user, int
     pr_pokemon *p=selected<bt->n_party[0]?bt->party[0][selected]:NULL;
     if(!p||p->hp>0) return;
     pr_reset_turn_data(p);clear_status(bt,e,p,false);revival_heal(p);
-    pr_queue_prompt_msg(bt,e,pr_msg1("moveTriggers:revivalBlessing",pr_arg_pokemon_name(bt,"pokemonName",p)));
+    pr_queue_prompt_msg(bt,e,pr_msg1("moveTriggers:revivalBlessing",pr_arg_pokemon_plain_name(bt,"pokemonName",p)));
     const pr_pokemon *ally=pr_get_ally(bt,user);
     if(bt->double_battle&&bt->n_party[0]>1&&ally&&(selected<=1||ally->hp<=0)) {
         int field=selected<=1?pr_battler_index(bt,p):pr_battler_index(bt,ally);
@@ -2958,11 +2958,11 @@ static void quiet_form_change_body(pr_battle *bt, pr_engine *e, int ph)
     }
     const char *key = pr_half_base_form(p)->form_key;
     if (key && strstr(key, "mega"))
-        pr_show_text(bt, e, pr_msg2("battlePokemonForm:megaChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:megaChange", pre, pr_arg_pokemon_plain_name(bt, "pokemonName", p)));
     else if (key && strstr(key, "gigantamax"))
-        pr_show_text(bt, e, pr_msg2("battlePokemonForm:gigantamaxChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:gigantamaxChange", pre, pr_arg_pokemon_plain_name(bt, "pokemonName", p)));
     else if (key && strstr(key, "eternamax"))
-        pr_show_text(bt, e, pr_msg2("battlePokemonForm:eternamaxChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:eternamaxChange", pre, pr_arg_pokemon_plain_name(bt, "pokemonName", p)));
     else if (target == 0)
         pr_show_text(bt, e, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", p)));
     else if (p->ability == ABILITY_ID_DISGUISE)

@@ -275,6 +275,11 @@ typedef struct pr_illusion {
  * Multiscale-like reductions, before Sturdy-like endures; at least 1; value 3 after the hit). The faint that wakes it shows value 1.
  * Not an ability: Mold Breaker and ability suppression do not touch it. No state of its own: "awake" is read from the party's HP. */
 #define PR_CUSTOM_PASSIVE_PERFECT_BEING (-4)
+/* Pokemon.nickname. Upstream keeps it base64 encoded (btoa of the URI-encoded text) in the save and decodes it to show it; here it is
+ * the plain UTF-8 text. The rename form's input is at most 20 characters (FormModalUiHandler's maxLength), and a character is at most
+ * four bytes of UTF-8. "" = no nickname (upstream's undefined or empty string: getNameToRender falls through to the species name). */
+#define PR_NICKNAME_MAX_CHARS 20
+#define PR_NICKNAME_BYTES (PR_NICKNAME_MAX_CHARS * 4 + 1)
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -307,6 +312,9 @@ typedef struct pr_pokemon {
      * through, getBaseTypes' `??`), else PokemonType + 1. Only the regular types 0..17 can be stored. */
     uint8_t custom_types[2], fusion_custom_types[2];
     bool is_player;
+    /* Pokemon.nickname: what getNameToRender shows in place of the species name (and the name in every message that uses it); the app and
+     * game-core set it, battle-core only reads it. Ignored while an Illusion is active (the disguise shows its own name). */
+    char nickname[PR_NICKNAME_BYTES];
     int32_t stats[6];
     double summon_stats[6];    /* summonData.stats: 0 = no override (Gorilla Tactics' 1.5x can leave a fraction) */
     int32_t hp;

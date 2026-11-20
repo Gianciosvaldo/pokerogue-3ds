@@ -411,6 +411,14 @@ all: $(BUILD)/fusion-message-test
 $(BUILD)/fusion-message-test: tests/fusion-message-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+all: $(BUILD)/nickname-message-test
+$(BUILD)/nickname-message-test: tests/nickname-message-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/nickname-test
+$(BUILD)/nickname-test: tests/nickname-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 all: $(BUILD)/fusion-wish-test
 $(BUILD)/fusion-wish-test: tests/fusion-wish-test.c tests/fusion-message-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion-wish-test.c $(BUILD)/libprcore.a -lm -o $@

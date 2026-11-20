@@ -54,9 +54,28 @@ static uint32_t pokemon_v(const pr_battle *bt, const pr_pokemon *p)
                           p->illusion.active ? p->illusion.form : p->form, flags);
 }
 
-pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p)
+/* A nickname as a message holds it. A message is made when its event happens and formatted later, when the screen plays it, so what it holds
+ * must not change meanwhile: a pointer into the Pokemon would, as a release, a trade or a rename moves or rewrites the party's storage.
+ * The text is copied here once per distinct nickname and the argument's `s` points at the copy. The pool is a ring, so it is never full: a
+ * message can only lose its nickname if 64 other distinct nicknames were seen between making and playing it, and a batch of events
+ * names at most a dozen Pokemon. The pool is presentation only: nothing in the battle reads it. */
+#define NICKNAME_POOL 64
+static const char *intern_nickname(const char *text)
 {
-    pr_msg_arg a = arg(name, PR_ARG_POKEMON, pokemon_v(bt, p), NULL);
+    static char pool[NICKNAME_POOL][PR_NICKNAME_BYTES];
+    static unsigned next;
+    for (unsigned i = 0; i < NICKNAME_POOL; i++)
+        if (!strcmp(pool[i], text)) return pool[i];   /* an unused slot is "", and text is not */
+    char *slot = pool[next++ % NICKNAME_POOL];
+    strncpy(slot, text, PR_NICKNAME_BYTES - 1);
+    slot[PR_NICKNAME_BYTES - 1] = 0;
+    return slot;
+}
+
+/* pokemon.name: the species name (form prefix, fusion blend), never the nickname (evolutionDone, megaChange, stealEatBerry...) */
+pr_msg_arg pr_arg_pokemon_plain_name(const pr_battle *bt, const char *name, const pr_pokemon *p)
+{
+    pr_msg_arg a = arg(name, PR_ARG_POKEMON_NAME, pokemon_v(bt, p), NULL);
     if (p) {
         uint16_t species = p->illusion.active ? p->illusion.fusion_species : p->fusion_species;
         if (species) a.fusion_v = pr_msg_pokemon(species,
@@ -64,6 +83,17 @@ pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemo
     }
     return a;
 }
+
+/* getPokemonNameWithAffix: getNameToRender (the nickname, else the species name) with the Wild/Foe affix of an enemy. A disguised
+ * Pokemon shows the disguise's name (getNameToRender checks the illusion first; the app does not model its nickname). */
+pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p)
+{
+    pr_msg_arg a = pr_arg_pokemon_plain_name(bt, name, p);
+    a.kind = PR_ARG_POKEMON;
+    if (p && !p->illusion.active && p->nickname[0]) a.s = intern_nickname(p->nickname);
+    return a;
+}
+/* getNameToRender: the name alone */
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p)
 {
     pr_msg_arg a = pr_arg_pokemon(bt, name, p);

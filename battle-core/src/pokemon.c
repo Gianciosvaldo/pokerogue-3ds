@@ -904,7 +904,7 @@ void pr_mega_evolve(pr_battle *bt, pr_pokemon *p)
     }
 
     if (bt->engine) {
-        pr_queue_msg(bt, bt->engine, pr_msg2("battlePokemonForm:megaChange", pre_name_arg, pr_arg_pokemon_name(bt, "pokemonName", p)));
+        pr_queue_msg(bt, bt->engine, pr_msg2("battlePokemonForm:megaChange", pre_name_arg, pr_arg_pokemon_plain_name(bt, "pokemonName", p)));
     }
 
     pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};

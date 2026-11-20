@@ -401,7 +401,7 @@ typedef struct gc_run {
     pr_battle bt;               /* battle-core's scene: field, weather, tags, the turn's commands */
     pr_engine eng;
     gc_screen screen;           /* what gc_run_screen returns */
-    uint64_t internal_[8448];   /* game-core's own state (the run's phase queue...): opaque */
+    uint64_t internal_[8576];   /* game-core's own state (the run's phase queue...): opaque; grew by 1 KB when pr_pokemon gained its nickname (gc_internal holds 9 pr_pokemon, 88 bytes more each) */
     /* the event queue */
     gc_event events[GC_MAX_EVENTS];
     int ev_head, ev_count;
