@@ -57,10 +57,46 @@ double gc_level_total_exp(int level, int growth_rate) { return pr_run_get_level_
  * SelectStarterPhase's moveset, passive, pokerus and tera type. The constructor's own rolls (the id first)
  * are on Phaser.Math.RND; its generateAndPopulateMoveset isn't run: the starter's moveset replaces it
  * (tryPopulateMoveset), and without one the starter select screen's default is used. */
+bool gc_nickname_valid(const char *text)
+{
+    if (!text) return true;
+    unsigned units = 0;
+    for (const unsigned char *p = (const unsigned char *)text; *p;) {
+        uint32_t cp;
+        int n;
+        if (*p < 0x80) { cp = *p; n = 1; }
+        else if ((*p & 0xE0) == 0xC0) { cp = *p & 0x1F; n = 2; }
+        else if ((*p & 0xF0) == 0xE0) { cp = *p & 0x0F; n = 3; }
+        else if ((*p & 0xF8) == 0xF0) { cp = *p & 0x07; n = 4; }
+        else return false;
+        for (int i = 1; i < n; i++) {
+            if ((p[i] & 0xC0) != 0x80) return false;   /* also the end of the text inside a character */
+            cp = (cp << 6) | (p[i] & 0x3F);
+        }
+        if ((n == 2 && cp < 0x80) || (n == 3 && cp < 0x800) || (n == 4 && cp < 0x10000) || cp > 0x10FFFF ||
+            (cp >= 0xD800 && cp <= 0xDFFF)) return false;                 /* overlong, surrogate, out of range */
+        if (cp < 0x20 || cp == 0x7F || (cp >= 0x80 && cp < 0xA0)) return false;   /* control characters */
+        units += cp >= 0x10000 ? 2 : 1;                                   /* the input's maxLength counts UTF-16 code units */
+        if (units > PR_NICKNAME_MAX_CHARS) return false;
+        p += n;
+    }
+    return strlen(text) < PR_NICKNAME_BYTES;
+}
+
+bool gc_run_set_nickname(gc_run *run, int idx, const char *text)
+{
+    if (!run || idx < 0 || idx >= run->n_party || idx >= 6 || !gc_nickname_valid(text)) return false;
+    char *dst = run->party[idx].b.nickname;
+    memset(dst, 0, PR_NICKNAME_BYTES);
+    if (text) memcpy(dst, text, strlen(text));
+    return true;
+}
+
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
 {
     memset(m, 0, sizeof *m);
     pr_pokemon *p = &m->b;
+    if (gc_nickname_valid(s->nickname)) memcpy(p->nickname, s->nickname, strlen(s->nickname));
     const pr_species *sp = gc_species(s->species);
     p->id = (uint32_t)floor(pr_rng_real_in_range(&run->run.rng, 0, 4294967296.0));
     p->species = s->species;

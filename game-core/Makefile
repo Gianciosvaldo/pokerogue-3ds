@@ -298,6 +298,14 @@ test: retained-form-save-test
 retained-form-save-test: $(BUILD)/retained_form_save_test
 	$(BUILD)/retained_form_save_test
 .PHONY: retained-form-save-test
+# nicknames: the text check, the setter, a starter's, the save (none written when nobody has one, a damaged one dropped), the messages
+all: $(BUILD)/nickname_host_test
+$(BUILD)/nickname_host_test: tests/nickname_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: nickname-host-test
+nickname-host-test: $(BUILD)/nickname_host_test
+	$(BUILD)/nickname_host_test
+.PHONY: nickname-host-test
 # Memory Mushroom / TM learning against upstream's LearnMovePhase.learnMove and SelectModifierPhase.applyModifier
 # (tests/memory-learn.producer.test.ts at 8555c08, replayed without upstream; regenerate with tools/memorylearndiff.sh)
 all: $(BUILD)/memory_learn_diff_test

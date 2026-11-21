@@ -86,6 +86,17 @@ static const sfield enemy_tera_fields[]={SF(gc_mon,tera_instant)};
  * so a save from before it loads with no custom types and counts nothing as dropped */
 static const sfield custom_type_fields[]={SF(pr_pokemon,custom_types),SF(pr_pokemon,fusion_custom_types)};
 static const sfield fusion_fields[]={SF(gc_mon,fusion_shiny),SF(gc_mon,fusion_variant),SF(gc_mon,fusion_luck)};
+/* Pokemon.nickname of the party, and of D'Arby's sealed chips (their own section): written only when one of them has a nickname, so a run with none
+ * saves the bytes it always saved and a save from before nicknames loads with none. The text is plain UTF-8 (upstream stores it base64 encoded). */
+static const sfield nickname_fields[]={SF(pr_pokemon,nickname)};
+static bool any_nickname(const gc_mon *m,int n){for(int i=0;i<n;i++)if(m[i].b.nickname[0])return true;return false;}
+/* A nickname that is not valid text (cut short, not UTF-8, too long) is dropped, not the whole run: it only names a Pokemon. Counts what it dropped. */
+static void check_nicknames(gc_mon *m,int n,int *dropped){
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&m[i].b;
+        if(!memchr(p->nickname,0,sizeof p->nickname)||!gc_nickname_valid(p->nickname)){memset(p->nickname,0,sizeof p->nickname);(*dropped)++;}
+    }
+}
 /* D'Arby's chips (gc_darby.c): the sealed souls, their items and the rematch state. Sections of their own, written only while a soul is sealed, so
  * older saves load with none */
 typedef struct { uint8_t n, n_items, taken, battle; uint8_t level[3]; } sv_darby;
@@ -637,6 +648,11 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     s=section_start(&w,"enemy_tera");
     put_block(&w,enemy_tera_fields,NF(enemy_tera_fields),run->enemy,sizeof(gc_mon),run->n_enemy);
     section_end(&w,s);
+    if(any_nickname(run->party,run->n_party)){
+        s=section_start(&w,"nicknames");
+        put_block(&w,nickname_fields,NF(nickname_fields),&run->party[0].b,sizeof(gc_mon),run->n_party);
+        section_end(&w,s);
+    }
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -676,6 +692,11 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
         put_block(&w,fusion_fields,NF(fusion_fields),in->chips.mon,sizeof(gc_mon),in->chips.n);
         put_block(&w,custom_type_fields,NF(custom_type_fields),&in->chips.mon[0].b,sizeof(gc_mon),in->chips.n);
         section_end(&w,s);
+        if(any_nickname(in->chips.mon,in->chips.n)){
+            s=section_start(&w,"darby_nicknames");
+            put_block(&w,nickname_fields,NF(nickname_fields),&in->chips.mon[0].b,sizeof(gc_mon),in->chips.n);
+            section_end(&w,s);
+        }
     }
     if (run->terminal_result) {
         sv_terminal terminal={run->terminal_result};
@@ -1271,6 +1292,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
                         ||get_block(&extra,custom_type_fields,NF(custom_type_fields),&chip_mons[0].b,sizeof(gc_mon),d.n,&dropped)!=d.n)){
             memset(run,0,sizeof *run);*why="the stored D'Arby chips are damaged";return false;
         }
+        reader chip_nicknames=section(&body,"darby_nicknames");
+        if(!chip_nicknames.bad){
+            if(get_block(&chip_nicknames,nickname_fields,NF(nickname_fields),&chip_mons[0].b,sizeof(gc_mon),d.n,&dropped)!=d.n||chip_nicknames.bad||chip_nicknames.pos!=chip_nicknames.n){
+                memset(run,0,sizeof *run);*why="the stored D'Arby chips are damaged";return false;
+            }
+            check_nicknames(chip_mons,d.n,&dropped);
+        }
         for(int i=0;i<d.n;i++){in->chips.mon[i]=chip_mons[i];in->chips.level[i]=d.level[i];}
         in->chips.n=d.n;in->chips.n_items=d.n_items;in->chips.taken=d.taken;in->chips.battle=d.battle!=0;
     }
@@ -1317,6 +1345,14 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             ||custom_types.bad||custom_types.pos!=custom_types.n){*why="the stored custom types are damaged";return false;}
         for(int k=0;k<run->n_party;k++)for(int i=0;i<2;i++)
             if(run->party[k].b.custom_types[i]>POKEMON_TYPE_FAIRY+1||run->party[k].b.fusion_custom_types[i]>POKEMON_TYPE_FAIRY+1){*why="a stored custom type is damaged";return false;}
+    }
+
+    /* Older saves have no nicknames either: nobody has one then */
+    reader nicknames=section(&body,"nicknames");
+    if(!nicknames.bad){
+        if(get_block(&nicknames,nickname_fields,NF(nickname_fields),&run->party[0].b,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||nicknames.bad||nicknames.pos!=nicknames.n){*why="the stored nicknames are damaged";return false;}
+        check_nicknames(run->party,run->n_party,&dropped);
     }
 
     /* Older saves have no trainer Tera pick either: nobody is picked then */
