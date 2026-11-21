@@ -86,7 +86,8 @@ static void collect_starters(void)
 
 static void layout_cases(void)
 {
-    /* the memory a profile pays for it: every gc_system in the app (and in gc_classic.c, gc_gacha.c, gc_achv.c, gacha_host.c) carries the table */
+    /* the memory a profile pays for it: every gc_system in the app (and in gc_classic.c, gc_gacha.c, gc_achv.c, gacha_host.c) carries the table; the
+     * fields are 8,196 bytes, sizeof(gc_system) grew by 8,192 (the count sits in padding) */
     CHECK(sizeof(gc_starter_nickname) == 64);
     CHECK(sizeof sys.starter_nicknames == 128 * 64 && sizeof sys.starter_nicknames + sizeof sys.n_starter_nicknames == 8196);
     /* the longest text there is fits with its terminator */

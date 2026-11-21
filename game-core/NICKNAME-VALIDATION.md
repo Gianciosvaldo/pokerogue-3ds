@@ -40,10 +40,10 @@ and the use at run start are the next change.
 - `gc_system_starter_nickname(sys, species)` reads it ("" = none, also for a non-starter), `gc_system_set_starter_nickname(sys, species, text)` sets,
   replaces or (with `""` / `NULL`) clears it and answers `GC_STARTER_NICK_OK`, `_NOT_A_STARTER` (species not in `gc_starter_costs`), `_BAD_TEXT`
   (`gc_nickname_valid` says no) or `_FULL`. Nothing changes unless it answers OK.
-- **Memory.** The table costs 8,196 bytes in every `gc_system`. A slot for each of the 572 starters would cost 640 x 61 = 39 KB, and there are five
+- **Memory.** The table makes every `gc_system` 8,192 bytes bigger (`sizeof` 760,248 to 768,440; the 4-byte count sits in padding that was there). A slot for each of the 572 starters would cost 640 x 61 = 39 KB, and there are five
   copies of a profile in the app: `g_sys` (`system_data.c`), the static `next` in `gc_classic.c` and in `gc_gacha.c`, the static `fresh` in `gc_achv.c`,
   and a temporary `malloc` in `gacha_host.c`. So a table for every starter would add about 156 KB of static memory (and 39 KB transient) against about
-  33 KB (and 8 KB) for this one. **The price is a limit upstream does not have:** a 129th starter cannot get a nickname until one is cleared. It is one
+  32 KB (and 8 KB) for this one. **The price is a limit upstream does not have:** a 129th starter cannot get a nickname until one is cleared. It is one
   constant (`GC_STARTER_NICKNAMES`). Neither figure was measured on a 3DS (no devkitARM here); they are `sizeof` and the count of copies.
 - The save has a `starter_nicknames` section, written **only when a starter has a nickname**: a profile with none writes the bytes it wrote before
   (proved against `origin/main`, below), and a profile with nicknames loads in a build that does not know the section (checked once by hand against

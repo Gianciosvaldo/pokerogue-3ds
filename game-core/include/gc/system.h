@@ -143,8 +143,9 @@ const char *gc_system_starter_nickname(const gc_system *sys, uint16_t species);
  *  - GC_STARTER_NICK_NOT_A_STARTER: no such starter (or no profile);
  *  - GC_STARTER_NICK_BAD_TEXT: `text` is not what gc_nickname_valid accepts (invalid UTF-8, a control character, more than 20 UTF-16 units);
  *  - GC_STARTER_NICK_FULL: a new nickname when GC_STARTER_NICKNAMES starters already have one (replacing or clearing one always works).
- * Memory: the table is 8,196 bytes in every gc_system; a table with a slot for every starter would be 40 KB, and the app holds a profile in four
- * places at once (system_data.c, gc_classic.c, gc_gacha.c, gc_achv.c) plus a temporary copy in gacha_host.c. */
+ * Memory: the table makes every gc_system 8,192 bytes bigger (760,248 to 768,440; the count fits in padding); a table with a slot for every starter
+ * would be 40 KB, and the app holds a profile in four places at once (system_data.c, gc_classic.c, gc_gacha.c, gc_achv.c) plus a temporary copy in
+ * gacha_host.c. */
 enum { GC_STARTER_NICK_OK = 0, GC_STARTER_NICK_NOT_A_STARTER, GC_STARTER_NICK_BAD_TEXT, GC_STARTER_NICK_FULL };
 int gc_system_set_starter_nickname(gc_system *sys, uint16_t species, const char *text);
 
