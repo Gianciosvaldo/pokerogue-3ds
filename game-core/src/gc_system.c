@@ -45,6 +45,52 @@ bool gc_system_buy_starter_unlock(gc_system *sys, uint16_t species, bool hidden)
 }
 #include <string.h>
 
+/* A starter's nickname (system.h): a sorted table, one entry per species, the unused tail all zero. */
+_Static_assert(GC_STARTER_NICKNAME_BYTES == PR_NICKNAME_MAX_CHARS * 3 + 1, "the longest valid nickname is 20 three-byte characters");
+static int nick_count(const gc_system *sys) {
+    return sys->n_starter_nicknames < 0 ? 0 : sys->n_starter_nicknames > GC_STARTER_NICKNAMES ? GC_STARTER_NICKNAMES : sys->n_starter_nicknames;
+}
+/* the index of the first entry whose species is not below `species` */
+static int nick_lower_bound(const gc_system *sys, int n, uint16_t species) {
+    int lo = 0, hi = n;
+    while (lo < hi) {
+        const int mid = (lo + hi) / 2;
+        if (sys->starter_nicknames[mid].species < species) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+const char *gc_system_starter_nickname(const gc_system *sys, uint16_t species) {
+    if (!sys) return "";
+    const int n = nick_count(sys), at = nick_lower_bound(sys, n, species);
+    return at < n && sys->starter_nicknames[at].species == species ? sys->starter_nicknames[at].text : "";
+}
+
+int gc_system_set_starter_nickname(gc_system *sys, uint16_t species, const char *text) {
+    if (!sys || gc_starter_cost(species) < 0) return GC_STARTER_NICK_NOT_A_STARTER;
+    if (!gc_nickname_valid(text) || (text && strlen(text) >= GC_STARTER_NICKNAME_BYTES)) return GC_STARTER_NICK_BAD_TEXT;
+    gc_starter_nickname *e = sys->starter_nicknames;
+    const int n = nick_count(sys), at = nick_lower_bound(sys, n, species);
+    const bool have = at < n && e[at].species == species;
+    if (!text || !text[0]) {   /* an empty submit clears it, as upstream's */
+        if (have) {
+            memmove(&e[at], &e[at + 1], (size_t)(n - at - 1) * sizeof e[0]);
+            memset(&e[n - 1], 0, sizeof e[0]);
+            sys->n_starter_nicknames = n - 1;
+        }
+        return GC_STARTER_NICK_OK;
+    }
+    if (!have) {
+        if (n >= GC_STARTER_NICKNAMES) return GC_STARTER_NICK_FULL;
+        memmove(&e[at + 1], &e[at], (size_t)(n - at) * sizeof e[0]);
+        sys->n_starter_nicknames = n + 1;
+    }
+    memset(&e[at], 0, sizeof e[at]);   /* a shorter name leaves no tail of the longer one */
+    e[at].species = species;
+    memcpy(e[at].text, text, strlen(text));
+    return GC_STARTER_NICK_OK;
+}
+
 void gc_system_init_defaults(gc_system *sys) {
     if (!sys) return;
     memset(sys, 0, sizeof(*sys));

@@ -138,6 +138,8 @@ jobs:
         run: make -C game-core test
       - name: Check the game-core nickname test catches its planted faults
         run: python3 game-core/tools/nickname-guards.py
+      - name: Check the starter nickname test catches its planted faults
+        run: python3 game-core/tools/starter-nickname-guards.py
       - name: Check mystery encounter UI and reward failure controls
         run: python3 game/tests/check_mystery_ui_faults.py
       - name: Check the app's nickname tests catch their planted faults

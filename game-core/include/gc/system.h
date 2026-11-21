@@ -42,6 +42,18 @@ typedef struct {
     uint8_t gender_preference; /* StarterPreferences.female (0 male, 1 female), valid with flag 16 */
 } gc_starter_entry;
 
+/* A starter's nickname, kept across runs (upstream StarterPreferences.nickname, set by the starter select's Rename and given to the Pokemon the
+ * starter becomes: SelectStarterPhase's starterPokemon.nickname). Plain UTF-8, at most 20 UTF-16 units: 20 three-byte characters (60 bytes) is the
+ * most such a text can take, hence 61 with the terminator (game-core checks it against PR_NICKNAME_MAX_CHARS). */
+#define GC_STARTER_NICKNAME_BYTES 61
+/* How many starters can carry a nickname at once. Upstream has no limit (572 starters here); the table is kept small because every gc_system is
+ * copied whole in places and several live in the app (see gc_system_set_starter_nickname). */
+#define GC_STARTER_NICKNAMES 128
+typedef struct {
+    uint16_t species;                           /* a starter's species id */
+    char text[GC_STARTER_NICKNAME_BYTES];       /* NUL-terminated, never empty, zero-filled after the terminator */
+} gc_starter_nickname;
+
 /* Upstream Unlocks */
 typedef struct {
     bool endless_mode;
@@ -117,10 +129,24 @@ typedef struct {
     uint32_t egg_pity[4],unlock_pity[4];
     gc_stat_milestones stats;                          /* profile stat milestones */
     gc_achv_progress achv;                             /* custom achievements (gc_achv.c) */
+    int n_starter_nicknames;                           /* the first n entries below are in use */
+    gc_starter_nickname starter_nicknames[GC_STARTER_NICKNAMES];   /* sorted by species, one per species; the rest all zero (so a profile compares and saves the same however it got here) */
 } gc_system;
 
 /* Initialize system data with new-save defaults (upstream initDexData + initStarterData) */
 void gc_system_init_defaults(gc_system *sys);
+
+/* A starter's nickname: "" when it has none (also for a species that is not a starter or a NULL profile). The pointer stays good until the next
+ * gc_system_set_starter_nickname. */
+const char *gc_system_starter_nickname(const gc_system *sys, uint16_t species);
+/* Sets, replaces or (with "" or NULL) clears a starter's nickname. 0 = done; otherwise nothing changed:
+ *  - GC_STARTER_NICK_NOT_A_STARTER: no such starter (or no profile);
+ *  - GC_STARTER_NICK_BAD_TEXT: `text` is not what gc_nickname_valid accepts (invalid UTF-8, a control character, more than 20 UTF-16 units);
+ *  - GC_STARTER_NICK_FULL: a new nickname when GC_STARTER_NICKNAMES starters already have one (replacing or clearing one always works).
+ * Memory: the table is 8,196 bytes in every gc_system; a table with a slot for every starter would be 40 KB, and the app holds a profile in four
+ * places at once (system_data.c, gc_classic.c, gc_gacha.c, gc_achv.c) plus a temporary copy in gacha_host.c. */
+enum { GC_STARTER_NICK_OK = 0, GC_STARTER_NICK_NOT_A_STARTER, GC_STARTER_NICK_BAD_TEXT, GC_STARTER_NICK_FULL };
+int gc_system_set_starter_nickname(gc_system *sys, uint16_t species, const char *text);
 
 /* Dex and starter data helpers */
 uint64_t gc_mon_dex_attr(const gc_mon *m);

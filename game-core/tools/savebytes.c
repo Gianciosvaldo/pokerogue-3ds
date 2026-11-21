@@ -1,5 +1,5 @@
 /* Saves of runs that never had a nickname (or any other state a build may have added since): every point a run can be saved, as a length and an
- * FNV-1a hash per save. tools/save-bytes-diff.sh builds this against two trees and compares what they print, so a change to the save format that
+ * FNV-1a hash per save, and the system profile (gc_system_save) the run has built up at that point, the same way. tools/save-bytes-diff.sh builds this against two trees and compares what they print, so a change to the save format that
  * should not change a run's bytes shows up. Uses only what both trees have (the starters, the choices, gc_run_save). The party is leveled to 50 and
  * healed at every command so the runs reach the late waves (trainers, encounters, shops, biomes). */
 #include "internal.h"
@@ -8,7 +8,7 @@
 #include <string.h>
 static gc_run run;
 static gc_system sys;
-static uint8_t buf[GC_SAVE_MAX];
+static uint8_t buf[GC_SAVE_MAX], sbuf[1 << 20];
 static uint64_t fnv(const uint8_t *p, size_t n){uint64_t h=1469598103934665603ULL;for(size_t i=0;i<n;i++){h^=p[i];h*=1099511628211ULL;}return h;}
 int main(int argc, char **argv)
 {
@@ -35,6 +35,8 @@ int main(int argc, char **argv)
             if (gc_run_can_save(&run)) {
                 const size_t len = gc_run_save(&run, buf, sizeof buf);
                 printf("run %d wave %d screen %d: %zu %016llx\n", r, run.wave, gc_run_screen(&run)->kind, len, (unsigned long long)fnv(buf, len));
+                const size_t slen = gc_system_save(&sys, sbuf, sizeof sbuf);
+                printf("run %d wave %d profile: %zu %016llx\n", r, run.wave, slen, (unsigned long long)fnv(sbuf, slen));
                 saves++;
             }
             const gc_screen *s = gc_run_screen(&run);

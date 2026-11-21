@@ -1599,6 +1599,10 @@ static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, darby_rematch_wins),
 };
 
+/* A starter's nickname (gc_system.starter_nicknames): a section of its own, written only once a starter has one, so a profile with none saves the bytes
+ * it always saved and a save from before them loads with none. The text is plain UTF-8 (upstream stores it base64 encoded). */
+static const sfield starter_nickname_fields[]={SF(gc_starter_nickname,species),SF(gc_starter_nickname,text)};
+
 static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};
 static const sfield egg_fields[] = {
     SF(gc_egg, id), SF(gc_egg, hatch_waves), SF(gc_egg, tier), SF(gc_egg, species), SF(gc_egg, source_type), SF(gc_egg, variant_tier), SF(gc_egg, egg_move_index),
@@ -1710,6 +1714,13 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
         }
     }
 
+    if (sys->n_starter_nicknames > 0) {
+        const int n = sys->n_starter_nicknames < GC_STARTER_NICKNAMES ? sys->n_starter_nicknames : GC_STARTER_NICKNAMES;
+        s = section_start(&w, "starter_nicknames");
+        put_block(&w, starter_nickname_fields, NF(starter_nickname_fields), sys->starter_nicknames, sizeof sys->starter_nicknames[0], n);
+        section_end(&w, s);
+    }
+
     if (w.full) { memset(buf, 0, 8); return 0; }
     const uint32_t len = (uint32_t)(w.n - body), crc = crc32(w.p + body, len);
     memcpy(w.p + 12, &len, 4);
@@ -1813,6 +1824,20 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
             }
         }
         free(st_buf);
+    }
+
+    /* a nickname only names a starter: one that is not text, not a starter's, empty or past the table is dropped (counted), not the profile */
+    r = section(&body, "starter_nicknames");
+    if (!r.bad) {
+        gc_starter_nickname *nick = calloc(GC_STARTER_NICKNAMES, sizeof *nick);
+        if (!nick) { *why = "system save allocation failed"; return false; }
+        const int count = get_block(&r, starter_nickname_fields, NF(starter_nickname_fields), nick, sizeof *nick, GC_STARTER_NICKNAMES, &dropped);
+        for (int i = 0; i < count; i++) {
+            const bool kept = memchr(nick[i].text, 0, sizeof nick[i].text) && nick[i].text[0] &&
+                              gc_system_set_starter_nickname(sys, nick[i].species, nick[i].text) == GC_STARTER_NICK_OK;
+            if (!kept) dropped++;
+        }
+        free(nick);
     }
 
     return true;
