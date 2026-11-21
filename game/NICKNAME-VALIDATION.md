@@ -76,9 +76,11 @@ All commands from the repository root, from a clean `game/tests/build` (that Mak
 | Rename option, form text, member mapping, cancel / empty / bad text, battle info box, summary names (party_item_test) | `game/tests/run_host_tests.sh` | `party_item_test: ... Rename passed` |
 | Text entry: the starting text (whole characters, the limit, malformed bytes), overlay, trimming | same | `name_entry_test`: 351 checks, 0 failed |
 | Names the battle view is given: nickname, 80-byte nickname, emoji, fusion, disguise, disguise breaking, form change, `mon_display_name` into a small buffer | same | `fused_name_test`: 28 checks, 0 failures |
-| All `game/` host tests | `game/tests/run_host_tests.sh` | 89 test programs plus `runtest`, `game/tests: all passed` |
-| Planted faults | `python3 game/tests/check_nickname_ui_faults.py` (after `make -C game-core test`; in CI) | 25 of 25 caught (see the list at the top of the script) |
-| game-core and battle-core suites on this head | `make -C game-core -k test`, the CI `test` job's history, proof and `check_mystery_ui_faults.py` steps | exit 0; `nickname_host_test` 303 checks, 0 failures; mystery UI 67 faults rejected |
+| The starter select's Rename (row only with the event, form text, set / replace / clear, cancel, same text not written, failed write undone, refusals, 128 full, long names in the panel, nickname in the run's starter) | same | `starter_ui_test`: 23,006 checks, 0 failed |
+| The starter profile with the real system data file (written as a change, restart, same bytes, a run gets the nickname, clearing restores the plain file) | same | `starter_data_test`: 553,646 checks, 0 failed |
+| All `game/` host tests | `rm -rf game/tests/build && game/tests/run_host_tests.sh` | 89 sections of output (72 test programs and 17 `runtest` runs), `game/tests: all passed`, exit 0 |
+| Planted faults | `python3 game/tests/check_nickname_ui_faults.py` (after `make -C game-core build/libgc.a` and its other libraries; in CI) | 49 of 49 caught (see the list at the top of the script) |
+| game-core and battle-core suites | `make -C game-core -k test`, the CI `test` job's history, proof and `check_mystery_ui_faults.py` steps | run by hand for the nickname game-core changes (#691, #693: exit 0; `nickname_host_test` 303 checks, 0 failures; `starter_nickname_host_test` 76,291 checks, 0 failed; 19 of 19 planted faults); the starter select change touches no game-core file, so the CI `test` job is the check for this head |
 
 The planted faults cover: the option not offered or not handled, the wrong member (slot instead of the party order, battle order replaced by the run's),
 cancel clearing the name, no error sound, the party not resumed or the entry not popped, the list not refreshed, the form starting empty or not as an
