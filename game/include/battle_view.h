@@ -23,6 +23,8 @@
 extern "C" {
 #endif
 
+/* the name buffer: a nickname of at most 20 characters is up to 80 bytes of UTF-8 (game-core's PR_NICKNAME_BYTES; battle_events.c checks it) */
+#define BV_NAME_BYTES 84
 #define BV_PLAYER 0 /* battler index 0 = player's first, 2 = enemy's first (upstream BattlerIndex) */
 #define BV_ENEMY 2
 #define BV_PLAYER_ALLY 1
@@ -38,7 +40,7 @@ typedef struct {
   int fusion_form, fusion_gender, fusion_variant;
   bool fusion_shiny;
   int pokeball;              /* stored ball, supplied by the run for the opening throw */
-  char name[40];             /* the name to render (nickname or species name) */
+  char name[BV_NAME_BYTES];  /* the name to render (nickname or species name) */
   int level;
   int hp, max_hp;
   int status;                /* StatusEffect (0 = none) */

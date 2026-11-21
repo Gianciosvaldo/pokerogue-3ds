@@ -19,6 +19,10 @@
 
 #include "mui.h"
 
+/* A Pokemon's displayed name: a nickname of at most 20 characters is up to 80 bytes of UTF-8 (a fusion's blended species name is shorter); game-core's
+ * PR_NICKNAME_BYTES is the same number (party_screen.c checks it) */
+#define MENU_NAME_BYTES 84
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -69,7 +73,7 @@ typedef struct {
   bool fusion_shiny;
   uint8_t fusion_variant;
 
-  char name[40];          /* getNameToRender(): nickname or species name */
+  char name[MENU_NAME_BYTES]; /* getNameToRender(): nickname or species name */
   uint32_t level;
   uint32_t hp, max_hp;
   uint8_t status;         /* MS_* (the non-volatile status; 0 = none) */
@@ -165,6 +169,9 @@ typedef struct party_events {
   void (*on_summary)(void* ctx, int slot);
   void* ctx;
   void (*on_form_item)(void* ctx, int slot, int inventory_index);
+  /* RENAME picked (upstream's processRenameOption; the option is in every mode's common options, after Summary): the caller shows the text entry
+   * and calls party_resume when it closes, after party_refresh when the name changed. NULL = the option is hidden. */
+  void (*on_rename)(void* ctx, int slot);
 } party_events;
 
 typedef struct {

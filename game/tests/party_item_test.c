@@ -5,7 +5,9 @@
 #include <string.h>
 #include "gc/run.h"
 #include "gc/reward.h"
+#include "battle_view.h"
 #include "menus.h"
+#include "name_entry.h"
 #include "party_screen.h"
 #include "party_fake.h"
 #include "ui.h"
@@ -25,6 +27,9 @@ void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x; (void)y;
 const char* i18n_species_name(int id) { (void)id; return "Pokemon"; }
 const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, n, "%s", key); return out; }
 void bv_set_info(const char* name, const char* desc) { (void)name; (void)desc; }
+/* the battle view's four Pokemon (battler 0..3): the party screen names a renamed one again */
+static bv_mon view_mon[4];
+bv_mon* bv_mon_of(int battler) { return &view_mon[battler]; }
 static menu_mon summary_mon;static int summary_calls;
 void summary_open(const summary_args* a, const summary_events* e) { (void)e;summary_mon=a->party[a->index];summary_calls++; }
 void summary_close(void) {}
@@ -35,6 +40,22 @@ static float summary_ms;
 void summary_update(float dt) { summary_ms=dt; }
 void summary_draw(void) {}
 void learn_move_start(const learn_move_args* a, const learn_move_host* h) { (void)a; (void)h; assert(0); }
+/* the text entry is a screen of its own (name_entry.c, tested by name_entry_test): here it only records how it was opened, and the test ends it */
+static name_entry_args ne;
+static char ne_initial[256]; /* the real screen copies the initial text when it opens (name_entry.c load_initial): the caller's buffer is gone after */
+static int ne_opens, play_errors;
+static ui_screen entry_stub = {.name = "name-entry"};
+void name_entry_open(const name_entry_args* a) {
+  ne = *a;
+  if (a->initial) {
+    assert(strlen(a->initial) < sizeof ne_initial);
+    strcpy(ne_initial, a->initial);
+    ne.initial = ne_initial;
+  }
+  ne_opens++;
+  ui_push(&entry_stub);
+}
+void ui_play_error(void) { play_errors++; }
 
 static void on_pick(int slot, int move, void* arg) {
   (void)arg;
@@ -309,7 +330,7 @@ static void fusion_cases(void) {
   input(BTN_DOWN); input(BTN_ACTION);
   pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
   assert(pf_text_count("Unsplice"));
-  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION);       /* Apply, Summary, Unsplice: "Do you really want to unsplice...?" */
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION);   /* Apply, Summary, Rename, Unsplice: "Do you really want to unsplice...?" */
   for (int i = 0; i < 4 && unspliced < 0; i++) input(BTN_ACTION);   /* the question, then its Yes */
   assert(unspliced == 0);                                      /* the fused one, as party[] index */
   assert(run.party[0].b.fusion_species == 0);
@@ -331,11 +352,113 @@ static void fusion_cases(void) {
   input(BTN_ACTION);                                           /* the fused one (the cursor starts on it): its options */
   pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
   assert(pf_text_count("Unsplice") && !pf_text_count("partyUiHandler:release"));
-  input(BTN_DOWN); input(BTN_ACTION);                          /* Summary, Unsplice */
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION);         /* Summary, Rename, Unsplice */
   for (int i = 0; i < 4 && unspliced < 0; i++) input(BTN_ACTION);
   assert(unspliced == 0 && run.party[0].b.fusion_species == 0 && pf_msg_count("Was reverted.") == 2 && depth == 2);
   ps_close();
 }
+/* Rename (processRenameOption): the option is in the common options after Summary, the form starts with the name the Pokemon shows, the nickname
+ * goes to the right member (the reward screens list the party order, the battle's switch screen battle-core's), an empty text clears it, cancelling
+ * and a text the run does not keep leave it as it was, and the party works again afterwards. */
+static void rename_cases(void) {
+  memset(&run, 0, sizeof run);
+  run.n_party = 3;
+  for (int k = 0; k < 3; k++) {
+    run.party[k].b.species = SPECIES_ID_VENUSAUR;
+    run.party[k].b.id = 100 + k;
+    run.party[k].b.hp = run.party[k].b.stats[0] = 10;
+    run.party[k].b.level = 5;
+  }
+  run.party_order[0] = 2; run.party_order[1] = 1; run.party_order[2] = 0;   /* slot 0 is party[2]; the cursor is a party[] index, so 2 starts on slot 0 */
+  run.screen.kind = GC_SCREEN_COMMAND;
+  ps_open_check(&run, 2, form_pick, NULL, check_done, NULL);
+  assert(depth == 2);
+  input(BTN_ACTION);
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(pf_text_count("Summary") == 1 && pf_text_count("partyUiHandler:rename") == 1);
+  input(BTN_DOWN); input(BTN_ACTION);                                       /* Summary, Rename */
+  assert(ne_opens == 1 && depth == 3 && ui_top() == &entry_stub);
+  assert(!strcmp(ne.title_key, "menu:renamePokemon") && !strcmp(ne.label_key, "menu:nickname") && !strcmp(ne.ok_key, "menu:rename") &&
+         !strcmp(ne.cancel_key, "menu:cancel") && ne.max_chars == PR_NICKNAME_MAX_CHARS && ne.overlay);
+  assert(ne.initial && !strcmp(ne.initial, "Pokemon"));                      /* the species name: the Pokemon has no nickname yet */
+  ne.on_done("Sparky", ne.arg);
+  assert(depth == 2 && ui_top() != &entry_stub);                             /* the entry is popped, the party is under it */
+  assert(!strcmp(run.party[2].b.nickname, "Sparky") && !run.party[0].b.nickname[0] && !run.party[1].b.nickname[0]);
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);                      /* the list lists the new name */
+  assert(pf_text_count("Sparky") == 1);
+  summary_mon.name[0] = 0;
+  input(BTN_ACTION); input(BTN_ACTION);                                      /* the party takes input again: Summary of the same member */
+  assert(!strcmp(summary_mon.name, "Sparky"));
+  ps_close();                                                                /* the list is built again by the next opening */
+  ps_open_check(&run, 2, form_pick, NULL, check_done, NULL);
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(!strcmp(summary_mon.name, "Sparky") && !summary_mon.fusion);
+  ps_close();                                                                /* the summary leaves the party waiting (the fake never closes it) */
+  ps_open_check(&run, 2, form_pick, NULL, check_done, NULL);
+  /* the form starts with the nickname now; cancelling changes nothing */
+  input(BTN_ACTION); input(BTN_DOWN); input(BTN_ACTION);
+  assert(ne_opens == 2 && !strcmp(ne.initial, "Sparky"));
+  ne.on_done(NULL, ne.arg);
+  assert(depth == 2 && !strcmp(run.party[2].b.nickname, "Sparky") && play_errors == 0);
+  /* a text the run does not keep (longer than 20 characters): the error sound, the nickname stays */
+  input(BTN_ACTION); input(BTN_DOWN); input(BTN_ACTION);
+  ne.on_done("123456789012345678901", ne.arg);
+  assert(depth == 2 && !strcmp(run.party[2].b.nickname, "Sparky") && play_errors == 1);
+  /* an empty text clears it, as an empty submit does upstream: the species name is shown again */
+  input(BTN_ACTION); input(BTN_DOWN); input(BTN_ACTION);
+  ne.on_done("", ne.arg);
+  assert(depth == 2 && !run.party[2].b.nickname[0]);
+  summary_mon.name[0] = 0;
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(!strcmp(summary_mon.name, "Pokemon"));
+  ps_close();
+  assert(depth == 1);
+
+  /* the battle's switch screen: battle-core's order, the active Pokemon first (here storage 1, then 0 and 2) */
+  run.bt.n_party[0] = 3;
+  run.bt.party[0][0] = &run.party[1].b; run.bt.party[0][1] = &run.party[0].b; run.bt.party[0][2] = &run.party[2].b;
+  memset(view_mon, 0, sizeof view_mon);                                      /* the battle view: party[1] on the field (id 101), party[0] behind a disguise */
+  view_mon[0] = (bv_mon){.species = SPECIES_ID_VENUSAUR, .pokemon_id = 101, .identity_known = true};
+  view_mon[1] = (bv_mon){.species = SPECIES_ID_VENUSAUR, .pokemon_id = 100, .identity_known = true, .illusion = true};
+  view_mon[2] = (bv_mon){.species = SPECIES_ID_VENUSAUR, .pokemon_id = 555, .identity_known = true};
+  strcpy(view_mon[0].name, "Pokemon"); strcpy(view_mon[1].name, "Disguise"); strcpy(view_mon[2].name, "Foe");
+  ps_open(&run.bt, PS_SWITCH, on_pick, NULL);
+  input(BTN_ACTION);                                                         /* the active one has no Send out: Summary, Rename */
+  input(BTN_DOWN); input(BTN_ACTION);
+  assert(ne_opens == 5 && ne.overlay && depth == 3);
+  ne.on_done("Zappy", ne.arg);
+  assert(depth == 2 && !strcmp(run.party[1].b.nickname, "Zappy") && !run.party[0].b.nickname[0] && !run.party[2].b.nickname[0]);
+  assert(!strcmp(view_mon[0].name, "Zappy") && !strcmp(view_mon[1].name, "Disguise") && !strcmp(view_mon[2].name, "Foe"));   /* the info box of that Pokemon only */
+  summary_mon.name[0] = 0;
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(!strcmp(summary_mon.name, "Zappy"));
+  ps_close();
+  ps_open(&run.bt, PS_SWITCH, on_pick, NULL);
+  input(BTN_DOWN); input(BTN_ACTION);                                        /* the second slot (party[0]): Send out, Summary, Rename */
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION);
+  assert(ne_opens == 6 && !strcmp(ne.initial, "Pokemon"));
+  ne.on_done("Ace", ne.arg);
+  assert(!strcmp(run.party[0].b.nickname, "Ace") && !strcmp(run.party[1].b.nickname, "Zappy") && !run.party[2].b.nickname[0]);
+  assert(!strcmp(view_mon[1].name, "Disguise") && !strcmp(view_mon[0].name, "Zappy"));                                      /* a disguise keeps hiding it */
+  ps_close();
+  assert(depth == 1);
+  ps_open(&run.bt, PS_SWITCH, on_pick, NULL);                                /* clearing it names the info box by the species again */
+  input(BTN_ACTION); input(BTN_DOWN); input(BTN_ACTION);
+  ne.on_done("", ne.arg);
+  assert(!run.party[1].b.nickname[0] && !strcmp(view_mon[0].name, "Pokemon") && !strcmp(view_mon[1].name, "Disguise"));
+  ps_close();
+  assert(depth == 1);
+
+  /* a 20-character nickname of four-byte characters fits a menu's name */
+  memset(&run.party[0].b.nickname, 0, sizeof run.party[0].b.nickname);
+  for (int i = 0; i < 10; i++) strcat(run.party[0].b.nickname, "\xF0\x9F\x94\xA5");   /* ten emoji: 20 UTF-16 units, 40 bytes */
+  for (int i = 0; i < 20; i++) run.party[2].b.nickname[i] = 'a' + i % 26;
+  ps_open_check(&run, 2, form_pick, NULL, check_done, NULL);
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(!strcmp(summary_mon.name, run.party[2].b.nickname) && strlen(summary_mon.name) == 20);
+  ps_close();
+}
+
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -418,6 +541,7 @@ int main(void) {
   order_cases();
   remember_reward_cases();
   fusion_cases();
-  puts("party_item_test: TM labels, Teach/filter, B/touch cancellation, move-item reset, remembered moves and the DNA Splicers screen passed");
+  rename_cases();
+  puts("party_item_test: TM labels, Teach/filter, B/touch cancellation, move-item reset, remembered moves, the DNA Splicers screen and Rename passed");
   return 0;
 }

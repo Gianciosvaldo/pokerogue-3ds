@@ -201,8 +201,8 @@ static const char* why_text(const char* why, char* out, int n) {
   const pr_msg *message=gc_run_refusal_message(&G.run);
   if(message && !strcmp(message->key,why)){be_format_message(message,out,(size_t)n);return out;}
   if (strchr(why, ':') && !strchr(why, ' ')) {
-    char name[48] = "";
-    if (G.run.n_party > 0) snprintf(name, sizeof name, "%s", i18n_species_name(G.run.party[0].b.species));
+    char name[BV_NAME_BYTES] = "";
+    if (G.run.n_party > 0) snprintf(name, sizeof name, "%s", G.run.party[0].b.nickname[0] ? G.run.party[0].b.nickname : i18n_species_name(G.run.party[0].b.species));
     return i18n_t(out, n, why, "pokemonName", name, NULL);
   }
   snprintf(out, (size_t)n, "%s", why);
@@ -1281,8 +1281,8 @@ static void ask(void) {
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];
     if (!s->move_ok[i] && s->move_why[i] && me && i < PR_N_MOVES(&me->b)) {
-      char name[48];
-      snprintf(name, sizeof name, "%s", i18n_species_name(me->b.species));
+      char name[BV_NAME_BYTES];   /* the nickname, unless it is hidden by a disguise (the Pokemon is named as the battle view names it) */
+      snprintf(name, sizeof name, "%s", me->b.nickname[0] && !pr_shows_illusion(&G.run.bt, &me->b) ? me->b.nickname : i18n_species_name(me->b.species));
       i18n_t(g_reason[i], sizeof g_reason[i], s->move_why[i], "moveName", i18n_move_name(PR_MOVES(&me->b)[i]),
              "pokemonNameWithAffix", name, "pokemonName", name, NULL);
       o.move_why[i] = g_reason[i];

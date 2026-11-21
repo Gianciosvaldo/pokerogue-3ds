@@ -10,15 +10,20 @@
 #include "fused_name.h"
 #include "i18n.h"
 #include "menus.h"
+#include "name_entry.h"
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "ui.h"
 
 static const gc_run* g_run;
+static gc_run* g_run_mut; /* the same run: the screens read it, and Rename (a nickname) writes it. It is the app's live run, never a const object */
 static char g_trainer_id[12];
+
+_Static_assert(MENU_NAME_BYTES >= PR_NICKNAME_BYTES, "a nickname fits a menu's name");
 
 void ps_set_run(const void* gc_run_ptr) {
   g_run = (const gc_run*)gc_run_ptr;
+  g_run_mut = (gc_run*)gc_run_ptr;
   snprintf(g_trainer_id, sizeof g_trainer_id, "%d", g_run ? g_run->trainer_id : 0);
 }
 
@@ -79,6 +84,7 @@ static struct {
   void (*on_pick)(int, int, void*);
   void* arg;
   bool open;
+  const pr_battle* bt; /* the battle's party order, for the battle's switch screen (NULL: the screens that list the run's own order) */
 } S;
 
 /* The reward-time screens list the party in upstream's party order (run->party_order, which switching in battle changes), not in
@@ -129,7 +135,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->gender = p->gender;
   m->shiny = p->shiny;
   m->variant = p->variant;
-  fused_mon_name(m->name, sizeof m->name, p->species, p->fusion_species);
+  mon_display_name(m->name, sizeof m->name, p->species, p->fusion_species, p->nickname);
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];
@@ -174,7 +180,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->gender = p->gender;
   m->shiny = p->shiny;
   m->variant = p->variant;
-  fused_mon_name(m->name, sizeof m->name, p->species, p->fusion_species);
+  mon_display_name(m->name, sizeof m->name, p->species, p->fusion_species, p->nickname);
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];
@@ -264,6 +270,56 @@ static void on_summary(void* ctx, int slot) {
   summary_open(&a, &ev);
 }
 
+/* ---- Rename (PartyUiHandler.processRenameOption) ---- */
+
+/* The Pokemon of a slot: the battle's switch screen lists battle-core's party order, the others the run's party order */
+static pr_pokemon* slot_pokemon(int slot) {
+  if (slot < 0 || slot >= S.n || slot >= PR_MAX_PARTY) return NULL;
+  if (S.bt) return slot < S.bt->n_party[0] ? S.bt->party[0][slot] : NULL;
+  return g_run_mut ? &g_run_mut->party[storage_at(slot)].b : NULL;
+}
+
+/* the text entry is over (name_entry.h: it is an overlay, so the party screen is under it again once it is popped): the nickname is set, or
+ * cleared by an empty text, as the form's submit does, and the party lists the new name. Cancelled (NULL): nothing changes. */
+static void rename_done(const char* text, void* arg) {
+  const int slot = (int)(long)arg;
+  ui_pop();
+  pr_pokemon* p = slot_pokemon(slot);
+  const gc_mon* g = p ? run_mon_of(p) : NULL;
+  if (text && g) {
+    if (gc_run_set_nickname(g_run_mut, (int)(g - g_run_mut->party), text)) {
+      mon_display_name(S.party[slot].name, sizeof S.party[slot].name, p->species, p->fusion_species, p->nickname);
+      /* in a battle, the info box of a Pokemon on the field shows the name it was sent out with: it is named again (a disguise keeps hiding it) */
+      if (S.bt)
+        for (int k = 0; k < 4; k++) {
+          bv_mon* v = bv_mon_of(k);
+          if (v->identity_known && v->pokemon_id == p->id && !v->illusion)
+            mon_display_name(v->name, sizeof v->name, v->species, v->fusion_species, p->nickname);
+        }
+      party_refresh(S.party, S.n);
+    } else {
+      ui_play_error(); /* not text the run keeps (name_entry's keys cannot make it, an initial text longer than the limit could) */
+    }
+  }
+  party_resume();
+}
+
+static void on_rename(void* ctx, int slot) {
+  (void)ctx;
+  const pr_pokemon* p = slot_pokemon(slot);
+  if (!p || !run_mon_of(p)) {
+    party_resume();
+    return;
+  }
+  /* the form starts with the name the Pokemon shows now (getNameToRender({useIllusion: false})) */
+  char now[PR_NICKNAME_BYTES * 2];
+  mon_display_name(now, sizeof now, p->species, p->fusion_species, p->nickname);
+  name_entry_args a = {"menu:renamePokemon", "menu:nickname", "menu:rename", "menu:cancel", PR_NICKNAME_MAX_CHARS, rename_done, (void*)(long)slot};
+  a.initial = now;
+  a.overlay = true;
+  name_entry_open(&a);
+}
+
 /* ---- the ui screen ---- */
 
 static bool ps_input(ui_screen* s, ui_button b) {
@@ -313,6 +369,7 @@ void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*
   S.mode = mode;
   S.on_pick = on_pick;
   S.arg = arg;
+  S.bt = bt;
   for (int i = 0; i < bt->n_party[0] && i < PR_MAX_PARTY; i++) ps_menu_mon(bt, bt->party[0][i], &S.party[i]);
   S.n = bt->n_party[0];
   party_args a;
@@ -323,6 +380,7 @@ void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*
   a.filter = mode == PARTY_REVIVAL_BLESSING ? filter_fainted : filter_non_fainted;
   static party_events ev;
   ev = (party_events){on_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  ev.on_rename = on_rename;
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
@@ -424,6 +482,7 @@ static void open_item(const void* gc_run_ptr, int pmode, bool target_move, int t
 
   static party_events ev;
   ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  ev.on_rename = on_rename;
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
@@ -520,6 +579,7 @@ void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor,
 
   static party_events ev;
   ev = (party_events){on_fuse_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  ev.on_rename = on_rename;
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
@@ -579,6 +639,7 @@ void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int 
   a.in_reward_phase = true;
   static party_events ev;
   ev = (party_events){on_transfer_select, on_transfer_pick, on_discard_pick, NULL, NULL, on_summary, NULL};
+  ev.on_rename = on_rename;
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
@@ -646,7 +707,7 @@ void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,v
   a.max_level=run->bt.max_exp_level;a.in_reward_phase=run->screen.kind==GC_SCREEN_REWARD;
   a.preserve_roster=true;a.allow_unsplice=Un.cb!=NULL;
   party_events ev={0};ev.on_select=check_select;ev.on_pause_evolution=check_pause;
-  ev.on_summary=on_summary;ev.on_form_item=check_form;
+  ev.on_summary=on_summary;ev.on_form_item=check_form;ev.on_rename=on_rename;
   party_open(&a,S.party,S.n,&ev);S.open=true;ui_push(&g_screen);
 }
 
@@ -655,7 +716,7 @@ void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,v
 static struct {
   menu_mon party[PR_MAX_PARTY];
   int n;
-  char name[48], trainer_id[12];
+  char name[MENU_NAME_BYTES], trainer_id[12];
   ps_learn_host h;
   void (*done)(void*);
   void* done_ctx;

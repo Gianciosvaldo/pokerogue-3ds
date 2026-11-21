@@ -1190,7 +1190,7 @@ static float draw_tera_icon(const bv_mon* m, float x, float y) {
 
 static void draw_name(const bv_mon* m, bool player, float x, float y) {
   /* updateNameText: shortened with "." until it fits */
-  char name[48];
+  char name[BV_NAME_BYTES];
   snprintf(name, sizeof name, "%s", m->name);
   float limit = 60 - ((m->gender < 0 ? 0 : 6) + (m->shiny ? 8 : 0) +
                       (fminf((float)snprintf(NULL, 0, "%d", m->level), 3) - 3) * 8);

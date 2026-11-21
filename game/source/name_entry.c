@@ -132,6 +132,27 @@ static void finish(bool ok) {
   if (E.a.on_done) E.a.on_done(s, E.a.arg);
 }
 
+/* The starting text: whole UTF-8 characters, at most max_chars of them, and nothing from the first byte that is not part of a well-formed
+ * sequence (the keys cannot type it, and erase() walks back over continuation bytes) */
+static void load_initial(const char* s) {
+  if (!s) return;
+  size_t have = 0;
+  while (*s && E.n_chars < E.a.max_chars) {
+    const unsigned char c = (unsigned char)*s;
+    const int n = c < 0x80 ? 1 : (c & 0xe0) == 0xc0 ? 2 : (c & 0xf0) == 0xe0 ? 3 : (c & 0xf8) == 0xf0 ? 4 : 0;
+    if (!n || have + (size_t)n >= sizeof E.text) break;
+    bool whole = true;
+    for (int i = 1; i < n; i++)
+      if (((unsigned char)s[i] & 0xc0) != 0x80) whole = false; /* also stops at the end of the text inside a character */
+    if (!whole) break;
+    memcpy(E.text + have, s, (size_t)n);
+    have += (size_t)n;
+    s += n;
+    E.n_chars++;
+  }
+  E.text[have] = '\0';
+}
+
 /* ------------------------------------------------------------------ cells */
 
 static void build_cells(void) {
@@ -369,11 +390,15 @@ void name_entry_open(const name_entry_args* a) {
   if (E.a.max_chars > NE_MAX_BYTES / 4 - 1) E.a.max_chars = NE_MAX_BYTES / 4 - 1;
   build_cells();
   set_cursor(cell_at(1, 0)); /* the first letter */
+  load_initial(a->initial);
   i18n_t(E.title, sizeof E.title, a->title_key, NULL);
   i18n_t(E.label, sizeof E.label, a->label_key, NULL);
   i18n_t(E.ok, sizeof E.ok, a->ok_key, NULL);
   i18n_t(E.cancel, sizeof E.cancel, a->cancel_key, NULL);
   snprintf(E.shift_label[0], sizeof E.shift_label[0], "Shift");
   snprintf(E.shift_label[1], sizeof E.shift_label[1], "Caps");
-  ui_set(&g_screen);
+  if (a->overlay)
+    ui_push(&g_screen);
+  else
+    ui_set(&g_screen);
 }

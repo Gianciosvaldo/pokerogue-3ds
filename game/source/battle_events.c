@@ -83,6 +83,15 @@ static bool (*fusion_shine)(uint32_t pokemon_id, bool* shiny, int* variant);
 
 void be_set_fusion_shine(bool (*lookup)(uint32_t pokemon_id, bool* shiny, int* variant)) { fusion_shine = lookup; }
 
+_Static_assert(BV_NAME_BYTES >= PR_NICKNAME_BYTES, "a nickname fits the view's name");
+
+/* The nickname of the party member with this identity on a side ("" = none): the real Pokemon behind a disguise that ends */
+static const char* nickname_of(const pr_battle* bt, int side, uint32_t pokemon_id) {
+  for (int i = 0; i < bt->n_party[side] && i < PR_MAX_PARTY; i++)
+    if (bt->party[side][i] && bt->party[side][i]->id == pokemon_id) return bt->party[side][i]->nickname;
+  return "";
+}
+
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
   /* PR_DEV_ILLUSION: a disguised Pokemon looks, is named and is typed as its disguise */
@@ -103,8 +112,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
     if (fusion_shine) fusion_shine(p->id, &m->fusion_shiny, &m->fusion_variant);
   }
   m->sprite_scale = (float)pr_get_sprite_scale(p);
-  /* a fusion is named as both halves (upstream getNameToRender); a disguise shows the disguise's halves */
-  fused_mon_name(m->name, sizeof m->name, form->species, look ? p->illusion.fusion_species : p->fusion_species);
+  /* the nickname, else a fusion named as both halves (upstream getNameToRender); a disguise shows the disguise's halves and hides the nickname */
+  mon_display_name(m->name, sizeof m->name, form->species, look ? p->illusion.fusion_species : p->fusion_species, look ? NULL : p->nickname);
   m->level = p->level;
   m->hp = p->hp;
   m->max_hp = p->stats[STAT_HP];
@@ -345,6 +354,10 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         bv_mon* mon = &sent[n_sent++];
         look_of(mon, &current[view_slot(b)], &ev->field[b]);
         mon->illusion=false;
+        if (ev->field[b].pokemon_id_known) {   /* the real Pokemon is named by its nickname again */
+          const char* nick = nickname_of(bt, b >= 2, ev->field[b].pokemon_id);
+          if (nick[0]) snprintf(mon->name, sizeof mon->name, "%s", nick);
+        }
         mon->hp = seen[b].hp; mon->max_hp = seen[b].max_hp; mon->status = seen[b].status;   /* the bar as the screen has it */
         PUT(.type = BEV_ILLUSION, .battler = b, .a = 1, .mon = mon);
         seen[b].species = mon->species;
@@ -535,7 +548,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             (*sm).pokemon_id=ev->field[b].pokemon_id;(*sm).identity_known=ev->field[b].pokemon_id_known;
           (*sm).species = ev->field[b].species;
             (*sm).form = ev->field[b].form;
-            snprintf((*sm).name, sizeof (*sm).name, "%s", i18n_species_name(ev->field[b].species));
+            if (!(p->nickname[0] && !pr_shows_illusion(bt, p))) snprintf((*sm).name, sizeof (*sm).name, "%s", i18n_species_name(ev->field[b].species));   /* a nickname stays through a form change */
           }
         } else {
           memset(&(*sm), 0, sizeof (*sm));
