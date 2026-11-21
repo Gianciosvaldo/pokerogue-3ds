@@ -242,6 +242,50 @@ static void test_system_data(void) {
 
 static int cmp_u16(const void* a, const void* b) { return (int)*(const uint16_t*)a - (int)*(const uint16_t*)b; }
 
+/* a starter's nickname is part of the profile on the SD card: it is a change that gets written, it comes back after a restart (the whole system
+ * as it was), the starter handed to a run carries it, and clearing it leaves the profile as it was before */
+static void test_starter_nickname_file(void) {
+  char p[256], why[SYSD_WHY_LEN];
+  snprintf(p, sizeof p, "%s/system.sav", SAVE_DIR);
+  sysd_reset();
+  gc_system* sys = sysd_get();
+  CHECK(sysd_state(why) == SYSD_NEW, "a new install: state %d", sysd_state(NULL));
+  const uint16_t sp = gc_default_starters[0];
+  CHECK(sysd_save() && exists(p), "the defaults are written");
+  const size_t plain_size = file_size(p);
+  remove(p);
+  CHECK(sysd_save() && !exists(p), "unchanged: nothing is written");
+  CHECK(ss_set_nickname(sys, sp, "Sparky") == GC_STARTER_NICK_OK, "a nickname for the default starter %u", sp);
+  CHECK(sysd_save() && exists(p), "a nickname is a change: it is written");
+  CHECK(file_size(p) > plain_size, "the file holds it (%zu bytes, %zu without)", file_size(p), plain_size);
+  memcpy(&S1, sys, sizeof S1);
+  sysd_reset();
+  CHECK(sysd_state(why) == SYSD_LOADED, "restart: state %d (%s)", sysd_state(NULL), why);
+  CHECK(!memcmp(&S1, sysd_get(), sizeof S1), "the system read back is the one written, nickname and all");
+  sys = sysd_get();
+  CHECK(!strcmp(gc_system_starter_nickname(sys, sp), "Sparky"), "the nickname is back after a restart");
+  gc_starter s;
+  CHECK(ss_starter(sys, sp, &s) && !strcmp(s.nickname, "Sparky"), "the starter carries it");
+  /* starting a run marks the starter as seen: on a copy, so the profile here stays what it was */
+  static gc_system started;
+  memcpy(&started, sys, sizeof started);
+  const char* reason = NULL;
+  CHECK(core_takes(&started, &s, 1, &reason) && !strcmp(RUN.party[0].b.nickname, "Sparky"), "and so does the Pokemon of the run: %s", reason ? reason : "");
+  starter_info info;
+  ss_describe(sys, sp, &info);
+  CHECK(!strcmp(info.mon.name, "Sparky"), "the panel's data names it");
+  remove(p);
+  CHECK(sysd_save() && !exists(p), "read back and unchanged: not written again");
+  /* cleared: the profile is the one without a nickname again, in memory and on the card */
+  CHECK(ss_set_nickname(sys, sp, "") == GC_STARTER_NICK_OK && sysd_save() && exists(p), "clearing it is a change that is written");
+  CHECK(file_size(p) == plain_size, "the file is as small as before (%zu bytes)", file_size(p));
+  sysd_reset();
+  CHECK(sysd_state(why) == SYSD_LOADED && !*gc_system_starter_nickname(sysd_get(), sp) && sysd_get()->n_starter_nicknames == 0, "none after a restart");
+  CHECK(ss_starter(sysd_get(), sp, &s) && !s.nickname[0], "the starter carries none");
+  remove(p);
+  sysd_reset();
+}
+
 static void test_new_save(void) {
   gc_system_init_defaults(&S1);
   static sm_entry list[SS_MAX_ENTRIES];
@@ -993,6 +1037,7 @@ int main(int argc, char** argv) {
   }
   test_pokerus_rotation();
   test_system_data();
+  test_starter_nickname_file();
   test_new_save();
   test_everything_unlocked();
   test_prevolution_without_form_bit();

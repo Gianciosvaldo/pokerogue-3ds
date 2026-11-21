@@ -8,6 +8,7 @@
 
 #include "bgm.h"
 #include "i18n.h"
+#include "name_entry.h"
 #include "starter_data.h"
 #include "starter_filter.h"
 #include "system_data.h"
@@ -246,6 +247,48 @@ static void configure(void* ctx,uint16_t species) {
   (void)ctx;H.editing=species;H.page=0;editor_show(EDIT_TOP);
 }
 
+/* ---- Rename (starter-select-ui-handler.ts: the options menu's "Rename") ----
+ * The nickname is kept per species in the system data, so it outlives the run, and is the Pokemon's when the starter is picked (ss_starter). */
+
+/* The text entry is over (name_entry.h: an overlay, so the starter screen is under it again once it is popped). Cancelled (NULL): nothing changes. An
+ * empty text clears the nickname, as upstream's submit does. Saved like the Customize lists: a change that cannot be written is undone. */
+static void rename_done(const char* text, void* arg) {
+  const uint16_t species = (uint16_t)(long)arg;
+  ui_pop();
+  if (!text) return;
+  char old[GC_STARTER_NICKNAME_BYTES];
+  snprintf(old, sizeof old, "%s", gc_system_starter_nickname(H.sys, species));
+  if (!strcmp(old, text)) {ui_play_select();return;} /* the same again: nothing to write */
+  /* settle any pending profile transaction before the change, as the Customize lists do */
+  if(!editor_save()) {starter_message("The profile could not be saved. Nothing was changed.");return;}
+  const int r = ss_set_nickname(H.sys, species, text);
+  if (r != GC_STARTER_NICK_OK) { /* name_entry's keys cannot make bad text; a full table can happen */
+    ui_play_error();
+    if (r == GC_STARTER_NICK_FULL) {
+      char msg[96];
+      snprintf(msg, sizeof msg, "Only %d starters can have a nickname at once. Clear one first.", GC_STARTER_NICKNAMES);
+      starter_message(msg);
+    }
+    return;
+  }
+  if(!editor_save()) {
+    ss_set_nickname(H.sys, species, old); /* what it was: replaces, or puts back, or clears; it cannot be refused */
+    editor_refresh();
+    starter_message("The profile could not be saved. Nothing was changed.");
+    return;
+  }
+  ui_play_select();
+  editor_refresh(); /* the panel shows the new name */
+}
+
+static void rename_starter(void* ctx, uint16_t species) {
+  (void)ctx;
+  name_entry_args a = {"menu:renamePokemon", "menu:nickname", "menu:rename", "menu:cancel", PR_NICKNAME_MAX_CHARS, rename_done, (void*)(long)species};
+  a.initial = gc_system_starter_nickname(H.sys, species); /* the stored nickname, empty when there is none (not the species name: upstream's form is filled with the nickname) */
+  a.overlay = true;
+  name_entry_open(&a);
+}
+
 /* ---- the filter and sort menu (upstream's filter bar, as a list) ---- */
 
 enum { FM_TOP, FM_GEN, FM_TYPE, FM_CAUGHT, FM_RARITY };
@@ -434,7 +477,7 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
   const starter_args args = {H.entries, H.n, gc_starter_budget(game_mode()), H.all, H.n_all};
-  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle};
+  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle, rename_starter};
   starter_open(&args, &events);
   ui_set(&g_screen);
   if (notice && *notice) starter_message(notice);

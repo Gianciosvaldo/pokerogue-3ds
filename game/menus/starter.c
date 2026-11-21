@@ -46,7 +46,7 @@ static struct {
   struct {
     bool open;
     int cursor, n;
-    int act[3];           /* 0 add, 1 remove, 2 customize; last row is Cancel */
+    int act[4];           /* 0 add, 1 remove, 2 customize, 3 rename; last row is Cancel */
     uint16_t species;
   } menu;
   bool done;              /* the team was confirmed: the screen takes no more buttons until the caller replaces it */
@@ -189,6 +189,23 @@ void starter_message(const char* text) {
   mui_msg_show(&S.msg, wrapped, 20, NULL, NULL, true);
 }
 
+/* upstream's truncateString(name, 15): a name of more than 15 UTF-16 units is cut to its first 12 and "...". A unit is not a byte: a nickname of kana
+ * takes 3 bytes a character and an emoji 2 units, and the cut never splits a character. `name` is a MENU_NAME_BYTES buffer. */
+static void truncate_name(char* name) {
+  int units = 0;
+  size_t cut = 0;
+  for (const unsigned char* p = (const unsigned char*)name; *p;) {
+    const int bytes = *p < 0x80 ? 1 : (*p & 0xE0) == 0xC0 ? 2 : (*p & 0xF0) == 0xE0 ? 3 : (*p & 0xF8) == 0xF0 ? 4 : 1;
+    size_t have = 0;
+    while (have < (size_t)bytes && p[have]) have++;
+    if (have < (size_t)bytes) break; /* not a whole character: not text this counts (the name is valid UTF-8 or ASCII) */
+    p += bytes;
+    units += bytes == 4 ? 2 : 1;
+    if (units <= 12) cut = (size_t)(p - (const unsigned char*)name);
+  }
+  if (units > 15) strcpy(name + cut, "...");
+}
+
 static void open_menu(uint16_t species) {
   S.menu.open = true;
   S.menu.cursor = 0;
@@ -199,6 +216,7 @@ static void open_menu(uint16_t species) {
   else if (sm_in_party(&S.m, species, NULL))
     S.menu.act[S.menu.n++] = 1;
   if (S.ev.configure) S.menu.act[S.menu.n++] = 2;
+  if (S.ev.rename) S.menu.act[S.menu.n++] = 3;
   S.menu.act[S.menu.n++] = -1; /* Cancel */
 }
 
@@ -207,6 +225,7 @@ static const char* menu_label(int row) {
     case 0: return mui_t("starterSelectUiHandler:addToParty");
     case 1: return mui_t("starterSelectUiHandler:removeFromParty");
     case 2: return "Customize";
+    case 3: return mui_t("menu:rename");
     default: return mui_t("menu:cancel");
   }
 }
@@ -232,6 +251,7 @@ static void menu_choose(int row) {
   }
   follow_cursor();
   if (S.menu.act[row] == 2 && S.ev.configure) S.ev.configure(S.ev.ctx,sp);
+  if (S.menu.act[row] == 3 && S.ev.rename) S.ev.rename(S.ev.ctx, sp);
 }
 
 void starter_set_entries(const sm_entry* entries, int n) {
@@ -555,12 +575,9 @@ static void draw_panel(void) {
   }
   /* name and gender */
   {
-    char name[48];
-    snprintf(name, sizeof name, "%.40s", m->name);
-    if (strlen(name) > 15) { /* truncateString(name, 15) */
-      name[12] = 0;
-      strcat(name, "...");
-    }
+    char name[MENU_NAME_BYTES];
+    snprintf(name, sizeof name, "%s", m->name);
+    truncate_name(name);
     mui_text(TS_SUMMARY, 6, 112, name);
     const pr_species* sp = menu_species(S.info_species);
     if (sp && sp->male_permille >= 0) {
@@ -779,8 +796,8 @@ void starter_draw_top(void) {
     o.origin_x = o.origin_y = 0.5f;
     rr_draw(sf, 56, MUI_H - 106, &o);
   }
-  char name[48];
-  snprintf(name, sizeof name, "%.40s", m->name);
+  char name[MENU_NAME_BYTES];
+  snprintf(name, sizeof name, "%s", m->name);
   mui_text(TS_SUMMARY, 6, MUI_H - 53, name);
 
   /* the panel: type, ability, passive, nature and growth rate, then the moves two by two */

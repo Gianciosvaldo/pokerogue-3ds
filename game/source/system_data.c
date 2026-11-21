@@ -12,7 +12,7 @@
 /* gc_system_save writes a sparse form: 3 KB for a new save, 88 KB with 1100 species fully unlocked */
 #define BUF_MAX (1024 * 1024)
 
-/* The system data is 724 KB: a static, not the stack (the 3DS stack is 32 KB). */
+/* The system data is 768 KB (sizeof gc_system 768,440; 760,248 before the starter nicknames): a static, not the stack (the 3DS stack is 32 KB). */
 static gc_system g_sys;
 static struct {
   bool loaded;
