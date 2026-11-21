@@ -306,6 +306,14 @@ test: nickname-host-test
 nickname-host-test: $(BUILD)/nickname_host_test
 	$(BUILD)/nickname_host_test
 .PHONY: nickname-host-test
+# a starter's nickname kept in the system profile: the table, the save (no section when nobody has one, a damaged one dropped), the full table
+all: $(BUILD)/starter_nickname_host_test
+$(BUILD)/starter_nickname_host_test: tests/starter_nickname_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: starter-nickname-host-test
+starter-nickname-host-test: $(BUILD)/starter_nickname_host_test
+	$(BUILD)/starter_nickname_host_test
+.PHONY: starter-nickname-host-test
 # Memory Mushroom / TM learning against upstream's LearnMovePhase.learnMove and SelectModifierPhase.applyModifier
 # (tests/memory-learn.producer.test.ts at 8555c08, replayed without upstream; regenerate with tools/memorylearndiff.sh)
 all: $(BUILD)/memory_learn_diff_test

@@ -1,7 +1,7 @@
 #!/bin/sh
-# The saves of runs that never had a nickname must be the bytes the base wrote. Builds tools/savebytes.c against the base (a git ref,
+# The saves of runs and profiles that never had a nickname must be the bytes the base wrote. Builds tools/savebytes.c against the base (a git ref,
 # default origin/main, in a temporary worktree) and against this tree, plays RUNS runs (default 200) in each, and compares every save's length
-# and hash. Exit 0 and "IDENTICAL" when they agree. From anywhere: sh game-core/tools/save-bytes-diff.sh [BASE_REF [RUNS]]
+# and hash (the run's and the system profile's). Exit 0 and "IDENTICAL" when they agree. From anywhere: sh game-core/tools/save-bytes-diff.sh [BASE_REF [RUNS]]
 set -e
 ROOT=$(git rev-parse --show-toplevel)
 BASE=${1:-origin/main}
