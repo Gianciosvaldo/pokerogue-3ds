@@ -4,9 +4,10 @@ unchanged objects of the test that covers it. The test must stop on an assertion
 passes it. Usage, from the repository root after `make -C game-core build/libgc.a` and its other libraries (CI builds them in
 "Run game-core tests"):  python3 game/tests/check_nickname_ui_faults.py
 
-Three tests: party_item_test (the party screen's Rename: the option, the form's starting text, the member that gets the nickname, the
-battle's info box), fused_name_test (the names the battle view is given: nickname, disguise, form change) and name_entry_test (the text
-entry's starting text and overlay)."""
+Four tests: party_item_test (the party screen's Rename: the option, the form's starting text, the member that gets the nickname, the
+battle's info box), fused_name_test (the names the battle view is given: nickname, disguise, form change), name_entry_test (the text
+entry's starting text and overlay) and starter_ui_test (the starter screen's Rename: the row, the form's starting text, saving and undoing,
+the nickname in the panel and in the run's starter, the panel's cut of a long name)."""
 from pathlib import Path
 import os
 import subprocess
@@ -27,9 +28,12 @@ PARTY = ['game/tests/party_item_test.c', 'game/tests/party_fake.c', 'game/menus/
          'game/menus/move_names.c', 'game/menus/menus_data.c', 'game/gen/gm_item_ui.c', 'game/source/party_screen.c']
 FUSED = ['game/tests/fused_name_test.c', 'game/tests/battle_setup.c', 'game/source/battle_events.c']
 ENTRY = ['game/tests/name_entry_test.c', 'game/source/name_entry.c']
-TESTS = {'party_item_test': (PARTY, True), 'fused_name_test': (FUSED, True), 'name_entry_test': (ENTRY, False)}
+STARTER = ['game/tests/starter_ui_test.c', 'game/menus/starter.c', 'game/menus/starter_model.c', 'game/menus/menus_data.c', 'game/menus/menus_names.c',
+           'game/menus/move_names.c', 'game/source/starter_host.c', 'game/source/starter_filter.c', 'game/source/starter_data.c']
+TESTS = {'party_item_test': (PARTY, True), 'fused_name_test': (FUSED, True), 'name_entry_test': (ENTRY, False), 'starter_ui_test': (STARTER, True)}
 
 PS, PM, BE, NE = 'game/source/party_screen.c', 'game/menus/party.c', 'game/source/battle_events.c', 'game/source/name_entry.c'
+SM, SH, SD = 'game/menus/starter.c', 'game/source/starter_host.c', 'game/source/starter_data.c'
 FORM_OLD = 'if (!(p->nickname[0] && !pr_shows_illusion(bt, p))) snprintf((*sm).name'
 
 # (name, test, file, original text (exactly once), replacement)
@@ -62,6 +66,38 @@ FAULTS = [
     ('entry-initial-over-the-limit', 'name_entry_test', NE, 'while (*s && E.n_chars < E.a.max_chars) {', 'while (*s) {'),
     ('entry-initial-torn-character', 'name_entry_test', NE, '    if (!whole) break;', ''),
     ('entry-overlay-ignored', 'name_entry_test', NE, '  if (a->overlay)\n    ui_push(&g_screen);', '  if (0)\n    ui_push(&g_screen);'),
+    ('starter-rename-not-offered', 'starter_ui_test', SM, 'if (S.ev.rename) S.menu.act[S.menu.n++] = 3;', 'if (0) S.menu.act[S.menu.n++] = 3;'),
+    ('starter-rename-offered-without-the-event', 'starter_ui_test', SM, 'if (S.ev.rename) S.menu.act[S.menu.n++] = 3;', 'S.menu.act[S.menu.n++] = 3;'),
+    ('starter-rename-row-does-nothing', 'starter_ui_test', SM, 'if (S.menu.act[row] == 3 && S.ev.rename) S.ev.rename(S.ev.ctx, sp);', ''),
+    ('starter-rename-row-before-customize', 'starter_ui_test', SM,
+     '  if (S.ev.configure) S.menu.act[S.menu.n++] = 2;\n  if (S.ev.rename) S.menu.act[S.menu.n++] = 3;',
+     '  if (S.ev.rename) S.menu.act[S.menu.n++] = 3;\n  if (S.ev.configure) S.menu.act[S.menu.n++] = 2;'),
+    ('starter-form-starts-with-the-species-name', 'starter_ui_test', SH, 'a.initial = gc_system_starter_nickname(H.sys, species);', 'a.initial = i18n_species_name(species);'),
+    ('starter-form-is-not-an-overlay', 'starter_ui_test', SH, 'a.overlay = true;', 'a.overlay = false;'),
+    ('starter-entry-not-popped', 'starter_ui_test', SH, '  const uint16_t species = (uint16_t)(long)arg;\n  ui_pop();', '  const uint16_t species = (uint16_t)(long)arg;'),
+    ('starter-cancel-clears-the-nickname', 'starter_ui_test', SH, '  if (!text) return;\n  char old[', '  if (!text) text = "";\n  char old['),
+    ('starter-same-text-is-written-again', 'starter_ui_test', SH, 'if (!strcmp(old, text)) {ui_play_select();return;}', ''),
+    ('starter-pending-write-not-settled', 'starter_ui_test', SH,
+     '  if(!editor_save()) {starter_message("The profile could not be saved. Nothing was changed.");return;}\n  const int r = ss_set_nickname',
+     '  const int r = ss_set_nickname'),
+    ('starter-bad-write-keeps-the-nickname', 'starter_ui_test', SH, '    ss_set_nickname(H.sys, species, old); /* what it was', '    (void)old; /* what it was'),
+    ('starter-bad-write-not-reported', 'starter_ui_test', SH,
+     '    editor_refresh();\n    starter_message("The profile could not be saved. Nothing was changed.");\n    return;\n  }\n  ui_play_select();\n  editor_refresh(); /* the panel',
+     '    editor_refresh();\n    return;\n  }\n  ui_play_select();\n  editor_refresh(); /* the panel'),
+    ('starter-nickname-not-saved', 'starter_ui_test', SH, '  if(!editor_save()) {\n    ss_set_nickname(H.sys, species, old);', '  if(0) {\n    ss_set_nickname(H.sys, species, old);'),
+    ('starter-panel-not-refreshed', 'starter_ui_test', SH, '  ui_play_select();\n  editor_refresh(); /* the panel shows the new name */', '  ui_play_select();'),
+    ('starter-refusal-silent', 'starter_ui_test', SH, '    ui_play_error();\n    if (r == GC_STARTER_NICK_FULL) {', '    if (r == GC_STARTER_NICK_FULL) {'),
+    ('starter-full-table-not-explained', 'starter_ui_test', SH, 'if (r == GC_STARTER_NICK_FULL) {', 'if (0) {'),
+    ('starter-uncaught-takes-a-nickname', 'starter_ui_test', SD, '  if (!caught(sys, species)) return GC_STARTER_NICK_NOT_A_STARTER;\n', ''),
+    ('starter-nickname-not-handed-to-the-run', 'starter_ui_test', SD,
+     '  snprintf(out->nickname, sizeof out->nickname, "%s", gc_system_starter_nickname(sys, species));', ''),
+    ('starter-panel-ignores-the-nickname', 'starter_ui_test', SD, '*nickname ? nickname : i18n_species_name(species)', 'i18n_species_name(species)'),
+    ('starter-panel-cut-counts-bytes', 'starter_ui_test', SM, '    units += bytes == 4 ? 2 : 1;', '    units += bytes;'),
+    ('starter-panel-cut-counts-an-emoji-once', 'starter_ui_test', SM, '    units += bytes == 4 ? 2 : 1;', '    units += 1;'),
+    ('starter-panel-cut-splits-a-character', 'starter_ui_test', SM, '    if (units <= 12) cut = (size_t)(p - (const unsigned char*)name);', '    if (units <= 12) cut = (size_t)units;'),
+    ('starter-panel-never-cut', 'starter_ui_test', SM, '  if (units > 15) strcpy(name + cut, "...");', ''),
+    ('starter-top-screen-cuts-the-name', 'starter_ui_test', SM,
+     '  snprintf(name, sizeof name, "%s", m->name);\n  mui_text(TS_SUMMARY, 6, MUI_H - 53, name);', '  snprintf(name, sizeof name, "%.40s", m->name);\n  mui_text(TS_SUMMARY, 6, MUI_H - 53, name);'),
 ]
 
 
@@ -114,7 +150,7 @@ def main():
             caught_all = caught_all and caught
     if not caught_all:
         sys.exit('planted faults not caught')
-    print(f'Nickname UI: {n} of {len(FAULTS)} planted faults caught; unchanged code passes all three tests.')
+    print(f'Nickname UI: {n} of {len(FAULTS)} planted faults caught; unchanged code passes all four tests.')
 
 
 main()

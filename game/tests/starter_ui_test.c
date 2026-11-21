@@ -22,6 +22,7 @@
 #include "starter_data.h"
 #include "starter_host.h"
 #include "gc/gacha.h"
+#include "name_entry.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -305,6 +306,17 @@ static void option_answer(int value) {
   if(cb)cb(value,arg);
 }
 bool sysd_save(void) {save_calls++;return !fail_save_call || save_calls!=fail_save_call;}
+/* the text entry is a screen of its own (name_entry.c, tested by name_entry_test): here it only records how it was opened, and the test ends it by
+ * calling on_done. The real screen copies the initial text when it opens (name_entry.c load_initial); so does this. */
+static name_entry_args g_ne;
+static char g_ne_initial[256];
+static int g_ne_opens,g_pops;
+void name_entry_open(const name_entry_args* a) {
+  g_ne=*a;
+  if(a->initial) {CHECK(strlen(a->initial)<sizeof g_ne_initial,"initial text fits");snprintf(g_ne_initial,sizeof g_ne_initial,"%s",a->initial);g_ne.initial=g_ne_initial;}
+  g_ne_opens++;
+}
+void ui_pop(void) {g_pops++;}
 void ui_play_select(void) {log_add(g_sfx,"ui/select");}
 void ui_play_error(void) {log_add(g_sfx,"ui/error");}
 const char* i18n_type_name(int t) {static char b[24];snprintf(b,sizeof b,"Type%d",t);return b;}
@@ -526,8 +538,9 @@ static void test_touch(void) {
   tap(115 + 26 + 13, 22 + 15);
   draw();
   CHECK(drawn("starterSelectUiHandler:addToParty") && drawn("menu:cancel"), "a second tap on it opens the options menu");
-  /* the menu: bottom right, rows of 16 px from 7 px under its top (125..141 Add to Party, 141..157 Customize, 157..173 Cancel) */
-  tap(300, 132);
+  /* the menu: bottom right, rows of 16 px from 7 px under its top, its bottom edge on the canvas' (109..125 Add to Party, 125..141 Customize, 141..157
+   * Rename, 157..173 Cancel: Rename put a row in, and the rows above it moved up) */
+  tap(300, 117);
   draw();
   snprintf(want, sizeof want, "%g/10", list[1].cost);
   CHECK(!drawn("starterSelectUiHandler:addToParty") && drawn(want), "a tap on Add to Party adds it: %s", want);
@@ -1099,6 +1112,265 @@ static void test_candy_cost_reductions(void){
 }
 
 
+/* ---------------------------------------------------------------- Rename (the options menu's row): the nickname is kept per species in the
+ * profile, shown in the panel, and given to the Pokemon the starter becomes */
+
+#define KANA "\xE3\x81\x82"
+#define FIRE "\xF0\x9F\x94\xA5"
+static bool same(const char* a,const char* b) {return a&&b&&!strcmp(a,b);}
+/* is `line` one whole line of the log (each text drawn is a line) */
+static bool has_line(const char* log,const char* line) {
+  const size_t k=strlen(line);
+  for(const char* p=log;*p;) {
+    const char* e=strchr(p,'\n');const size_t len=e?(size_t)(e-p):strlen(p);
+    if(len==k&&!strncmp(p,line,k))return true;
+    if(!e)break;
+    p=e+1;
+  }
+  return false;
+}
+static void draw_bottom(void) {g_drawn[0]=0;g_screen->draw(g_screen,RR_BOTTOM);}
+static void draw_top(void) {g_drawn[0]=0;g_screen->draw(g_screen,RR_TOP);}
+/* the options menu of the species under the cursor, then the row after Customize */
+static void open_rename(void) {
+  press(MB_ACTION);press(MB_DOWN);press(MB_DOWN);press(MB_ACTION);
+}
+/* the text entry ends: what it hands over (NULL = cancelled) */
+static void entry_done(const char* text) {
+  CHECK(g_ne.on_done!=NULL,"a text entry is open");
+  if(!g_ne.on_done)return;
+  void (*done)(const char*,void*)=g_ne.on_done;void* arg=g_ne.arg;g_ne.on_done=NULL;
+  done(text,arg);
+}
+static void rename_with(const char* text) {open_rename();entry_done(text);}
+
+static void test_rename(void) {
+  gc_system_init_defaults(&SYS);
+  CHECK(open_screen(NULL),"open the rename test");
+  const int opens0=g_ne_opens,pops0=g_pops,saves0=save_calls;
+  const uint16_t sp=sm_species(starter_model());
+  const char* plain=i18n_species_name(sp);
+  CHECK(sp!=0&&!*gc_system_starter_nickname(&SYS,sp),"the first species has no nickname");
+
+  /* the options menu lists Rename after Customize and before Cancel */
+  press(MB_ACTION);
+  draw();
+  CHECK(drawn("menu:rename")&&drawn("Customize")&&drawn("menu:cancel"),"the options menu offers Rename");
+  CHECK(strstr(g_drawn,"Customize")<strstr(g_drawn,"menu:rename")&&strstr(g_drawn,"menu:rename")<strstr(g_drawn,"menu:cancel"),"in the order Customize, Rename, Cancel");
+  press(MB_DOWN);press(MB_DOWN);press(MB_ACTION);
+  draw();
+  CHECK(!drawn("menu:rename")&&!drawn("menu:cancel"),"choosing it closes the options menu");
+  CHECK(g_ne_opens==opens0+1&&g_ne.on_done!=NULL,"and opens the text entry");
+  CHECK(same(g_ne.title_key,"menu:renamePokemon")&&same(g_ne.label_key,"menu:nickname")&&same(g_ne.ok_key,"menu:rename")&&same(g_ne.cancel_key,"menu:cancel"),"with upstream's words");
+  CHECK(g_ne.max_chars==20,"at most 20 characters");
+  CHECK(g_ne.overlay,"over the starter screen, which is not replaced");
+  CHECK(g_ne.initial&&!*g_ne.initial,"the form starts empty when the species has no nickname (not with its name)");
+  CHECK(g_pops==pops0&&save_calls==saves0,"nothing popped or saved yet");
+
+  /* cancelled: nothing changes, nothing is written */
+  int saves=save_calls,pops=g_pops;
+  entry_done(NULL);
+  CHECK(g_pops==pops+1,"the entry is popped");
+  CHECK(!*gc_system_starter_nickname(&SYS,sp)&&save_calls==saves,"cancelling changes and saves nothing");
+
+  /* a nickname: kept in the profile, saved, shown in the panel in the species' place */
+  reset_logs();
+  rename_with("Sparky");
+  CHECK(g_pops==pops+2,"popped again");
+  CHECK(!strcmp(gc_system_starter_nickname(&SYS,sp),"Sparky"),"the nickname is the species' in the profile");
+  CHECK(save_calls==saves+2,"saved (the pending transaction first, then the change): %d calls",save_calls-saves);
+  CHECK(count_in(g_sfx,"ui/select")>=1&&!count_in(g_sfx,"ui/error"),"with the select sound");
+  draw_bottom();
+  CHECK(drawn("Sparky")&&!drawn(plain),"the panel shows the nickname and no longer the species name (%s)",plain);
+  draw_top();
+  CHECK(drawn("Sparky")&&!drawn(plain),"so does the top screen");
+  gc_starter st;
+  CHECK(ss_starter(&SYS,sp,&st)&&!strcmp(st.nickname,"Sparky"),"the starter handed to a run carries it");
+  starter_info info;
+  ss_describe(&SYS,sp,&info);
+  CHECK(!strcmp(info.mon.name,"Sparky"),"and the panel's data");
+  CHECK(strcmp(gc_system_starter_nickname(&SYS,sp+1),"Sparky"),"no other species has it");
+
+  /* the form starts with the stored nickname */
+  open_rename();
+  CHECK(g_ne.initial&&!strcmp(g_ne.initial,"Sparky"),"the form starts with the nickname: %s",g_ne.initial?g_ne.initial:"(none)");
+  /* cancelled with a nickname in place: it stays, nothing is written */
+  saves=save_calls;
+  entry_done(NULL);
+  CHECK(!strcmp(gc_system_starter_nickname(&SYS,sp),"Sparky")&&save_calls==saves,"cancelling keeps the nickname and writes nothing");
+  /* the same text again writes nothing */
+  open_rename();
+  entry_done("Sparky");
+  CHECK(save_calls==saves&&!strcmp(gc_system_starter_nickname(&SYS,sp),"Sparky"),"the same text is not written again");
+  /* another one replaces it (no tail of the longer one) */
+  rename_with("Em");
+  CHECK(!strcmp(gc_system_starter_nickname(&SYS,sp),"Em")&&SYS.n_starter_nicknames==1,"another replaces it");
+  for(size_t k=3;k<sizeof SYS.starter_nicknames[0].text;k++)CHECK(SYS.starter_nicknames[0].text[k]==0,"no tail");
+
+  /* it starts a run: the team's first Pokemon is called by it */
+  press(MB_ACTION);press(MB_ACTION); /* Add to Party */
+  CHECK(starter_model()->n_party==1,"on the team");
+  press(MB_MENU);tick(2500);
+  const char* why=NULL;
+  press(MB_ACTION); /* Yes */
+  CHECK(R.started==1&&R.n_team==1&&!strcmp(R.team[0].nickname,"Em"),"the team handed over carries the nickname");
+  CHECK(core_takes(R.team,R.n_team,&why),"game-core takes it: %s",why?why:"");
+  CHECK(!strcmp(RUN.party[0].b.nickname,"Em"),"the Pokemon of the run has it");
+
+  /* it outlives the run and the program: saved with the profile, loaded, and the next starter screen shows it */
+  static unsigned char profile[1024*1024];static gc_system restored;
+  const size_t bytes=gc_system_save(&SYS,profile,sizeof profile);
+  CHECK(bytes&&gc_system_load(&restored,profile,bytes,&why),"the profile saves and loads");
+  CHECK(!strcmp(gc_system_starter_nickname(&restored,sp),"Em"),"the nickname survives the reload");
+  gc_system keep;memcpy(&keep,&SYS,sizeof keep);
+  memcpy(&SYS,&restored,sizeof SYS);
+  CHECK(open_screen(NULL),"open on the reloaded profile");
+  draw_bottom();
+  CHECK(drawn("Em")&&!drawn(plain),"the panel shows it");
+  CHECK(ss_starter(&SYS,sp,&st)&&!strcmp(st.nickname,"Em"),"and a new run would start with it");
+  memcpy(&SYS,&keep,sizeof SYS);
+  CHECK(open_screen(NULL),"open again");
+
+  /* an empty text clears it, as upstream's submit does: the species name is back */
+  rename_with("");
+  CHECK(!*gc_system_starter_nickname(&SYS,sp)&&SYS.n_starter_nicknames==0,"an empty text clears it");
+  draw_bottom();
+  CHECK(drawn(plain)&&!drawn("Em"),"the panel shows the species name again");
+  CHECK(ss_starter(&SYS,sp,&st)&&!st.nickname[0],"the starter carries none");
+
+  /* a change that cannot be written is undone: at the write... */
+  rename_with("Keep");
+  saves=save_calls;
+  fail_save_call=save_calls+2;
+  rename_with("Lost");
+  fail_save_call=0;
+  CHECK(save_calls==saves+2,"two writes were tried");
+  CHECK(!strcmp(gc_system_starter_nickname(&SYS,sp),"Keep"),"the write failed: the old nickname is back (%s)",gc_system_starter_nickname(&SYS,sp));
+  tick(4000);draw_bottom();
+  CHECK(drawn("The profile could not be saved. Nothing was changed."),"and the box says so");
+  press(MB_ACTION);
+  draw_bottom();
+  CHECK(drawn("Keep")&&!drawn("Lost"),"the panel shows the old one");
+  /* ... of a new nickname (it goes back to none) ... */
+  rename_with("");
+  fail_save_call=save_calls+2;
+  rename_with("Lost");
+  fail_save_call=0;
+  CHECK(!*gc_system_starter_nickname(&SYS,sp)&&SYS.n_starter_nicknames==0,"the write of a new nickname failed: none again");
+  tick(4000);press(MB_ACTION);
+  /* ... of a clearing (the nickname comes back) ... */
+  rename_with("Keep");
+  fail_save_call=save_calls+2;
+  rename_with("");
+  fail_save_call=0;
+  CHECK(!strcmp(gc_system_starter_nickname(&SYS,sp),"Keep")&&SYS.n_starter_nicknames==1,"the write of a clearing failed: it is back");
+  tick(4000);press(MB_ACTION);
+  /* ... and at the settling of the pending transaction before it */
+  saves=save_calls;
+  fail_save_call=save_calls+1;
+  rename_with("Lost");
+  fail_save_call=0;
+  CHECK(save_calls==saves+1&&!strcmp(gc_system_starter_nickname(&SYS,sp),"Keep"),"nothing was changed when the first write failed");
+  tick(4000);draw_bottom();
+  CHECK(drawn("The profile could not be saved. Nothing was changed."),"and the box says so");
+  press(MB_ACTION);
+
+  /* text the profile refuses (the keys cannot make it): the error sound, nothing changes */
+  reset_logs();
+  saves=save_calls;
+  rename_with("123456789012345678901");
+  CHECK(count_in(g_sfx,"ui/error")==1&&!strcmp(gc_system_starter_nickname(&SYS,sp),"Keep")&&save_calls==saves+1,"a text of 21 characters is refused with the error sound");
+  rename_with("a\x01" "b");
+  CHECK(count_in(g_sfx,"ui/error")==2&&!strcmp(gc_system_starter_nickname(&SYS,sp),"Keep"),"so is a control character");
+
+  /* a species that is not caught (not in the grid) cannot be renamed through the data layer either */
+  uint16_t other=0;
+  for(int i=0;i<gc_starter_cost_count;i++)if(!SYS.dex[gc_starter_costs[i].id].caught_attr){other=gc_starter_costs[i].id;break;}
+  CHECK(other!=0&&ss_set_nickname(&SYS,other,"Ghost")==GC_STARTER_NICK_NOT_A_STARTER&&!*gc_system_starter_nickname(&SYS,other),"an uncaught species takes no nickname");
+  CHECK(ss_set_nickname(&SYS,2,"Ivy")==GC_STARTER_NICK_NOT_A_STARTER&&ss_set_nickname(&SYS,0,"Zero")==GC_STARTER_NICK_NOT_A_STARTER,"nor does a species that is not a starter");
+
+  /* the table is full: a new nickname is refused with a message, one that is there can still be changed or cleared */
+  gc_system_init_defaults(&SYS);
+  int given=0;
+  for(int i=0;i<gc_starter_cost_count&&given<GC_STARTER_NICKNAMES;i++) {
+    const uint16_t id=gc_starter_costs[i].id;
+    if(id==sp)continue;
+    CHECK(gc_system_set_starter_nickname(&SYS,id,"Full")==GC_STARTER_NICK_OK,"fill the table with %u",id);
+    given++;
+  }
+  CHECK(open_screen(NULL),"open with a full table");
+  reset_logs();
+  saves=save_calls;
+  rename_with("Late");
+  CHECK(!*gc_system_starter_nickname(&SYS,sp)&&SYS.n_starter_nicknames==GC_STARTER_NICKNAMES,"a 129th nickname is refused");
+  CHECK(count_in(g_sfx,"ui/error")==1,"with the error sound");
+  tick(4000);draw_bottom();
+  CHECK(drawn("Only 128 starters can have a nickname at once. Clear one first."),"and a message that says why");
+  press(MB_ACTION);
+  CHECK(save_calls==saves+1,"the change was never written");
+  CHECK(gc_system_set_starter_nickname(&SYS,gc_starter_costs[0].id==sp?gc_starter_costs[1].id:gc_starter_costs[0].id,"Full2")==GC_STARTER_NICK_OK,"(an existing one can be replaced)");
+
+  /* long names: the bottom panel cuts at 15 UTF-16 units to 12 and "..." (truncateString(name, 15)), the top screen shows it whole */
+  gc_system_init_defaults(&SYS);
+  CHECK(open_screen(NULL),"open for long names");
+  static const struct {const char* nick;const char* panel;} longs[]={
+    {"ABCDEFGHIJKLMNO","ABCDEFGHIJKLMNO"},                                   /* 15: whole */
+    {"ABCDEFGHIJKLMNOP","ABCDEFGHIJKL..."},                                  /* 16: cut */
+    {"ABCDEFGHIJKLMNOPQRST","ABCDEFGHIJKL..."},                              /* 20 */
+    {KANA KANA KANA KANA KANA KANA,KANA KANA KANA KANA KANA KANA},           /* 6 kana, 18 bytes: not more than 15 units, whole */
+    {"A" KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA,
+     "A" KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA KANA "..."},     /* 20 units: 12 and "...", a character is never cut */
+    {FIRE FIRE FIRE FIRE FIRE FIRE FIRE,FIRE FIRE FIRE FIRE FIRE FIRE FIRE}, /* 7 emoji = 14 units: whole */
+    {FIRE FIRE FIRE FIRE FIRE FIRE FIRE FIRE FIRE FIRE,FIRE FIRE FIRE FIRE FIRE FIRE "..."}, /* 10 emoji = 20 units: 6 of them (12 units) */
+  };
+  for(size_t k=0;k<sizeof longs/sizeof longs[0];k++) {
+    CHECK(gc_nickname_valid(longs[k].nick),"case %zu is a valid nickname",k);
+    CHECK(ss_set_nickname(&SYS,sp,longs[k].nick)==GC_STARTER_NICK_OK,"set case %zu",k);
+    starter_refresh();
+    draw_bottom();
+    CHECK(has_line(g_drawn,longs[k].panel),"case %zu: the bottom panel shows %s",k,longs[k].panel);
+    draw_top();
+    CHECK(has_line(g_drawn,longs[k].nick),"case %zu: the top screen shows the whole %s",k,longs[k].nick);
+  }
+}
+
+/* the row is there only when the caller can rename: a screen opened without that event has no Rename */
+static void stub_describe(void* ctx,uint16_t species,starter_info* out) {(void)ctx;ss_describe(&SYS,species,out);}
+static bool stub_start(void* ctx,const uint16_t* species,int n) {(void)ctx,(void)species,(void)n;return true;}
+static void stub_exit(void* ctx) {(void)ctx;}
+static int stub_rnd(void* ctx,int n) {(void)ctx,(void)n;return 0;}
+static int g_stub_renames;
+static uint16_t g_stub_species;
+static void stub_rename(void* ctx,uint16_t species) {(void)ctx;g_stub_renames++;g_stub_species=species;}
+static void test_rename_row_needs_the_event(void) {
+  static sm_entry list[SS_MAX_ENTRIES];
+  gc_system_init_defaults(&SYS);
+  const int n=ss_list(&SYS,list,SS_MAX_ENTRIES,NULL);
+  const starter_args args={list,n,10,NULL,0};
+  for(int with=0;with<2;with++) {
+    starter_events ev={stub_describe,stub_start,stub_exit,stub_rnd};
+    if(with)ev.rename=stub_rename;
+    g_stub_renames=0;g_stub_species=0;
+    reset_logs();
+    starter_open(&args,&ev);
+    CHECK(starter_input(MB_ACTION),"the options menu opens");
+    g_drawn[0]=0;starter_draw();
+    CHECK(drawn("menu:rename")==(with!=0),"Rename is a row only when the caller can rename (with=%d)",with);
+    CHECK(drawn("starterSelectUiHandler:addToParty")&&drawn("menu:cancel"),"Add to Party and Cancel stay");
+    if(with) {
+      starter_input(MB_DOWN);starter_input(MB_ACTION); /* Add to Party, then the row under it (no Customize here) */
+      CHECK(g_stub_renames==1&&g_stub_species==list[0].species,"choosing it asks the caller to rename the species under the cursor (%u)",g_stub_species);
+      g_drawn[0]=0;starter_draw();
+      CHECK(!drawn("menu:cancel"),"and the menu is closed");
+    } else {
+      starter_input(MB_DOWN);starter_input(MB_ACTION); /* Cancel */
+      CHECK(g_stub_renames==0,"the last row is Cancel and renames nothing");
+    }
+    starter_close();
+  }
+  g_screen=NULL;
+}
+
 static void test_filter_menu(void) {
   gc_system_init_defaults(&SYS);
   CHECK(open_screen(NULL),"open the filter test");
@@ -1156,6 +1428,8 @@ int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
   test_candy_cost_reductions();
   test_filter_menu();
+  test_rename();
+  test_rename_row_needs_the_event();
   test_customization();
   test_cycle_buttons();
   test_no_hidden_ability_purchase();

@@ -9,7 +9,7 @@
  * A species is picked with the defaults upstream chooses for one with no stored preference (getStarterDetailsFromPreferences at the
  * pinned commit, src/ui/utils/starter-select-ui-utils.ts): shiny when a shiny is caught (the highest variant caught), female only
  * for a species that is always female, form 0, the first ability unlocked, the lowest nature caught, the passive when it is
- * unlocked and on, the species' first type as the tera type, the IVs the dex holds, and the default moveset. The cycle buttons that
+ * unlocked and on, the species' first type as the tera type, the IVs the dex holds, the default moveset and the nickname stored for the species. The cycle buttons that
  * change them are available through Customize (and L / ZL for the form and gender). Stored unlocked preferences override these defaults;
  * invalid or stale choices fall back safely.
  */
@@ -67,6 +67,12 @@ bool ss_cycle_gender(gc_system* sys, uint16_t species);
 bool ss_form_offered(const gc_system* sys, uint16_t species, int form);
 bool ss_set_form(gc_system* sys, uint16_t species, int form);
 bool ss_set_gender(gc_system* sys, uint16_t species, bool female);
+
+/* A starter's nickname (the options menu's Rename): `text` "" or NULL clears it. It is kept in the system data per species (gc_system_set_starter_nickname) and
+ * the caller saves it. ss_starter hands it on to the Pokemon the starter becomes and ss_describe shows it in the panel. Returns what
+ * gc_system_set_starter_nickname returns (GC_STARTER_NICK_OK, _NOT_A_STARTER, _BAD_TEXT, _FULL); a species that is not caught (not in the grid) is
+ * NOT_A_STARTER. Nothing changes unless it returns OK. */
+int ss_set_nickname(gc_system* sys, uint16_t species, const char* text);
 
 /* The team the player confirmed, as game-core takes it: each one through ss_starter and gc_starter_is_available, the cost against
  * gc_starter_budget(mode) (15 in Endless and Spliced Endless, 10 otherwise: the mode of the run being started, never assumed). False with `why` (a locale key such as "starterSelectUiHandler:cost" or game-core's own text) when game-core

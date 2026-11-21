@@ -1,7 +1,7 @@
 # Nicknames in the app
 
 Source: `8555c08c823b856cbec4eb99ca84ea52a955836d`. Locales: `270ed0a2938b2c3e2e34e7de940e84aecadf548b`. Needs battle-core's and game-core's nickname changes
-(`pr_pokemon.nickname`, `gc_run_set_nickname`, `gc_nickname_valid`).
+(`pr_pokemon.nickname`, `gc_run_set_nickname`, `gc_nickname_valid`, and for the starter screen `gc_system_starter_nickname` / `gc_system_set_starter_nickname`).
 
 Upstream's party screen has a **Rename** option (`PartyUiHandler.processRenameOption`): it opens a form pre-filled with `getNameToRender({useIllusion: false})`
 and a submit sets `pokemon.nickname` (an empty submit clears it). This change gives the app that option and shows the nickname where upstream shows
@@ -32,13 +32,39 @@ and a submit sets `pokemon.nickname` (an empty submit clears it). This change gi
   the stack in `be_convert_events` (+176 bytes in that frame); the app's startup stack is at least 512 KB (`check_stack_size.py` enforces it), so the growth is not a stack
   risk. It was **not measured on ARM** (no devkitARM here).
 
+## The starter select's Rename (kept across runs)
+
+Upstream's starter select has a Rename in the options menu of a caught species: the form is filled with the **stored nickname** (empty when there is none;
+not the species name, unlike the party's), a submit sets `starterPreferences[speciesId].nickname` (an empty one clears it), the panel shows it in the
+species' place, it is saved with the system data when the screen is left, and `SelectStarterPhase` gives it to the Pokemon (`starterPokemon.nickname =
+starter.nickname`). Here:
+
+- **The row.** `starter_events.rename` (menus/starter.h) puts **Rename** in the options menu after Customize and before Cancel (upstream: after
+  Favourites, before the candy purchases; this screen's Customize holds the candy purchases). The row is there only when the caller gives the event.
+  Adding a row moved the menu's other rows up by 16 px (it is anchored to the bottom edge), so `test_touch` taps Add to Party at y 117 instead of 132.
+- **The form** is `name_entry` as an overlay, the same words as the party's Rename, at most 20 characters, starting with the stored nickname.
+  `starter_host.c` (`rename_starter`, `rename_done`) keeps it with the species in the profile (`ss_set_nickname`: only a caught species; the rest is
+  `gc_system_set_starter_nickname`) and **writes the profile at once** (not when the screen is left, as upstream does): the settle-then-change-then-write pattern of the
+  Customize lists, a write that fails puts the old nickname back and says "The profile could not be saved. Nothing was changed.". The same text is not
+  written again. Cancel changes nothing.
+- **Full.** The profile holds at most 128 nicknamed starters (game-core's `GC_STARTER_NICKNAMES`, a memory trade-off: upstream has no limit). A new nickname
+  for a 129th starter plays the error sound and says "Only 128 starters can have a nickname at once. Clear one first."; replacing or clearing still works.
+- **The panel** (`ss_describe`) names the starter by its nickname, on both screens. The bottom panel cuts a name of more than 15 UTF-16 units to 12 and "..."
+  (`truncateString(name, 15)`, as it always did for names); upstream shows the whole nickname when the panel is drawn and cuts it only right after a rename, here
+  it is always cut on the bottom screen (where the gender sign sits beside the name; the fit of 20 wide characters was not looked at on a console) and shown whole on the top screen. The cut counts
+  UTF-16 units, not bytes (kana are 3 bytes, an emoji is 2 units) and never splits a character; it also stops cutting a localized species name that has
+  more than 15 bytes but fewer than 16 characters.
+- **The run.** `ss_starter` copies the stored nickname into `gc_starter.nickname`, so every team handed to `gc_run_set_starters` (the screen's Start, and the
+  random team the soak runs use) carries it, and `gc_mon_new_player` gives it to the Pokemon. It comes back after a restart (`sysd_save` writes it, the
+  profile loads it) and is cleared with an empty text.
+- The filter's sort by name still sorts by the species' name.
+
 ## Not done
 
 - Run history, the post-mortem and the radar still show species names (the history keeps species, not Pokemon; adding the nickname grows every history
   entry in the save).
 - Messages that game-core stored as words before this change (Wish, Healing Wish, Lunar Dance) keep the species (battle-core's PR says so).
-- Enemy nicknames (the Expert Pokemon Breeder's Cleffa) and the starter screen's Rename with per-species storage (upstream `StarterPreferences`):
-  not in this change.
+- Enemy nicknames (the Expert Pokemon Breeder's Cleffa): not in this change.
 - Not run on a console or in Azahar (no Azahar screenshots were asked for); the 3DS build (`build-3ds`) only runs in CI.
 
 ## Checks

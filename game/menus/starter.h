@@ -10,7 +10,8 @@
  *     panel (sprite, dex number, name, types, growth rate, ability, passive, nature), the options menu with Add to Party and
  *     Remove from Party, Customize, and the Begin / Exit questions. The host provides unlocked move/nature/shiny/ability selections and candy purchases. The top screen shows the species' sprite, moves and team luck.
  *   - the filter and sort are a menu the caller shows (SELECT, or the Filter button), not upstream's bar. The form and gender cycle buttons (L, ZL)
- *     are there; shiny, ability, nature and tera are chosen in Customize. Not there: IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
+ *     are there; shiny, ability, nature and tera are chosen in Customize. Rename is a row of the options menu (below Customize; upstream's is after
+ *     Favourites and before the candy purchases). Not there: IVs, favourites, the Pokedex page and the tutorial. The options menu lists only
  *     what works. See starter_model.h for how the cursor moves without the filter bar.
  */
 #ifndef GAME_MENUS_STARTER_H
@@ -56,6 +57,9 @@ typedef struct {
    * cycles that starter's form or gender and answers true when it did (it may be NULL: the buttons do nothing). The screen then plays the
    * select sound and asks `describe` again. */
   bool (*cycle)(void* ctx, uint16_t species, mui_button b);
+  /* "Rename" in the options menu of `species` (the row is there only when this is given): the caller asks for the nickname and keeps it. The screen has
+   * closed its menu; the caller calls starter_refresh when the name changed, to have the panel show it. */
+  void (*rename)(void* ctx, uint16_t species);
 } starter_events;
 
 typedef struct {

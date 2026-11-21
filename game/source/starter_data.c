@@ -314,7 +314,9 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out) {
   m->gender = p.sp->male_permille < 0 ? MG_GENDERLESS : (p.female ? MG_FEMALE : MG_MALE);
   m->shiny = p.shiny;
   m->variant = p.variant;
-  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(species));
+  /* the panel shows the nickname in the species' place (StarterSummary.setNameAndNumber) */
+  const char* nickname = gc_system_starter_nickname(sys, species);
+  snprintf(m->name, sizeof m->name, "%s", *nickname ? nickname : i18n_species_name(species));
   m->types[0] = p.form->type1;
   m->types[1] = p.form->type2;
   m->ability = p.ability_index == 0 ? p.form->ability1 : p.ability_index == 1 ? p.form->ability2 : p.form->ability_hidden;
@@ -345,6 +347,8 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
   out->passive = p.passive;
   out->pokerus = ss_has_pokerus(species);
   out->tera_type = -1; /* the species' first type */
+  /* the nickname the starter select stored for it (Starter.nickname = starterPreferences[speciesId].nickname): SelectStarterPhase gives it to the Pokemon */
+  snprintf(out->nickname, sizeof out->nickname, "%s", gc_system_starter_nickname(sys, species));
   if (sys && species <= GC_MAX_SPECIES_ID) memcpy(out->ivs, sys->dex[species].ivs, sizeof out->ivs);
   uint16_t pool[64];int n=gc_starter_moves(sys,species,p.form_index,pool,64),w=0;
   if(n<0) return false;
@@ -359,6 +363,12 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
     if(!duplicate) out->moves[w++]=pool[i];
   }
   return true;
+}
+
+int ss_set_nickname(gc_system* sys, uint16_t species, const char* text) {
+  /* the starter select offers Rename for a species its grid lists, a caught one */
+  if (!caught(sys, species)) return GC_STARTER_NICK_NOT_A_STARTER;
+  return gc_system_set_starter_nickname(sys, species, text);
 }
 
 bool ss_team(const gc_system* sys, int mode, const uint16_t* species, int n, gc_starter* out, const char** why) {
