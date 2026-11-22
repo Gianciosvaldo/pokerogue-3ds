@@ -23,7 +23,30 @@ static struct {
   bool (*gate)(void);
   sysd_io io;
   bool have_io;
+  uint32_t play_ms; /* play time not yet folded into g_sys.gstats.play_time (see sysd_play_tick) */
 } S;
+
+/* Whole seconds of the pending play time go into the profile; the remainder stays pending. Only when the profile was read (a profile
+ * nobody opened has nothing to add to), and never over an unreadable file (sysd_save returns before this). */
+static void fold_play_time(void) {
+  const uint32_t secs = S.play_ms / 1000u;
+  if (!secs) return;
+  S.play_ms -= secs * 1000u;
+  const uint64_t t = (uint64_t)g_sys.gstats.play_time + secs;
+  g_sys.gstats.play_time = t > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)t;
+}
+
+void sysd_play_tick(uint32_t ms) {
+  if (!S.loaded) return; /* the profile is read at the title; before that there is nothing to add to */
+  if (ms > SYSD_PLAY_TICK_MAX_MS) ms = SYSD_PLAY_TICK_MAX_MS; /* a sleep or a long SD load is not play time */
+  S.play_ms += ms;
+}
+
+uint32_t sysd_play_seconds(void) {
+  if (!S.loaded) return 0;
+  const uint64_t t = (uint64_t)g_sys.gstats.play_time + S.play_ms / 1000u;
+  return t > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)t;
+}
 
 static save_result do_read(char** out, size_t* len, bool* used_backup) {
   return S.have_io ? S.io.read(FILE_NAME, out, len, used_backup) : save_read(FILE_NAME, out, len, used_backup);
@@ -102,6 +125,7 @@ bool sysd_save(void) {
   uint8_t* buf = malloc(BUF_MAX);
   if (!buf) return false;
   bool ok = false;
+  fold_play_time(); /* after the gate, before the bytes: play time lives outside g_sys until a save (profile_tx hashes g_sys) */
   const size_t n = gc_system_save(&g_sys, buf, BUF_MAX);
   if (n) {
     const uint64_t h = fnv1a(buf, n);

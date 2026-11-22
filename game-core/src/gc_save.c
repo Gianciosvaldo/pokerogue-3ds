@@ -1596,6 +1596,19 @@ static const sfield stat_milestone_fields[] = {
     SF(gc_stat_milestones, epic_eggs_pulled), SF(gc_stat_milestones, legendary_eggs_pulled), SF(gc_stat_milestones, manaphy_eggs_pulled),
 };
 
+/* the rest of GameStats (gc_game_stats): a section of its own, written only once something is counted */
+static const sfield game_stats_fields[] = {
+    SF(gc_game_stats, play_time), SF(gc_game_stats, classic_sessions_played), SF(gc_game_stats, daily_run_sessions_played),
+    SF(gc_game_stats, daily_run_sessions_won), SF(gc_game_stats, endless_sessions_played), SF(gc_game_stats, highest_endless_wave),
+    SF(gc_game_stats, highest_level), SF(gc_game_stats, highest_money), SF(gc_game_stats, highest_heal),
+    SF(gc_game_stats, pokemon_seen), SF(gc_game_stats, pokemon_defeated), SF(gc_game_stats, pokemon_hatched),
+    SF(gc_game_stats, sub_legendary_seen), SF(gc_game_stats, sub_legendary_caught), SF(gc_game_stats, sub_legendary_hatched),
+    SF(gc_game_stats, legendary_seen), SF(gc_game_stats, legendary_caught), SF(gc_game_stats, legendary_hatched),
+    SF(gc_game_stats, mythical_seen), SF(gc_game_stats, mythical_caught), SF(gc_game_stats, mythical_hatched),
+    SF(gc_game_stats, shiny_seen), SF(gc_game_stats, shiny_caught), SF(gc_game_stats, shiny_hatched),
+    SF(gc_game_stats, pokemon_fused), SF(gc_game_stats, trainers_defeated),
+};
+
 static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, jojo_beaten), SF(gc_achv_progress, jojo_beaten_hi), SF(gc_achv_progress, jojo_battles), SF(gc_achv_progress, jojo_clean),
     SF(gc_achv_progress, run_tag), SF(gc_achv_progress, run_jojo), SF(gc_achv_progress, best_run_jojo),
@@ -1648,6 +1661,16 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
     s = section_start(&w, "stats");
     put_block(&w, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1);
     section_end(&w, s);
+
+    /* only once something is counted, so a profile without any is saved as it always was */
+    {
+        static const gc_game_stats none;
+        if (memcmp(&sys->gstats, &none, sizeof none)) {
+            s = section_start(&w, "gstats");
+            put_block(&w, game_stats_fields, NF(game_stats_fields), &sys->gstats, sizeof sys->gstats, 1);
+            section_end(&w, s);
+        }
+    }
 
     /* only once there is progress, so a profile without any is saved as it always was */
     {
@@ -1780,6 +1803,9 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
     if (!r.bad) {
         get_block(&r, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1, &dropped);
     }
+
+    r = section(&body, "gstats");
+    if (!r.bad) get_block(&r, game_stats_fields, NF(game_stats_fields), &sys->gstats, sizeof sys->gstats, 1, &dropped);
 
     r = section(&body, "achv");
     if (!r.bad) get_block(&r, achv_progress_fields, NF(achv_progress_fields), &sys->achv, sizeof sys->achv, 1, &dropped);

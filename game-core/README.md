@@ -698,6 +698,13 @@ prevents duplicate awards across reloads. This proves actual source terminal
 bookkeeping with legal fixture outcomes; whole-run clears remain gated. See
 [scope and validation](CLASSIC-WIN-VALIDATION.md).
 
+## Game Stats
+
+The profile's game statistics (upstream `GameStats`: battles, Pokemon defeated, sessions played, highest damage / heal / level / endless wave,
+seen / caught / hatched by rarity and shine, fusions, trainers, play time) are recorded where upstream records them, in `gc_system` (`stats`
+plus the new `gstats`, a `gstats` save section written only once something is counted). The recorders are in `src/gc_gamestats.c`; battle-core
+reports damage and heal through `pr_battle.game_stat`. See [mapping, quirks and validation](GAME-STATS-VALIDATION.md).
+
 ## Endgame diagnostic chooser
 
 The separate host `gcstress` tool starts a documented strong fixture at wave 1

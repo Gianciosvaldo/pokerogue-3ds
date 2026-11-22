@@ -42,6 +42,9 @@ static void command_wallet(void) {
   /* damage40, Golden2 =>40, Coin1 adds8, Coin2 adds19, nominal67. */
   CHECK(run.money==(capped?9007199254740991.0:before+67));CHECK(loaded.money==run.money&&run.bt.money==run.money);
   CHECK(run.bt.money_scattered==0&&loaded.bt.money_scattered==0);CHECK(run.n_items==3&&loaded.n_items==3);
+  /* the Game Stats record the hit (Dragon Rage, 40) in the profile; nothing else in it moves */
+  CHECK(sys.stats.highest_damage==40);
+  old.stats.highest_damage=sys.stats.highest_damage;
   CHECK(!memcmp(&sys,&old,sizeof sys));CHECK(!memcmp(&run.run.rng,&loaded.run.rng,sizeof run.run.rng));
   gc_wallet_to_battle(&run);CHECK(run.bt.money==run.money);
  }

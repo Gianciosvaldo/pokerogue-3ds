@@ -2195,6 +2195,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   bes_bind(&G.run);
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  gc_stats_run_loaded(G.run.sys, G.run.money); /* upstream's highestMoney is only ever raised when a session is loaded */
   eh_install(&G.run);   /* timed events: game-core does not save the source */
   G.run.ask_switch = cfg->ask_switch;
   ach_reset_loaded();

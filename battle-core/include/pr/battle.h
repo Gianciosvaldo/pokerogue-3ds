@@ -488,6 +488,15 @@ typedef void (*pr_faint_observer_fn)(const struct pr_battle *bt, const pr_faint_
 enum { PR_ACHV_CHECK_TERASTALLIZE, PR_ACHV_CHECK_STELLAR_TERASTALLIZE };
 typedef void (*pr_achievement_check_fn)(const struct pr_battle *bt, int check, void *ctx);
 
+/* Optional (NULL = none, the default; every differential leaves it): told of the two amounts upstream's player-side checks read, at the line where
+ * upstream reads them, the way pr_achievement_check_fn is told of a Terastallization. Never changes the battle, an RNG draw, an event or a phase.
+ *  PR_GAME_STAT_DAMAGE: MoveEffectPhase's hit of a PLAYER Pokemon that took HP off its target (finalDmg > 0; none for a Substitute's), value = finalDmg:
+ *      what upstream feeds gameStats.highestDamage and DamageAchv.
+ *  PR_GAME_STAT_HEAL: PokemonHealPhase healing a PLAYER Pokemon (an amount of 0 or more, however little HP it had room for), value = healAmount:
+ *      gameStats.highestHeal and HealAchv. A heal that does not go through the phase upstream (Regenerator, Pain Split, a Potion) is not told. */
+enum { PR_GAME_STAT_DAMAGE, PR_GAME_STAT_HEAL };
+typedef void (*pr_game_stat_fn)(const struct pr_battle *bt, int stat, int32_t value, void *ctx);
+
 typedef struct pr_battle {
     pr_rng rng;                /* Phaser.Math.RND (global) */
     bool rng_live;             /* false = the caller didn't provide its state */
@@ -615,6 +624,8 @@ typedef struct pr_battle {
     /* Profile validation requests emitted by battle phases; caller owns profile state. */
     pr_achievement_check_fn achievement_check;
     void *achievement_check_ctx;
+    pr_game_stat_fn game_stat;
+    void *game_stat_ctx;
     pr_faint_observer_fn faint_observer;
     void *faint_observer_ctx;
     pr_event_sink_fn event_sink;

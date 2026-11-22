@@ -211,6 +211,15 @@ static bool wild_illusion_species(pr_battle *bt, const pr_pokemon *p, void *ctx,
     return true;
 }
 
+/* battle-core's pr_game_stat_fn: the hit or heal of a player's Pokemon that upstream's highestDamage / highestHeal read */
+static void battle_game_stat(const pr_battle *bt, int stat, int32_t value, void *ctx)
+{
+    (void)bt;
+    gc_run *run = ctx;
+    if (stat == PR_GAME_STAT_DAMAGE) gc_stats_damage(run->sys, value);
+    else if (stat == PR_GAME_STAT_HEAL) gc_stats_heal(run->sys, value);
+}
+
 static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 {
     pr_battle *bt = &run->bt;
@@ -239,6 +248,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 
     memset(bt, 0, sizeof *bt);
     bt->event_sink = battle_event_chunk; bt->event_sink_ctx = run;
+    bt->game_stat = battle_game_stat; bt->game_stat_ctx = run;
     bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION | PR_DEV_FUSION_ABILITIES;   /* lorenzo's departures from the pin */
     bt->player_teras_used_known = true;
     bt->player_teras_used = player_teras_used;
