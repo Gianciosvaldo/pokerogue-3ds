@@ -11,14 +11,16 @@ void me_flow_intro(const gc_run* run, char* out, size_t n) {
   if (n) out[0] = 0;
 }
 
-/* Set by the run driver test: called as the options are about to be answered (the fake answers at once, so this is the last moment before the
- * run is stepped again; the Safari Zone's IV Scanner question is checked here for not having touched the run's RNG streams). */
-void (*me_fake_before_open)(void);
+/* Set by the run driver test: called as an encounter's screen is about to be answered (the fake answers at once, so this is the last moment before the run is stepped
+ * again). It checks what the screen did to the run (the Safari Zone's IV Scanner question must not have touched the RNG streams) and settles the save the screen's question
+ * is (an encounter's first question is upstream's save point). False leaves the screen unanswered: the driver drops the run and continues it from its slot. */
+bool (*me_fake_before_open)(void);
 
 bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void* arg), void* arg) {
   const gc_screen* s = gc_run_screen(run);
-  if (s->kind != GC_SCREEN_MYSTERY || s->n_options < 1) return false;
-  if (me_fake_before_open) me_fake_before_open();
+  if (s->kind != GC_SCREEN_MYSTERY) return false;
+  if (me_fake_before_open && !me_fake_before_open()) return true;   /* the question stays up, as it would while the player reads it */
+  if (s->n_options < 1) return false;
   me_choice c;
   memset(&c, 0, sizeof c);
   for (int i = 0; i < s->n_options && i < 8; i++)

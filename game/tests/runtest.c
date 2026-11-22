@@ -19,6 +19,11 @@
  *                        Save and Quit is answered Yes (the run is dropped and continued from its slot, which must hold the save of
  *                        the battle's start: the run that comes back is the slot's) or backed out of (the run goes on), alternately.
  *                        Fails when the menu is not offered, is told another turn than the battle's, or the driver goes on after a quit.
+ *   RUNTEST_ME=cycle     every run is given one upstream mystery encounter, from wave 3 on (the developer hook), a different one each run
+ *                        (RUNTEST_ME=<number>: that one every run). With
+ *                        RUNTEST_SAVE the first question of an encounter is a save point like a battle's first command (the run must be in
+ *                        its slot before the question is answered, and the slot must hold it), and with =resume every 4th save point is
+ *                        dropped and continued from the slot, the question included. Fails when too few kinds of encounter were saved.
  * The music is the app's own (bgm.c, bgm_choose.c, bgm_player.c) over a fake DSP (snd_fake.c). The runs fail when a track is started
  * while a battle animation plays (the SD card reads would stall it), when a scene starts with other music than upstream's
  * Battle.getBgmOverride gives (checked against bgm_choose, not the app's own scene code), when a command is asked with other music
@@ -125,7 +130,7 @@ static struct {
   const int* ball_counts;
   int ball_counts_copy[BALL_TYPES];
   /* saving (RUNTEST_SAVE) */
-  int expected_saves;     /* save points whose first command was asked, not counting a run that was just loaded */
+  int expected_saves;     /* save points whose first command (or an encounter's first question) was asked, not counting a run that was just loaded */
   int save_points;        /* the same, to pick the ones to resume from */
   bool resume_now;        /* drop the run and continue it from its slot (the main loop does it) */
   bool resumed;           /* the run was just loaded: its save point is the file it came from */
@@ -169,7 +174,11 @@ static int n_safari_yes, n_safari_no, n_safari_keys, n_safari_windows, n_safari_
 static struct { uint32_t id; int wave, remaining; } safari_keys[4096];
 static bool safari_rng_pending;                 /* a Safari scan question was answered and the four actions have not been reached yet */
 static pr_rng safari_rng_run, safari_rng_battle; /* the run's streams when the question was asked */
-extern void (*me_fake_before_open)(void);
+extern bool (*me_fake_before_open)(void);
+static int n_me_saves, n_me_resumes;   /* save points that were an encounter's first question, and the ones the run was continued from */
+static uint32_t me_types_saved, me_types_resumed;   /* which encounters (a bit each) those were */
+static bool me_cycle;   /* RUNTEST_ME=cycle: every run is given one upstream encounter from wave 3 on, a different one each run */
+static int me_fixed = -1;   /* RUNTEST_ME=<number>: the same one every run */
 static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls, n_reordered_trays;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
@@ -434,6 +443,11 @@ void __real_gc_ev_battle_chunk(gc_run*,const pr_event*,int);
 void __wrap_gc_ev_battle(gc_run*run){__real_gc_ev_battle(run);promote_event_storage(run);}
 void __wrap_gc_ev_battle_chunk(gc_run*run,const pr_event*events,int n){__real_gc_ev_battle_chunk(run,events,n);promote_event_storage(run);}
 
+/* the trainer a "battle:trainerDefeated" named since the wave began, as the app told the music (-1: none). Clowning Around, Weird Dream, A Trainer's Test and The
+ * Winstrate Challenge queue a TrainerVictoryPhase after their fights (game-core's ports of upstream), the others' trainer fights do not */
+static int victory_trainer = -1;
+void __real_bgm_on_trainer_defeated(int trainer_type);
+void __wrap_bgm_on_trainer_defeated(int trainer_type) { victory_trainer = trainer_type; __real_bgm_on_trainer_defeated(trainer_type); }
 /* a scene was just set up (at black): its music is upstream's, with the trainer's encounter music before its first send-out */
 static void music_scene(int scene_biome) {
   const gc_run* r = rs_run();
@@ -448,6 +462,7 @@ static void music_scene(int scene_biome) {
   snprintf(key, sizeof key, "audio/bgm/%s", first);
   if (strcmp(SND.key, key) || SND.volume != 1.0f) BAD("the DSP plays \"%s\" at volume %.2f, the wave wants \"%s\"", SND.key, SND.volume, key);
   snprintf(M.battle, sizeof M.battle, "%s", battle);
+  victory_trainer = -1;
   M.trainer = r->battle_type == BATTLE_TYPE_TRAINER ? r->trainer_type : -2;
   M.have = true;
   M.scenes++;
@@ -493,6 +508,11 @@ static void music_reward(void) {
   } else if (r->battle_type == BATTLE_TYPE_TRAINER && !r->me_battle) { /* an encounter's trainer fight has no TrainerVictoryPhase (handleMysteryEncounterVictory) */
     const char* v = bgm_trainer_victory(r->trainer_type);
     if (strcmp(bgm_current(), v)) BAD("the reward screen after trainer %d plays \"%s\", its victory music is \"%s\"", r->trainer_type, bgm_current(), v);
+    M.victories++;
+    music_seen(v);
+  } else if (r->battle_type == BATTLE_TYPE_TRAINER && r->me_battle && victory_trainer >= 0) { /* an encounter's trainer fight that had a TrainerVictoryPhase */
+    const char* v = bgm_trainer_victory(victory_trainer);
+    if (strcmp(bgm_current(), v)) BAD("the reward screen after an encounter's trainer fight with a victory message plays \"%s\", its victory music is \"%s\"", bgm_current(), v);
     M.victories++;
     music_seen(v);
   } else if (strcmp(bgm_current(), M.battle)) {
@@ -923,6 +943,51 @@ void bv_set_item_bars(const bv_item *foe,int nf,const bv_item *keys,int nk,int l
 static bool cfg_ask_switch;
 static int n_switch_yes, n_switch_no, n_switch_second;
 
+/* A save point's first question is up, a battle's first command or an encounter's first question: the run must be in its slot by now, and the slot must hold this run.
+ * True when the run is to be dropped and continued from the slot instead of going on (the main loop does it). */
+static bool save_point_asked(const gc_run* r) {
+  const bool just_resumed = W.resumed;
+  if (W.resumed) {
+    W.resumed = false;
+    W.sp_open = true;
+  } else if (!W.sp_open) {
+    W.sp_open = true;
+    W.expected_saves++;
+    W.save_points++;
+    if (r->screen.kind == GC_SCREEN_MYSTERY) { n_me_saves++; me_types_saved |= 1u << r->screen.mystery_type; }
+  }
+  const rs_stats* st = rs_stats_get();
+  if (st->saves != W.expected_saves) BAD("a save point was asked with %d saves written, %d expected", st->saves, W.expected_saves);
+  rsv_info info;
+  if ((custom_on ? cr_inspect(0, &info) : rsv_inspect(0, &info)) != RSV_OK) {
+    BAD("the slot does not load after a save: %s", info.why);
+  } else {
+    rsv_info now;
+    memset(&now, 0, sizeof now);
+    rsv_summarize(r, &now);
+    if (info.wave != now.wave || info.score != now.score || info.money != now.money || info.n_party != now.n_party ||
+        info.biome != now.biome || memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party))
+      BAD("the slot holds wave %d score %d, the run is at wave %d score %d (money %d/%d, biome %d/%d, party %d/%d, party bytes %s)", info.wave, info.score,
+          now.wave, now.score, (int)info.money, (int)now.money, (int)info.biome, (int)now.biome, (int)info.n_party, (int)now.n_party,
+          memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party) ? "differ" : "same");
+  }
+  if (resume_on && !just_resumed && W.save_points % 4 == 0) {
+    W.resume_now = true; /* the player quits to the title and continues: the main loop does it */
+    if (r->screen.kind == GC_SCREEN_MYSTERY) { n_me_resumes++; me_types_resumed |= 1u << r->screen.mystery_type; }
+    return true;
+  }
+  return false;
+}
+
+/* An encounter's screen is about to be answered (me_fake.c): its first question is a save point like a battle's first command, and the Safari Zone's scanner question
+ * must have left the RNG streams where they were. False: the run is dropped here and continued from its slot. */
+static bool me_screen_reached(void) {
+  safari_actions_reached();
+  const gc_run* r = rs_run();
+  if (save_on && gc_run_can_save(r) && save_point_asked(r)) return false;
+  return true;
+}
+
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   n_ask++;
   music_command();
@@ -1045,37 +1110,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       if(a->moves[i]!=PR_MOVES(&me->b)[i]||a->pp_left[i]!=max-PR_PP_USED(&me->b)[i])BAD("fight menu move/PP differs for actor%d slot%d",r->screen.slot,i);
     }
   }
-  if (save_on && gc_run_can_save(r)) {
-    /* the first command of a battle: the run must be in its slot by now, and the slot must hold this run */
-    const bool just_resumed = W.resumed;
-    if (W.resumed) {
-      W.resumed = false;
-      W.sp_open = true;
-    } else if (!W.sp_open) {
-      W.sp_open = true;
-      W.expected_saves++;
-      W.save_points++;
-    }
-    const rs_stats* st = rs_stats_get();
-    if (st->saves != W.expected_saves) BAD("a first command was asked with %d saves written, %d expected", st->saves, W.expected_saves);
-    rsv_info info;
-    if ((custom_on ? cr_inspect(0, &info) : rsv_inspect(0, &info)) != RSV_OK) {
-      BAD("the slot does not load after a save: %s", info.why);
-    } else {
-      rsv_info now;
-      memset(&now, 0, sizeof now);
-      rsv_summarize(r, &now);
-      if (info.wave != now.wave || info.score != now.score || info.money != now.money || info.n_party != now.n_party ||
-          info.biome != now.biome || memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party))
-        BAD("the slot holds wave %d score %d, the run is at wave %d score %d (money %d/%d, biome %d/%d, party %d/%d, party bytes %s)", info.wave, info.score,
-            now.wave, now.score, (int)info.money, (int)now.money, (int)info.biome, (int)now.biome, (int)info.n_party, (int)now.n_party,
-            memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party) ? "differ" : "same");
-    }
-    if (resume_on && !just_resumed && W.save_points % 4 == 0) {
-      W.resume_now = true; /* the player quits to the title and continues: the main loop does it */
-      return;
-    }
-  }
+  if (save_on && gc_run_can_save(r) && save_point_asked(r)) return;
   /* the first command is asked only once every "Will you switch?" of the start (one per Pokemon in a double battle) is answered */
   if (rs_run()->eng.awaiting_confirm) BAD("a command was asked with a Will you switch? still waiting");
   W.opts = *opts;
@@ -1948,7 +1983,7 @@ static bool step(void) {
     bool scan = scanner_fixture && (scan_run->screen.kind == GC_SCREEN_COMMAND || safari_q);
     pr_rng scan_rng = scan_run->run.rng, scan_battle_rng = scan_run->bt.battle_rng;
     if (safari_q && scanner_fixture) { safari_rng_pending = true; safari_rng_run = scan_rng; safari_rng_battle = scan_battle_rng; }
-    if (safari_q && !scanner_fixture) BAD("the IV Scanner was offered in a Safari Zone without one");
+    if (safari_q && !scanner_fixture && gc_item_stack(scan_run, "IV_SCANNER") == 0) BAD("the IV Scanner was offered in a Safari Zone without one");   /* (a long run can find one) */
     if (safari_q && scanner_fixture) {
       int remaining = -1;
       for (int k = 0; k < scan_run->screen.n_me_args; k++) if (!strcmp(scan_run->screen.me_args[k].name, "remainingCount")) remaining = (int)scan_run->screen.me_args[k].v;
@@ -2096,7 +2131,18 @@ static bool save_sys_check(void) {
   const char* why = NULL;
   if (!n) BAD("the system data could not be serialized");
   else if (!gc_system_load(&g_sys_back, buf, n, &why)) BAD("the system data did not load back: %s", why ? why : "?");
-  else if (memcmp(&g_sys, &g_sys_back, sizeof g_sys)) BAD("the system data loaded back is not the one that was saved");
+  else if (memcmp(&g_sys, &g_sys_back, sizeof g_sys)) {
+    size_t at = 0;
+    while (((const uint8_t*)&g_sys)[at] == ((const uint8_t*)&g_sys_back)[at]) at++;
+    BAD("the system data loaded back is not the one that was saved (first difference at byte %zu of %zu)", at, sizeof g_sys);
+    if (at >= offsetof(gc_system, eggs) && at < offsetof(gc_system, n_eggs)) {
+      const int i = (int)((at - offsetof(gc_system, eggs)) / sizeof(gc_egg));
+      const gc_egg *x = &g_sys.eggs[i], *y = &g_sys_back.eggs[i];
+      BAD("egg %d of %d: id %u/%u waves %d/%d tier %d/%d species %d/%d src %d/%d vt %d/%d mv %d/%d shiny %d/%d ha %d/%d ts %llu/%llu", i, g_sys.n_eggs, x->id, y->id, x->hatch_waves, y->hatch_waves, x->tier, y->tier,
+          x->species, y->species, x->source_type, y->source_type, x->variant_tier, y->variant_tier, x->egg_move_index, y->egg_move_index, x->is_shiny, y->is_shiny,
+          x->override_hidden_ability, y->override_hidden_ability, (unsigned long long)x->timestamp_ms, (unsigned long long)y->timestamp_ms);
+    }
+  }
   free(buf);
   n_sys_saves++;
   return n > 0;
@@ -2298,7 +2344,12 @@ int main(int argc, char** argv) {
   if (getenv("RUNTEST_DARBY")) gc_debug_force_mystery(GC_ME_DARBY, 5);
   /* RUNTEST_SAFARI: the same hook forces the Safari Zone from wave 5 (rundriver "mystery=safariZone,5"), where the question for each Pokemon is checked */
   safari_forced = getenv("RUNTEST_SAFARI") != NULL;
-  if (safari_forced) { gc_debug_force_mystery(GC_ME_SAFARI_ZONE, 5); me_fake_before_open = safari_actions_reached; }
+  const char* me_mode = getenv("RUNTEST_ME");
+  me_cycle = me_mode && !strcmp(me_mode, "cycle") && !safari_forced;
+  if (me_mode && !me_cycle && !safari_forced) me_fixed = atoi(me_mode);
+  int me_cycle_run = -1;
+  if (safari_forced) { gc_debug_force_mystery(GC_ME_SAFARI_ZONE, 5); }
+  me_fake_before_open = me_screen_reached;
   const char* custom_mode = getenv("RUNTEST_CUSTOM");
   custom_on = custom_mode && *custom_mode;
   custom_strong = custom_on && !strcmp(custom_mode, "strong");
@@ -2338,6 +2389,14 @@ int main(int argc, char** argv) {
   int wave_hist[21] = {0};
   int last_waves = 0, last_nf = 0,last_shown=0;
   while (ended < runs) {
+    if ((me_cycle || me_fixed >= 0) && me_cycle_run != ended) {
+      me_cycle_run = ended;
+      /* Fiery Fallout is left out of the cycle: its fight is a double battle that begins in a single scene (the converter says a centre move with no
+       * doubles switch before it), which is its own finding and fails this driver whatever is saved (RUNTEST_ME=11 shows it) */
+      int t = ended % (GC_ME_UPSTREAM_COUNT - 1);
+      if (t >= GC_ME_FIERY_FALLOUT) t++;
+      gc_debug_force_mystery(me_cycle ? t : me_fixed, 3);
+    }
     if (W.quit_now) {
       /* Save and Quit, answered Yes: nothing may go on, and Continue must bring back what the slot holds (the save of the battle's start,
        * not the battle in progress) */
@@ -2570,12 +2629,19 @@ int main(int argc, char** argv) {
   printf("player centred in a double: %d scenes began centred, %d moves to the centre at a turn's end, %d moves back to a column, %d commands asked centred\n",
          n_centred_scenes, n_centre_events, n_centre_back_events, n_centred_commands);
   if (save_on) {
-    printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
-           n_resumes);
+    printf("saving: %d save points, %d written, %d failed, %d resumed from the slot; encounter questions: %d saved, %d resumed from the slot\n", W.expected_saves, st->saves,
+           st->save_failed, n_resumes, n_me_saves, n_me_resumes);
     if (st->save_failed) BAD("%d saves failed", st->save_failed);
     if (st->saves != W.expected_saves) BAD("%d saves written for %d save points", st->saves, W.expected_saves);
     if (!W.expected_saves) BAD("no save points were reached");
     if (resume_on && !n_resumes) BAD("no run was resumed");
+    if (me_cycle || me_fixed >= 0) {
+      printf("encounters: %d kinds saved at their question, %d continued from it\n", __builtin_popcount(me_types_saved), __builtin_popcount(me_types_resumed));
+      if (runs >= 300 && __builtin_popcount(me_types_saved) < 20) BAD("only %d kinds of encounter were saved at their question", __builtin_popcount(me_types_saved));
+      if (runs >= 300 && resume_on && __builtin_popcount(me_types_resumed) < 10) BAD("only %d kinds of encounter were continued from their question", __builtin_popcount(me_types_resumed));
+    }
+    if (runs >= 100 && me_cycle && !n_me_saves) BAD("no encounter's first question was saved");
+    if (runs >= 100 && me_cycle && resume_on && !n_me_resumes) BAD("no run was continued from an encounter's first question");
     if (quit_on) {
       printf("in-run menu: %d opened, %d Save and Quit answered Yes (%d continued from the slot), %d backed out of\n", n_menu_opened, n_menu_yes, n_resumes,
              n_menu_no);
