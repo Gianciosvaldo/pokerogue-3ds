@@ -1,6 +1,6 @@
 #!/bin/sh
 # The Expert Pokemon Breeder: show the comparator (and the host test) can fail. Replays one trace (from tools/breederdiff.sh) through copies of game-core, each with one line of src/gc_breeder.c (or gc_mystery.c, gc_phases.c, gc_encounter.c, gc_soothe.c, gc_gacha.c) changed, and prints each one's totals. Every copy must be caught: by tests/mystery_breeder_diff_test.c exiting 1, or, for what the oracle does not play (the battle itself, the shop, the loss through the game-over phase, the party coming back in order), by tests/mystery_breeder_test.c failing.
-# Not planted (equivalent mutants or not reachable by the oracle): the Cleffa's Tera slot in the moveset (the oracle draws the same with and without it), the trainer's name string and the Cleffa nicknames (no engine field), the pool evolution wave of 60 (the oracle never starts a wave 60), the stub counters, and the availability check in gc_mystery.c (static; the trace never offers the encounter with fewer than three able Pokemon).
+# Not planted (equivalent mutants or not reachable by the oracle): the Cleffa's Tera slot in the moveset (the oracle draws the same with and without it), the trainer's name string, the zero fill of the nickname's tail (nothing reads past the terminator), the pool evolution wave of 60 (the oracle never starts a wave 60), the stub counters, and the availability check in gc_mystery.c (static; the trace never offers the encounter with fewer than three able Pokemon).
 # Usage: tools/breederplant.sh <trace>   (BREEDER_PLANT_FROM=<name> starts at that plant, BREEDER_PLANT_ONLY="a b" runs those)
 set -e
 TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
@@ -84,6 +84,16 @@ plant cfg-ivs 's|for (int i = 0; i < 6; i++) m->b.ivs\[i\] = 31;|for (int i = 0;
 plant cfg-tera 's|if (e == 0) m->b.tera_type = POKEMON_TYPE_FAIRY;|if (e == 0) m->b.tera_type = POKEMON_TYPE_STEEL;|'
 plant cfg-friendship 's|    m->b.friendship = 255;|    m->b.friendship = 254;|'
 plant cfg-pool-members 's|if (e > 0 \&\& !space) return;|if (e > 1 \&\& !space) return;|'
+plant nick-first 's|snprintf(m->b.nickname, sizeof m->b.nickname, "Ace");|snprintf(m->b.nickname, sizeof m->b.nickname, "Ice");|'
+plant nick-second 's|snprintf(m->b.nickname, sizeof m->b.nickname, "Clefablest");|snprintf(m->b.nickname, sizeof m->b.nickname, "Clefabelst");|'
+plant nick-third-suffix 's|"%s the Great", cleffa_species_name|"%s The Great", cleffa_species_name|'
+plant nick-third-slot 's|else if (e == 1) snprintf(m->b.nickname|else if (e == 2) snprintf(m->b.nickname|'
+plant nick-never 's|^    set_nickname(m, e);|    (void)e;|'
+plant nick-pool-members 's|if (e > 0 \&\& !space) return;|if (e > 0 \&\& !space) { set_nickname(m, e); return; }|'
+plant nick-species-cleffa 's|: "Cleffa";|: "Cleffy";|'
+plant nick-species-clefairy 's|species == SPECIES_ID_CLEFAIRY ? "Clefairy"|species == SPECIES_ID_CLEFAIRY ? "Clefary"|'
+plant nick-species-clefable 's|species == SPECIES_ID_CLEFABLE ? "Clefable"|species == SPECIES_ID_CLEFABLE ? "Clefabel"|'
+plant nick-species-wrong-stage 's|species == SPECIES_ID_CLEFAIRY ? "Clefairy"|species == SPECIES_ID_CLEFAIRY ? "Cleffa"|'
 plant cfg-shiny 's|        m->b.shiny = true;|        m->b.shiny = false;|'
 plant fight-bell-stack 's|        bells\[e\].stack = 3;|        bells[e].stack = 2;|'
 plant fight-bell-key 's|        bells\[e\].key = "SOOTHE_BELL";|        bells[e].key = "LEFTOVERS";|'
@@ -124,7 +134,7 @@ plant ui-rare-token "$MYS"'s|screen_arg(s, pr_arg_int(rares\[k\], r));|screen_ar
 plant ui-species "$MYS"'s|pr_arg_pokemon_name(\&run->bt, names\[k\], \&run->party\[pick\[k\]\].b)|pr_arg_pokemon_name(\&run->bt, names[k], \&run->party[pick[0]].b)|' gc_mystery.c
 plant dispatch-outro 's|if (p->a == GC_ME_THE_EXPERT_POKEMON_BREEDER) { gc_breeder_outro(run, p); return; }|if (p->a == GC_ME_THE_EXPERT_POKEMON_BREEDER) return;|' gc_mystery.c
 plant leave-post 's|^    if (in->me_post.pending) {|    if (0 \&\& in->me_post.pending) {|' gc_mystery.c
-plant phase-reward 's|gc_teleport_reward(run); gc_breeder_reward(run); }|gc_teleport_reward(run); }|' gc_phases.c
+plant phase-reward 's|gc_teleport_reward(run); gc_breeder_reward(run); gc_trtest_reward(run);|gc_teleport_reward(run); gc_trtest_reward(run);|' gc_phases.c
 plant phase-game-over 's|if (!p->a \&\& gc_breeder_game_over(run)) return true;|if (0 \&\& gc_breeder_game_over(run)) return true;|' gc_phases.c
 plant pool-me-battle 's|const int pool = run->battle_type == BATTLE_TYPE_TRAINER \&\& !run->me_battle ? 1 : 0;|const int pool = run->battle_type == BATTLE_TYPE_TRAINER ? 1 : 0;|' gc_encounter.c
 plant soothe-base 's|!pr_reward_soothe_bell_gain(\&c,target,base,\&amount,NULL)|!pr_reward_soothe_bell_gain(\&c,target,3,\&amount,NULL)|' gc_soothe.c

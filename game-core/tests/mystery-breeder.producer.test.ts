@@ -61,8 +61,8 @@ it("starts on Node 22", () => {
 
 /** a Pokemon as one record: species form level boss segments ivs nature abilityIndex passive shiny variant gender friendship id hp max stats n moves */
 const dump = (e: any) => `${e.species.speciesId} ${e.formIndex} ${e.level} ${e.isBoss() ? 1 : 0} ${e.bossSegments ?? 0} ${e.ivs.join(" ")} ${e.nature} ${e.abilityIndex} ${e.passive ? 1 : 0} ${e.shiny ? 1 : 0} ${e.variant} ${e.gender} ${e.friendship} ${e.id} ${e.hp} ${e.getMaxHp()} ${e.stats.join(" ")} ${e.getMoveset().length} ${e.getMoveset().map((m: any) => m.moveId).join(" ")}`;
-/** what the encounter's config adds: the ball, the tera type, the ability, the luck, the slot, the name */
-const extra = (e: any) => `${e.pokeball} ${e.teraType} ${e.getAbility().id} ${e.luck} ${e.trainerSlot} ${e.fusionSpecies ? e.fusionSpecies.speciesId : 0} ${e.name.replace(/\s+/g, "_")}`;
+/** what the encounter's config adds: the ball, the tera type, the ability, the luck, the slot, the species name, the stored nickname (decoded; "-" = none) and the name getNameToRender shows */
+const extra = (e: any) => `${e.pokeball} ${e.teraType} ${e.getAbility().id} ${e.luck} ${e.trainerSlot} ${e.fusionSpecies ? e.fusionSpecies.speciesId : 0} ${e.name.replace(/\s+/g, "_")} ${e.nickname ? tokenOf(Buffer.from(e.nickname, "base64").toString("utf8")) : "-"} ${tokenOf(e.getNameToRender())}`;
 const tokenOf = (s: string | undefined) => (s ?? "").replace(/\s+/g, "_").replace(/\n/g, "|");
 
 for (let ci = 0; ci < configs.length; ci++) {
