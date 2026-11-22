@@ -35,6 +35,7 @@
 #include "run_settings.h"
 #include "save.h"
 #include "snd.h"
+#include "system_data.h"
 #include "ui.h"
 #include "ui_widgets.h"
 #include "party_screen.h"
@@ -124,7 +125,12 @@ int main(void) {
   cfg.entropy = (uint32_t)osGetTime();
   read_driver_file(&cfg);
   app_start(&cfg);
+  /* play time (Game Stats): the real time of each frame, folded into the profile at its next save (system_data.h) */
+  u64 last_ms = osGetTime();
   while (ui_tick()) {
+    const u64 now_ms = osGetTime();
+    sysd_play_tick(now_ms > last_ms ? (uint32_t)(now_ms - last_ms) : 0u);
+    last_ms = now_ms;
   }
   bes_shutdown();
   snd_exit();

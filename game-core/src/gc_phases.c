@@ -289,6 +289,7 @@ static void exp_phase(gc_run *run, gc_rphase *p)
 static void level_up(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
+    gc_stats_level_up(run->sys, p->c);   /* LevelUpPhase.start: gameStats.highestLevel */
     gc_mon_recalc(run, m);
     gc_event *ev = gc_ev_new(run, GC_EV_LEVEL_UP);
     if (ev) { ev->a = p->a; ev->b = p->c; ev->c = p->b; ev->hp = (int32_t)m->b.hp; }
@@ -449,6 +450,8 @@ static void battle_end(gc_run *run, gc_rphase *p)
         for (int k = 0; k < q->n[l]; k++)
             if (q->q[l][k].type == RP_BATTLE_END) victory |= q->q[l][k].a;
     gc_rq_remove_all(run, RP_BATTLE_END);
+    /* gameStats.battles++, highestEndlessWave and, for a won battle with a trainer (an encounter's trainer fight is a TRAINER battle here), trainersDefeated++ */
+    gc_stats_battle_end(run->sys, run->run.mode, run->wave, victory, run->battle_type == BATTLE_TYPE_TRAINER);
     if (victory) {
         /* currentBattle.addBattleScore(): Sine.easeIn over the turns taken */
         double mult = run->n_enemy / 2.0 + 0.5;
@@ -752,6 +755,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         gc_battle_switch_screen(run);
         return false;
     case RP_VICTORY:
+        /* VictoryPhase.start: pokemonDefeated++ except for a mystery encounter that prevents game stats updates (Training Session) */
+        if (!gc_int(run)->me_no_stats) gc_stats_pokemon_defeated(run->sys);
         victory(run, p->a);
         /* VictoryPhase.end(): the experience phases it unshifted run first, then the turn goes on where the
          * faint interrupted it */

@@ -30,18 +30,27 @@ cc_status cc_jojo_validate_in(const cc_jojo_state *s, unsigned count)
 
 cc_status cc_jojo_validate(const cc_jojo_state *s) { return cc_jojo_validate_in(s, cc_jojo_count); }
 
+int cc_jojo_in_biome(const cc_jojo_char *c, int biome)
+{
+    if (!c || biome < 0 || c->biome < 0) return 0;
+    if (c->biome == biome) return 1;
+    for (unsigned k = 0; k < c->n_more_biomes && k < CC_JOJO_MAX_MORE_BIOMES; k++)
+        if (c->more_biomes[k] == biome) return 1;
+    return 0;
+}
+
 int cc_jojo_roll_in(cc_jojo_state *s, const cc_jojo_char *chars, unsigned count, int biome)
 {
     if (!s || !chars || count > CC_JOJO_MAX_CHARS || cc_jojo_validate_in(s, count) != CC_OK) return CC_JOJO_NONE;
     if (biome < 0) return CC_JOJO_NONE;   /* biome -1 is the Pillar Men's: never dealt here */
     unsigned n = 0;
     for (unsigned i = 0; i < count; i++)
-        if (chars[i].biome == biome && !(s->used >> i & 1ull)) n++;
+        if (cc_jojo_in_biome(&chars[i], biome) && !(s->used >> i & 1ull)) n++;
     if (!n) return CC_JOJO_NONE;
     if (cc_rng_v1_pick(&s->rng_state, 100) >= CC_JOJO_P_PERCENT) return CC_JOJO_NONE;
     unsigned pick = cc_rng_v1_pick(&s->rng_state, n);
     for (unsigned i = 0; i < count; i++) {
-        if (chars[i].biome != biome || (s->used >> i & 1ull)) continue;
+        if (!cc_jojo_in_biome(&chars[i], biome) || (s->used >> i & 1ull)) continue;
         if (pick-- == 0) {
             s->used |= 1ull << i;
             s->fights++;

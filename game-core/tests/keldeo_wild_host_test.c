@@ -1,0 +1,146 @@
+/* A wild Keldeo's learned-move form change through the encounter (the comparisons against upstream are tests/keldeo_wild_diff_test.c's):
+ * gen_wild_slot makes it with the native generator and notes the phase its constructor queued, gc_new_battle_start runs it right after the "appeared" text, and
+ * the save of the encounter holds the form the Pokemon was made with, because upstream saves inside EncounterPhase.start, before that phase.
+ * The upstream behaviour checked here was observed by running it at the pin: a wild Keldeo knowing Secret Sword is made in its first form, the session is saved
+ * with that form, then "A wild Keldeo appeared!" and "Wild Keldeo changed form!" are shown and it fights in the second; two wild Keldeo change in the order they were made. */
+#include "../src/internal.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static gc_run run, loaded;
+static gc_system sys;
+static unsigned char saved[GC_SAVE_MAX];
+static int checks;
+#define CHECK(x) do { checks++; if (!(x)) { fprintf(stderr, "Keldeo wild host line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
+
+/* the first seed on which the wild enemy rolled for Beach at `wave` is a Keldeo that does (want_ss) or does not hold Secret Sword */
+static unsigned find_seed(gc_run *r, int wave, int level, bool want_ss, unsigned from)
+{
+    r->wave = wave;
+    r->biome = BIOME_ID_BEACH;
+    for (unsigned s = from; s < from + 400000; s++) {
+        char t[64];
+        snprintf(t, sizeof t, "keldeo-host-%u", s);
+        pr_seedstr seed;
+        pr_seed_from_ascii(&seed, t);
+        r->run.rng = pr_run_seed_offset_rng(&r->run, 0, &seed);
+        pr_wild_enemy_ctx wc;
+        memset(&wc, 0, sizeof wc);
+        gc_enemy_ctx(r, &wc.enemy);
+        wc.level = level;
+        pr_wild_enemy w;
+        if (pr_run_gen_wild_enemy(&r->run, &wc, &w) < 0 || w.species != SPECIES_ID_KELDEO) continue;
+        r->run.rng = pr_run_seed_offset_rng(&r->run, 0, &seed);
+        if (!gc_gen_wild(r, level)) continue;
+        bool ss = false;
+        for (int k = 0; k < r->enemy[0].b.n_moves; k++) ss |= r->enemy[0].b.moves[k] == MOVE_ID_SECRET_SWORD;
+        if (ss == want_ss) { r->run.rng = pr_run_seed_offset_rng(&r->run, 0, &seed); return s; }
+    }
+    return 0;
+}
+
+static void fresh(void)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, "keldeo-wild-host", 777);
+    run.sys = &sys;
+    run.battle_type = BATTLE_TYPE_WILD;
+}
+
+static int messages(const char *key)
+{
+    int n = 0;
+    gc_event ev;
+    while (gc_run_next_event(&run, &ev)) n += ev.kind == GC_EV_MESSAGE && !strcmp(ev.msg.key, key);
+    return n;
+}
+
+int main(void)
+{
+    fresh();
+    /* a wild Keldeo that holds Secret Sword: native moves (no stand-in), the phase noted, the form unchanged until the phase runs */
+    const unsigned s1 = find_seed(&run, 61, 80, true, 1);
+    CHECK(s1);
+    gc_internal *in = gc_int(&run);
+    CHECK(run.enemy[0].b.species == SPECIES_ID_KELDEO && run.enemy[0].b.is_boss && run.enemy[0].b.form == 0);
+    CHECK(run.stubs[GC_STUB_ENEMY_MOVESET] == 0);
+    CHECK(in->enemy_learned_form[0] == 2 && in->enemy_pre_form[0] == 0);
+    messages("none");
+    gc_enemy_apply_learned_forms(&run);
+    CHECK(run.enemy[0].b.form == 1 && run.enemy[0].b.stats[STAT_HP] > 0);
+    CHECK(in->enemy_learned_form[0] == 0 && in->enemy_pre_form[0] == 1);
+    CHECK(sys.dex[SPECIES_ID_KELDEO].seen_attr != 0 && !sys.dex[SPECIES_ID_KELDEO].caught_attr);   /* the new form is marked seen, never caught */
+    CHECK(messages("battlePokemonForm:formChange") == 1);
+    gc_enemy_apply_learned_forms(&run);   /* the phase ran once */
+    CHECK(run.enemy[0].b.form == 1 && in->enemy_pre_form[0] == 0 && messages("battlePokemonForm:formChange") == 0);
+
+    /* a wild Keldeo without Secret Sword: nothing queued, nothing changes */
+    fresh();
+    const unsigned s2 = find_seed(&run, 61, 30, false, 1);
+    CHECK(s2);
+    in = gc_int(&run);
+    CHECK(run.stubs[GC_STUB_ENEMY_MOVESET] == 0 && in->enemy_learned_form[0] == 0);
+    gc_enemy_apply_learned_forms(&run);
+    CHECK(run.enemy[0].b.form == 0 && messages("battlePokemonForm:formChange") == 0);
+
+    /* only a wild battle runs it: a trainer's battle and a mystery encounter's drop it, as upstream queues no phase for an enemy in a mystery encounter and
+     * a trainer's Pokemon set their forms in their own configs */
+    for (int k = 0; k < 2; k++) {
+        fresh();
+        CHECK(find_seed(&run, 61, 80, true, s1));
+        in = gc_int(&run);
+        CHECK(in->enemy_learned_form[0] == 2);
+        if (k) run.me_battle = true; else run.battle_type = BATTLE_TYPE_TRAINER;
+        gc_enemy_apply_learned_forms(&run);
+        CHECK(run.enemy[0].b.form == 0 && in->enemy_learned_form[0] == 0 && messages("battlePokemonForm:formChange") == 0);
+    }
+
+    /* a Keldeo that fusion or a mystery encounter makes is generated by the old paths: the generator's mystery-encounter and fusion refusals stand */
+    fresh();
+    CHECK(find_seed(&run, 61, 80, true, s1));
+    run.me_battle = true;
+    gc_mon m = run.enemy[0];
+    pr_enemy_gen g;
+    memset(&g, 0, sizeof g);
+    g.fusion_species = -1;
+    CHECK(!gc_enemy_moveset(&run, &m, &g));
+    run.me_battle = false;
+    CHECK(gc_enemy_learned_form_target(&run, &m) == 1);   /* ordinary form, Secret Sword known */
+    m.b.fusion_species = SPECIES_ID_DITTO;
+    CHECK(gc_enemy_learned_form_target(&run, &m) == -1);
+    m.b.fusion_species = 0;
+    run.run.mode = GAME_MODES_DAILY;
+    CHECK(gc_enemy_learned_form_target(&run, &m) == -1);   /* the registered change's condition: not in Daily mode */
+
+    /* the save of the encounter: upstream saves inside EncounterPhase.start, before the queued phase, so the file holds the first form; the run in memory keeps
+     * fighting in the new one, and a second save once the phase is over (enemy_pre_form cleared by the next battle) holds whatever form it has */
+    fresh();
+    CHECK(find_seed(&run, 61, 80, true, s1));
+    const gc_mon keldeo = run.enemy[0];
+    gc_run_new(&run, GAME_MODES_CLASSIC, "keldeo-wild-save", 777);
+    const char *why = NULL;
+    gc_starter starter = {.species = SPECIES_ID_BULBASAUR, .tera_type = -1};
+    memset(starter.ivs, 15, sizeof starter.ivs);
+    CHECK(gc_run_set_starters(&run, &starter, 1, &why));
+    gc_event ev;
+    while (gc_run_next_event(&run, &ev)) {}
+    CHECK(gc_run_can_save(&run));
+    run.enemy[0] = keldeo;   /* the wild Keldeo is the encounter's enemy */
+    in = gc_int(&run);
+    in->enemy_learned_form[0] = 2;
+    gc_enemy_apply_learned_forms(&run);
+    CHECK(run.enemy[0].b.form == 1 && in->enemy_pre_form[0] == 1 && gc_run_can_save(&run));
+    size_t n = gc_run_save(&run, saved, sizeof saved);
+    CHECK(n > 0);
+    CHECK(run.enemy[0].b.form == 1);   /* saving does not touch the run */
+    CHECK(gc_run_load(&loaded, saved, n, &why));
+    CHECK(loaded.enemy[0].b.species == SPECIES_ID_KELDEO && loaded.enemy[0].b.form == 0);
+    in->enemy_pre_form[0] = 0;   /* the next battle's start clears it */
+    n = gc_run_save(&run, saved, sizeof saved);
+    CHECK(n > 0 && gc_run_load(&loaded, saved, n, &why) && loaded.enemy[0].b.form == 1);
+
+    printf("Keldeo wild form change through the encounter: %d checks passed\n", checks);
+    return 0;
+}

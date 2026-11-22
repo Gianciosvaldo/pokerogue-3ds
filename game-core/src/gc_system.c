@@ -224,13 +224,30 @@ int getStarterValueFriendshipCap(int starter_cost) {
     }
 }
 
+/* The rarity counters of GameStats for one Pokemon, upstream's chain: `pokemon.species.subLegendary`, else `.legendary`, else `.mythical` (its own species,
+ * not the prevolution stage a catch is counting), and `pokemon.isShiny()` (the Pokemon's own shine or, fused, the fusion half's). `kind` picks the column:
+ * 0 seen, 1 caught, 2 hatched. */
+static void count_rarity(gc_system *sys, const gc_mon *m, int kind) {
+    uint32_t *sub[3] = {&sys->gstats.sub_legendary_seen, &sys->gstats.sub_legendary_caught, &sys->gstats.sub_legendary_hatched};
+    uint32_t *leg[3] = {&sys->gstats.legendary_seen, &sys->gstats.legendary_caught, &sys->gstats.legendary_hatched};
+    uint32_t *myth[3] = {&sys->gstats.mythical_seen, &sys->gstats.mythical_caught, &sys->gstats.mythical_hatched};
+    uint32_t *shiny[3] = {&sys->gstats.shiny_seen, &sys->gstats.shiny_caught, &sys->gstats.shiny_hatched};
+    const pr_species *sp = gc_species(m->b.species);
+    const unsigned rarity = sp ? sp->rarity : 0;
+    uint32_t *c = rarity & 1 ? sub[kind] : rarity & 2 ? leg[kind] : rarity & 4 ? myth[kind] : NULL;
+    if (c && *c < UINT32_MAX) (*c)++;
+    if ((m->b.shiny || (m->b.fusion_species && m->fusion_shiny)) && *shiny[kind] < UINT32_MAX) (*shiny[kind])++;
+}
+
 void gc_system_set_pokemon_seen(gc_system *sys, const gc_mon *m, bool increment_count, bool trainer) {
-    (void)trainer;
     if (!sys || !m || m->b.species == 0 || m->b.species > GC_MAX_SPECIES_ID) return;
     gc_dex_entry *entry = &sys->dex[m->b.species];
     entry->seen_attr |= gc_mon_dex_attr(m);
     if (increment_count) {
         entry->seen_count++;
+        if (sys->gstats.pokemon_seen < UINT32_MAX) sys->gstats.pokemon_seen++;
+        /* a trainer's Pokemon only count in pokemonSeen: the rarity and shiny counters are for the wild */
+        if (!trainer) count_rarity(sys, m, 0);
     }
 }
 
@@ -313,10 +330,15 @@ static void set_pokemon_species_caught(gc_system *sys, const gc_mon *m, uint16_t
     bool has_new_attr = (caught_attr_before & dex_attr) != dex_attr;
 
     if (cx->increment_count) {
+        /* setPokemonSpeciesCaught runs once per prevolution stage and counts at each (a caught Charizard is 3 pokemonCaught), as the pin does */
         if (cx->from_egg) {
             dex_entry->hatched_count++;
+            if (sys->gstats.pokemon_hatched < UINT32_MAX) sys->gstats.pokemon_hatched++;
+            count_rarity(sys, m, 2);
         } else {
             dex_entry->caught_count++;
+            if (sys->stats.total_catches < UINT32_MAX) sys->stats.total_catches++;
+            count_rarity(sys, m, 1);
         }
         /* a Daily Run gives candy for a catch only when it unlocks something new */
         if (!has_pre && (!cx->daily || has_new_attr || cx->from_egg)) {

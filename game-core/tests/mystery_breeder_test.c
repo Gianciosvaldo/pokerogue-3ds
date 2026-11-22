@@ -47,11 +47,13 @@ static void start(const char *seed, int wave, const int *species, int n, int lev
 }
 
 static int said_outro, said_failed, said_eggs, outro_arg_kind = -1;
+static char sent_out[PR_NICKNAME_BYTES];   /* the name "battle:trainerSendOut" gave for the trainer's first Pokemon ("" = none said yet) */
 static void drain(void)
 {
     gc_event e;
     while (gc_run_next_event(&run, &e)) {
         if (e.kind != GC_EV_MESSAGE || !e.msg.key) continue;
+        if (!strcmp(e.msg.key, "battle:trainerSendOut") && e.msg.n_args > 1 && e.msg.args[1].s) snprintf(sent_out, sizeof sent_out, "%s", e.msg.args[1].s);
         if (!strcmp(e.msg.key, "mysteryEncounters/theExpertPokemonBreeder:outro")) { said_outro++; outro_arg_kind = e.msg.n_args ? e.msg.args[0].kind : -1; }
         if (!strcmp(e.msg.key, "mysteryEncounters/theExpertPokemonBreeder:outroFailed")) said_failed++;
         if (!strcmp(e.msg.key, "mysteryEncounters/theExpertPokemonBreeder:gainedEggs")) said_eggs++;
@@ -145,6 +147,9 @@ static void test_the_win(void)
     assert(run.battle_type == BATTLE_TYPE_TRAINER && run.trainer_type == TRAINER_TYPE_EXPERT_POKEMON_BREEDER && !run.double_battle);
     assert(run.n_enemy == 3 && run.me_battle && !run.screen.can_run && !run.me_catch_allowed);
     assert(run.enemy[0].b.species == SPECIES_ID_CLEFAIRY && run.enemy[0].b.nature == NATURE_ADAMANT && run.enemy[0].b.friendship == 255);
+    /* the config's nickname: the Cleffa's, and only in the Space biome the other two (here Plains: the pool members have none); the send-out line uses it */
+    assert(!strcmp(run.enemy[0].b.nickname, "Ace") && !run.enemy[1].b.nickname[0] && !run.enemy[2].b.nickname[0]);
+    assert(!strcmp(sent_out, "Ace"));
     for (int e = 0; e < 3; e++) {
         int bells = 0;
         for (int i = 0; i < run.n_enemy_items; i++) if (run.enemy_items[i].pokemon_id == run.enemy[e].b.id && !strcmp(run.enemy_items[i].key, "SOOTHE_BELL") && run.enemy_items[i].stack == 3) bells++;
@@ -232,6 +237,30 @@ static void test_the_stages(void)
     puts("ok");
 }
 
+/* Space has three Cleffa of the wave's stage: Ace, Clefablest, and "<species name> the Great" in the species the wave gives */
+static void test_the_nicknames(void)
+{
+    puts("test_breeder_nicknames...");
+    static const int friendship[4] = {200, 50, 120, 30};
+    static const struct { int wave; const char *great; } stage[3] = {{44, "Cleffa the Great"}, {63, "Clefairy the Great"}, {75, "Clefable the Great"}};
+    for (int i = 0; i < 3; i++) {
+        sent_out[0] = 0;
+        start("brd-nick", stage[i].wave, TANKS, 4, 40, friendship);
+        run.biome = BIOME_ID_SPACE;
+        const char *why;
+        gc_choice ch = {GC_CH_MYSTERY, 0, 0, 0};
+        assert(gc_run_choose(&run, &ch, &why));
+        drain();
+        assert(run.screen.kind == GC_SCREEN_COMMAND && run.n_enemy == 3);
+        assert(!strcmp(run.enemy[0].b.nickname, "Ace"));
+        assert(!strcmp(run.enemy[1].b.nickname, "Clefablest"));
+        assert(!strcmp(run.enemy[2].b.nickname, stage[i].great));
+        assert(!strcmp(sent_out, "Ace"));
+        for (int e = 0; e < 3; e++) assert(gc_nickname_valid(run.enemy[e].b.nickname));
+    }
+    puts("ok");
+}
+
 static void test_a_lost_fight_with_nobody_else_left(void)
 {
     puts("test_breeder_loss_nobody_left...");
@@ -282,6 +311,7 @@ int main(void)
     test_the_win();
     test_the_loss();
     test_the_stages();
+    test_the_nicknames();
     test_a_lost_fight_with_nobody_else_left();
     test_a_full_party_comes_back_in_order();
     puts("all breeder host tests passed");

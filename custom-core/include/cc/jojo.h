@@ -24,6 +24,7 @@
 #define CC_JOJO_MAX_MEMBERS 6
 #define CC_JOJO_MAX_ITEMS 5
 #define CC_JOJO_NONE (-1)
+#define CC_JOJO_MAX_MORE_BIOMES 3   /* biomes a character is in besides `biome` (Ghiaccio: every ice and snow biome, lorenzo 2026-11-22) */
 
 typedef struct {
     const char *key;            /* a modifierTypes key as game-core's item tables spell it ("LEFTOVERS", "ATTACK_TYPE_BOOSTER") */
@@ -63,7 +64,14 @@ typedef struct {
     int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none, CC_JOJO_PASSIVE_MADE_IN_HEAVEN = Pucci's, CC_JOJO_PASSIVE_THE_WORLD = DIO's, CC_JOJO_PASSIVE_PERFECT_BEING = Kars's */
     uint8_t n_members;          /* 1..CC_JOJO_MAX_MEMBERS */
     cc_jojo_member member[CC_JOJO_MAX_MEMBERS];
+    /* After the members so a row that leaves them out has none (zero): */
+    uint8_t n_more_biomes;      /* 0..CC_JOJO_MAX_MORE_BIOMES: the character is dealt in these biomes too (a biome of -1 has none) */
+    int16_t more_biomes[CC_JOJO_MAX_MORE_BIOMES];
+    uint8_t doubles;            /* 1: a double battle, the members sent out in pairs (Prosciutto & Pesci, lorenzo 2026-11-22); 0: a single one */
 } cc_jojo_char;
+
+/* Whether character `c` is dealt in `biome` (its `biome` or one of its more_biomes; never for a biome below 0). */
+int cc_jojo_in_biome(const cc_jojo_char *c, int biome);
 
 extern const cc_jojo_char cc_jojo_chars[];
 extern const unsigned cc_jojo_count;

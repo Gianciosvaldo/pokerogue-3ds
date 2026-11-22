@@ -378,8 +378,17 @@ static bool gen_wild_slot(gc_run *run, int level,int idx)
     pr_wild_enemy w;
     if (pr_run_gen_wild_enemy(&run->run, &wc, &w) < 0) return false;
     gc_mon *m = &run->enemy[idx];
+    gc_internal *in = gc_int(run);
+    if (!idx) {
+        memset(in->enemy_learned_form, 0, sizeof in->enemy_learned_form);
+        memset(in->enemy_pre_form, 0, sizeof in->enemy_pre_form);
+    }
     gc_mon_new_enemy(run, m, w.species, level, &w.mon, 0);
-    if (!gc_enemy_moveset(run, m, &w.mon)) gc_port_enemy_moveset(run, m);
+    if (gc_enemy_moveset(run, m, &w.mon)) {
+        /* the form change the constructor's moveset queued (Keldeo with Secret Sword): it runs after EncounterPhase */
+        const int target = gc_enemy_learned_form_target(run, m);
+        in->enemy_learned_form[idx] = (uint8_t)(target >= 0 ? target + 1 : 0);
+    } else gc_port_enemy_moveset(run, m);
     wc.enemy.species = w.species;
     wc.enemy.level = level;
     wc.enemy.boss = w.boss;
@@ -1032,6 +1041,8 @@ void gc_new_battle_start(gc_run *run, bool reset, bool new_biome)
             gc_ev_msg(run,"battle:multiWildAppeared",2,gc_m_mon_name(run,"pokemonName1",1,0),gc_m_mon_name(run,"pokemonName2",1,1));
         else gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
+    /* the QuietFormChangePhases the wild enemies' constructors queued run right after EncounterPhase, before the player's SummonPhase */
+    gc_enemy_apply_learned_forms(run);
     /* doPostBattleCleanup's resetArenaState */
     const bool sent_out = gc_battle_setup_field(run, reset);
     if (run->battle_type == BATTLE_TYPE_TRAINER)

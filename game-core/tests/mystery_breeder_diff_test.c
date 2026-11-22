@@ -244,11 +244,13 @@ int main(int argc, char **argv)
         for (int k = 0; k < n_x && k < 3; k++) { if (k) semicolon(); read_mon(&up[k]); }
         tag("X3");
         integer();
-        struct { int ball, tera, ability, luck, slot, fusion; char name[40]; } x3[3];
+        struct { int ball, tera, ability, luck, slot, fusion; char name[40], nick[48], shown[48]; } x3[3];
         for (int k = 0; k < 3; k++) {
             if (k) semicolon();
             x3[k].ball = (int)integer(); x3[k].tera = (int)integer(); x3[k].ability = (int)integer(); x3[k].luck = (int)integer(); x3[k].slot = (int)integer(); x3[k].fusion = (int)integer();
             word(x3[k].name, sizeof x3[k].name);
+            word(x3[k].nick, sizeof x3[k].nick);    /* the stored nickname with its spaces as _, "-" = none */
+            word(x3[k].shown, sizeof x3[k].shown);  /* getNameToRender() */
         }
         tag("N");
         int status[3], ai[3];
@@ -491,6 +493,20 @@ int main(int argc, char **argv)
             EQ("ability", pr_get_ability(&m->b, false), x3[e].ability);
             EQ("luck", m->luck, x3[e].luck);
             EQ("trainer slot", m->trainer_slot, x3[e].slot);
+            {   /* the nickname the config gave (upstream stores it base64 encoded; game-core holds the text) and the name a message shows for the Pokemon */
+                char token[PR_NICKNAME_BYTES];
+                snprintf(token, sizeof token, "%s", m->b.nickname[0] ? m->b.nickname : "-");
+                for (char *c = token; *c; c++) if (*c == ' ') *c = '_';
+                texts_checked++;
+                CHECK(!strcmp(token, x3[e].nick), "enemy %d nickname is \"%s\", upstream \"%s\"", e, token, x3[e].nick);
+                const pr_msg_arg named = pr_arg_pokemon_name(&run.bt, "pokemonName", &m->b);
+                CHECK((named.s != NULL) == (x3[e].nick[0] != '-'), "enemy %d: the name shown %s a nickname, upstream's %s", e, named.s ? "is" : "is not", x3[e].nick[0] != '-' ? "is" : "is not");
+                if (named.s) {
+                    snprintf(token, sizeof token, "%s", named.s);
+                    for (char *c = token; *c; c++) if (*c == ' ') *c = '_';
+                    CHECK(!strcmp(token, x3[e].shown), "enemy %d is shown as \"%s\", upstream \"%s\"", e, token, x3[e].shown);
+                }
+            }
         }
         for (int k = 0; k < n_enemy_items; k++) {
             bool found = false;

@@ -114,6 +114,7 @@ int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor
     int n_donor_moves = 0;
     for (int i = 0; i < q->n_moves && i < 4; i++) if (q->moves[i]) donor_moves[n_donor_moves++] = q->moves[i];
 
+    gc_stats_pokemon_fused(run->sys);   /* PlayerPokemon.fuse: gameStats.pokemonFused++ */
     p->fusion_species = (uint16_t)r->fusion_species;
     p->fusion_form = r->fusion_form;
     p->fusion_gender = r->fusion_gender;

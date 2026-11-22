@@ -96,6 +96,33 @@ typedef struct {
     uint64_t total_money_earned;
 } gc_stat_milestones;
 
+/* Upstream's GameStats (src/system/game-stats.ts, 35 counters) is split in two: gc_stat_milestones above (the ones the port had first, which keep their
+ * names) and this, the rest. Which field is which upstream counter, as the Game Stats screen reads them (game/source/gamestats_screen.c):
+ *   playTime = gstats.play_time (seconds)          battles = stats.total_battles          classicSessionsPlayed = gstats.classic_sessions_played
+ *   sessionsWon = stats.classic_wins               ribbonsOwned = stats.ribbons_owned     dailyRunSessionsPlayed / Won = gstats.daily_run_sessions_*
+ *   endlessSessionsPlayed = gstats.endless_sessions_played                                 highestEndlessWave = gstats.highest_endless_wave
+ *   highestLevel / highestMoney / highestHeal = gstats.highest_*                           highestDamage = stats.highest_damage
+ *   pokemonSeen / Defeated / Hatched = gstats.pokemon_*                                    pokemonCaught = stats.total_catches
+ *   {subLegendary,legendary,mythical,shiny}Pokemon{Seen,Caught,Hatched} = gstats.<kind>_{seen,caught,hatched} (the caught ones count a catch's
+ *   prevolution stages too, as upstream does)                                              pokemonFused = gstats.pokemon_fused
+ *   trainersDefeated = gstats.trainers_defeated    eggsPulled and its four tiers = stats.*_eggs_pulled
+ * Not the same thing: stats.total_hatches counts the eggs hatched (one each: the custom achievements' hatch counts read it), gstats.pokemon_hatched is
+ * upstream's, which counts a hatched species' prevolution stages as well (a Pikachu egg is 2). stats.total_shinies, highest_wave, total_money_earned
+ * and endless_wins are from before this and nothing writes them.
+ * A section of its own in the save ("gstats"), written only once something is counted, so a profile with none saves the bytes it always saved and a
+ * save from before it loads with zeros. Counters stop at UINT32_MAX. */
+typedef struct {
+    uint32_t play_time;
+    uint32_t classic_sessions_played, daily_run_sessions_played, daily_run_sessions_won, endless_sessions_played;
+    uint32_t highest_endless_wave, highest_level, highest_money, highest_heal;
+    uint32_t pokemon_seen, pokemon_defeated, pokemon_hatched;
+    uint32_t sub_legendary_seen, sub_legendary_caught, sub_legendary_hatched;
+    uint32_t legendary_seen, legendary_caught, legendary_hatched;
+    uint32_t mythical_seen, mythical_caught, mythical_hatched;
+    uint32_t shiny_seen, shiny_caught, shiny_hatched;
+    uint32_t pokemon_fused, trainers_defeated;
+} gc_game_stats;
+
 /* What the custom achievements count (gc_achv.c; no upstream equivalent). Only ever grows. */
 typedef struct {
     uint32_t jojo_beaten;   /* bit i: the JoJo challenger i (the table's order in custom-core) has been beaten (i = 0..31) */
@@ -128,6 +155,7 @@ typedef struct {
     bool classic_voucher_unlocked; /* achievement voucher, separate from trainer unlocks */
     uint32_t egg_pity[4],unlock_pity[4];
     gc_stat_milestones stats;                          /* profile stat milestones */
+    gc_game_stats gstats;                              /* the rest of upstream's GameStats (see gc_game_stats) */
     gc_achv_progress achv;                             /* custom achievements (gc_achv.c) */
     int n_starter_nicknames;                           /* the first n entries below are in use */
     gc_starter_nickname starter_nicknames[GC_STARTER_NICKNAMES];   /* sorted by species, one per species; the rest all zero (so a profile compares and saves the same however it got here) */
@@ -148,6 +176,26 @@ const char *gc_system_starter_nickname(const gc_system *sys, uint16_t species);
  * gacha_host.c. */
 enum { GC_STARTER_NICK_OK = 0, GC_STARTER_NICK_NOT_A_STARTER, GC_STARTER_NICK_BAD_TEXT, GC_STARTER_NICK_FULL };
 int gc_system_set_starter_nickname(gc_system *sys, uint16_t species, const char *text);
+
+/* Recording upstream's GameStats (gc_gamestats.c). Each takes the profile (NULL: nothing) and is called where the upstream line it names runs. The seen,
+ * caught and hatched counters are written by gc_system_set_pokemon_seen / _caught_ex themselves (GameData.setPokemonSeen / setPokemonSpeciesCaught). */
+/* SelectStarterPhase's classicSessionsPlayed / endlessSessionsPlayed (a Classic or Challenge run, else Endless); TitlePhase's dailyRunSessionsPlayed */
+void gc_stats_session_started(gc_system *sys, int game_mode);
+/* BattleEndPhase.start: battles++; in an Endless mode highestEndlessWave = wave + 1 when that is higher; a won trainer battle: trainersDefeated++ */
+void gc_stats_battle_end(gc_system *sys, int game_mode, int wave, bool victory, bool trainer);
+/* VictoryPhase.start: pokemonDefeated++ (the caller leaves a mystery encounter that prevents game stats updates out) */
+void gc_stats_pokemon_defeated(gc_system *sys);
+/* LevelUpPhase.start: highestLevel = the level when higher */
+void gc_stats_level_up(gc_system *sys, int level);
+/* PlayerPokemon.fuse: pokemonFused++ */
+void gc_stats_pokemon_fused(gc_system *sys);
+/* MoveEffectPhase's hit of a player's Pokemon: highestDamage; PokemonHealPhase healing one: highestHeal (battle-core's pr_game_stat_fn) */
+void gc_stats_damage(gc_system *sys, int32_t damage);
+void gc_stats_heal(gc_system *sys, int32_t amount);
+/* GameData.loadSession: highestMoney = the saved run's money when higher */
+void gc_stats_run_loaded(gc_system *sys, double money);
+/* The scene's one-second timer (battle-scene.ts: gameStats.playTime++): the app adds the seconds it has run */
+void gc_stats_add_play_time(gc_system *sys, uint32_t seconds);
 
 /* Dex and starter data helpers */
 uint64_t gc_mon_dex_attr(const gc_mon *m);

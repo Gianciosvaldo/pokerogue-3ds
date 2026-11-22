@@ -54,6 +54,8 @@ static struct {
   rs_stats st;
   int scan_wave, scan_next, scan_target;
   bool scan_enabled;
+  bool scan_safari;             /* the scan in progress is the Safari Zone's: the Pokemon is run.enemy[0], and the driver goes on to the four actions */
+  int safari_scanned;           /* wave * 8 + remainingCount of the last Safari Pokemon the scanner was offered for (-1: none this run) */
   int scan_stats[12];
   uint64_t rng;                 /* the stand-in team's */
   /* the events of the current drain, handled one by one (lazily: the screen must have played the
@@ -108,6 +110,7 @@ static const gc_mon* command_mon(void){int field=G.run.screen.slot==1?1:0;const 
 static void pump(void* arg);
 static void screen_step(void);
 static void refresh_item_bars(void);
+static bool scan_safari_ivs(void);
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -132,6 +135,8 @@ static void reset_driver(void) {
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
   G.me_stage = 0;
+  G.scan_safari = false;
+  G.safari_scanned = -1;
   G.resume_wave = G.resume_foe = G.offer_look = false;
 }
 
@@ -550,7 +555,8 @@ static void wave_black(void* arg) {
     char key[64];
     snprintf(key, sizeof key, "images/trainer/custom/%s", jojo->id);
     if (img_has(key)) {
-      snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);   /* (a JoJo battle is a single one: no partner key) */
+      snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);
+      s.trainer_keys[1][0] = 0;   /* his art is the one sprite, a pair's too (Prosciutto & Pesci's double battle): no partner key */
     }
     snprintf(s.trainer_name, sizeof s.trainer_name, "%s", jojo->name);
     /* Pucci's stand (PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN): a battle reloaded after his first or second faint shows the stage he reached */
@@ -1793,6 +1799,7 @@ static void mystery_screen(void) {
       return;
     }
   }
+  if (G.run.screen.me_stage == GC_ME_STAGE_SAFARI && scan_safari_ivs()) return;   /* the scan, then the four actions (this step comes again) */
   G.me_stage = 3;
   if (!me_flow_open(&G.run, on_mystery_choice, NULL)) {
     G.me_stage = 0;
@@ -1944,6 +1951,7 @@ static void open_custom_offer(void);
 /* ScanIvsPhase is presentation only: do not answer or advance the battle command. */
 static void scan_done(void* arg) {
   (void)arg;
+  G.scan_safari = false;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   pump(NULL);
 }
@@ -1951,7 +1959,7 @@ static void scan_done(void* arg) {
 static void scan_answered(int yes, void* arg) {
   (void)arg;
   if (!yes) { scan_done(NULL); return; }
-  const pr_pokemon* p = G.run.bt.field[G.scan_target];
+  const pr_pokemon* p = G.scan_safari ? (G.run.n_enemy > 0 ? &G.run.enemy[0].b : NULL) : G.run.bt.field[G.scan_target];
   if (!p) { scan_done(NULL); return; }
   uint16_t root = gc_species_root_id(p->species);
   for (int s = 0; s < 6; s++) {
@@ -1986,6 +1994,29 @@ static bool scan_wild_ivs(void) {
     return true;
   }
   return false;
+}
+
+/* The Safari Zone: summonSafariPokemon pushes a ScanIvsPhase for the Pokemon it summoned when the player owns an IV Scanner, so the question and the
+ * assessment come before the four actions. The Pokemon is run.enemy[0] (a Safari is a MYSTERY screen, nobody is on the battle's field), and each of the
+ * three is asked about once: bait, mud and a ball that broke free show the same Pokemon again. Presentation only, as the wild scan: no command, no RNG. */
+static bool scan_safari_ivs(void) {
+  const gc_screen* s = gc_run_screen(&G.run);
+  int remaining = -1;
+  for (int i = 0; i < s->n_me_args; i++)
+    if (!strcmp(s->me_args[i].name, "remainingCount")) remaining = (int)s->me_args[i].v;
+  if (remaining < 0 || G.run.n_enemy < 1) return false;
+  const int key = G.run.wave * 8 + remaining;
+  if (key == G.safari_scanned) return false;
+  G.safari_scanned = key;
+  if (gc_item_stack(&G.run, "IV_SCANNER") <= 0) return false;
+  G.scan_safari = true;
+  G.scan_target = 2;   /* the enemy's slot: the assessment window does not read it, the host test checks it */
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  pr_msg question = pr_msg1("battle:ivScannerUseQuestion", pr_arg_pokemon(&G.run.bt, "pokemonName", &G.run.enemy[0].b));
+  put_gc_msg(&question);
+  G.st.bev++;
+  bv_play(G.ev, G.n_ev, scan_confirm, NULL);
+  return true;
 }
 
 /* CheckSwitchPhase: the question is in the events just played; Yes opens the party screen (a SWITCH screen), No (or B) goes on */
@@ -2195,6 +2226,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   bes_bind(&G.run);
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  gc_stats_run_loaded(G.run.sys, G.run.money); /* upstream's highestMoney is only ever raised when a session is loaded */
   eh_install(&G.run);   /* timed events: game-core does not save the source */
   G.run.ask_switch = cfg->ask_switch;
   ach_reset_loaded();

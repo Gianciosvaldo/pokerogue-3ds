@@ -15,8 +15,12 @@
  * eggs, and says the outro. Loss (the chosen Pokemon fainted: GameOverPhase asks onGameOver): the others come back, the chosen one's friendship is 0 and it
  * stays fainted, the rewards are cleared, and the encounter ends with the heal-only shop and the failure outro.
  *
- * Not ported: the Cleffa's nickname (Ace, Clefablest, "Clefable the Great"; the engine has no nicknames), the intro and outro speaker names, the trainer's
- * and Cleffa's sprites, the unseeded egg rolls (the new Egg's species comes from randomString(24): the eggs here are drawn from a seed of the wave). */
+ * The Cleffa's nickname (EnemyPartyConfig.nickname, which initBattleWithEnemyConfig stores as the Pokemon's nickname): the first is "Ace", and in the Space biome the
+ * second is "Clefablest" and the third "<its species name> the Great" (the pinned English locales: cleffa1Nickname, cleffa2Nickname, cleffa3Nickname). It is drawn on
+ * no RNG. The other two Pokemon of the party have none. Every message that names a Pokemon, and the battle's name boxes, show a nickname before the species name.
+ *
+ * Not ported: the intro and outro speaker names, the trainer's and Cleffa's sprites, the unseeded egg rolls (the new Egg's species comes from randomString(24): the
+ * eggs here are drawn from a seed of the wave). */
 #include "internal.h"
 #include "gc/gacha.h"
 #include <math.h>
@@ -240,6 +244,23 @@ static void set_moves(gc_mon *m, const int *mv)
     for (int k = 0; k < 4; k++) { m->b.max_pp_override[k] = -1; gc_mon_set_move(m, k, mv[k]); }
 }
 
+/* The Cleffa line's species name as the English locale writes it (pokemon:cleffa, pokemon:clefairy, pokemon:clefable): the Cleffa of a wave is one of these three,
+ * and the port's text is English only, so the name inside "{{speciesName}} the Great" is written out here. */
+static const char *cleffa_species_name(int species)
+{
+    return species == SPECIES_ID_CLEFABLE ? "Clefable" : species == SPECIES_ID_CLEFAIRY ? "Clefairy" : "Cleffa";
+}
+
+/* config.nickname: "mysteryEncounters/theExpertPokemonBreeder:cleffa1Nickname" "Ace", cleffa2Nickname "Clefablest", cleffa3Nickname "{{speciesName}} the Great" (the
+ * speciesName is the species of the wave's Cleffa, which the Pokemon is). Only the Cleffa have one: the pool members' configs name no nickname. */
+static void set_nickname(gc_mon *m, int e)
+{
+    memset(m->b.nickname, 0, sizeof m->b.nickname);
+    if (e == 0) snprintf(m->b.nickname, sizeof m->b.nickname, "Ace");
+    else if (e == 1) snprintf(m->b.nickname, sizeof m->b.nickname, "Clefablest");
+    else snprintf(m->b.nickname, sizeof m->b.nickname, "%s the Great", cleffa_species_name(m->b.species));
+}
+
 /* EnemyPokemonConfig of the party: the fields initBattleWithEnemyConfig puts on the Pokemon after it is made */
 static void apply_config(gc_run *run, int e, gc_mon *m)
 {
@@ -270,6 +291,7 @@ static void apply_config(gc_run *run, int e, gc_mon *m)
     set_moves(m, mv);
     if (e == 0) m->b.tera_type = POKEMON_TYPE_FAIRY;
     m->b.friendship = 255;
+    set_nickname(m, e);
 }
 
 static void say_trainer_fight(gc_run *run, gc_internal *in)

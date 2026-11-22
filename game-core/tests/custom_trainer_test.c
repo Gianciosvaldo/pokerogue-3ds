@@ -784,6 +784,65 @@ static void test_check(void)
     t = the_team; t.passive = -1; CHECK(gc_custom_team_check(&t, &why));
 }
 
+/* A double battle (Prosciutto & Pesci, lorenzo 2026-11-22): an ordinary single trainer wave becomes the trainer's double variant; the members
+ * alternate between the trainer's and the partner's slots, two come out, the battle is played to its end, and the double survives a save. */
+static void test_doubles(void)
+{
+    make_team();
+    the_team.name = "Prosciutto & Pesci";
+    the_team.passive = -1;
+    the_team.n = 4;
+    the_team.member[3] = the_team.member[1];
+    the_team.member[3].species = SPECIES_ID_GENGAR;
+    the_team.member[3].ability_slot = 0;
+    the_team.member[3].moves[0] = MOVE_ID_SHADOW_BALL; the_team.member[3].moves[2] = 0;
+    the_team.doubles = true;
+    answer_yes = true;
+    calls = accepted_calls = bad_calls = 0;
+    on_event = NULL;
+    new_run_in(&run, &sys, "trainer-team-1", &(gc_custom_hooks){NULL, NULL, NULL, NULL, NULL, h_trainer});
+    int steps = 0;
+    while (!accepted_calls && steps++ < 4000) CHECK(bot_step(&run, false));
+    CHECK(accepted_calls == 1 && bad_calls == 0);   /* the hook saw a single wave */
+    const int wave = run.wave;
+    CHECK(run.double_battle && run.trainer_variant == TRAINER_VARIANT_DOUBLE && run.n_enemy == 4);
+    for (int i = 0; i < 4; i++) CHECK(run.enemy[i].b.trainer_slot == (i % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER));
+    for (int k = 0; k < GC_TNAME_COUNT_; k++) CHECK(run.trainer_names[k] && !strcmp(run.trainer_names[k], "Prosciutto & Pesci"));
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) {}
+    /* the save point keeps the double */
+    CHECK(gc_run_can_save(&run));
+    static uint8_t buf[GC_SAVE_MAX];
+    const size_t n = gc_run_save(&run, buf, sizeof buf);
+    CHECK(n > 0);
+    gc_system_init_defaults(&back_sys);
+    memset(&back, 0, sizeof back);
+    const char *why = "";
+    gc_run_new(&back, GAME_MODES_CLASSIC, "other", 1);
+    back.sys = &back_sys;
+    CHECK(gc_run_load(&back, buf, n, &why));
+    CHECK(back.double_battle && back.trainer_variant == TRAINER_VARIANT_DOUBLE && back.n_enemy == 4);
+    /* two on the field, then the battle is played out: every member faints and the run moves on */
+    CHECK(run.bt.double_battle);
+    int seen_partner_field = 0;
+    for (int i = 0; i < 600 && run.wave == wave && run.screen.kind != GC_SCREEN_REWARD; i++) {
+        if (run.bt.field[2] && run.bt.field[3]) seen_partner_field++;   /* two of theirs on the field */
+        if (!bot_step(&run, false)) break;
+    }
+    CHECK(seen_partner_field > 0);
+    for (int i = 0; i < 4; i++) CHECK(run.enemy[i].b.hp <= 0);
+    /* the next trainer wave is offered as an ordinary single one again */
+    the_team.doubles = false;
+    answer_yes = false;
+    for (int i = 0; i < 4000 && calls < 2; i++) if (!bot_step(&run, false)) break;
+    CHECK(calls >= 2 && bad_calls == 0);
+    gc_custom_team t = the_team;
+    t.doubles = true; t.n = 1;
+    CHECK(!gc_custom_team_check(&t, &why));   /* a double needs two members */
+    t.n = 2;
+    CHECK(gc_custom_team_check(&t, &why));
+}
+
 int main(void)
 {
     test_check();
@@ -796,6 +855,7 @@ int main(void)
     test_levels();
     test_save_load();
     test_refused();
+    test_doubles();
     test_made_in_heaven();
     test_the_world();
     test_perfect_being();

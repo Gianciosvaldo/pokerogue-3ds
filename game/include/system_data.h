@@ -45,6 +45,16 @@ sysd_status sysd_state(char why[SYSD_WHY_LEN]);
  * over and is not reported as a failure at every save. False when the SD card refused the write; the next call retries it. */
 bool sysd_save(void);
 
+/* ---- play time (upstream gameStats.playTime, one tick per second of play) ---- */
+/* Longest single step counted; a longer one (the console asleep, a long SD load) is cut to this. */
+#define SYSD_PLAY_TICK_MAX_MS 5000u
+/* Adds `ms` of play. It stays here and is folded into the profile (gstats.play_time) only inside sysd_save, after the gate: the
+ * profile transaction (profile_tx.c) hashes the profile at begin and again at execute, so it must not tick while a pull is open.
+ * Ignored until the profile was read. Call it once per frame with the real time that passed. */
+void sysd_play_tick(uint32_t ms);
+/* Seconds played: the profile's plus what is pending (what the Game Stats screen shows). */
+uint32_t sysd_play_seconds(void);
+
 /* ---- for the profile transaction owner (profile_tx.c, task C08) ---- */
 
 /* The canonical bytes of the system data as it is now (gc_system_save): what a save would write. 0: it could not be serialized (the

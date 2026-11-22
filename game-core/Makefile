@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_chest.c src/gc_strong.c src/gc_teleport.c src/gc_fiery.c src/gc_breed.c src/gc_breeder.c src/gc_superfan.c src/gc_dance.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_events.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_challenge.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darby.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c src/gc_avarice.c src/gc_safari.c src/gc_winstrate.c src/gc_trtest.c src/gc_clown.c src/gc_weird.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_chest.c src/gc_strong.c src/gc_teleport.c src/gc_fiery.c src/gc_breed.c src/gc_breeder.c src/gc_superfan.c src/gc_dance.c src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_events.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_challenge.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_delibirdy.c src/gc_pillar.c src/gc_darby.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c src/gc_avarice.c src/gc_safari.c src/gc_winstrate.c src/gc_trtest.c src/gc_clown.c src/gc_weird.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_gamestats.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -656,6 +656,16 @@ $(BUILD)/dextest: tests/dextest.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN
 $(BUILD)/dexupdatetest: tests/dexupdatetest.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/gamestats_diff_test: tests/gamestats_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/gamestats_host_test: tests/gamestats_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+test: gamestats-host-test
+gamestats-host-test: $(BUILD)/gamestats_host_test
+	$(BUILD)/gamestats_host_test
+
 $(BUILD)/level_evo_test: tests/level_evo_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
@@ -1259,6 +1269,17 @@ keldeo-host-test: $(BUILD)/keldeo_host_test
 $(BUILD)/keldeo_host_test: tests/keldeo_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: keldeo-host-test
+
+all: $(BUILD)/keldeo_wild_diff_test
+$(BUILD)/keldeo_wild_diff_test: tests/keldeo_wild_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+all: $(BUILD)/keldeo_wild_host_test
+test: keldeo-wild-host-test
+keldeo-wild-host-test: $(BUILD)/keldeo_wild_host_test
+	$(BUILD)/keldeo_wild_host_test
+$(BUILD)/keldeo_wild_host_test: tests/keldeo_wild_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: keldeo-wild-host-test
 
 all: $(BUILD)/keldeo_learn_test
 $(BUILD)/keldeo_learn_test: tests/keldeo_learn_test.c $(BATTLE_CORE)/build/wide-substitute-frame.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
