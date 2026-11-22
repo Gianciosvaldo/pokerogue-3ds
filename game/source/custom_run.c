@@ -411,6 +411,7 @@ bool cr_jojo_team(int idx, gc_custom_team* team) {
                 : c->passive == CC_JOJO_PASSIVE_PERFECT_BEING ? GC_CUSTOM_PASSIVE_PERFECT_BEING
                                                              : c->passive;
   team->n = c->n_members;
+  team->doubles = c->doubles != 0;
   for (int i = 0; i < c->n_members && i < GC_CUSTOM_MAX_TEAM; i++) {
     const cc_jojo_member* m = &c->member[i];
     gc_custom_team_member* t = &team->member[i];

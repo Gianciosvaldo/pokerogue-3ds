@@ -220,6 +220,7 @@ bool gc_custom_team_check(const gc_custom_team *team, const char **why)
     if (!why) why = &dummy;
     *why = "";
     if (!team) { *why = "no team"; return false; }
+    if (team->doubles && team->n < 2) { *why = "a double battle needs two members"; return false; }
     if (!team->name || !team->name[0] || strlen(team->name) >= sizeof((gc_internal *)0)->custom_trainer_name) { *why = "trainer name"; return false; }
     if (team->n < 1 || team->n > GC_CUSTOM_MAX_TEAM) { *why = "team size"; return false; }
     if ((team->passive < -1 && team->passive != GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN && team->passive != GC_CUSTOM_PASSIVE_THE_WORLD
@@ -299,7 +300,7 @@ bool gc_custom_build_trainer(gc_run *run, const gc_custom_team *team)
         g.luck = t->shiny ? t->variant + 1 : 0;
         g.friendship = -1;
         gc_mon *m = &built[e];
-        gc_mon_new_enemy(run, m, t->species, lvl, &g, TRAINER_SLOT_TRAINER);
+        gc_mon_new_enemy(run, m, t->species, lvl, &g, team->doubles && e % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER);
         m->b.n_moves = 0;
         for (int k = 0; k < 4; k++) m->b.moves[k] = 0;
         int slot = 0;
@@ -311,6 +312,10 @@ bool gc_custom_build_trainer(gc_run *run, const gc_custom_team *team)
     }
     for (int e = 0; e < team->n; e++) run->enemy[e] = built[e];
     run->n_enemy = team->n;
+    if (team->doubles) {   /* the ordinary trainer's double variant, as gen_trainer makes one: is_double for the AI, both trainers' slots, two on the field */
+        run->double_battle = true;
+        run->trainer_variant = TRAINER_VARIANT_DOUBLE;
+    }
     in->custom_team = *team;
     in->custom_team_on = true;
     snprintf(in->custom_trainer_name, sizeof in->custom_trainer_name, "%s", team->name);

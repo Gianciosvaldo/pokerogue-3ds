@@ -555,7 +555,8 @@ static void wave_black(void* arg) {
     char key[64];
     snprintf(key, sizeof key, "images/trainer/custom/%s", jojo->id);
     if (img_has(key)) {
-      snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);   /* (a JoJo battle is a single one: no partner key) */
+      snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);
+      s.trainer_keys[1][0] = 0;   /* his art is the one sprite, a pair's too (Prosciutto & Pesci's double battle): no partner key */
     }
     snprintf(s.trainer_name, sizeof s.trainer_name, "%s", jojo->name);
     /* Pucci's stand (PR_CUSTOM_PASSIVE_MADE_IN_HEAVEN): a battle reloaded after his first or second faint shows the stage he reached */

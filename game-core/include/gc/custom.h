@@ -114,6 +114,8 @@ typedef struct {
     int16_t passive;             /* an AbilityId every member has as its passive, -1 = none, GC_CUSTOM_PASSIVE_MADE_IN_HEAVEN = Pucci's, GC_CUSTOM_PASSIVE_THE_WORLD = DIO's, GC_CUSTOM_PASSIVE_PERFECT_BEING = Kars's */
     uint8_t n;                   /* 1..GC_CUSTOM_MAX_TEAM */
     gc_custom_team_member member[GC_CUSTOM_MAX_TEAM];
+    bool doubles;                /* the wave becomes a double battle (the ordinary trainer's double variant): the members are sent out in pairs, the
+                                  * even ones as the trainer's, the odd ones as the partner's; at least 2 members (Prosciutto & Pesci, lorenzo 2026-11-22) */
 } gc_custom_team;
 
 /* A Pokemon of a faint, by value (nothing points into the run). */
