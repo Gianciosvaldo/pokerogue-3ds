@@ -163,6 +163,13 @@ static struct {
 static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
 static bool scanner_fixture;
 static int n_scanner_yes, n_scanner_no, n_scanner_windows;
+/* RUNTEST_SAFARI (with RUNTEST_SCANNER): the Safari Zone is forced from wave 5, and the scanner is offered for each Pokemon it summons, once */
+static bool safari_forced;
+static int n_safari_yes, n_safari_no, n_safari_keys, n_safari_windows, n_safari_rng_checks;
+static struct { uint32_t id; int wave, remaining; } safari_keys[4096];
+static bool safari_rng_pending;                 /* a Safari scan question was answered and the four actions have not been reached yet */
+static pr_rng safari_rng_run, safari_rng_battle; /* the run's streams when the question was asked */
+extern void (*me_fake_before_open)(void);
 static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls, n_reordered_trays;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
@@ -234,6 +241,16 @@ static char first_violation[300];
 
 static void bad(const char* fmt, ...);
 #define BAD(...) bad(__VA_ARGS__)
+
+/* The four actions are about to be answered: whatever the question and its window did in between (a Yes, a No, a window), the streams are as they were. */
+static void safari_actions_reached(void) {
+  if (!safari_rng_pending) return;
+  safari_rng_pending = false;
+  n_safari_rng_checks++;
+  const gc_run* r = rs_run();
+  if (memcmp(&safari_rng_run, &r->run.rng, sizeof safari_rng_run) || memcmp(&safari_rng_battle, &r->bt.battle_rng, sizeof safari_rng_battle))
+    BAD("the Safari Zone's IV scanner question advanced an RNG stream");
+}
 
 static int verbose_bad;
 static char trail[120][80];
@@ -791,6 +808,18 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         n_scanner_windows++;
         if (!e->stats || e->battler < 2 || e->battler > 3) BAD("invalid IV scanner window");
         else for (int k = 0; k < 12; k++) if (e->stats[k] < 0 || e->stats[k] > 31) BAD("invalid scanner IV");
+        {   /* in a Safari Zone the assessment is of the Pokemon in front of the player, with its own IVs */
+          const gc_run* sr = rs_run();
+          if (e->stats && sr->screen.kind == GC_SCREEN_MYSTERY && sr->screen.me_stage == GC_ME_STAGE_SAFARI) {
+            n_safari_windows++;
+            if (sr->n_enemy != 1) BAD("a Safari IV window with %d enemies", sr->n_enemy);
+            else for (int k = 0; k < 6; k++) if (e->stats[k] != sr->enemy[0].b.ivs[k]) BAD("the Safari IV window shows %d for stat %d, the Pokemon has %d", e->stats[k], k, sr->enemy[0].b.ivs[k]);
+          } else if (e->stats && e->battler >= 2 && e->battler <= 3) {   /* a wild battle's: the Pokemon on the field in that slot (a double's second foe is not the first) */
+            const pr_pokemon* fp = sr->bt.field[e->battler];
+            if (!fp) BAD("an IV scanner window for an empty slot %d", e->battler);
+            else for (int k = 0; k < 6; k++) if (e->stats[k] != fp->ivs[k]) BAD("the IV window of slot %d shows %d for stat %d, the Pokemon has %d", e->battler, e->stats[k], k, fp->ivs[k]);
+          }
+        }
         break;
       case BEV_LEVEL_UP:
         /* "X grew to Lv. N!" and the stat window: the gains can't be negative at a higher level of the same species */
@@ -1914,14 +1943,28 @@ static bool step(void) {
       }
     }
     const gc_run* scan_run = rs_run();
-    bool scan = scanner_fixture && scan_run->screen.kind == GC_SCREEN_COMMAND;
+    /* the Safari Zone's own question (ScanIvsPhase after summonSafariPokemon): the actions screen is up behind it, a Pokemon at most once, never without a scanner */
+    const bool safari_q = scan_run->screen.kind == GC_SCREEN_MYSTERY && scan_run->screen.me_stage == GC_ME_STAGE_SAFARI;
+    bool scan = scanner_fixture && (scan_run->screen.kind == GC_SCREEN_COMMAND || safari_q);
     pr_rng scan_rng = scan_run->run.rng, scan_battle_rng = scan_run->bt.battle_rng;
-    if (scan) {
+    if (safari_q && scanner_fixture) { safari_rng_pending = true; safari_rng_run = scan_rng; safari_rng_battle = scan_battle_rng; }
+    if (safari_q && !scanner_fixture) BAD("the IV Scanner was offered in a Safari Zone without one");
+    if (safari_q && scanner_fixture) {
+      int remaining = -1;
+      for (int k = 0; k < scan_run->screen.n_me_args; k++) if (!strcmp(scan_run->screen.me_args[k].name, "remainingCount")) remaining = (int)scan_run->screen.me_args[k].v;
+      if (remaining < 1 || remaining > 3 || scan_run->n_enemy != 1) BAD("a Safari scan question with %d left and %d enemies", remaining, scan_run->n_enemy);
+      for (int k = 0; k < n_safari_keys; k++)
+        if (safari_keys[k].id == scan_run->enemy[0].b.id && safari_keys[k].wave == scan_run->wave && safari_keys[k].remaining == remaining)
+          BAD("the Safari Pokemon with %d left on wave %d was asked about twice", remaining, scan_run->wave);
+      if (n_safari_keys < 4096) safari_keys[n_safari_keys++] = (typeof(safari_keys[0])){scan_run->enemy[0].b.id, scan_run->wave, remaining};
+      if (yes) n_safari_yes++; else n_safari_no++;
+    } else if (scan) {
       if (scan_run->battle_type != BATTLE_TYPE_WILD) BAD("IV scanner prompted in a trainer/mystery battle");
       if (yes) n_scanner_yes++; else n_scanner_no++;
     }
     f(yes, W.confirm_arg);
-    if (scan && (memcmp(&scan_rng,&scan_run->run.rng,sizeof scan_rng) ||
+    /* the Safari question is checked when the four actions are about to be answered (safari_actions_reached): a No goes on to them inside f() */
+    if (scan && !safari_q && (memcmp(&scan_rng,&scan_run->run.rng,sizeof scan_rng) ||
                  memcmp(&scan_battle_rng,&scan_run->bt.battle_rng,sizeof scan_battle_rng)))
       BAD("IV scanner advanced a battle RNG stream");
     return true;
@@ -2253,6 +2296,9 @@ int main(int argc, char** argv) {
   }
   /* RUNTEST_DARBY (with RUNTEST_CUSTOM): the playtest hook forces D'Arby from wave 5 (rundriver "mystery=darby,5") so his table is played */
   if (getenv("RUNTEST_DARBY")) gc_debug_force_mystery(GC_ME_DARBY, 5);
+  /* RUNTEST_SAFARI: the same hook forces the Safari Zone from wave 5 (rundriver "mystery=safariZone,5"), where the question for each Pokemon is checked */
+  safari_forced = getenv("RUNTEST_SAFARI") != NULL;
+  if (safari_forced) { gc_debug_force_mystery(GC_ME_SAFARI_ZONE, 5); me_fake_before_open = safari_actions_reached; }
   const char* custom_mode = getenv("RUNTEST_CUSTOM");
   custom_on = custom_mode && *custom_mode;
   custom_strong = custom_on && !strcmp(custom_mode, "strong");
@@ -2461,8 +2507,12 @@ int main(int argc, char** argv) {
   printf("DNA Splicers: %d party screens, %d fusions, %d backed out; %d evolutions of a fused member's fusion half\n", n_fuse_opens, n_fusions, n_fuse_back, n_evo_fusion);
   if (scanner_fixture) {
     printf("IV scanner: %d accepted, %d declined, %d windows\n",n_scanner_yes,n_scanner_no,n_scanner_windows);
-    if (!n_scanner_yes || !n_scanner_no || n_scanner_windows!=n_scanner_yes)
+    if (!n_scanner_yes || !n_scanner_no || n_scanner_windows!=n_scanner_yes+n_safari_yes)
       BAD("IV scanner missing confirmation or window coverage");
+    if (safari_forced) {
+      printf("IV scanner in the Safari Zone: %d accepted, %d declined, %d windows, %d RNG checks at the four actions\n", n_safari_yes, n_safari_no, n_safari_windows, n_safari_rng_checks);
+      if (!n_safari_yes || !n_safari_no || n_safari_windows != n_safari_yes || n_safari_rng_checks != n_safari_yes + n_safari_no) BAD("the Safari Zone's IV scanner question or window was not covered");
+    }
   }
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");

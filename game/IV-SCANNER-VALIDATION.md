@@ -29,8 +29,30 @@ JOBS=2 game/tests/run_host_tests.sh
 ```
 
 Scope: canonical positive IV Scanner stock on ordinary wild encounter entry,
-including loaded entries. Trainer battles are excluded. Mystery encounters have
-an additional native scanner callback that remains separate work. The native
+including loaded entries. Trainer battles are excluded. A mystery encounter's
+wild or boss fight is a wild battle in game-core (`run->me_battle`), so it is
+scanned like one, and a trainer fight inside an encounter is not (upstream's
+`MysteryEncounterBattlePhase.endBattleSetup` skips TRAINER_BATTLE); the Safari
+Zone is the one encounter that scans without a battle, see below. The native
 HUD's small improved-IV icons require a separate HUD feature; this fix supplies
 the missing prompt and assessment window. It does not establish full battle-core
 completion.
+
+## The Safari Zone
+
+`summonSafariPokemon` pushes a `ScanIvsPhase` for each Pokemon it summons when the player has an IV Scanner, before the four actions are offered. A Safari
+is a MYSTERY screen with nobody on the battle's field, so the driver (`scan_safari_ivs` in `run_screen.c`) asks for `run.enemy[0]` when the actions
+screen first comes up for a Pokemon (keyed by wave and the `remainingCount` the screen carries, so bait, mud and a ball that broke free do not ask again),
+with the same question, the same assessment window and the same ratings as above. It answers nothing to game-core: no command, no RNG, no dex unlock.
+
+```sh
+make -C game/tests runtest
+RUNTEST_SCANNER=1 RUNTEST_SAFARI=1 game/tests/build/runtest 60 0
+RUNTEST_SAFARI=1 game/tests/build/runtest 60 0
+python3 game/tests/check_safari_scan_faults.py
+```
+
+`RUNTEST_SAFARI` forces the Safari Zone from wave 5 (the playtest hook of `gc_debug_force_mystery`). With a scanner the test checks that each Pokemon is
+asked about once, that the window shows that Pokemon's own IVs and that no RNG stream moves; without one it checks that nothing is asked.
+Not run on a console or in Azahar. Upstream's own TODO in `summonSafariPokemon` says the scan is placed apart from the encounter text because awaiting that text shows
+it without the Pokemon on screen; the port asks once the Pokemon and the actions screen are up, which is not a replay of that ordering.

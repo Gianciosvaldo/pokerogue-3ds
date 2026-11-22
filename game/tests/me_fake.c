@@ -11,9 +11,14 @@ void me_flow_intro(const gc_run* run, char* out, size_t n) {
   if (n) out[0] = 0;
 }
 
+/* Set by the run driver test: called as the options are about to be answered (the fake answers at once, so this is the last moment before the
+ * run is stepped again; the Safari Zone's IV Scanner question is checked here for not having touched the run's RNG streams). */
+void (*me_fake_before_open)(void);
+
 bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void* arg), void* arg) {
   const gc_screen* s = gc_run_screen(run);
   if (s->kind != GC_SCREEN_MYSTERY || s->n_options < 1) return false;
+  if (me_fake_before_open) me_fake_before_open();
   me_choice c;
   memset(&c, 0, sizeof c);
   for (int i = 0; i < s->n_options && i < 8; i++)
