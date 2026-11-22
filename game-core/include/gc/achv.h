@@ -35,7 +35,8 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 154   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", then D'Arby's two */
+#define GC_ACHV_COUNT 162   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
+                              * batch's "Defeat X" and "Flawless X" in pairs (ids stay under 192, where upstream's own start) */
 #define GC_ACHV_TWENTY_FACES 117
 #define GC_ACHV_DARBY 152   /* beating D'Arby the Gambler (Standard or All-In: a won hand or a caught cheat) */
 #define GC_ACHV_DARBY_REMATCH 153   /* beating D'Arby's rematch, the battle for the sealed souls (lorenzo 2026-11-18) */
@@ -48,16 +49,20 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
        /* the second batch (2026-11-15) */
        GC_JOJO_CAESAR, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY, GC_JOJO_NARANCIA, GC_JOJO_BRUNO,
        GC_JOJO_ABBACCHIO, GC_JOJO_WEATHER, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO, GC_JOJO_SHIGECHI, GC_JOJO_JOSUKE, GC_JOJO_ROHAN,
-       GC_JOJO_GIORNO, GC_JOJO_COUNT };
+       GC_JOJO_GIORNO,
+       /* the third batch (lorenzo 2026-11-22) */
+       GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO, GC_JOJO_JODIO, GC_JOJO_JONATHAN, GC_JOJO_COUNT };
 
 /* The achievement of beating one challenger ("Defeat X"): ids 0..16 for the first 17 (the table index), then GC_ACHV_JOJO2_FIRST + (index - 17)
- * for the second batch, because the ids of the others (the sets, the runs, ...) were taken before it existed and a profile keeps them by id.
+ * for the second batch, because the ids of the others (the sets, the runs, ...) were taken before it existed and a profile keeps them by id;
+ * the third batch on (GC_JOJO_GHIACCIO..) takes GC_ACHV_JOJO3_FIRST + 2 * (index - GC_JOJO_GHIACCIO), its "Flawless X" the id after it.
  * -1 for an index outside the table. */
 #define GC_ACHV_JOJO2_FIRST 100
+#define GC_ACHV_JOJO3_FIRST 154
 int gc_achv_jojo_id(int jojo);
 
 /* The achievement of beating one challenger with none of your Pokemon fainting in that battle ("Flawless X"): GC_ACHV_FLAWLESS_FIRST + the table
- * index, for all of the table (-1 for an index outside it). */
+ * index for the first 34, the id after the "Defeat X" for the third batch on (-1 for an index outside the table). */
 #define GC_ACHV_FLAWLESS_FIRST 118
 int gc_achv_flawless_id(int jojo);
 

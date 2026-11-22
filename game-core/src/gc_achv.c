@@ -37,12 +37,12 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Battle Tendency", "Defeat Joseph, Caesar, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse and Iggy.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan and Shigechi.", J, V(GC_VOUCHER_REGULAR, 2)},
-    {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio and Narancia.", J, V(GC_VOUCHER_PLUS, 1)},
+    {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio, Narancia, Ghiaccio and Prosciutto & Pesci.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stone Ocean", "Defeat Jolyne, Pucci and Weather Report.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Steel Ball Run", "Defeat Valentine, Gyro, Johnny, Sandman and Diego.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Five Faces", "Defeat 5 different challengers.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Ten Faces", "Defeat 10 different challengers.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Every Face", "Defeat all 34 different challengers.", J, SHINY(2)},
+    {"Every Face", "Defeat all 38 different challengers.", J, SHINY(2)},
     {"Hat Trick", "Defeat 3 challengers in one run.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Hundred Duels", "Win 100 challenger battles.", J, EGG(3)},
     {"Untouched", "Defeat a challenger without any of your Pokemon fainting.", J, V(GC_VOUCHER_PLUS, 1)},
@@ -179,6 +179,15 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     /* 152: lorenzo 2026-11-18, one achievement for beating D'Arby at either wager; his reward is two Regular vouchers */
     {"Gambler's Downfall", "Beat D'Arby the Gambler at Soul Poker.", RUN, V(GC_VOUCHER_REGULAR, 2)},
     {"Debt Paid in Full", "Win your Pokemon back from D'Arby the Gambler.", RUN, V(GC_VOUCHER_REGULAR, 2)},   /* lorenzo's title; the Flawless JoJo reward */
+    /* 154..: the third batch (lorenzo 2026-11-22), "Defeat X" then "Flawless X" for each challenger in table order (GC_ACHV_JOJO3_FIRST) */
+    {"It's Pronounced Venezia!", "Defeat Ghiaccio.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Absolute Zero Casualties", "Defeat Ghiaccio without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Cut the Line, Beat the Heat", "Defeat Prosciutto & Pesci.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Not a Scratch, Not a Wrinkle", "Defeat Prosciutto & Pesci without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Weathered the November Storm", "Defeat Jodio Joestar.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Not a Drop, Not a Dime", "Defeat Jodio Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Beyond the Sunlight Yellow Overdrive", "Defeat Jonathan Joestar.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"Unscathed by the Sunlight's Ripple", "Defeat Jonathan Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -198,19 +207,29 @@ static uint64_t clean_mask(const gc_achv_progress *a) { return ((uint64_t)a->joj
 int gc_achv_jojo_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
+    if (jojo >= GC_JOJO_GHIACCIO) return GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
     return jojo < GC_JOJO_CAESAR ? jojo : GC_ACHV_JOJO2_FIRST + (jojo - GC_JOJO_CAESAR);
 }
 
-int gc_achv_flawless_id(int jojo) { return jojo >= 0 && jojo < GC_JOJO_COUNT ? GC_ACHV_FLAWLESS_FIRST + jojo : -1; }
+int gc_achv_flawless_id(int jojo)
+{
+    if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
+    return jojo >= GC_JOJO_GHIACCIO ? GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO) + 1 : GC_ACHV_FLAWLESS_FIRST + jojo;
+}
 
 /* the challenger an achievement id is the "Flawless X" of, or -1 */
-static int flawless_of_id(int id) { return id >= GC_ACHV_FLAWLESS_FIRST && id < GC_ACHV_FLAWLESS_FIRST + GC_JOJO_COUNT ? id - GC_ACHV_FLAWLESS_FIRST : -1; }
+static int flawless_of_id(int id)
+{
+    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2 : -1;
+    return id >= GC_ACHV_FLAWLESS_FIRST && id < GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO ? id - GC_ACHV_FLAWLESS_FIRST : -1;
+}
 
 /* the challenger an achievement id is the "Defeat X" of, or -1 */
 static int jojo_of_id(int id)
 {
     if (id >= 0 && id < GC_JOJO_CAESAR) return id;
-    if (id >= GC_ACHV_JOJO2_FIRST && id < GC_ACHV_JOJO2_FIRST + (GC_JOJO_COUNT - GC_JOJO_CAESAR)) return GC_JOJO_CAESAR + (id - GC_ACHV_JOJO2_FIRST);
+    if (id >= GC_ACHV_JOJO2_FIRST && id < GC_ACHV_JOJO2_FIRST + (GC_JOJO_GHIACCIO - GC_JOJO_CAESAR)) return GC_JOJO_CAESAR + (id - GC_ACHV_JOJO2_FIRST);
+    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? -1 : GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
     return -1;
 }
 
@@ -241,7 +260,7 @@ static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO
                                JB(GC_JOJO_VANILLAICE) | JB(GC_JOJO_HOLHORSE) | JB(GC_JOJO_IGGY);
 static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI);
 static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO) | JB(GC_JOJO_GIORNO) | JB(GC_JOJO_BRUNO) |
-                               JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA);
+                               JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA) | JB(GC_JOJO_GHIACCIO) | JB(GC_JOJO_PROSCIUTTO);
 static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI) | JB(GC_JOJO_WEATHER);
 static const uint64_t SET_P7 = JB(GC_JOJO_VALENTINE) | JB(GC_JOJO_GYRO) | JB(GC_JOJO_JOHNNY) | JB(GC_JOJO_SANDMAN) | JB(GC_JOJO_DIEGO);
 
