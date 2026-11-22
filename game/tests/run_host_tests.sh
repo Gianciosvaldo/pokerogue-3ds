@@ -36,6 +36,10 @@ done
 # Cancel. Keep that coverage assertion and every original case.
 echo "== runtest (IV Scanner encounter prompt and assessment) 350"
 RUNTEST_SCANNER=1 build/runtest 350 0 || failed="$failed runtest-scanner"
+echo "== runtest (IV Scanner in the Safari Zone: forced from wave 5, asked once per Pokemon, the window with its own IVs, no RNG drawn) 60"
+RUNTEST_SCANNER=1 RUNTEST_SAFARI=1 build/runtest 60 0 || failed="$failed runtest-safari-scanner"
+echo "== runtest (the Safari Zone without a scanner: nothing is asked) 60"
+RUNTEST_SAFARI=1 build/runtest 60 0 || failed="$failed runtest-safari-no-scanner"
 echo "== runtest (Check Team form toggle and reward return) 350"
 RUNTEST_FORM=1 build/runtest 350 0 || failed="$failed runtest-form"
 echo "== runtest (Check Team form change, animation and reward return) 350"
