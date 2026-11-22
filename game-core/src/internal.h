@@ -128,6 +128,11 @@ typedef struct {
     bool custom_offering, custom_offer_reset, custom_offer_new_biome;
     uint16_t enemy_start_species[6];   /* the enemy party's species and forms when the battle began (gc_custom_actor.start_*); not saved */
     uint8_t enemy_start_form[6];
+    /* Keldeo's form change on learning Secret Sword (SpeciesFormChangeMoveLearnedTrigger), for a wild enemy (src/gc_enemy_form.c). enemy_learned_form[i] = the form
+     * + 1 that the QuietFormChangePhase queued by the enemy's constructor changes it to (0 = none); gc_new_battle_start runs it once EncounterPhase is over. enemy_pre_form[i]
+     * = the form + 1 the enemy had before that phase ran: upstream saves the session inside EncounterPhase.start, before the phase, so gc_run_save writes that form.
+     * Neither is saved. */
+    uint8_t enemy_learned_form[6], enemy_pre_form[6];
     /* Fun and Games!: the minigame is running (the encounter's misc.turnsRemaining and its handlers). Not saved: the only
      * save point is the encounter's start, before the option is chosen */
     struct { bool active; int8_t turns_remaining; } fg;
@@ -319,6 +324,11 @@ int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor
 bool gc_reward_add_pokeballs(gc_run *run, const char *key);
 void gc_reward_gain(gc_run *run, const char *key);
 void gc_reward_change_form(gc_run *run, int party, int form, int half);   /* half 1: the fusion's second species */
+
+/* ---- a wild enemy's learned-move form change (src/gc_enemy_form.c) ---- */
+int gc_enemy_learned_form_target(gc_run *run, const gc_mon *m);   /* the form Pokemon.generateAndPopulateMoveset's trigger queues a QuietFormChangePhase for, -1 = none */
+void gc_enemy_quiet_form_change(gc_run *run, int idx, int form);  /* QuietFormChangePhase.start for the wild enemy `idx`, on the field and visible */
+void gc_enemy_apply_learned_forms(gc_run *run);                   /* the queued phases of the wild enemies, once EncounterPhase is over */
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */

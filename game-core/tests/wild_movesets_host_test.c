@@ -83,7 +83,7 @@ static void unsupported(void)
         case 10:g.fusion_form++;break;
         case 11:g.fusion_ability_index=(g.fusion_ability_index+1)%3;break;
         case 12:g.fusion_gender=g.fusion_gender==0?1:0;break;
-        case 13:m.b.species=SPECIES_ID_KELDEO;break;
+        case 13:run.run.mode=GAME_MODES_CHALLENGE;break;   /* a Keldeo is generated since its form change was ported (keldeo_wild_host_test.c); a mode the constructor is not validated for is not */
         case 14:m.b.fusion_species=0;break;
         }
         gc_mon before=m;pr_rng rng=run.run.rng;
