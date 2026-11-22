@@ -14,12 +14,14 @@
 #include "ui_text.h"
 #include "ui_widgets.h"
 
+#define TITLE_MAX 16 /* entries: Continue and fifteen more (the list scrolls from the eleventh) */
+
 static struct {
   title_args args;
   optlist list;
-  char labels[8][48];
-  const char* label_ptrs[8];
-  title_choice choice[8];
+  char labels[TITLE_MAX][48];
+  const char* label_ptrs[TITLE_MAX];
+  title_choice choice[TITLE_MAX];
   char biome[48];
 } T;
 
@@ -225,6 +227,8 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_CAPSULE;
   snprintf(T.labels[n], sizeof T.labels[n], "Achievements"); /* the custom content's own entry: no upstream string */
   T.choice[n++] = TITLE_ACHIEVEMENTS;
+  i18n_t(T.labels[n], sizeof T.labels[n], "menu:stats", NULL); /* upstream's own string for the Game Stats entry */
+  T.choice[n++] = TITLE_STATS;
   snprintf(T.labels[n], sizeof T.labels[n], "Football Playoff");
   T.choice[n++] = TITLE_FOOTBALL;
   for (int i = 0; i < n; i++) T.label_ptrs[i] = T.labels[i];

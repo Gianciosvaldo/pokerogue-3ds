@@ -360,12 +360,43 @@ profile_tx_test: build/profile_tx_test
 .PHONY: profile_tx_test
 
 # the play-time counter of Game Stats (system_data.c: sysd_play_tick, folded into the profile at sysd_save); make play_time_test && build/play_time_test
-PLAYT_SRCS := play_time_test.c ../source/system_data.c $(APP)/source/save.c $(CORE_SRCS)
-build/play_time_test: $(PLAYT_SRCS)
+PLAYT_OWN := play_time_test.c ../source/system_data.c $(APP)/source/save.c
+build/play_time_test: $(PLAYT_OWN) build/ptx_core.a
 	@mkdir -p build
-	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PLAYT_SRCS) -lm -o $@
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PLAYT_OWN) build/ptx_core.a -lm -o $@
 play_time_test: build/play_time_test
 .PHONY: play_time_test
+
+# what the Game Stats screen shows (source/gamestats_model.c) against upstream's own handler (fixtures/game-stats-screen.native.txt.gz, made by
+# gamestats-screen.producer.test.ts); make gamestats_model_test && build/gamestats_model_test fixtures/game-stats-screen.native.txt.gz
+GSM_OWN := gamestats_model_test.c ../source/gamestats_model.c
+build/gamestats_model_test: $(GSM_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(GSM_OWN) build/ptx_core.a -lm -o $@
+gamestats_model_test: build/gamestats_model_test
+.PHONY: gamestats_model_test
+# the same test built over another copy of the model (gamestats_model_plant.sh): make GSM_MODEL=<model.c> BUILD_OUT=<exe> <exe>
+GSM_MODEL ?= ../source/gamestats_model.c
+BUILD_OUT ?= build/gamestats_model_test
+ifneq ($(BUILD_OUT),build/gamestats_model_test)
+$(BUILD_OUT): gamestats_model_test.c $(GSM_MODEL) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined gamestats_model_test.c $(GSM_MODEL) build/ptx_core.a -lm -o $@
+endif
+
+# the Game Stats screen (source/gamestats_screen.c) over the real model and a fake drawing layer; make gamestats_screen_test && build/gamestats_screen_test
+GSS_OWN := gamestats_screen_test.c ../source/gamestats_screen.c ../source/gamestats_model.c
+build/gamestats_screen_test: $(GSS_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(GSS_OWN) build/ptx_core.a -lm -o $@
+gamestats_screen_test: build/gamestats_screen_test
+.PHONY: gamestats_screen_test
+# the same test built over another copy of the screen (gamestats_screen_plant.sh): make GSS_SCREEN=<screen.c> GSS_OUT=<exe> <exe>
+GSS_SCREEN ?= ../source/gamestats_screen.c
+GSS_OUT ?= build/gamestats_screen_test
+ifneq ($(GSS_OUT),build/gamestats_screen_test)
+$(GSS_OUT): gamestats_screen_test.c $(GSS_SCREEN) ../source/gamestats_model.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined gamestats_screen_test.c $(GSS_SCREEN) ../source/gamestats_model.c build/ptx_core.a -lm -o $@
+endif
 
 # the same test with game-core compiled once into an archive: only the files under test are rebuilt (profile_tx_mutations.py uses it)
 PTX_OWN := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c

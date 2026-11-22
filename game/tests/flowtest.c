@@ -31,6 +31,7 @@
 #include "radar_screen.h"
 #include "history_screen.h"
 #include "achv_screen.h"
+#include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "result_screen.h"
 #include "run_history.h"
@@ -188,6 +189,14 @@ static int n_achv;
 void achv_screen_open(const achv_args* a) {
   AV = *a;
   n_achv++;
+}
+
+/* the Game Stats screen: records how it was opened */
+static gamestats_args GV;
+static int n_gamestats;
+void gamestats_screen_open(const gamestats_args* a) {
+  GV = *a;
+  n_gamestats++;
 }
 
 /* the achievement bar: what the app asked it to tell (achv_toast.h) */
@@ -491,6 +500,13 @@ int main(void) {
   CHECK(n_achv == 1 && AV.sys == sysd_get() && AV.on_exit, "Achievements opens the list over the profile");
   CHECK(n_toasts == 0, "nothing new was unlocked, so no bar (%d)", n_toasts);
   AV.on_exit(AV.arg);
+  CHECK(n_title == 3, "leaving it shows the title again");
+  n_title--;
+
+  /* the title's Stats opens the Game Stats over the player's profile, with the device's play time, and B comes back to the title */
+  T.on_choose(TITLE_STATS, T.arg);
+  CHECK(n_gamestats == 1 && GV.sys == sysd_get() && GV.play_seconds == sysd_play_seconds && GV.on_exit, "Stats opens the Game Stats over the profile");
+  GV.on_exit(GV.arg);
   CHECK(n_title == 3, "leaving it shows the title again");
   n_title--;
 
