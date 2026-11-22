@@ -359,6 +359,14 @@ build/profile_tx_test: $(PTX_SRCS)
 profile_tx_test: build/profile_tx_test
 .PHONY: profile_tx_test
 
+# the play-time counter of Game Stats (system_data.c: sysd_play_tick, folded into the profile at sysd_save); make play_time_test && build/play_time_test
+PLAYT_SRCS := play_time_test.c ../source/system_data.c $(APP)/source/save.c $(CORE_SRCS)
+build/play_time_test: $(PLAYT_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PLAYT_SRCS) -lm -o $@
+play_time_test: build/play_time_test
+.PHONY: play_time_test
+
 # the same test with game-core compiled once into an archive: only the files under test are rebuilt (profile_tx_mutations.py uses it)
 PTX_OWN := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
 CORE_HEADERS := $(wildcard $(GC)/include/gc/*.h $(RC)/include/pr/*.h $(RW)/include/pr/*.h $(BC)/include/pr/*.h $(AI)/include/pr/*.h $(BC)/gen/out/*.h)

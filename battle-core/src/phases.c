@@ -2270,6 +2270,8 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     if (d.softened && final > 0) perfect_being_phase(bt, e, pr_battler_index(bt, target), 3);   /* Perfect Being (custom content) */
     r.critical = crit;
     if (final <= 0) return r;
+    /* if (user.isPlayer()): validateAchvs(DamageAchv, new NumberHolder(finalDmg)) and gameStats.highestDamage, before the turn data */
+    if (user->is_player && bt->game_stat) bt->game_stat(bt, PR_GAME_STAT_DAMAGE, (int32_t)final, bt->game_stat_ctx);
     user->total_damage_dealt += (int32_t)final;
     user->single_hit_damage_dealt = (int32_t)final;
     target->summon_hit_count++;
@@ -4123,6 +4125,8 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
             double room = max_hp(p) - p->hp;
             p->hp += (int32_t)(amount < room ? amount : room);
             pr_event_add(bt, e, PR_EV_HP, h->battler, -1, 0, (int32_t)amount, NULL);
+            /* if (pokemon.isPlayer()): validateAchvs(HealAchv, healAmount) and gameStats.highestHeal (a negative amount took the branch above) */
+            if (p->is_player && bt->game_stat) bt->game_stat(bt, PR_GAME_STAT_HEAL, (int32_t)amount, bt->game_stat_ctx);
         }
     }
     if ((f & PR_HEAL_STATUS) && p->status) {

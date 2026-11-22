@@ -468,6 +468,7 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
     }
     if (cost > (double)gc_starter_budget(run->run.mode) + 1e-9) { *why = "starterSelectUiHandler:cost"; return false; }
     gc_starters_build_party(run, starters, n);
+    gc_stats_session_started(run->sys, run->run.mode);   /* SelectStarterPhase: classicSessionsPlayed / endlessSessionsPlayed, just before newBattle */
     memset(&run->screen, 0, sizeof run->screen);
     gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
     gc_run_until_screen(run);
