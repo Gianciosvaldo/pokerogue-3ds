@@ -30,6 +30,7 @@ int main(void){
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].candy_count>=2*n);
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].egg_moves==(n==2?3:15));
   CHECK(sys.stats.total_hatches==n);
+  {static const gc_egg none;for(int i=0;i<n;i++)CHECK(!memcmp(&sys.eggs[i],&none,sizeof none));}   /* the slots the hatched eggs left are empty */
   size_t count=gc_system_save(&sys,saved,sizeof saved);CHECK(count>0);
   CHECK(gc_system_load(&loaded,saved,count,&why));
   CHECK(loaded.n_eggs==0&&loaded.stats.total_hatches==n);

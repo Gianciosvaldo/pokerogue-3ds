@@ -54,6 +54,7 @@ int gc_system_hatch_ready_eggs(gc_run *run)
          * versions hatch here too. The profile and run share the normal save. */
         memmove(&sys->eggs[i],&sys->eggs[i+1],(sys->n_eggs-i-1)*sizeof sys->eggs[0]);
         sys->n_eggs--;
+        memset(&sys->eggs[sys->n_eggs],0,sizeof sys->eggs[0]);   /* the slot the last egg moved out of: its bytes are not a second copy of an egg (the system data round trip compares the whole array) */
         uint8_t previous[6];memcpy(previous,sys->dex[mon.b.species].ivs,6);
         gc_system_set_pokemon_caught_ex(sys,&mon,true,true,false,false,NULL);
         gc_system_update_species_dex_ivs(sys,mon.b.species,mon.b.ivs);

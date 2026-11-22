@@ -1866,6 +1866,30 @@ test: debug-force-mystery-test
 debug-force-mystery-test: $(BUILD)/debug_force_mystery_test
 	$(BUILD)/debug_force_mystery_test
 .PHONY: debug-force-mystery-test
+# an encounter's one save, at its first question: the host test (every upstream encounter the fixed run can be given) and the soak (a save and a load at every
+# encounter's question over whole runs, forced one type at a time: the digests with and without the round trips must be the same, and the question must have been saved)
+all: $(BUILD)/mystery_save_test
+$(BUILD)/mystery_save_test: tests/mystery_save_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mystery_save_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+test: mystery-save-test
+mystery-save-test: $(BUILD)/mystery_save_test
+	$(BUILD)/mystery_save_test
+test: me-save-soak
+ME_SOAK_TYPES ?= 31
+ME_SOAK_RUNS ?= 12
+ME_SOAK_MIN ?= 300
+me-save-soak: $(BUILD)/gcplay
+	@fail=0; total=0; for t in $$(seq 0 $$(( $(ME_SOAK_TYPES) - 1 ))); do \
+	  a=$$($(BUILD)/gcplay --auto $(ME_SOAK_RUNS) --jobs 8 --force-mystery $$t | grep -E "digest|STUCK|CRASH|TIMEOUT"); \
+	  c=$$($(BUILD)/gcplay --auto $(ME_SOAK_RUNS) --jobs 8 --save-test --force-mystery $$t); \
+	  b=$$(echo "$$c" | grep -E "digest|STUCK|CRASH|TIMEOUT"); \
+	  n=$$(echo "$$c" | grep -o "[0-9]* of them" | cut -d' ' -f1); \
+	  [ "$$a" = "$$b" ] || { echo "encounter $$t: the runs changed with a save and a load at its question"; echo "$$a"; echo "$$b"; fail=1; }; \
+	  echo "$$a" | grep -q "STUCK\|CRASH\|TIMEOUT" && { echo "encounter $$t: a run got stuck"; fail=1; }; \
+	  total=$$(( total + n )); done; \
+	  echo "encounter-question saves: $$total over $(ME_SOAK_TYPES) encounters x $(ME_SOAK_RUNS) runs"; \
+	  [ $$fail = 0 ] && [ $$total -ge $(ME_SOAK_MIN) ]
+.PHONY: mystery-save-test me-save-soak
 all: $(BUILD)/mystery_clown_test
 $(BUILD)/mystery_clown_test: tests/mystery_clown_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

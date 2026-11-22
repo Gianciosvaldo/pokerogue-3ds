@@ -515,7 +515,8 @@ bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
 const pr_msg *gc_run_refusal_message(const gc_run *run);
 
 /* Saving, at upstream's save point: from GC_EV_SAVE_POINT (the start of an encounter) until the battle's
- * first turn runs, while its first COMMAND screen waits (gc_run_can_save). The buffer holds everything
+ * first turn runs, while its first COMMAND screen waits (gc_run_can_save); a mystery encounter has no battle there, so its save is while its first MYSTERY
+ * question waits and nothing has been chosen, and a load comes back to that question. The buffer holds everything
  * needed to come back to that screen with the run as it was; gc_run_save returns the bytes written (0 =
  * not allowed now, or the buffer is too small; GC_SAVE_MAX always fits). gc_run_load replaces the whole
  * run and queues the scene's events (WAVE, TRAINER, SUMMON) before the COMMAND screen; false (and *why)

@@ -881,6 +881,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         s->kind = GC_SCREEN_MYSTERY;
         s->mystery_type = (int8_t)p->a;
         s->mystery_tier = (int8_t)p->b;
+        in->me_question = true;
         gc_mystery_setup_screen(run);
         return false;
     }
@@ -1046,7 +1047,11 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     case RP_MYSTERY:
     case RP_SAFARI:   /* the Safari Zone's four actions wait on the phase that summoned the Pokemon */
         if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
-        return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
+        {
+            const bool more = gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
+            if (*ok) gc_int(run)->me_question = false;   /* an answer ends the encounter's save point */
+            return more;
+        }
     case RP_ME_BEFORE_REWARDS:
         return gc_superfan_tutor_choose(run, c, why, ok);
     case RP_ME_POST:

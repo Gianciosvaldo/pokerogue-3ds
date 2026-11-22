@@ -6,6 +6,11 @@
  * runs, while the COMMAND screen of turn 1 waits. A load comes back to that screen with the run exactly
  * as it was, so what follows is what would have followed without the reload.
  *
+ * A mystery encounter has no battle at its start, and upstream saves there too (before the question is shown): gc_run_can_save is true while the encounter's first question
+ * waits (in->me_question) and nothing has been chosen, and the save carries a one-byte "me_question" section. It holds the run as it was when the encounter began: a load queues the same events and RP_MYSTERY, which sets the screen up again, so the question and what follows
+ * are what they would have been. (The screen's setup draws nothing from the run's RNG in any upstream encounter, so the saved RNG is the one the setup found; tests/mystery_save_test.c compares
+ * the RNG of a loaded question with the saved run's for every encounter, and an encounter whose setup drew would fail it.) The encounter's later screens, and its battle, are not saved: its one save is that one.
+ *
  * The format is made to outlive changes to battle-core's and game-core's structs: every value is stored
  * under its field's name (a hash) and size, and a load takes each field it knows from a field the save
  * has with the same name and size. A field the save doesn't have, or has with another size (the struct
@@ -75,6 +80,10 @@ typedef struct {
 } sv_run;
 typedef struct { uint8_t double_battle; } sv_encounter;
 static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
+/* the battle-core mirror of the run's RNG as the last battle left it (stale at an encounter's question, and read nowhere before the next sync, but it is part of the state a
+ * run holds there: the stress diagnostic folds it, and a loaded question must equal the fresh one) */
+typedef struct { pr_rng rng; uint8_t live; } sv_me_btrng;
+static const sfield me_btrng_fields[]={SF(sv_me_btrng,rng),SF(sv_me_btrng,live)};
 static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fusion_species),
     SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
 /* What a DNA Splicers fusion keeps of the second member (gc_mon's fusion_shiny, fusion_variant, fusion_luck): a section of its own, so a
@@ -486,6 +495,15 @@ bool gc_run_can_save(const gc_run *run)
         && run->wave >= 1 && (run->terminal_result == 2 ? run->wave >= 200 && !run->run.has_challenges : run->wave <= 200)
         && run->screen.kind == (run->terminal_result == 2 ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER);
     gc_internal *in = gc_int((gc_run *)run);
+    if (in->me_question) {
+        /* an encounter's first question, before anything is chosen: upstream saves at the encounter's start, and the screen is set up again from there */
+        const gc_rqueue *mq = &in->rq;
+        if (!in->at_save_point || !run->in_battle || run->screen.kind != GC_SCREEN_MYSTERY || run->mystery_type < 0 || run->mystery_type >= GC_ME_COUNT
+            || run->mystery_tier < GC_ME_COMMON || run->mystery_tier > GC_ME_ROGUE || run->screen.mystery_type != run->mystery_type
+            || run->battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER || mq->current.type != RP_MYSTERY || run->n_enemy < 0 || run->n_enemy > 6) return false;
+        for (int l = 0; l < mq->n_levels; l++) if (mq->n[l]) return false;
+        return true;
+    }
     if (!in->at_save_point || !run->in_battle || run->screen.kind != GC_SCREEN_COMMAND) return false;
     /* only the turn this COMMAND screen belongs to may be waiting: the load starts it again */
     const gc_rqueue *q = &in->rq;
@@ -631,6 +649,16 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     const uint8_t multi_lens_storage = 1;
     put(&w,&multi_lens_storage,1);
     section_end(&w,s);
+    if (in->me_question) {   /* optional marker: only a save made at an encounter's first question has it (an older build refuses such a save) */
+        s = section_start(&w,"me_question");
+        const uint8_t me_question = 1;
+        put(&w,&me_question,1);
+        section_end(&w,s);
+        s = section_start(&w,"me_btrng");
+        sv_me_btrng btrng = {bt->rng, bt->rng_live};
+        put_block(&w,me_btrng_fields,NF(me_btrng_fields),&btrng,sizeof btrng,1);
+        section_end(&w,s);
+    }
     s = section_start(&w,"encounter");
     sv_encounter encounter={run->double_battle};
     put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
@@ -1162,6 +1190,10 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     }
     if (counter_schema.bad) { *why = "the save is damaged"; return false; }
     if (r.bad || get_block(&r, run_fields, NF(run_fields) - !counter_fields, &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
+    /* a save made at an encounter's first question: the marker is exactly one byte, 1 */
+    const reader meq = section(&body, "me_question");
+    const bool me_q = !meq.bad;
+    if (me_q && (meq.n != 1 || meq.p[0] != 1)) { *why = "the stored encounter question is damaged"; return false; }
     uint8_t frozen_marker; memcpy(&frozen_marker, &v.frozen_names, 1);
     if (frozen_marker > 1) { *why = "the stored names are damaged"; return false; }
     sv_terminal terminal={0};reader tr=section(&body,"terminal");
@@ -1173,7 +1205,12 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     if (!tr.bad && (get_block(&tr,terminal_fields,NF(terminal_fields),&terminal,sizeof terminal,1,&dropped)!=1
         || tr.bad || tr.pos!=tr.n || terminal.terminal_result<1 || terminal.terminal_result>2)) { *why="the terminal save is damaged";return false; }
     if (terminal.terminal_result && (v.in_battle || v.mode!=GAME_MODES_CLASSIC || (terminal.terminal_result==2&&(v.wave<200||v.has_challenges))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
-    if ((!v.in_battle && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
+    if (me_q && (!v.in_battle || terminal.terminal_result || v.battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER || v.mystery_type < 0 || v.mystery_type >= GC_ME_COUNT
+                 || v.mystery_tier < GC_ME_COMMON || v.mystery_tier > GC_ME_ROGUE || v.me_battle || v.mode != GAME_MODES_CLASSIC)) {
+        *why = "the stored encounter question is damaged";
+        return false;
+    }
+    if ((!v.in_battle && !me_q && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < (me_q ? 0 : 1) || v.n_enemy > 6
         || v.n_items < 0 || v.n_items > PR_MAX_MODIFIERS || v.n_enemy_items < 0 || v.n_enemy_items > PR_MAX_MODIFIERS
         || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
         || v.seed_len > 64 || v.wave_seed_len > 64 || v.n_arena_tags < 0 || v.n_arena_tags > PR_MAX_ARENA_TAGS
@@ -1452,6 +1489,36 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         in->rq.waiting=true;in->rq.current=gc_rp(RP_GAME_OVER,terminal.terminal_result==2,0,0);
         r=section(&body,"stats");if(!r.bad)get_block(&r,stat_fields,NF(stat_fields),run,sizeof *run,1,&dropped);
         run->load_dropped=dropped;gc_items_to_battle(run);return true;
+    }
+    if (me_q) {
+        /* back to the encounter's first question: the events gc_new_battle queued for it, then RP_MYSTERY sets the screen up again */
+        gc_event *me_ev = gc_ev_new(run, GC_EV_WAVE);
+        if (me_ev) { me_ev->a = run->wave; me_ev->b = run->biome; me_ev->c = BATTLE_TYPE_MYSTERY_ENCOUNTER; }
+        me_ev = gc_ev_new(run, GC_EV_MYSTERY);
+        if (me_ev) { me_ev->a = run->mystery_type; me_ev->b = run->mystery_tier; me_ev->c = run->wave; }
+        r = section(&body, "stats");
+        if (!r.bad) get_block(&r, stat_fields, NF(stat_fields), run, sizeof *run, 1, &dropped);
+        run->load_dropped = dropped;
+        bt->battle_rng = v.battle_rng;   /* what the last battle left, stale at the question and read nowhere before the next battle seeds it, but part of the state */
+        bt->battle_rng_live = v.battle_rng_live;
+        for (int k = 0; k < run->n_party; k++) bt->party[0][k] = &run->party[run->party_order[k]].b;   /* the party as the last battle left battle-core's list */
+        bt->n_party[0] = (uint8_t)run->n_party;
+        gc_items_to_battle(run);
+        reader brr = section(&body, "me_btrng");
+        sv_me_btrng btrng;
+        memset(&btrng, 0, sizeof btrng);
+        if (!brr.bad && get_block(&brr, me_btrng_fields, NF(me_btrng_fields), &btrng, sizeof btrng, 1, &dropped) == 1 && !brr.bad && btrng.live <= 1 && isfinite(btrng.rng.c) && isfinite(btrng.rng.s0)
+            && isfinite(btrng.rng.s1) && isfinite(btrng.rng.s2) && isfinite(btrng.rng.n)) {
+            bt->rng = btrng.rng;
+            bt->rng_live = btrng.live != 0;
+        }
+        gc_ai_reset(run);   /* the AI's seed is set by a battle's start; an encounter's fight does not reset it, so it is the run's seed from here */
+        gc_weird_reset_ranges();   /* Weird Dream's BST ranges widen in place and upstream keeps them for the page's life: a load is a new page load, and the plan is drawn again */
+        in->at_save_point = true;
+        gc_ev_new(run, GC_EV_SAVE_POINT);
+        gc_rq_unshift(run, gc_rp(RP_MYSTERY, run->mystery_type, run->mystery_tier, 0));
+        gc_run_until_screen(run);
+        return true;
     }
     gc_trainer_names(run);
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
