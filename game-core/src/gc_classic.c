@@ -18,10 +18,10 @@ static bool count_root(gc_system *s,int root) {
 }
 bool gc_classic_finish(gc_run *run,bool victory,const char **why) {
  if(why)*why="unsupported Classic terminal context";
- if(!run||run->run.mode!=GAME_MODES_CLASSIC||run->wave<1||run->terminal_result>2||run->n_party<1||run->n_party>6)return false;
+ if(!run||!gc_is_classic_mode(run->run.mode)||run->wave<1||run->terminal_result>2||run->n_party<1||run->n_party>6)return false;
  if(run->terminal_result)return true; /* local exactly-once safety, not source phase idempotence */
  if(!victory){run->terminal_result=1;return true;}
- if(run->wave<200||run->run.has_challenges||!run->sys)return false;
+ if(run->wave<200||gc_challenges_unplayed(run)||!run->sys)return false;
  bool used[6]={0},unevolved=false,fused=false;
  for(int k=0;k<run->n_party;k++){
   int j=run->party_order[k];if(j<0||j>=run->n_party||used[j])return false;used[j]=true;
@@ -31,6 +31,7 @@ bool gc_classic_finish(gc_run *run,bool victory,const char **why) {
   if(p->fusion_species){const pr_species *fusion=gc_species(p->fusion_species);if(!fusion||p->fusion_form>=fusion->nforms)return false;}
   unevolved|=evolves(p->species);fused|=p->fusion_species!=0;
  }
+ const uint64_t ribbons=gc_challenge_ribbon_flags(run);
  static gc_system next;next=*run->sys;
  if(next.stats.classic_wins==UINT32_MAX)return false;
  bool first=!next.achievement_flags[GC_ACHV_CLASSIC_VICTORY]&&!next.stats.classic_wins;
@@ -44,7 +45,8 @@ bool gc_classic_finish(gc_run *run,bool victory,const char **why) {
   int species=run->party[run->party_order[k]].b.species;
   int root=gc_species_root_id(species),starter=gc_species_root_for_starter(species);
   if(!count_root(&next,root)||(root!=starter&&!count_root(&next,starter)))return false;
-  for(int depth=0;species>0&&depth<10;depth++){next.dex[species].ribbon_flags|=GC_RIBBON_CLASSIC;species=gc_species_prevolution(species);}
+  /* awardRibbons: Classic's ribbon, or in Challenge Mode the challenges' (none for Moveset Randomizer), to the Pokemon and its prevolutions */
+  for(int depth=0;species>0&&depth<10;depth++){next.dex[species].ribbon_flags|=ribbons;species=gc_species_prevolution(species);}
  }
  next.unlocks.endless_mode=next.unlocks.mini_black_hole=true;
  next.unlocks.spliced_endless_mode|=fused;next.unlocks.eviolite|=unevolved;

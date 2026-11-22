@@ -3,7 +3,7 @@
 #include "internal.h"
 static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target,bool battle_gain) {
  memset(c,0,sizeof *c);c->run=&run->run;
- if(run->run.has_challenges||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY
+ if(gc_challenges_unplayed(run)||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY
     ||storage<0||storage>=run->n_party||run->n_items<0||run->n_items>GC_MAX_ITEMS
     ||run->n_items>PR_REWARD_MAX_OWNED||run->n_items>PR_MAX_MODIFIERS)return false;
  bool used[PR_REWARD_MAX_PARTY]={0};*target=-1;
@@ -84,7 +84,7 @@ bool gc_soothe_friendship(gc_run *run,int storage,int base) {
  if(run->n_items<0||run->n_items>GC_MAX_ITEMS)return false;
  for(int j=0;j<run->n_items;j++)any|=!strcmp(run->items[j].key,"SOOTHE_BELL");
  if(!any){gc_system_add_friendship(run->sys,run,&run->party[storage],base,false);return true;}
- if(run->run.mode!=GAME_MODES_CLASSIC&&run->run.mode!=GAME_MODES_ENDLESS)return false;
+ if(!gc_is_classic_mode(run->run.mode)&&run->run.mode!=GAME_MODES_ENDLESS)return false;
  /* Friendship selects by stable holder ID; fusion does not alter the Bell gain. */
  static pr_reward_ctx c;int target;double amount;
  if(!context(run,&c,storage,&target,true)||!pr_reward_soothe_bell_gain(&c,target,base,&amount,NULL))return false;

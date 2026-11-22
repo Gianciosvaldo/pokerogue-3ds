@@ -446,6 +446,7 @@ void gc_starters_build_party(gc_run *run, const gc_starter *starters, int n)
             plain.fusion_species = -1;
             if (!constructor_tera_draw(run, &plain, run->party[i].b.species)) gc_stub(run, GC_STUB_UNPORTED_ENEMY);
         }
+        gc_challenge_modify_starter(run, &run->party[i]);   /* applyChallenges(STARTER_MODIFY, starterPokemon) */
         run->party_order[i] = (int8_t)i;
     }
     run->n_party = n;
@@ -457,15 +458,28 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
     if (!why) why = &dummy;
     if (run->screen.kind != GC_SCREEN_STARTERS) { *why = "not on the starter screen"; return false; }
     if (n < 1 || n > 6) { *why = "starterSelectUiHandler:invalidParty"; return false; }
+    const gc_challenge_set *set = run->run.mode == GAME_MODES_CHALLENGE ? &run->challenges : NULL;
     double cost = 0;
+    bool any_valid = false;
     for (int i = 0; i < n; i++) {
         double c = 0;
         if (!gc_nickname_valid(starters[i].nickname)) { *why = "the starter's nickname is not valid"; return false; }
-        if (!gc_starter_is_available(run->sys, &starters[i], &c, why)) return false;
+        if (!gc_starter_is_available_set(run->sys, set, &starters[i], &c, why)) return false;
         for (int k = 0; k < i; k++)
             if (starters[k].species == starters[i].species) { *why = "the same species twice"; return false; }
+        if (set) {
+            /* checkStarterValidForChallenge: the party select takes a starter that is valid, or (next to a valid one) one an evolution of
+             * which is, and starts only with at least one valid starter in the party (isPartyValid) */
+            const bool valid = gc_challenge_starter_valid(set, starters[i].species, starters[i].form, false);
+            if (!valid && !gc_challenge_starter_valid(set, starters[i].species, starters[i].form, true)) {
+                *why = "a starter this challenge does not allow";
+                return false;
+            }
+            any_valid |= valid;
+        }
         cost += c;
     }
+    if (set && !any_valid) { *why = "starterSelectUiHandler:invalidParty"; return false; }
     if (cost > (double)gc_starter_budget(run->run.mode) + 1e-9) { *why = "starterSelectUiHandler:cost"; return false; }
     gc_starters_build_party(run, starters, n);
     memset(&run->screen, 0, sizeof run->screen);

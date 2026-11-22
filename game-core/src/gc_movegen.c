@@ -741,7 +741,7 @@ bool gc_generate_moveset_player(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mo
 
 static bool generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera, bool player)
 {
-    if (run->run.has_challenges) return false;
+    if (gc_challenges_unplayed(run)) return false;
     /* a player's Pokemon is not a battle trainer's: these guards do not apply to it (its pools are made a trainer's below, in c.trainer) */
     const bool trainer = !player && (m->b.has_trainer || m->trainer_slot || m->b.trainer_slot);
     if (trainer && plain_grunt(run->trainer_type)
@@ -757,7 +757,7 @@ static bool generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *
         || (plain_egg_gym(run->trainer_type) && run->double_battle && run->trainer_type != TRAINER_TYPE_TATE
             && run->trainer_type != TRAINER_TYPE_LIZA)
         || m->b.fusion_species || (m->b.is_boss && !stats_of && !run->me_battle) || m->b.passive_flag || m->b.terastallized
-        || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
+        || m->b.n_tags || m->b.on_field || !gc_is_classic_mode(run->run.mode)
         || run->trainer_type <= 0 || run->trainer_type >= gc_mg_trainer_egg_count
         || (run->trainer_type >= TRAINER_TYPE_RIVAL && run->trainer_type <= TRAINER_TYPE_RIVAL_6))) return false;
     const pr_species *sp = gc_species(m->b.species);

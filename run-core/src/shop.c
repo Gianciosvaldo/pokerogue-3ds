@@ -50,7 +50,8 @@ int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_s
         {PR_SHOP_SACRED_ASH, 10, 6},
     };
     if (wave % 10 == 0) return 0;
-    if (run->has_challenges) run->unported |= PR_RUN_UNPORTED_CHALLENGES;
+    if (run->has_challenges && (run->mode != GAME_MODES_CHALLENGE || pr_run_has_unported_challenges(run)))
+        run->unported |= PR_RUN_UNPORTED_CHALLENGES;   /* the SHOP hook is Limited Support's; the ported challenges have none */
     double rows = ceil((wave + 10 > 0 ? wave + 10 : 0) / 30.0);
     int n = 0;
     for (int i = 0; i < PR_SHOP_ITEM_COUNT_; i++) {
@@ -66,7 +67,8 @@ int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_s
 /* gameMode.getShopStatus(): !hasNoShop (the daily run has no shop), then the challenges' SHOP hook */
 bool pr_run_get_shop_status(pr_run *run)
 {
-    if (run->has_challenges) run->unported |= PR_RUN_UNPORTED_CHALLENGES;
+    if (run->has_challenges && (run->mode != GAME_MODES_CHALLENGE || pr_run_has_unported_challenges(run)))
+        run->unported |= PR_RUN_UNPORTED_CHALLENGES;   /* the SHOP hook is Limited Support's; the ported challenges have none */
     return run->mode != GAME_MODES_DAILY;
 }
 

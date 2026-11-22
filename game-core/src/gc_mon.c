@@ -114,7 +114,8 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
     p->friendship = sp ? sp->base_friendship : 0;
     p->is_player = true;
     p->passive_flag = s->passive;
-    p->tera_type = (int8_t)(s->tera_type >= 0 ? s->tera_type : f->type1);
+    /* initBattle: a starter without a tera type gets starterPokemon.species.type1, the species' own, not the form's */
+    p->tera_type = (int8_t)(s->tera_type >= 0 ? s->tera_type : gc_form(s->species, 0)->type1);
     m->pokerus = s->pokerus;
     m->met_wave = -1;
     m->met_level = level;   /* Pokemon's constructor: metLevel = level, metBiome = -1 before a battle, metSpecies */
@@ -782,8 +783,8 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
 }
 
 /* ---- starters ---- */
-/* getRunValueLimit (starter-select-ui-utils.ts): 15 in Endless and Spliced Endless, 10 otherwise (the STARTER_POINTS challenges
- * aren't ported) */
+/* getRunValueLimit (starter-select-ui-utils.ts): 15 in Endless and Spliced Endless, 10 otherwise, before the STARTER_POINTS challenge
+ * (gc_challenge_starter_budget) */
 int gc_starter_budget(int mode) { return mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS ? 15 : 10; }
 
 /* speciesDataRegistry.getStarterCost (gen/out/gc_starters.c); -1 = not a starter species */
@@ -825,10 +826,19 @@ double gc_starter_value(const gc_system *sys, int species)
  *   :717-723  nature against getNaturesForAttr(natureAttr): bit (nature + 1), game-data.ts:1989-1997
  *   :2219     passive: only when passiveAttr has UNLOCKED (1); starter-select-ui-handler.ts:1809-1810
  *   :3038-3039 cost: the party's getSpeciesStarterValue sum must not exceed the run's value limit (game-data.ts:2018)
- * Not done, the game-core data has nothing for them: a form's isStarterSelectable (:710), the tera type must be one of
- * the species' types (:725-734), and the challenge filters (FRESH_START, STARTER_COST, STARTER_POINTS).
+ * Not done, the game-core data has nothing for them: a form's isStarterSelectable (:710) and the tera type must be one of
+ * the species' types (:725-734). The challenge rules are gc_challenge.c's (STARTER_SELECT_MODIFY as the view the checks read, STARTER_COST
+ * as the cost; STARTER_CHOICE and STARTER_POINTS are checked by gc_run_set_starters).
  * With sys == NULL (no system data attached to the run) nothing is locked: only the structural checks run. */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why)
+{
+    return gc_starter_is_available_set(sys, NULL, starter, cost_out, why);
+}
+
+/* The same under a Challenge Mode run's challenges (`set` NULL = none): the starter select shows the profile as getStarterData(starterId) gives it
+ * (STARTER_SELECT_MODIFY, gc_challenge_starter_view) and prices the starter with getSpeciesStarterValue (STARTER_COST). Whether the species is
+ * valid for the challenges (STARTER_CHOICE) is gc_challenge_starter_valid's, asked by the party check (gc_run_set_starters). */
+bool gc_starter_is_available_set(const gc_system *sys, const gc_challenge_set *set, const gc_starter *starter, double *cost_out, const char **why)
 {
     const char *dummy;
     if (!why) why = &dummy;
@@ -838,7 +848,7 @@ bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, do
     int base_c = gc_starter_cost(sp_id);
     if (base_c < 0) { *why = "not a starter species"; return false; }
 
-    double val = gc_starter_value(sys, sp_id);
+    double val = gc_challenge_starter_cost(sys, set, sp_id);
     if (cost_out) *cost_out = val;
 
     const pr_species *sp = gc_species(sp_id);
@@ -860,10 +870,12 @@ bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, do
 
     if (sp_id > GC_MAX_SPECIES_ID) { *why = "not a starter species"; return false; }
 
-    caught_attr = sys->dex[sp_id].caught_attr;
-    ability_attr = sys->starters[sp_id].ability_attr;
-    passive_attr = sys->starters[sp_id].passive_attr;
-    nature_attr = sys->dex[sp_id].nature_attr;
+    gc_starter_view view;
+    gc_challenge_starter_view(sys, set, sp_id, &view);
+    caught_attr = view.caught_attr;
+    ability_attr = view.ability_attr;
+    passive_attr = view.passive_attr;
+    nature_attr = view.nature_attr;
 
     /* :647 species locked if never caught */
     if (!caught_attr) { *why = "starterSelectUiHandler:lockedSpecies"; return false; }

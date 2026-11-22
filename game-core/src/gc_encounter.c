@@ -387,7 +387,7 @@ static bool gen_wild_slot(gc_run *run, int level,int idx)
     if (pr_run_enemy_pokemon_finish(&run->run, &wc.enemy, &w.mon) < 0) return false;
     gc_refresh_enemy(run, m, w.species, level, &w.mon, 0);
     /* the classic final boss gets perfect IVs */
-    if (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave))
+    if (gc_is_classic_mode(run->run.mode) && pr_run_is_wave_final(run->run.mode, run->wave))
         for (int i = 0; i < 6; i++) m->b.ivs[i] = 31;
     run->n_enemy = idx+1;
     return true;
@@ -517,7 +517,7 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
     gc_enemy_ctx(run, &tc.enemy);
     const pr_trainer_info *t = trainer_info(trainer_type);
     tc.is_double = (t && t->double_only) || variant == TRAINER_VARIANT_DOUBLE;
-    tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
+    tc.classic_wave20_trainer = run->wave == 20 && gc_is_classic_mode(run->run.mode);
     /* the gym leaders', Elite Four's and champions' partyMemberFuncs (run-core's gym_e4.c, diff-tested). Every trainer fight takes them: the
      * Mysterious Challengers' teams (which this was first turned on for) are made the same way */
     tc.enable_gym_e4 = true;
@@ -594,7 +594,7 @@ static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new
     *new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
     *reset = !prev_wave || *new_biome || run->battle_type == BATTLE_TYPE_TRAINER
              || run->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER
-             || (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode,run->wave));
+             || (gc_is_classic_mode(run->run.mode) && pr_run_is_wave_final(run->run.mode,run->wave));
     *roll = !prev_wave || *new_biome || run->run.mode == GAME_MODES_DAILY;
 }
 
@@ -653,7 +653,7 @@ static void finish_party_ex(gc_run *run, const gc_item *given, int n_given, bool
      * Classic final boss and each Endless major boss. This runs after item creation so
      * generated and explicitly configured stocks share the same rule. */
     const bool lock_black_hole =
-        (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave))
+        (gc_is_classic_mode(run->run.mode) && pr_run_is_wave_final(run->run.mode, run->wave))
         || pr_run_is_endless_major_boss(&run->run, run->wave);
     if (lock_black_hole) {
         for (int p = 0; p < run->n_enemy; p++) {

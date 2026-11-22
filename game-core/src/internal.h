@@ -207,6 +207,13 @@ const pr_species *gc_species(int id);
 const pr_form *gc_form(int species, int form);
 int gc_form_ability(int species, const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
+/* ---- Challenge Mode (src/gc_challenge.c) ---- */
+void gc_challenge_sync(gc_run *run);                     /* run.has_challenges / challenge_flags / ... from run.challenges */
+bool gc_challenges_unplayed(const gc_run *run);          /* an active challenge game-core does not play yet (or an active set nobody listed) */
+void gc_challenge_modify_starter(gc_run *run, gc_mon *m);   /* ChallengeType.STARTER_MODIFY */
+uint64_t gc_challenge_ribbon_flags(const gc_run *run);   /* GameOverPhase.awardRibbons: the flags to give the party's lines, 0 = none */
+/* gameMode.isClassic: Classic and Challenge Mode run the same game */
+static inline bool gc_is_classic_mode(int mode) { return mode == GAME_MODES_CLASSIC || mode == GAME_MODES_CHALLENGE; }
 /* SelectStarterPhase.initBattle's party (src/gc_run.c), and its Spliced Endless fusion (generateFusionSpecies(true)) */
 void gc_starters_build_party(gc_run *run, const gc_starter *starters, int n);
 bool gc_mon_starter_fusion(gc_run *run, gc_mon *m);
