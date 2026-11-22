@@ -821,6 +821,7 @@ Tera: a party slot in the config's `setInstantTera` list (`tera_static`; Penny's
 changes the type of Tera Blast, Tera Starstorm and Revelation Dance, the STAB and type-diversity rules and the Hail and Sandstorm checks. Rivals (their own
 signature moves) stay on the stand-in; Keldeo (Alder's, whose form changes when it learns Secret Sword: upstream queues a form change phase that is not run here) is
 generated like any member of the Elite Four and Champions, and every other trainer still declines it.
+A wild Keldeo (always a boss) is generated natively, and the form change its constructor queues runs after the "appeared" text (`gc_enemy_apply_learned_forms`); the encounter's save holds the form it was made with, as upstream saves first (`tests/keldeo_wild_diff_test.c`, `tools/keldeowilddiff.sh`, `tools/keldeowildplant.sh`). Mystery-encounter, fused, Challenge and Spliced Endless Keldeo, and Weird Dream's, still keep the stand-in.
 A member made by a closure runs its constructor moveset first (on its own seed, `evil_rng`), then the constructor's finish, then the ops; a `generateAndPopulateMoveset()`
 op regenerates with what the ops assigned so far: the form, ability slot, gender and boss segments (a trainer's Pokemon is only a boss from `setBoss`, so the
 regeneration of a boss has its extra weights, no rare egg moves and its passive), the IVs the constructor rerolled (Hidden Power's type) but the stats the

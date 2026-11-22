@@ -1249,6 +1249,17 @@ $(BUILD)/keldeo_host_test: tests/keldeo_host_test.c $(BUILD)/libgc.a $(REWARD_LI
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: keldeo-host-test
 
+all: $(BUILD)/keldeo_wild_diff_test
+$(BUILD)/keldeo_wild_diff_test: tests/keldeo_wild_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+all: $(BUILD)/keldeo_wild_host_test
+test: keldeo-wild-host-test
+keldeo-wild-host-test: $(BUILD)/keldeo_wild_host_test
+	$(BUILD)/keldeo_wild_host_test
+$(BUILD)/keldeo_wild_host_test: tests/keldeo_wild_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: keldeo-wild-host-test
+
 all: $(BUILD)/keldeo_learn_test
 $(BUILD)/keldeo_learn_test: tests/keldeo_learn_test.c $(BATTLE_CORE)/build/wide-substitute-frame.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@

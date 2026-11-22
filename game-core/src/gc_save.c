@@ -661,7 +661,14 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     put_block(&w, mystery_history_fields, NF(mystery_history_fields), run->mystery_history,
               sizeof run->mystery_history[0], run->n_mystery_history);
     section_end(&w, s);
+    /* EncounterPhase.start saves the session before a wild enemy's QuietFormChangePhase runs (gc_enemy_apply_learned_forms): the save holds the form it had */
+    uint8_t shown_form[6] = {0};
+    for (int i = 0; i < run->n_enemy && i < 6; i++) {
+        shown_form[i] = run->enemy[i].b.form;
+        if (in->enemy_pre_form[i]) ((gc_run *)run)->enemy[i].b.form = (uint8_t)(in->enemy_pre_form[i] - 1);
+    }
     put_mons(&w, "enemy", run->enemy, run->n_enemy);
+    for (int i = 0; i < run->n_enemy && i < 6; i++) ((gc_run *)run)->enemy[i].b.form = shown_form[i];
     put_items(&w, "items", run->items, run->n_items);
     put_items(&w, "enemy_items", run->enemy_items, run->n_enemy_items);
     s = section_start(&w, "arena");
