@@ -53,8 +53,9 @@ and the use at run start are the next change.
 
 ## Not done
 
-- **Enemy nicknames** (the Expert Pokemon Breeder's Cleffa, `EnemyPartyConfig.nickname`): game-core does not set them. The field exists, the messages
-  would show it.
+- **Enemy nicknames:** the one encounter that gives enemies a nickname, the Expert Pokemon Breeder's Cleffa (`EnemyPartyConfig.nickname`), now sets them
+  (`gc_breeder.c`: "Ace", and in the Space biome "Clefablest" and "<species> the Great"); see `tests/mystery_breeder_diff_test.c`. No other upstream
+  encounter names an enemy (checked by searching `data/mystery-encounters` for `nickname`).
 - The app does not use the profile's starter nicknames yet (the starter select's Rename and applying one when a starter is picked are the app's change,
   after this one); until then only a starter's nickname handed to `gc_run_set_starters` is used.
 - Not upstream's limits: upstream keeps a nickname for every starter it has preferences for; the profile here holds at most `GC_STARTER_NICKNAMES` (128)
