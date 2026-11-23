@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 164   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
+#define GC_ACHV_COUNT 166   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
                               * batch's "Defeat X" and "Flawless X" in pairs (ids stay under 192, where upstream's own start) */
 #define GC_ACHV_TWENTY_FACES 117
 #define GC_ACHV_DARBY 152   /* beating D'Arby the Gambler (Standard or All-In: a won hand or a caught cheat) */
@@ -51,7 +51,7 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
        GC_JOJO_ABBACCHIO, GC_JOJO_WEATHER, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO, GC_JOJO_SHIGECHI, GC_JOJO_JOSUKE, GC_JOJO_ROHAN,
        GC_JOJO_GIORNO,
        /* the third batch (lorenzo 2026-11-22) */
-       GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO, GC_JOJO_JODIO, GC_JOJO_JONATHAN, GC_JOJO_TOORU, GC_JOJO_COUNT };
+       GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO, GC_JOJO_JODIO, GC_JOJO_JONATHAN, GC_JOJO_TOORU, GC_JOJO_OKUYASU, GC_JOJO_COUNT };
 
 /* The achievement of beating one challenger ("Defeat X"): ids 0..16 for the first 17 (the table index), then GC_ACHV_JOJO2_FIRST + (index - 17)
  * for the second batch, because the ids of the others (the sets, the runs, ...) were taken before it existed and a profile keeps them by id;

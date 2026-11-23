@@ -36,13 +36,13 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"The Pillar Men", "Defeat Kars, Wamuu and Esidisi.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Battle Tendency", "Defeat Joseph, Caesar, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse and Iggy.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan and Shigechi.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan, Shigechi and Okuyasu.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio, Narancia, Ghiaccio and Prosciutto & Pesci.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stone Ocean", "Defeat Jolyne, Pucci and Weather Report.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Steel Ball Run", "Defeat Valentine, Gyro, Johnny, Sandman and Diego.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Five Faces", "Defeat 5 different challengers.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Ten Faces", "Defeat 10 different challengers.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Every Face", "Defeat all 39 different challengers.", J, SHINY(2)},
+    {"Every Face", "Defeat all 40 different challengers.", J, SHINY(2)},
     {"Hat Trick", "Defeat 3 challengers in one run.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Hundred Duels", "Win 100 challenger battles.", J, EGG(3)},
     {"Untouched", "Defeat a challenger without any of your Pokemon fainting.", J, V(GC_VOUCHER_PLUS, 1)},
@@ -190,6 +190,8 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Unscathed by the Sunlight's Ripple", "Defeat Jonathan Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Broke the Flow of Calamity", "Defeat Tooru.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"We Went Beyond the Logic of This World", "Defeat Tooru without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Not as Dumb as He Looks", "Defeat Okuyasu Nijimura.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"He Couldn't Erase a Single Thing", "Defeat Okuyasu Nijimura without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -260,7 +262,7 @@ static const uint64_t SET_PILLAR = JB(GC_JOJO_KARS) | JB(GC_JOJO_WAMUU) | JB(GC_
 static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM) | JB(GC_JOJO_CAESAR);
 static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO_POLNAREFF) | JB(GC_JOJO_KAKYOIN) | JB(GC_JOJO_AVDOL) |
                                JB(GC_JOJO_VANILLAICE) | JB(GC_JOJO_HOLHORSE) | JB(GC_JOJO_IGGY);
-static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI);
+static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI) | JB(GC_JOJO_OKUYASU);
 static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO) | JB(GC_JOJO_GIORNO) | JB(GC_JOJO_BRUNO) |
                                JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA) | JB(GC_JOJO_GHIACCIO) | JB(GC_JOJO_PROSCIUTTO);
 static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI) | JB(GC_JOJO_WEATHER);
