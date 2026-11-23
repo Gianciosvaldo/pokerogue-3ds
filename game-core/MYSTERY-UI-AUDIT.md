@@ -62,19 +62,13 @@ Normal core/app/custom/save/football CI and the ARM build/stack checks remain
 required. Only the separately excluded custom Task63 checks are skipped.
 No new release or Windows builder is part of these repairs.
 
-## Older encounter stand-ins remain incomplete
+## Older encounter stand-ins: since ported
 
-The following fifteen dispatcher cases still contain simplified Task 46 actions
-rather than the source's complete encounters: Mysterious Chest, Safari Zone,
-Fiery Fallout, The Strong Stuff, Absolute Avarice, A Trainer's Test,
-Trash to Treasure, Clowning Around, Dancing Lessons, Weird Dream,
-The Winstrate Challenge, Teleporting Hijinks, Bug-Type Superfan,
-Uncommon Breed and The Expert Pokemon Breeder.
+When this audit was written, fifteen dispatcher cases still contained simplified Task 46 actions rather than the source's complete encounters: Mysterious Chest,
+Safari Zone, Fiery Fallout, The Strong Stuff, Absolute Avarice, A Trainer's Test, Trash to Treasure, Clowning Around, Dancing Lessons, Weird Dream, The Winstrate
+Challenge, Teleporting Hijinks, Bug-Type Superfan, Uncommon Breed and The Expert Pokemon Breeder. Each of the fifteen has since been replaced by its own source-backed
+port (`game-core/src/gc_chest.c`, `gc_safari.c`, `gc_fiery.c`, `gc_strong.c`, `gc_avarice.c`, `gc_trtest.c`, `gc_trash.c`, `gc_clown.c`, `gc_dance.c`, `gc_weird.c`,
+`gc_winstrate.c`, `gc_teleport.c`, `gc_superfan.c`, `gc_breed.c`, `gc_breeder.c`). What a port leaves out is said in its file's header under "Not ported".
 
-Examples: Safari Zone gives a ball/potion instead of its three-Pokemon safari;
-The Strong Stuff changes a battle stage instead of applying its permanent base
-stat modifiers; Trash to Treasure removes the first inventory entries instead
-of running its battle/dig branches. Their selection/intro or smoke tests do
-not validate the advertised actions. None is hidden or declared complete by
-this UI fix. They require separate source-backed ports, including their
-multi-step choices, battles, callbacks and reward paths.
+Examples that were true at the time: Safari Zone gave a ball/potion instead of its three-Pokemon safari; The Strong Stuff changed a battle stage instead of applying
+its permanent base stat modifiers; Trash to Treasure removed the first inventory entries instead of running its battle/dig branches.
