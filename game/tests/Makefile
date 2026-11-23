@@ -715,3 +715,34 @@ ifneq ($(ELS_OUT),build/egglist_screen_test)
 $(ELS_OUT): egglist_screen_test.c $(ELS_SCREEN) ../source/egglist_model.c ../source/scroll_grid.c build/ptx_core.a
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined egglist_screen_test.c $(ELS_SCREEN) ../source/egglist_model.c ../source/scroll_grid.c build/ptx_core.a -lm -o $@
 endif
+
+# the Pokedex list's model (source/pokedex_model.c) against upstream's own PokedexUiHandler (fixtures/pokedex-list.native.txt.gz, made by
+# pokedex-list.producer.test.ts); make pokedex_model_test && build/pokedex_model_test fixtures/pokedex-list.native.txt.gz
+PXM_OWN := pokedex_model_test.c ../source/pokedex_model.c
+build/pokedex_model_test: $(PXM_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PXM_OWN) build/ptx_core.a -lm -o $@
+pokedex_model_test: build/pokedex_model_test
+.PHONY: pokedex_model_test
+# the same test built over another copy of the model (pokedex_model_plant.sh): make PXM_MODEL=<model.c> PXM_OUT=<exe> <exe>
+PXM_MODEL ?= ../source/pokedex_model.c
+PXM_OUT ?= build/pokedex_model_test
+ifneq ($(PXM_OUT),build/pokedex_model_test)
+$(PXM_OUT): pokedex_model_test.c $(PXM_MODEL) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined pokedex_model_test.c $(PXM_MODEL) build/ptx_core.a -lm -o $@
+endif
+
+# the Pokedex list screen (source/pokedex_screen.c) over the real model and a fake drawing layer; make pokedex_screen_test && build/pokedex_screen_test
+PXS_OWN := pokedex_screen_test.c ../source/pokedex_screen.c ../source/pokedex_model.c
+build/pokedex_screen_test: $(PXS_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PXS_OWN) build/ptx_core.a -lm -o $@
+pokedex_screen_test: build/pokedex_screen_test
+.PHONY: pokedex_screen_test
+# the same test built over another copy of the screen (pokedex_screen_plant.sh): make PXS_SCREEN=<screen.c> PXS_OUT=<exe> <exe>
+PXS_SCREEN ?= ../source/pokedex_screen.c
+PXS_OUT ?= build/pokedex_screen_test
+ifneq ($(PXS_OUT),build/pokedex_screen_test)
+$(PXS_OUT): pokedex_screen_test.c $(PXS_SCREEN) ../source/pokedex_model.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined pokedex_screen_test.c $(PXS_SCREEN) ../source/pokedex_model.c build/ptx_core.a -lm -o $@
+endif

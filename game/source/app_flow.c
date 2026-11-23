@@ -20,6 +20,7 @@
 #include "run_history.h"
 #include "achv_screen.h"
 #include "egglist_screen.h"
+#include "pokedex_screen.h"
 #include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "run_saves.h"
@@ -55,6 +56,7 @@ static void show_history(void);
 static void show_achievements(void);
 static void show_gamestats(void);
 static void show_egglist(void);
+static void show_pokedex(void);
 static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
@@ -441,6 +443,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_EGGLIST:
       show_egglist();
       break;
+    case TITLE_POKEDEX:
+      show_pokedex();
+      break;
   }
 }
 
@@ -508,6 +513,18 @@ static void show_egglist(void) {
   const gc_system* sys = sysd_get();
   const egglist_args a = {sys->eggs, sys->n_eggs, egglist_tz_offset, on_egglist_exit, NULL};
   egglist_screen_open(&a);
+}
+
+/* ------------------------------------------------------------------ the Pokedex */
+
+static void on_pokedex_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+static void show_pokedex(void) {
+  const pokedex_args a = {sysd_get(), on_pokedex_exit, NULL};
+  pokedex_screen_open(&a);
 }
 
 /* ------------------------------------------------------------------ the Nemesis Radar */
