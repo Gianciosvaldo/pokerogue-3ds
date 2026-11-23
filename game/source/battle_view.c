@@ -196,7 +196,7 @@ static struct {
   /* D'Arby's table (bv_darby_*): the two face-down cards on the platforms, the Pokemon each one hides, D'Arby sliding off and back */
   struct { bool on; char key[2][96]; float scale[2]; double t_deal, t_back, t_reveal[2]; } darby;
   /* Jobin's beetle duel (bv_jobin_*): the drum instead of the platforms, a beetle on each side, both Grip bars and the Suspicion bar */
-  struct { bool on, king_on; char key[2][96]; float scale[2]; char name[2][BV_NAME_BYTES]; float from[3], to[3]; double t_move, t_king; } jobin;
+  struct { bool on; char key[2][96]; float scale[2]; char name[2][BV_NAME_BYTES]; float from[3], to[3]; double t_move; } jobin;
   float trainer_show_ms; /* BEV_TRAINER_SHOW: ms into the defeated trainer's slide back in, 0 = not sliding */
   bool player_trainer_visible, opening_summon;
   /* BEV_DIALOGUE: the talk's copies of its strings (one per event of a chunk), the darkening of the field behind the portrait
@@ -920,17 +920,14 @@ void bv_darby_clear(void) {
 bool bv_darby_table(void) { return B.darby.on; }
 
 /* Jobin's drum (lorenzo 2026-11-23): his arena art stands where the two platforms are, on the biome's own background; both beetles stand where the
- * ordinary battle puts them (the player's from the back at 106,132, his at 236,84), the Speed King beside his, and the boxes are the ordinary ones
+ * ordinary battle puts them (the player's from the back at 106,132, his at 236,84), and the boxes are the ordinary ones
  * (his top left, the player's bottom right). Positions are field coordinates (320 x 180); the arena image's top surface is an ellipse centred
  * 134 px right of and 60 px below its top left corner, wide enough to hold both feet. Meters in percent, eased over JOBIN_TWEEN_MS. */
 #define JOBIN_ARENA_X 38.0f
 #define JOBIN_ARENA_Y 40.0f
 #define JOBIN_SPOT_X(k) ((k) == 0 ? 106.0f : 236.0f)
 #define JOBIN_SPOT_Y(k) ((k) == 0 ? 132.0f : 84.0f)
-#define JOBIN_KING_X 284.0f
-#define JOBIN_KING_Y 84.0f
 #define JOBIN_TWEEN_MS 600.0
-#define JOBIN_KING_MS 350.0
 static float jobin_meter(int i) {
   const double u = B.jobin.t_move > 0 ? (ui_now() - B.jobin.t_move) / JOBIN_TWEEN_MS : 1;
   const float e = ease(EASE_CUBIC_OUT, u <= 0 ? 0 : u >= 1 ? 1 : (float)u);
@@ -950,21 +947,6 @@ static void draw_jobin_spot(int k) {
   o.origin_y = 1;
   o.scale_x = o.scale_y = B.jobin.scale[k] > 0 ? B.jobin.scale[k] : 1;
   rr_draw(f, JOBIN_SPOT_X(k), JOBIN_SPOT_Y(k), &o);
-}
-/* the Speed King beside Jobin's beetle while one of his attacks is telegraphed: his art 1:1 whatever the field's zoom, fading in */
-static void draw_jobin_king(void) {
-  if (!B.jobin.on || !B.jobin.king_on) return;
-  const rr_frame* f = img_anim_frame("images/trainer/custom/speed_king", 0);
-  if (!f) return;
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.origin_x = 0.5f;
-  o.origin_y = 1;
-  const double u = (ui_now() - B.jobin.t_king) / JOBIN_KING_MS;
-  o.tint = RR_RGBA(255, 255, 255, (int)(255 * (u <= 0 ? 0 : u >= 1 ? 1 : u)));
-  const float z = field_zoom_cur;
-  if (z != 1) rr_set_zoom(1, 160, 132);
-  rr_draw(f, 160 + (JOBIN_KING_X - 160) * z, 132 + (JOBIN_KING_Y - 132) * z, &o);
-  if (z != 1) rr_set_zoom(z, 160, 132);
 }
 
 void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp) {
@@ -988,11 +970,6 @@ void bv_jobin_set(int grip_you, int grip_him, int susp) {
   B.jobin.to[1] = (float)grip_him;
   B.jobin.to[2] = (float)susp;
   B.jobin.t_move = ui_now();
-}
-void bv_jobin_king(bool on) {
-  if (!B.jobin.on || B.jobin.king_on == on) return;
-  B.jobin.king_on = on;
-  B.jobin.t_king = ui_now();
 }
 void bv_jobin_end(void) { memset(&B.jobin, 0, sizeof B.jobin); }
 bool bv_jobin_on(void) { return B.jobin.on; }
@@ -1162,7 +1139,6 @@ static void draw_field_foes(void) {
   draw_me_intro();
   draw_darby_spot(1);
   draw_jobin_spot(1);
-  draw_jobin_king();
   draw_world_dio();
   draw_perfect_kars();
   for(int i=0;i<2;i++){

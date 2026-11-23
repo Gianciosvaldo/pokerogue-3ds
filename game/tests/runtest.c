@@ -552,10 +552,10 @@ void bv_darby_deal(const bv_mon* mine, const bv_mon* his) {
 void bv_darby_reveal(int k) { if (!darby_dealt || k < 0 || k > 1) BAD("a D'Arby card turned before the deal"); n_darby_reveals++; }
 void bv_darby_clear(void) { if (darby_dealt) n_darby_clears++; darby_dealt = false; }
 bool bv_darby_table(void) { return darby_dealt; }
-/* Jobin's duel: started on an encounter scene with a beetle on each side, the meters in 0..100, moved and the King shown only while it is on, ended once */
+/* Jobin's duel: started on an encounter scene with a beetle on each side, the meters in 0..100, moved only while it is on, ended once */
 static bool jobin_on_now;
 static int n_jobin_punish_scenes;   /* scenes of the fight after Jobin catches the player cheating */
-static int n_jobin_starts, n_jobin_sets, n_jobin_kings, n_jobin_ends;
+static int n_jobin_starts, n_jobin_sets, n_jobin_ends;
 void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp) {
   if (!me_scene_up) BAD("Jobin's duel started with no encounter scene");
   if (!mine || mine->species <= 0 || !his || his->species <= 0) BAD("Jobin's duel with no beetle on a side");
@@ -567,7 +567,6 @@ void bv_jobin_set(int grip_you, int grip_him, int susp) {
   if (grip_you < 0 || grip_you > 100 || grip_him < 0 || grip_him > 100 || susp < 0 || susp > 100) BAD("Jobin's meters out of range");
   n_jobin_sets++;
 }
-void bv_jobin_king(bool on) { if (!jobin_on_now) BAD("the Speed King shown with no duel"); (void)on; n_jobin_kings++; }
 void bv_jobin_end(void) { if (jobin_on_now) n_jobin_ends++; jobin_on_now = false; }
 bool bv_jobin_on(void) { return jobin_on_now; }
 
@@ -2642,7 +2641,7 @@ int main(int argc, char** argv) {
   printf("D'Arby's table: %d deals, %d cards turned, %d cleared\n", n_darby_deals, n_darby_reveals, n_darby_clears);
   if (getenv("RUNTEST_DARBY") && custom_on && runs >= 10 && (!n_darby_deals || n_darby_reveals < 2 * n_darby_deals || !n_darby_clears)) BAD("D'Arby's table was not played through");
   printf("Jobin's team: %d fights after a catch, each drawn as him\n", n_jobin_punish_scenes);
-  printf("Jobin's duel: %d started, %d meter moves, %d King calls, %d ended\n", n_jobin_starts, n_jobin_sets, n_jobin_kings, n_jobin_ends);
+  printf("Jobin's duel: %d started, %d meter moves, %d ended\n", n_jobin_starts, n_jobin_sets, n_jobin_ends);
   if (getenv("RUNTEST_JOBIN") && custom_on && runs >= 10 && (!n_jobin_starts || !n_jobin_sets)) BAD("Jobin's duel was not played");
   if (getenv("RUNTEST_JOBIN") && custom_on && runs >= 30 && !n_jobin_punish_scenes) BAD("nobody was caught cheating in %d runs: his team was not fought", runs);
   if (n_jobin_starts < n_jobin_ends || n_jobin_starts > n_jobin_ends + 1) BAD("%d duels started, %d ended", n_jobin_starts, n_jobin_ends);
