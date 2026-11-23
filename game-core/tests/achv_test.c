@@ -48,7 +48,8 @@ int main(void)
         assert(GC_JOJO_COUNT == 40 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
                GC_ACHV_DARBY == GC_ACHV_JOJO3_FIRST - 2 && GC_ACHV_DARBY_REMATCH == GC_ACHV_JOJO3_FIRST - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
                GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_JOBIN == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_OKUYASU - GC_JOJO_GHIACCIO) && GC_ACHV_JOBIN_PUNISH == GC_ACHV_JOBIN + 1 &&
-               GC_ACHV_JOJO4_FIRST == GC_ACHV_JOBIN + 2 && GC_ACHV_COUNT == GC_ACHV_JOJO4_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU));
+               GC_ACHV_JOJO4_FIRST == GC_ACHV_JOBIN + 2 && GC_ACHV_JOJOLION == GC_ACHV_JOJO4_FIRST + 2 && GC_ACHV_JOJO5_FIRST == GC_ACHV_JOJOLION + 1 &&
+               GC_ACHV_COUNT == GC_ACHV_JOJO5_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU - 1));
         assert(GC_ACHV_COUNT <= 192);   /* upstream's own achievements use 192 and up in achievement_flags */
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
@@ -116,14 +117,16 @@ int main(void)
     }
 
     /* the sets */
-    static const struct { int id; int members[9]; int n; } SETS[] = {
-        {17, {GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI}, 3},
-        {18, {GC_JOJO_JOSEPH, GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_STROHEIM, GC_JOJO_CAESAR}, 6},
-        {19, {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY}, 8},
-        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA, GC_JOJO_JOSUKE, GC_JOJO_ROHAN, GC_JOJO_SHIGECHI, GC_JOJO_OKUYASU}, 6},
-        {21, {GC_JOJO_DIAVOLO, GC_JOJO_MISTA, GC_JOJO_RISOTTO, GC_JOJO_GIORNO, GC_JOJO_BRUNO, GC_JOJO_ABBACCHIO, GC_JOJO_NARANCIA, GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO}, 9},
-        {22, {GC_JOJO_JOLYNE, GC_JOJO_PUCCI, GC_JOJO_WEATHER}, 3},
-        {23, {GC_JOJO_VALENTINE, GC_JOJO_GYRO, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO}, 5},
+    /* `extra`: a member that is not a challenger: 1 D'Arby (his game or his fight), 2 Jobin (the beetle duel or his team); it is one more than `n` */
+    static const struct { int id; int members[9]; int n; int extra; } SETS[] = {
+        {17, {GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI}, 3, 0},
+        {18, {GC_JOJO_JOSEPH, GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_STROHEIM, GC_JOJO_CAESAR}, 6, 0},
+        {19, {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY}, 8, 1},
+        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA, GC_JOJO_JOSUKE, GC_JOJO_ROHAN, GC_JOJO_SHIGECHI, GC_JOJO_OKUYASU}, 6, 0},
+        {21, {GC_JOJO_DIAVOLO, GC_JOJO_MISTA, GC_JOJO_RISOTTO, GC_JOJO_GIORNO, GC_JOJO_BRUNO, GC_JOJO_ABBACCHIO, GC_JOJO_NARANCIA, GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO}, 9, 0},
+        {22, {GC_JOJO_JOLYNE, GC_JOJO_PUCCI, GC_JOJO_WEATHER}, 3, 0},
+        {23, {GC_JOJO_VALENTINE, GC_JOJO_GYRO, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO}, 5, 0},
+        {GC_ACHV_JOJOLION, {GC_JOJO_TOORU}, 1, 2},
     };
     for (unsigned k = 0; k < sizeof SETS / sizeof SETS[0]; k++) {
         fresh();
@@ -132,13 +135,96 @@ int main(void)
             gc_achv_jojo_won(&S, SETS[k].members[i], 1, false);
             eval(NULL);
         }
+        uint32_t h, n;
+        if (SETS[k].extra) {
+            /* the challengers alone are one short: the set also asks for D'Arby (Stardust Crusaders) or Jobin (JoJolion) */
+            assert(!gc_achv_unlocked(&S, SETS[k].id));
+            assert(gc_achv_progress_of(&S, SETS[k].id, &h, &n) && h == (uint32_t)SETS[k].n && n == (uint32_t)SETS[k].n + 1);
+            if (SETS[k].extra == 1) gc_achv_darby_won(&S); else gc_achv_jobin_won(&S);
+            eval(NULL);
+        }
         assert(gc_achv_unlocked(&S, SETS[k].id));
         /* the progress line counts exactly the members, and a challenger outside the set adds nothing */
+        assert(gc_achv_progress_of(&S, SETS[k].id, &h, &n) && h == (uint32_t)SETS[k].n + (SETS[k].extra != 0) && n == h);
+    }
+
+    /* D'Arby and Jobin in the Part sets (lorenzo 2026-11-23): either of his two ways of being beaten counts, once; the other's encounter adds nothing */
+    {
         uint32_t h, n;
-        assert(gc_achv_progress_of(&S, SETS[k].id, &h, &n) && h == (uint32_t)SETS[k].n && n == (uint32_t)SETS[k].n);
+        const int stardust[8] = {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY};
+        assert(!strcmp(gc_achv_defs[19].name, "Stardust Crusaders") && strstr(gc_achv_defs[19].desc, "D'Arby"));
+        assert(!strcmp(gc_achv_defs[GC_ACHV_JOJOLION].name, "JoJolion") && strstr(gc_achv_defs[GC_ACHV_JOJOLION].desc, "Tooru") && strstr(gc_achv_defs[GC_ACHV_JOJOLION].desc, "Jobin"));
+        assert(gc_achv_defs[GC_ACHV_JOJOLION].group == GC_ACHV_GROUP_JOJO && gc_achv_defs[GC_ACHV_JOJOLION].reward == gc_achv_defs[19].reward && gc_achv_defs[GC_ACHV_JOJOLION].arg == gc_achv_defs[19].arg);
+
+        for (int way = 0; way < 2; way++) {   /* 0: the game (Gambler's Downfall), 1: the fight (Debt Paid in Full) */
+            fresh();
+            for (int i = 0; i < 8; i++) gc_achv_jojo_won(&S, stardust[i], 1, false);
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, 19) && gc_achv_progress_of(&S, 19, &h, &n) && h == 8 && n == 9);   /* the eight alone are not enough any more */
+            const uint32_t plus = S.voucher_counts[GC_VOUCHER_PLUS];
+            if (way == 0) gc_achv_darby_won(&S); else gc_achv_darby_rematch_won(&S);
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, 19) && gc_achv_progress_of(&S, 19, &h, &n) && h == 9 && n == 9);
+            assert(S.voucher_counts[GC_VOUCHER_PLUS] == plus + 1);                                           /* its Plus voucher (D'Arby's own two are Regular) */
+            const uint32_t plus2 = S.voucher_counts[GC_VOUCHER_PLUS];
+            gc_achv_darby_won(&S);
+            gc_achv_darby_rematch_won(&S);
+            eval(NULL);
+            assert(S.voucher_counts[GC_VOUCHER_PLUS] == plus2);                                              /* nothing twice */
+        }
+        /* D'Arby alone is one of nine, both ways of beating him together still one; Jobin's wins add nothing to this set */
+        fresh();
+        gc_achv_darby_won(&S);
+        gc_achv_darby_rematch_won(&S);
+        gc_achv_jobin_won(&S);
+        gc_achv_jobin_punish_won(&S);
+        assert(gc_achv_progress_of(&S, 19, &h, &n) && h == 1 && n == 9);
+        /* a profile that already has the set (with the eight, before D'Arby counted) keeps it */
+        fresh();
+        S.achievement_flags[19] = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 19));
+
+        /* JoJolion: Tooru and Jobin, each way for Jobin; D'Arby and the other challengers add nothing */
+        for (int way = 0; way < 2; way++) {   /* 0: the beetle duel, 1: his team after he caught the player cheating */
+            fresh();
+            gc_achv_jojo_won(&S, GC_JOJO_TOORU, 1, false);
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, GC_ACHV_JOJOLION) && gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 1 && n == 2);
+            const uint32_t plus = S.voucher_counts[GC_VOUCHER_PLUS];
+            if (way == 0) gc_achv_jobin_won(&S); else gc_achv_jobin_punish_won(&S);
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, GC_ACHV_JOJOLION) && gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 2 && n == 2);
+            assert(S.voucher_counts[GC_VOUCHER_PLUS] == plus + 1);                                           /* its Plus voucher, once */
+            gc_achv_jobin_won(&S);
+            gc_achv_jobin_punish_won(&S);
+            gc_achv_jojo_won(&S, GC_JOJO_TOORU, 2, false);
+            eval(NULL);
+            assert(S.voucher_counts[GC_VOUCHER_PLUS] == plus + 1);
+        }
+        /* the other order: Jobin first, Tooru second; and Jobin alone, either way, is one of two */
+        fresh();
+        gc_achv_jobin_punish_won(&S);
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, GC_ACHV_JOJOLION) && gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 1 && n == 2);
+        gc_achv_jojo_won(&S, GC_JOJO_TOORU, 1, false);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, GC_ACHV_JOJOLION));
+        fresh();
+        gc_achv_jobin_won(&S);
+        gc_achv_jobin_punish_won(&S);
+        assert(gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 1 && n == 2);
+        /* D'Arby, every other challenger and a clean mask bit for Tooru add nothing to it */
+        fresh();
+        gc_achv_darby_won(&S);
+        for (int j = 0; j < GC_JOJO_COUNT; j++)
+            if (j != GC_JOJO_TOORU) gc_achv_jojo_won(&S, j, 1, false);
+        assert(gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 0 && n == 2);
+        S.achv.jojo_clean_mask_hi |= 1u << (GC_JOJO_TOORU - 32);
+        assert(gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &h, &n) && h == 0 && n == 2);
     }
     /* every Part set but the Pillar Men's: the six Parts hold every challenger of Parts 2..7 (the Pillar Men sit in Battle Tendency) with nobody
-     * in two; Jonathan (Part 1), Tooru (Part 8) and Jodio (Part 9) have no Part set */
+     * in two; Jonathan (Part 1) and Jodio (Part 9) have no Part set; Tooru (Part 8) has the JoJolion one, which is not among 18..23 */
     {
         fresh();
         uint32_t total = 0;
@@ -147,7 +233,7 @@ int main(void)
             assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0);
             total += n;
         }
-        assert(total == GC_JOJO_COUNT - 3);
+        assert(total == GC_JOJO_COUNT - 3 + 1);   /* every challenger but those three, plus D'Arby in Stardust Crusaders */
         for (int j = 0; j < GC_JOJO_COUNT; j++) {   /* one challenger moves exactly one Part set's line (Jonathan and Jodio none) */
             fresh();
             gc_achv_jojo_won(&S, j, 1, false);
@@ -158,6 +244,8 @@ int main(void)
                 moved += h;
             }
             assert(moved == (j == GC_JOJO_JONATHAN || j == GC_JOJO_JODIO || j == GC_JOJO_TOORU ? 0 : 1));
+            uint32_t jh, jn;
+            assert(gc_achv_progress_of(&S, GC_ACHV_JOJOLION, &jh, &jn) && jh == (j == GC_JOJO_TOORU ? 1u : 0u));   /* Tooru moves the JoJolion line only */
         }
     }
 
@@ -224,12 +312,13 @@ int main(void)
         assert(gc_achv_order(-1) == -1 && gc_achv_order(GC_ACHV_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_order(j) == gc_achv_jojo_id(j));
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_order(GC_JOJO_COUNT + j) == gc_achv_flawless_id(j));   /* then the 34 "Flawless X" */
-        /* the other JoJo ones: 17..25, Twenty Faces, 26..29 */
+        /* the other JoJo ones: 17..25, Twenty Faces, 26..29, then the JoJolion set (a JoJo id after those of the batches, in id order) */
         int pos = 2 * GC_JOJO_COUNT;
         for (int id = 17; id <= 29; id++) {
             assert(gc_achv_order(pos++) == id);
             if (id == 25) assert(gc_achv_order(pos++) == GC_ACHV_TWENTY_FACES);
         }
+        assert(gc_achv_order(pos++) == GC_ACHV_JOJOLION);
         /* everything else in id order, from the runs */
         for (int id = 30; id < GC_ACHV_JOJO2_FIRST; id++) assert(gc_achv_order(pos++) == id);
         assert(gc_achv_order(pos++) == GC_ACHV_DARBY);   /* D'Arby's two, the only non-JoJo ones after 99 */
