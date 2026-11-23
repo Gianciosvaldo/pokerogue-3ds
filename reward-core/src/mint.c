@@ -2,6 +2,7 @@
  * pinned upstream 8555c08. Unlock policy belongs to the caller's dex, not rewards. */
 #include "pr/reward.h"
 #include "pr/battle.h"
+#include "reward_internal.h"
 #include <string.h>
 
 bool pr_reward_apply_mint(pr_reward_ctx *ctx, int nature, int party_idx)
@@ -10,8 +11,7 @@ bool pr_reward_apply_mint(pr_reward_ctx *ctx, int nature, int party_idx)
         || party_idx < 0 || party_idx >= ctx->n_party
         || nature < 0 || nature >= PR_NATURE_COUNT
         || ctx->n_items < 0 || ctx->n_items > PR_REWARD_MAX_OWNED
-        || ctx->n_nature_unlock_events >= PR_REWARD_MAX_NATURE_EVENTS
-        || (ctx->challenges & (1u << CHALLENGES_FLIP_STAT))) return false;
+        || ctx->n_nature_unlock_events >= PR_REWARD_MAX_NATURE_EVENTS) return false;
     pr_reward_mon *m = &ctx->party[party_idx];
     if (!m->has_explicit_nature || m->base_nature >= PR_NATURE_COUNT
         || m->custom_nature < -1 || m->custom_nature >= PR_NATURE_COUNT
@@ -34,7 +34,8 @@ bool pr_reward_apply_mint(pr_reward_ctx *ctx, int nature, int party_idx)
             || it->item == PR_ITEM_MYSTERY_ENCOUNTER_OLD_GATEAU
             || it->item == PR_ITEM_MYSTERY_ENCOUNTER_MACHO_BRACE) return false;
     }
-    pr_pokemon p = {0}; pr_battle bt = {0};
+    pr_pokemon p = {0}; pr_battle bt;
+    pr_reward_stats_battle(ctx, &bt);
     p.species = m->species; p.form = m->form;
     p.fusion_species = m->fusion_species < 0 ? 0 : m->fusion_species;
     p.fusion_form = m->fusion_form;

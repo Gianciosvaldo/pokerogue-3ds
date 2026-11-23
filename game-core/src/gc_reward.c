@@ -282,6 +282,9 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
                                      | (pr_fusion_ability_enabled(&run->bt, ABILITY_ID_RKS_SYSTEM) ? 2 : 0));
     c->caught = caught;
     c->caught_user = run;
+    /* globalScene.gameMode.challenges: what reward-core reads of them (Fresh Start's pool conditions, Flip Stat's stats, Hardcore's
+     * revives). Only a Challenge Mode game has them */
+    c->challenges = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     return c;
 }
 

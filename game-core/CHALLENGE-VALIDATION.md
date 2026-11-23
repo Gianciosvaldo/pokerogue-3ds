@@ -102,3 +102,30 @@ build battle-core from their own `../battle-core`), each with one line changed: 
   (they only look at 0, which Inverse never gives).
 * run-core edits (disclosed, approved by lorenzo per PR): `rival.c` (Inverse in the weakness walk), `include/pr/run.h` (the three challenge bits
   and `challenge_passives`; `PR_CHALLENGE_RULES_PORTED` includes them).
+
+# Fix: the rewards read the run's challenges
+
+Before this fix game-core's reward context (`gc_reward.c` `ctx_base`) left `challenges` at 0, so reward-core never saw a Challenge Mode game's
+challenges:
+
+* Fresh Start: the Eviolite and the Mini Black Hole stayed in the pool when unlocked (upstream: `!gameMode.isFreshStartChallenge()`).
+* Flip Stat: a Mint or a vitamin recalculated the stats with a `pr_battle` of zeros, unflipped, and wrote them back to the Pokemon (they stayed
+  wrong until the next recalculation). reward-core refused Flip Stat outright, but the refusal never fired because the bit never arrived.
+
+Now `ctx_base` sets `challenges` from the run (Challenge Mode only), and reward-core's Mint and vitamin recalculate with Flip Stat
+(`pr_reward_stats_battle`, `src/pools.c`) instead of refusing it. Hardcore's revive rules in reward-core (part 3) read the same field.
+
+The challenge-starters producer and comparator now also check, per case: the Eviolite's and the Mini Black Hole's PLAYER pool weights with both
+unlocked (upstream's weight functions, the port's `pr_reward_regenerate_thresholds` through `gc_reward_ctx`), then a Mint and a vitamin on the
+first member through `gc_port_apply_reward` (applied or not, hp, the six stats).
+
+| seed | Fresh Start cases / open pools | Flip cases with both applied | reward weights | reward applications | checks | TOTAL mismatches |
+|---|---|---|---|---|---|---|
+| 777 | 342 / 50 | 123 | 400 | 800 | 162428 | 0 |
+| 9001 | 342 / 52 | 134 | 400 | 800 | 161875 | 0 |
+| 4242 | 342 / 53 | 118 | 400 | 800 | 161058 | 0 |
+| 31337 | 342 / 51 | 118 | 400 | 800 | 163478 | 0 |
+
+Plants (`tools/challengebattleplant.sh`): `rewards-without-challenges` (the old `ctx_base`), `rewards-stats-without-flip`,
+`rewards-fresh-pools-ignored`. reward-core's `minttest`/`vitamintest` self-tests: the Flip Stat refusal check became a check that the Mint and the
+vitamin apply with flipped stats.

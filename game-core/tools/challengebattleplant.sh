@@ -1,5 +1,5 @@
 #!/bin/sh
-# The Challenge Mode battle rules (Inverse Battle, Flip Stat, Passives): show the comparator can fail. Replays one trace (from
+# The Challenge Mode battle rules (Inverse Battle, Flip Stat, Passives) and what the rewards read of the challenges: show the comparator can fail. Replays one trace (from
 # tools/challengestartersdiff.sh) through copies of game-core and battle-core, each with one line of battle-core or game-core changed, and prints
 # each one's totals. Every copy must exit 1.
 # Usage: tools/challengebattleplant.sh <trace>
@@ -40,5 +40,9 @@ plant passives-no-trainer battle-core/src/pokemon.c 's/const bool trainer = p->h
 plant passives-all-is-trainers battle-core/src/pokemon.c 's/bt->challenge_passives != 1) has = true;/bt->challenge_passives > 2) has = true;/'
 plant passives-boss-wave-ignores-challenge battle-core/src/pokemon.c 's/if (!p->is_player \&\& !passives \&\& ((classic_like/if (!p->is_player \&\& ((classic_like/'
 plant challenge-final-boss-not-classic battle-core/src/pokemon.c 's/const bool classic_like = gm == GAME_MODES_CLASSIC || gm == GAME_MODES_CHALLENGE;/const bool classic_like = gm == GAME_MODES_CLASSIC;/'
+# The rewards: game-core's reward context carries the run's challenges, and reward-core recalculates with Flip Stat
+plant rewards-without-challenges game-core/src/gc_reward.c 's/c->challenges = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;/c->challenges = 0;/'
+plant rewards-stats-without-flip reward-core/src/pools.c 's/if (!(ctx->challenges \& (1u << CHALLENGES_FLIP_STAT))) return;/return;/'
+plant rewards-fresh-pools-ignored reward-core/src/pools.c 's/(!has_challenge(ctx, CHALLENGES_FRESH_START) \&\& ctx->unlocked_eviolite)/(ctx->unlocked_eviolite)/'
 echo "challenge battle plants: $total run, $fails not caught"
 [ "$fails" = 0 ]

@@ -129,7 +129,17 @@ static void selftest(void)
     c = fixture(); c.party[0].species = -1; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.party[0].form = -1; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.party[0].fusion_species = -2; refused(&c, 0, 0, -1, 0);
-    c = fixture(); c.challenges = 1u << CHALLENGES_FLIP_STAT; refused(&c, 0, 0, -1, 0);
+    {   /* Flip Stat: the vitamin boosts the flipped base stat (BaseStatModifier after applyChallenges(FLIP_STAT)) */
+        pr_reward_ctx plain = fixture(), flip = fixture(); flip.challenges = 1u << CHALLENGES_FLIP_STAT;
+        if (pr_reward_apply_vitamin(&plain, 1, 0, -1, NULL) != PR_REWARD_VITAMIN_APPLIED
+            || pr_reward_apply_vitamin(&flip, 1, 0, -1, NULL) != PR_REWARD_VITAMIN_APPLIED) die("vitamin refused");
+        pr_battle fb = {0}; fb.game_mode = GAME_MODES_CHALLENGE; fb.challenge_flags = 1u << CHALLENGES_FLIP_STAT; fb.challenge_flags_known = true;
+        pr_pokemon q = {0}; q.species = SPECIES_ID_BULBASAUR; q.level = 20; q.id = 42; q.is_player = true;
+        for (int j = 0; j < 6; j++) q.ivs[j] = 10;
+        pr_battle nb = fb; pr_calculate_stats(&nb, &q);   /* flipped, no vitamin */
+        if (!memcmp(flip.party[0].stats, plain.party[0].stats, sizeof q.stats) || flip.party[0].stats[1] <= q.stats[1]
+            || nb.n_unported) die("flip stat vitamin");
+    }
     c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_MINT,.owner=0,.stack=1}; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_HEALING_CHARM,.owner=0,.stack=1}; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_FORM_CHANGE_ITEM,.owner=-1,.stack=1}; refused(&c, 0, 0, -1, 0);
@@ -154,7 +164,7 @@ static void selftest(void)
     if (pr_reward_apply_vitamin(&c, 0, 0, -1, &result) != PR_REWARD_VITAMIN_APPLIED
         || c.party[0].hp != c.party[0].max_hp || c.party[0].max_hp <= oldmax
         || result.purchase_error || !result.reward_finished) die("full HP/free vitamin");
-    printf("VITAMIN host guards: %d whole-context refusals passed; purchase metadata/HP/fainted application pass\n", guards);
+    printf("VITAMIN host guards: %d whole-context refusals passed; purchase metadata/HP/fainted application, Flip Stat application pass\n", guards);
 }
 int main(int argc, char **argv)
 {

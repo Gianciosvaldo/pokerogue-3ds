@@ -2,6 +2,7 @@
 #ifndef PR_REWARD_INTERNAL_H
 #define PR_REWARD_INTERNAL_H
 #include "pr/reward.h"
+#include "pr/battle.h"
 
 const pr_reward_species *pr_reward_species_find(int species);
 int pr_reward_form_key(int species, int form);
@@ -15,6 +16,8 @@ int pr_reward_weight(pr_reward_ctx *ctx, int item, int tier, int reroll_count);
 /* getHpRatio(): Math.round(hp / maxHp * 100) / 100 */
 double pr_reward_hp_ratio(const pr_reward_mon *m);
 bool pr_reward_is_classic(const pr_run *run);
+/* the battle state calculateStats reads from globalScene: a Challenge Mode game's Flip Stat (ctx->challenges) */
+void pr_reward_stats_battle(const pr_reward_ctx *ctx, pr_battle *bt);
 
 bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e);
 bool pr_reward_evo_conditions_ex(pr_reward_ctx *ctx, int p, const pr_item_evo *e, bool for_fusion);

@@ -10,6 +10,8 @@
  *  - the party gc_starters_build_party makes from the same starters on the same Phaser RNG state matches upstream's after its
  *    STARTER_MODIFY: id, species, form, level, nature, ability index and ability, passive, gender, luck, tera type, HP, the six stats, the six
  *    IVs, the four moves, and the RNG state afterwards.
+ * And what reward-core reads of the challenges, through game-core's reward context: the Eviolite's and the Mini Black Hole's pool weights
+ * (Fresh Start), then a Mint and a vitamin on the first member through gc_port_apply_reward (the stats Flip Stat recalculates).
  * Usage: challenge_starters_diff_test <trace> */
 #include "../src/internal.h"
 #include <math.h>
@@ -25,7 +27,8 @@ static int inverse_v, flip_v, passives_v;   /* the case's Inverse Battle, Flip S
 static char exp_e[6][400], exp_p[6][40];
 static char exp_y[32][80];
 static char exp_f[200];
-static long fusion_stats;
+static long fusion_stats, reward_weights, reward_applies;
+static char exp_r[80], exp_n[200], exp_u[200];   /* the Eviolite's and Mini Black Hole's weights, the Mint's and the vitamin's results */
 static int got_y;
 static pr_battle bt;   /* the battle rules are read from the challenge fields of a battle: nothing else of it is looked at */
 
@@ -61,6 +64,15 @@ static pr_rng read_rng(char **save)
     return r;
 }
 static bool same_rng(const pr_rng *a, const pr_rng *b) { return a->c == b->c && a->s0 == b->s0 && a->s1 == b->s1 && a->s2 == b->s2; }
+
+/* a PLAYER pool entry's weight in the thresholds regenerateModifierPoolThresholds made (0 when it isn't in them) */
+static long pool_weight(const pr_reward_thresholds *th, int tier, int item)
+{
+    for (int i = 0; i < th->n[tier]; i++)
+        if (pr_player_pool_entries[pr_player_pool[tier].start + th->index[tier][i]].item == item)
+            return th->total[tier][i] - (i ? th->total[tier][i - 1] : 0);
+    return 0;
+}
 
 static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after, const gc_starter *team, char exp[][400])
 {
@@ -172,6 +184,41 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
             enemy_passives++;
         }
     }
+    /* the rewards: the weights with both unlocked, then a Mint and a vitamin on the first member (its storage index) */
+    if (exp_r[0] && run.n_party > 0) {
+        sys.unlocks.eviolite = sys.unlocks.mini_black_hole = true;
+        pr_reward_thresholds th;
+        pr_reward_regenerate_thresholds(gc_reward_ctx(&run), 0, &th);
+        char line[200];
+        snprintf(line, sizeof line, "%s", exp_r);
+        char *rs = NULL;
+        strtok_r(line, " \n", &rs);   /* R */
+        const long want_ev = inum(&rs), want_mbh = inum(&rs);
+        const long got_ev = pool_weight(&th, 2, PR_ITEM_EVIOLITE), got_mbh = pool_weight(&th, 4, PR_ITEM_MINI_BLACK_HOLE);
+        CHECK(got_ev == want_ev && got_mbh == want_mbh, "case %d (Fresh Start %d): Eviolite weight %ld, Mini Black Hole weight %ld, upstream %ld %ld", idx, fresh,
+              got_ev, got_mbh, want_ev, want_mbh);
+        reward_weights++;
+        const int storage = run.party_order[0];
+        const char *kinds[2] = {"MINT", "BASE_STAT_BOOSTER"};
+        const char *exps[2] = {exp_n, exp_u};
+        for (int r = 0; r < 2; r++) {
+            snprintf(line, sizeof line, "%s", exps[r]);
+            char *ns = NULL;
+            strtok_r(line, " \n", &ns);   /* N / U */
+            const long arg = inum(&ns), want_ok = inum(&ns), want_hp = inum(&ns);
+            gc_offer o = {.key = kinds[r], .arg = (int16_t)arg, .tier = -1, .target = GC_TARGET_POKEMON};
+            const char *why = NULL;
+            const bool ok = gc_port_apply_reward(&run, &o, storage, -1, &why);
+            const pr_pokemon *p = &run.party[storage].b;
+            CHECK((long)ok == want_ok, "case %d (Flip %d): %s %ld applied %d, upstream %ld (%s)", idx, flip_v, kinds[r], arg, ok, want_ok, why ? why : "");
+            CHECK(p->hp == want_hp, "case %d (Flip %d): after the %s %ld hp %d, upstream %ld", idx, flip_v, kinds[r], arg, p->hp, want_hp);
+            for (int st = 0; st < 6; st++) {
+                const long want = inum(&ns);
+                CHECK(want == p->stats[st], "case %d (Flip %d): after the %s %ld stat %d is %d, upstream %ld", idx, flip_v, kinds[r], arg, st, p->stats[st], want);
+            }
+            reward_applies++;
+        }
+    }
     cases++;
 }
 
@@ -206,6 +253,7 @@ int main(int argc, char **argv)
             open_case = false;
             got_y = 0;
             exp_f[0] = 0;
+            exp_r[0] = exp_n[0] = exp_u[0] = 0;
             idx = (int)inum(&save);
             fresh = (int)inum(&save);
             const long budget = inum(&save);
@@ -291,6 +339,12 @@ int main(int argc, char **argv)
             snprintf(exp_p[(int)strtol(save, NULL, 10)], sizeof exp_p[0], "P %s", save);
         } else if (!strcmp(kind, "F")) {
             snprintf(exp_f, sizeof exp_f, "F %s", save);
+        } else if (!strcmp(kind, "R")) {
+            snprintf(exp_r, sizeof exp_r, "R %s", save);
+        } else if (!strcmp(kind, "N")) {
+            snprintf(exp_n, sizeof exp_n, "N %s", save);
+        } else if (!strcmp(kind, "U")) {
+            snprintf(exp_u, sizeof exp_u, "U %s", save);
         } else if (!strcmp(kind, "Y")) {
             snprintf(exp_y[got_y++], sizeof exp_y[0], "Y %s", save);
         } else if (!strcmp(kind, "T")) {
@@ -315,8 +369,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "incomplete trace: %ld of %ld cases, end marker %d\n", cases, n_cases, saw_end);
         return 2;
     }
-    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld checks=%ld\n",
-           cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, checks);
+    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld rewardWeights=%ld rewardApplies=%ld checks=%ld\n",
+           cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, reward_weights, reward_applies, checks);
     printf("TOTAL mismatches=%ld\n", failures);
     return failures ? 1 : 0;
 }

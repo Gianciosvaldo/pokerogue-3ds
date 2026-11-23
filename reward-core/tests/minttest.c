@@ -129,7 +129,14 @@ static void selftest(void)
     c = fixture(); c.n_party = 7; refused(&c, 1, 0);
     c = fixture(); c.n_items = PR_REWARD_MAX_OWNED + 1; refused(&c, 1, 0);
     c = fixture(); c.n_items = 1; c.items[0].item = PR_ITEM_COUNT_; refused(&c, 1, 0);
-    c = fixture(); c.challenges = 1u << CHALLENGES_FLIP_STAT; refused(&c, 1, 0);
+    {   /* Flip Stat: calculateStats flips the base stats (applyChallenges(FLIP_STAT) in calculateBaseStats) */
+        pr_reward_ctx plain = fixture(), flip = fixture(); flip.challenges = 1u << CHALLENGES_FLIP_STAT;
+        if (!pr_reward_apply_mint(&plain, NATURE_ADAMANT, 0) || !pr_reward_apply_mint(&flip, NATURE_ADAMANT, 0)) die("mint refused");
+        pr_battle fb = {0}; fb.game_mode = GAME_MODES_CHALLENGE; fb.challenge_flags = 1u << CHALLENGES_FLIP_STAT; fb.challenge_flags_known = true;
+        pr_pokemon q = {0}; q.species = SPECIES_ID_BULBASAUR; q.level = 20; q.nature = NATURE_ADAMANT; pr_calculate_stats(&fb, &q);
+        if (memcmp(flip.party[0].stats, q.stats, sizeof q.stats) || !memcmp(flip.party[0].stats, plain.party[0].stats, sizeof q.stats)
+            || fb.n_unported) die("flip stat mint");
+    }
     c = fixture(); pr_run run = {0}; run.mode = GAME_MODES_SPLICED_ENDLESS; c.run = &run; refused(&c, 1, 0);
     const int unsupported[] = {PR_ITEM_BASE_STAT_BOOSTER, PR_ITEM_SOUL_DEW,
         PR_ITEM_MYSTERY_ENCOUNTER_SHUCKLE_JUICE, PR_ITEM_MYSTERY_ENCOUNTER_OLD_GATEAU,
@@ -148,7 +155,7 @@ static void selftest(void)
     refused(&c, 3, 0);
     c = fixture(); c.party[0].hp = 0;
     if (!pr_reward_apply_mint(&c, 1, 0) || c.party[0].hp) die("fainted mint");
-    printf("MINT host guards: pass (%d refusals preserve whole context; bounds, metadata, unsupported stats, capacity, base nature, HP)\n", refusal_guards);
+    printf("MINT host guards: pass (%d refusals preserve whole context; bounds, metadata, unsupported stats, capacity, base nature, HP; Flip Stat applies flipped)\n", refusal_guards);
 }
 int main(int argc, char **argv)
 {
