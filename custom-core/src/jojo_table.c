@@ -273,6 +273,16 @@ const cc_jojo_char cc_jojo_chars[] = {
         {936, 0, 0, 0, 0, {890, 396, 94, 241}, 1, {{"ATTACK_TYPE_BOOSTER", 9, 1}}}, /* Armarouge (Flash Fire), Charcoal; Armor Cannon, Aura Sphere, Psychic, Sunny Day */
         {475, 1, 0, 0, 0, {533, 427, 370, 14}, 0, {{0}}}, /* Gallade (mega) (Inner Focus); Sacred Sword, Psycho Cut, Close Combat, Swords Dance */
     }, 0, {0}, 0},
+    /* Tooru (lorenzo 2026-11-22: the species, Absol's Super Luck and Scope Lens, Mr. Rime's roles, Cofagrigus's Mummy and moves, Darkrai's Bad
+     * Dreams and Dark Void; 2026-11-23 "generate the moveset yourself": the other moves, abilities and items are Claude's picks) */
+    {"tooru", "Tooru", "Looks like we ran into each other at a good time.", 5 /* Forest */, -1, 6, {
+        {465, 0, 2, 0, 0, {438, 282, 79, 73}, 1, {{"LEFTOVERS", -1, 1}}}, /* Tangrowth (Regenerator), Leftovers; Power Whip, Knock Off, Sleep Powder, Leech Seed */
+        {359, 0, 1, 0, 0, {400, 427, 389, 14}, 1, {{"SCOPE_LENS", -1, 1}}}, /* Absol (Super Luck), Scope Lens; Night Slash, Psycho Cut, Sucker Punch, Swords Dance */
+        {866, 0, 1, 0, 0, {115, 113, 229, 573}, 1, {{"LEFTOVERS", -1, 1}}}, /* Mr. Rime (Screen Cleaner), Leftovers; Reflect, Light Screen, Rapid Spin, Freeze-Dry */
+        {934, 0, 0, 0, 0, {864, 105, 446, 776}, 1, {{"LEFTOVERS", -1, 1}}}, /* Garganacl (Purifying Salt), Leftovers; Salt Cure, Recover, Stealth Rock, Body Press */
+        {563, 0, 0, 0, 0, {228, 220, 506, 261}, 1, {{"ATTACK_TYPE_BOOSTER", 7, 1}}}, /* Cofagrigus (Mummy), Spell Tag; Pursuit (P: no double damage on a switch-out), Pain Split, Hex, Will-O-Wisp */
+        {491, 0, 0, 0, 0, {464, 399, 417, 188}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Darkrai (Bad Dreams), Black Glasses; Dark Void, Dark Pulse, Nasty Plot, Sludge Bomb */
+    }, 0, {0}, 0},
 };
 
 const unsigned cc_jojo_count = sizeof cc_jojo_chars / sizeof *cc_jojo_chars;
