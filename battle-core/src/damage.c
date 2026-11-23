@@ -20,6 +20,12 @@ double pr_type_chart_multiplier(const pr_battle *bt, int atk, int def)
     return m;
 }
 
+/* HardcoreChallenge.applyPokemonMove: valid = moveId !== REVIVAL_BLESSING */
+bool pr_challenge_move_allowed(const pr_battle *bt, int move)
+{
+    return !(bt && (bt->challenge_flags & (1u << CHALLENGES_HARDCORE)) && move == MOVE_ID_REVIVAL_BLESSING);
+}
+
 static double type_mult(const pr_battle *bt, int atk, int def)
 {
     return pr_type_chart_multiplier(bt, atk, def);

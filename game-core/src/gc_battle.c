@@ -613,6 +613,7 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
          * is made with is this one */
         run->pokeballs[ball]--;
         gc_int(run)->thrown_ball = (uint8_t)ball;
+        bt->catch_not_added = !gc_challenge_add_to_party_ok(run);   /* AttemptCapturePhase's text: Limited Catch's verdict, as gc_catch_start takes it */
         memset(tc, 0, sizeof *tc);
         tc->command = COMMAND_BALL;
         tc->cursor = (int8_t)ball;

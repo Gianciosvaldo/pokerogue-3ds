@@ -44,5 +44,18 @@ plant challenge-final-boss-not-classic battle-core/src/pokemon.c 's/const bool c
 plant rewards-without-challenges game-core/src/gc_reward.c 's/c->challenges = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;/c->challenges = 0;/'
 plant rewards-stats-without-flip reward-core/src/pools.c 's/if (!(ctx->challenges \& (1u << CHALLENGES_FLIP_STAT))) return;/return;/'
 plant rewards-fresh-pools-ignored reward-core/src/pools.c 's/(!has_challenge(ctx, CHALLENGES_FRESH_START) \&\& ctx->unlocked_eviolite)/(ctx->unlocked_eviolite)/'
+# The run rules (PR 3): Limited Support's shop and heal, Hardcore's shop, revive and Revival Blessing, Limited Catch's party add
+plant shop-hardcore-keeps-revives run-core/src/shop.c 's/if (hardcore \&\& (table\[i\].item == PR_SHOP_REVIVE/if (0 \&\& (table[i].item == PR_SHOP_REVIVE/'
+plant shop-hardcore-keeps-sacred-ash run-core/src/shop.c 's/ || table\[i\].item == PR_SHOP_SACRED_ASH)) continue;/)) continue;/'
+plant shop-hardcore-outside-challenge run-core/src/shop.c 's/const bool hardcore = run->mode == GAME_MODES_CHALLENGE \&\& (run->challenge_flags \& PR_CHALLENGE_HARDCORE);/const bool hardcore = false;/'
+plant support-shop-open run-core/src/shop.c 's/status = run->challenge_limited_support == 1;/status = true;/'
+plant support-heal-on-both run-core/src/shop.c 's/return run->challenge_limited_support == 2;/return run->challenge_limited_support != 1;/'
+plant prevent-revive-off run-core/src/shop.c 's/    return run->mode == GAME_MODES_CHALLENGE \&\& (run->challenge_flags \& PR_CHALLENGE_HARDCORE);/    return false;/'
+plant support-not-synced game-core/src/gc_challenge.c 's/r->challenge_limited_support = set->value\[CHALLENGES_LIMITED_SUPPORT\];/r->challenge_limited_support = 0;/'
+plant revival-blessing-allowed battle-core/src/damage.c 's/move == MOVE_ID_REVIVAL_BLESSING);/move == MOVE_ID_NONE);/'
+plant usable-skips-challenge battle-core/src/commands.c 's/if (p->is_player \&\& !pr_challenge_move_allowed(bt, move)) {/if (0) {/'
+plant copycat-skips-challenge battle-core/src/called_moves.c 's/return !pr_moves\[move\].unimplemented \&\& pr_challenge_move_allowed(bt, move);/return !pr_moves[move].unimplemented;/'
+plant limited-catch-any-wave game-core/src/gc_challenge.c 's/|| run->wave % 10 == 1;/|| run->wave % 10 != 0;/'
+plant limited-catch-no-teleport game-core/src/gc_challenge.c 's/return gc_int((gc_run \*)run)->me_teleport_catch || run->wave/return run->wave/'
 echo "challenge battle plants: $total run, $fails not caught"
 [ "$fails" = 0 ]

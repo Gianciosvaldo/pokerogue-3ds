@@ -459,6 +459,60 @@ static void rename_cases(void) {
   ps_close();
 }
 
+/* Hardcore (PartyUiHandler.updateOptionsHardcore): a fainted member offers nothing but Cancel on an item screen, its held items on the
+ * transfer screen, and Release alone on a catch's release prompt; a member that is not fainted, and every member without Hardcore, keep
+ * the usual options */
+static int opt_text(const char* key) { ui_screen* s = ui_top(); pf_clear_text(); s->draw(s, RR_BOTTOM); return pf_text_count(key); }
+static void hardcore_cases(void) {
+  memset(&run, 0, sizeof run);
+  run.n_party = 2;
+  for (int i = 0; i < 2; i++) {
+    pr_pokemon* p = &run.party[i].b;
+    p->id = 700 + i;
+    p->species = SPECIES_ID_CHARIZARD;
+    p->level = 30;
+    p->hp = i == 0 ? 0 : 100;
+    p->stats[0] = 100;
+    p->n_moves = 1;
+    p->moves[0] = MOVE_ID_TACKLE;
+    for (int j = 0; j < 4; j++) p->max_pp_override[j] = -1;
+    run.party_order[i] = (int8_t)i;
+  }
+  run.bt.n_party[0] = 2;
+  for (int i = 0; i < 2; i++) run.bt.party[0][i] = &run.party[i].b;
+  ps_set_run(&run);
+  for (int hardcore = 0; hardcore < 2; hardcore++) {
+    run.run.mode = GAME_MODES_CHALLENGE;
+    run.run.has_challenges = hardcore;
+    run.run.challenge_flags = hardcore ? 1u << CHALLENGES_HARDCORE : 0;
+    run.bt.challenge_flags = run.run.challenge_flags;
+    /* an Ether on the fainted first slot: its moves only without Hardcore */
+    open_item(PARTY_MOVE_MODIFIER, 0);
+    input(BTN_ACTION);
+    assert(opt_text("Tackle") == !hardcore && opt_text("Cancel") == 1);
+    input(BTN_ACTION);   /* Tackle, or Cancel back to the list */
+    assert(hardcore ? picked == -1 && depth == 2 : picked == 0 && move_slot == 0 && depth == 1);
+    if (hardcore) {
+      input(BTN_DOWN); input(BTN_ACTION);   /* the member that is not fainted keeps its moves */
+      assert(opt_text("Tackle") == 1);
+      input(BTN_ACTION);
+      assert(picked == 1 && depth == 1);
+    }
+    /* Apply (a potion, a vitamin): likewise */
+    open_item(PARTY_MODIFIER, 0);
+    input(BTN_ACTION);
+    assert(opt_text("Apply") == !hardcore);
+    input(BTN_CANCEL); input(BTN_CANCEL);
+    assert(picked == 6 && depth == 1);
+    /* a catch with a full party: Release alone for the fainted member */
+    ps_open(&run.bt, PS_RELEASE, on_pick, NULL);
+    input(BTN_ACTION);
+    assert(opt_text("partyUiHandler:release") == 1 && opt_text("Summary") == !hardcore);
+    ps_close();
+  }
+  memset(&run, 0, sizeof run);
+}
+
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -550,6 +604,7 @@ int main(void) {
   remember_reward_cases();
   fusion_cases();
   rename_cases();
+  hardcore_cases();
   puts("party_item_test: TM labels, Teach/filter, B/touch cancellation, move-item reset, remembered moves, the DNA Splicers screen and Rename passed");
   return 0;
 }

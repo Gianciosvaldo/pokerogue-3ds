@@ -27,9 +27,13 @@ enum {
     PR_CHALLENGE_FRESH_START       = 1u << 4, /* Challenges.FRESH_START */
     PR_CHALLENGE_INVERSE_BATTLE    = 1u << 5, /* Challenges.INVERSE_BATTLE */
     PR_CHALLENGE_FLIP_STAT         = 1u << 6, /* Challenges.FLIP_STAT */
+    PR_CHALLENGE_LIMITED_CATCH     = 1u << 7, /* Challenges.LIMITED_CATCH */
+    PR_CHALLENGE_LIMITED_SUPPORT   = 1u << 8, /* Challenges.LIMITED_SUPPORT */
+    PR_CHALLENGE_HARDCORE          = 1u << 9, /* Challenges.HARDCORE */
     PR_CHALLENGE_PASSIVES          = 1u << 10, /* Challenges.PASSIVES */
     PR_CHALLENGE_RULES_PORTED = PR_CHALLENGE_SINGLE_GENERATION | PR_CHALLENGE_SINGLE_TYPE | PR_CHALLENGE_FRESH_START
-                                | PR_CHALLENGE_INVERSE_BATTLE | PR_CHALLENGE_FLIP_STAT | PR_CHALLENGE_PASSIVES,
+                                | PR_CHALLENGE_INVERSE_BATTLE | PR_CHALLENGE_FLIP_STAT | PR_CHALLENGE_PASSIVES
+                                | PR_CHALLENGE_LIMITED_CATCH | PR_CHALLENGE_LIMITED_SUPPORT | PR_CHALLENGE_HARDCORE,
 };
 
 typedef struct pr_run {
@@ -40,6 +44,7 @@ typedef struct pr_run {
     uint8_t challenge_type;       /* SINGLE_TYPE value: 0 off, 1..18 (PokemonType + 1) */
     uint8_t challenge_fresh_start;/* FRESH_START value: 0 off, 1..2 */
     uint8_t challenge_passives;   /* PASSIVES value: 0 off, 1..2 */
+    uint8_t challenge_limited_support; /* LIMITED_SUPPORT value: 0 off, 1 no heal, 2 no shop, 3 both */
     pr_seedstr seed;           /* globalScene.seed: the run seed */
     pr_seedstr wave_seed;      /* globalScene.waveSeed */
     pr_rng rng;                /* Phaser.Math.RND */
@@ -138,6 +143,10 @@ double pr_run_get_wave_money_amount(int wave, double money_multiplier);
  * one charges Black Sludge applied to the option built from the plain getWaveMoneyAmount(1). */
 int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_shop_option out[PR_SHOP_ITEM_COUNT_]);
 bool pr_run_get_shop_status(pr_run *run);
+/* applyChallenges(PARTY_HEAL): whether the party heal after a biome's last wave happens (Limited Support) */
+bool pr_run_get_party_heal_status(const pr_run *run);
+/* applyChallenges(PREVENT_REVIVE): a fainted Pokemon stays fainted (Hardcore) */
+bool pr_run_prevent_revive(const pr_run *run);
 /* HealShopCostModifier (Black Sludge) through applyModifier; multiplier 0 = none held */
 double pr_run_apply_heal_shop_cost(double cost, double black_sludge_multiplier);
 /* MoneyRewardPhase: wave money x the battle's multiplier, each Amulet Coin (MoneyMultiplierModifier,

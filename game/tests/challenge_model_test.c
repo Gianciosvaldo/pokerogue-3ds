@@ -51,7 +51,7 @@ int main(void) {
   /* prefilled values: those game-core plays are kept, what it would refuse (above the max, a challenge not played) is reset */
   gc_challenge_set in = {{0}};
   in.value[fs] = 1;
-  in.value[CHALLENGES_HARDCORE] = 1;
+  in.value[CHALLENGES_MOVESET_RANDOMIZER] = 1;
   in.value[CHALLENGES_SINGLE_TYPE] = 200;
   chm_init(&m, &in);
   CHECK(m.v.value[fs] == 1, "a prefilled Fresh Start is kept");

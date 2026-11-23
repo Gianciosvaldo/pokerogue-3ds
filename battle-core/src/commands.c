@@ -135,7 +135,11 @@ bool pr_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp
         return false;
     }
     if (for_selection && !pr_move_selectable(bt, p, move, why)) return false;
-    return true;   /* the challenges' POKEMON_MOVE rule for the player isn't modelled */
+    if (p->is_player && !pr_challenge_move_allowed(bt, move)) {
+        if (why) *why = pr_msg1("battle:moveCannotUseChallenge", pr_arg_move("moveName", move));
+        return false;
+    }
+    return true;
 }
 
 int pr_fight_move(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, pr_msg *why)

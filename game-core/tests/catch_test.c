@@ -55,11 +55,20 @@ static int farewells(void)
     return n;
 }
 
+/* the challenges of the next new_run: NULL for a Classic run, else a Challenge Mode run with these values */
+static const gc_challenge_set *next_challenges;
+static void start_run(const char *seed)
+{
+    const char *why;
+    gc_run_new(&run, next_challenges ? GAME_MODES_CHALLENGE : GAME_MODES_CLASSIC, seed, 7);
+    if (next_challenges) CHECK(gc_run_set_challenges(&run, next_challenges, &why));
+}
+
 static void new_run(const char *seed, bool with_sys)
 {
     memset(&run, 0, sizeof run);
     gc_system_init_defaults(&sys);
-    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    start_run(seed);
     gc_starter team[3];
     memset(team, 0, sizeof team);
     const int species[3] = {SPECIES_ID_BULBASAUR, SPECIES_ID_CHARMANDER, SPECIES_ID_SQUIRTLE};
@@ -73,7 +82,7 @@ static void new_run(const char *seed, bool with_sys)
      * separate doubles controller suite verifies the multi-opponent refusal. */
     for(int attempt=0;;attempt++){
         CHECK(attempt<64);
-        if(attempt){char single_seed[128];snprintf(single_seed,sizeof single_seed,"%s-single-%d",seed,attempt);gc_run_new(&run,GAME_MODES_CLASSIC,single_seed,7);}
+        if(attempt){char single_seed[128];snprintf(single_seed,sizeof single_seed,"%s-single-%d",seed,attempt);start_run(single_seed);}
         CHECK(gc_run_set_starters(&run, team, 3, &why));
         if(run.battle_type==BATTLE_TYPE_WILD&&run.n_enemy==1)break;
     }
@@ -712,6 +721,62 @@ static void event_catch_rate(void)
     CHECK(failed_throws(false, &EVENT_SRC, 10) == plain);
 }
 
+/* ------------------------------------------------------------------ Limited Catch (LimitedCatchChallenge.applyPokemonAddToParty)
+ * A catch joins the party only when its metWave (the current wave) is a biome's first, % 10 == 1, or in Teleporting Hijinks' fight after
+ * the teleport. Otherwise AttemptCapturePhase says battle:pokemonCaughtButChallenge, setPokemonCaught still runs (the dex), and the
+ * Pokemon is removed with no party prompt, even with a full party. */
+static void limited_catch(void)
+{
+    gc_challenge_set set;
+    memset(&set, 0, sizeof set);
+    set.value[CHALLENGES_LIMITED_CATCH] = 1;
+    next_challenges = &set;
+    for (int k = 0; k < 4; k++) {
+        /* k: 0 the run's first wave (kept), 1 wave 2 (refused), 2 wave 2 with a full party (refused, no prompt), 3 wave 2 after a teleport (kept) */
+        char seed[32];
+        snprintf(seed, sizeof seed, "limited-catch-%d", k);
+        new_run(seed, true);
+        CHECK(run.run.mode == GAME_MODES_CHALLENGE && (run.run.challenge_flags & PR_CHALLENGE_LIMITED_CATCH));
+        CHECK(run.wave == 1);
+        if (k) run.wave = 2;   /* the wave the enemy was made in: what metWave holds */
+        if (k == 2) fill_party(6);
+        if (k == 3) gc_int(&run)->me_teleport_catch = true;
+        const bool kept = k == 0 || k == 3;
+        CHECK(gc_challenge_add_to_party_ok(&run) == kept);
+        gc_mon *foe = &run.enemy[0];
+        sure_catch(foe);
+        const int n = run.n_party, species = foe->b.species;
+        run.pokeballs[POKEBALL_TYPE_POKEBALL] = 3;
+        const char *why = "";
+        CHECK(throw_ball(POKEBALL_TYPE_POKEBALL, &why));
+        CHECK(settle() == GC_SCREEN_REWARD);
+        CHECK(run.pokeballs[POKEBALL_TYPE_POKEBALL] == 2);
+        CHECK(times("battle:pokemonCaught") == (kept ? 1 : 0));
+        CHECK(times("battle:pokemonCaughtButChallenge") == (kept ? 0 : 1));
+        CHECK(times("battle:partyFull") == 0);
+        CHECK(run.n_party == (kept ? n + 1 : n));
+        CHECK(sys.dex[species].caught_attr != 0);   /* setPokemonCaught runs either way */
+        CHECK(run.enemy[0].b.hp == 0 && run.enemy[0].b.status == STATUS_EFFECT_FAINT);
+    }
+    /* an encounter's catch outside a battle (catchPokemon): an obtain (c = 1) always joins, the others follow the rule */
+    for (int c = 1; c <= 3; c++) {
+        char seed[32];
+        snprintf(seed, sizeof seed, "limited-catch-me-%d", c);
+        new_run(seed, true);
+        run.wave = 2;
+        sure_catch(&run.enemy[0]);
+        const int n = run.n_party;
+        gc_rphase p = gc_rp(RP_CATCH, 0, 0, c);
+        CHECK(gc_catch_start(&run, &p));
+        drain();
+        CHECK(run.n_party == (c == 1 ? n + 1 : n));
+        CHECK(times("battle:pokemonObtained") == (c == 1));
+        CHECK(times("battle:pokemonCaughtButChallenge") == (c == 3));
+        CHECK(times("battle:pokemonCaught") == 0);
+    }
+    next_challenges = NULL;
+}
+
 int main(int argc, char **argv)
 {
     const char *only = argc > 1 ? argv[1] : NULL;
@@ -723,6 +788,7 @@ int main(int argc, char **argv)
     if (!only || !strcmp(only, "save")) save_load();
     if (!only || !strcmp(only, "shiny")) shiny_catch_rate();
     if (!only || !strcmp(only, "event")) event_catch_rate();
+    if (!only || !strcmp(only, "limited")) limited_catch();
     printf("catch: %d checks, 0 failures\n", checks);
     return 0;
 }

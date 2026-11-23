@@ -81,10 +81,15 @@ static void test_money_teleports_and_clears_the_arena(void)
     /* the fight: the boss cannot be fled from but can be caught */
     assert(run.screen.kind == GC_SCREEN_COMMAND && run.n_enemy == 1 && run.enemy[0].b.is_boss);
     assert(!run.screen.can_run);
+    assert(gc_int(&run)->me_teleport_catch);   /* Limited Catch's isTeleporter: the first two options teleport */
     assert(run.me_catch_allowed);
     win_the_fight();
     /* the ordinary rewards of the wave, and nobody but the lead gained experience from the machine */
     assert(run.screen.kind == GC_SCREEN_REWARD);
+    /* the next wave's battle is no longer the encounter's: its catches follow Limited Catch's wave rule again */
+    gc_choice skip = {GC_CH_SKIP, 0, 0, 0};
+    assert(gc_run_choose(&run, &skip, &why));
+    assert(run.wave == 44 && !gc_int(&run)->me_teleport_catch);
     puts("ok");
 }
 
@@ -99,6 +104,7 @@ static void test_helper_gets_the_experience(void)
     assert(run.money == money);   /* the helper pays the machine's price */
     assert(run.biome != BIOME_ID_PLAINS);
     assert(run.screen.kind == GC_SCREEN_COMMAND && !run.screen.can_run);
+    assert(gc_int(&run)->me_teleport_catch);
     const double helper_exp = run.party[1].exp, bench_exp = run.party[2].exp;
     win_the_fight();
     assert(run.screen.kind == GC_SCREEN_REWARD || run.screen.kind == GC_SCREEN_COMMAND || run.screen.kind == GC_SCREEN_MYSTERY || run.n_party == 3);
@@ -118,6 +124,7 @@ static void test_inspect_opens_the_boosters(void)
     assert(gc_run_choose(&run, &ch, &why));
     assert(run.money == money && run.biome == BIOME_ID_PLAINS);
     assert(run.screen.kind == GC_SCREEN_COMMAND && !run.screen.can_run && run.me_catch_allowed);
+    assert(!gc_int(&run)->me_teleport_catch);   /* the third option is not a teleport: options[2] */
     win_the_fight();
     assert(run.screen.kind == GC_SCREEN_REWARD && run.screen.n_options >= 3);
     assert(!strcmp(run.screen.options[0].key, "ATTACK_TYPE_BOOSTER") && run.screen.options[0].arg == POKEMON_TYPE_STEEL);

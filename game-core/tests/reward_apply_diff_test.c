@@ -79,11 +79,19 @@ static void add_tag(pr_pokemon *b, int type)
 static gc_run run;
 static gc_system sys;
 
-static void setup(const member *m, int n, int rot, int stacks)
+static void setup(const member *m, int n, int rot, int stacks, bool hardcore)
 {
     memset(&run, 0, sizeof run);
     gc_system_init_defaults(&sys);
-    gc_run_new(&run, GAME_MODES_CLASSIC, "reward-apply-diff", 7);
+    /* the producer's case is Classic, or Challenge Mode with Hardcore (the only challenge it sets) */
+    gc_run_new(&run, hardcore ? GAME_MODES_CHALLENGE : GAME_MODES_CLASSIC, "reward-apply-diff", 7);
+    if (hardcore) {
+        gc_challenge_set set;
+        memset(&set, 0, sizeof set);
+        set.value[CHALLENGES_HARDCORE] = 1;
+        const char *cwhy;
+        if (!gc_run_set_challenges(&run, &set, &cwhy)) { fprintf(stderr, "could not set Hardcore: %s\n", cwhy); exit(2); }
+    }
     gc_starter team[6];
     memset(team, 0, sizeof team);
     int k = 0;
@@ -494,7 +502,7 @@ int main(int argc, char **argv)
     FILE *f = argc == 2 ? fopen(argv[1], "r") : NULL;
     if (!f) { fputs("usage: reward_apply_diff_test <apply trace>\n", stderr); return 2; }
     static char line[16384];
-    long cases = 0, replayed = 0, skipped_hardcore = 0, skipped_other = 0, mismatches = 0, comparisons = 0, shown = 0;
+    long cases = 0, replayed = 0, hardcore_cases = 0, skipped_other = 0, mismatches = 0, comparisons = 0, shown = 0;
     long taken[N_KEYS] = {0}, refused[N_KEYS] = {0}, cases_by_key[N_KEYS] = {0};
     long free_no_effect = 0, hp_changed = 0, pp_changed = 0, pp_up_changed = 0, status_cured = 0, charm_cases = 0;
     long bought_taken = 0, bought_refused = 0, free_taken = 0, free_refused = 0;
@@ -601,14 +609,16 @@ int main(int argc, char **argv)
         }
         if (!fgets(line, sizeof line, f) || line[0] != 'E') { fputs("malformed trace: E record\n", stderr); return 2; }
 
-        if (challenges & (1L << CHALLENGES_HARDCORE)) { skipped_hardcore++; continue; }
+        const bool hardcore = (challenges & (1L << CHALLENGES_HARDCORE)) != 0;
+        if (challenges & ~(1L << CHALLENGES_HARDCORE)) { fputs("malformed trace: a challenge other than Hardcore\n", stderr); return 2; }
+        hardcore_cases += hardcore;
         cases_by_key[item]++;
         charm_cases += stacks > 0;
         const bool sacred_ash = !strcmp(key, "SACRED_ASH");
 
         for (int purchase = 0; purchase < 2; purchase++) {
             const int rot = (int)((cases + purchase) % n);
-            setup(before, n, rot, stacks);
+            setup(before, n, rot, stacks, hardcore);
             gc_event drained;
             drain_events(&run, &drained);
             gc_offer o;
@@ -712,8 +722,8 @@ int main(int argc, char **argv)
     }
     if (!cases && !cs.cases && !ps.cases) return 1;
     if (!cases) return (mismatches || cs.mismatches || ps.mismatches) ? 1 : 0;
-    printf("%ld cases in the trace: %ld replayed twice (free and bought), %ld skipped (%ld Hardcore, %ld other items), %ld comparisons, %ld mismatches\n",
-           cases, replayed, skipped_hardcore + skipped_other, skipped_hardcore, skipped_other, comparisons, mismatches);
+    printf("%ld cases in the trace: %ld replayed twice (free and bought), %ld of them in Challenge Mode with Hardcore, %ld skipped (other items), %ld comparisons, %ld mismatches\n",
+           cases, replayed, hardcore_cases, skipped_other, comparisons, mismatches);
     printf("free rewards: %ld taken, %ld refused; bought: %ld taken, %ld refused; %ld cases with a Healing Charm\n", free_taken, free_refused, bought_taken, bought_refused, charm_cases);
     printf("what changed (free rewards): %ld HP values, %ld statuses, %ld PP used, %ld PP Ups; %ld taken with no effect (Sacred Ash)\n", hp_changed, status_cured, pp_changed, pp_up_changed, free_no_effect);
     printf("cures (free rewards): %ld confusions ended, %ld Nightmares lapsed, %ld status counter sets reset, %ld Full Heals on a Pokemon that was only confused; %ld texts compared with upstream's (free and bought)\n",

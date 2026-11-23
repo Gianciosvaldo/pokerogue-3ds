@@ -785,6 +785,7 @@ void gc_new_battle(gc_run *run)
     in->custom_trainer_name[0] = 0;
     in->custom_team_on = false;
     in->pillar.active = false;
+    in->me_teleport_catch = false;
     in->me_no_flee = in->me_reward.active = in->me_reward.before = in->me_no_stats = false;
     in->me_reward.n_more = in->me_reward.n_tiers = 0;
     in->berries.pending = false;

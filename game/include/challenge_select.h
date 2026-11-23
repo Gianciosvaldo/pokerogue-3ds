@@ -42,6 +42,9 @@ bool chm_can_start(const chm_model* m);
 int chm_current(const chm_model* m);
 /* the locale key base of a challenge ("freshStart": challenges:<base>.name / .value.N / .desc.N) */
 const char* chm_key(int challenge);
+/* updateDescriptionScroll: how far up (logical px, 0..overflow) a description `overflow` px taller than its window has scrolled after t_ms
+ * of the tween (delay 3200, duration max(3200, overflow * 44), hold 5000, yoyo, repeatDelay 3200, repeat forever, linear) */
+float chm_desc_scroll(float overflow, float t_ms);
 
 typedef struct {
   gc_challenge_set values;  /* what the screen starts with (the last choice when it comes back from the starter select) */

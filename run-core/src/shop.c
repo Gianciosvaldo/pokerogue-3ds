@@ -51,11 +51,14 @@ int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_s
     };
     if (wave % 10 == 0) return 0;
     if (run->has_challenges && (run->mode != GAME_MODES_CHALLENGE || pr_run_has_unported_challenges(run)))
-        run->unported |= PR_RUN_UNPORTED_CHALLENGES;   /* the SHOP hook is Limited Support's; the ported challenges have none */
+        run->unported |= PR_RUN_UNPORTED_CHALLENGES;
+    /* HardcoreChallenge.applyShopItem: status = shopItem.type.group !== "revive" (Revive, Max Revive, Sacred Ash) */
+    const bool hardcore = run->mode == GAME_MODES_CHALLENGE && (run->challenge_flags & PR_CHALLENGE_HARDCORE);
     double rows = ceil((wave + 10 > 0 ? wave + 10 : 0) / 30.0);
     int n = 0;
     for (int i = 0; i < PR_SHOP_ITEM_COUNT_; i++) {
         if (table[i].row >= rows) break;
+        if (hardcore && (table[i].item == PR_SHOP_REVIVE || table[i].item == PR_SHOP_MAX_REVIVE || table[i].item == PR_SHOP_SACRED_ASH)) continue;
         out[n].item = table[i].item;
         /* the table's factor times baseCost, as the JS writes it (baseCost alone for factor 1) */
         out[n].cost = option_cost(table[i].factor == 1 ? base_cost : base_cost * table[i].factor);
@@ -64,12 +67,30 @@ int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_s
     return n;
 }
 
-/* gameMode.getShopStatus(): !hasNoShop (the daily run has no shop), then the challenges' SHOP hook */
+/* gameMode.getShopStatus(): !hasNoShop (the daily run has no shop), then the challenges' SHOP hook: LimitedSupportChallenge.applyShop
+ * keeps an open shop only with its value 1 (no heal); 2 (no shop) and 3 (neither) close it */
 bool pr_run_get_shop_status(pr_run *run)
 {
     if (run->has_challenges && (run->mode != GAME_MODES_CHALLENGE || pr_run_has_unported_challenges(run)))
-        run->unported |= PR_RUN_UNPORTED_CHALLENGES;   /* the SHOP hook is Limited Support's; the ported challenges have none */
-    return run->mode != GAME_MODES_DAILY;
+        run->unported |= PR_RUN_UNPORTED_CHALLENGES;
+    bool status = run->mode != GAME_MODES_DAILY;
+    if (status && run->mode == GAME_MODES_CHALLENGE && (run->challenge_flags & PR_CHALLENGE_LIMITED_SUPPORT))
+        status = run->challenge_limited_support == 1;
+    return status;
+}
+
+/* applyChallenges(PARTY_HEAL, status) in SelectBiomePhase: LimitedSupportChallenge.applyPartyHeal keeps the heal only with its value 2 */
+bool pr_run_get_party_heal_status(const pr_run *run)
+{
+    if (run->mode == GAME_MODES_CHALLENGE && (run->challenge_flags & PR_CHALLENGE_LIMITED_SUPPORT))
+        return run->challenge_limited_support == 2;
+    return true;
+}
+
+/* applyChallenges(PREVENT_REVIVE, status): HardcoreChallenge sets it */
+bool pr_run_prevent_revive(const pr_run *run)
+{
+    return run->mode == GAME_MODES_CHALLENGE && (run->challenge_flags & PR_CHALLENGE_HARDCORE);
 }
 
 /* HealShopCostModifier (Black Sludge).apply(moneyCost): moneyCost.value = Math.floor(moneyCost.value * this.shopMultiplier).
