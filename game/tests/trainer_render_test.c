@@ -133,7 +133,7 @@ int main(void) {
   draw_me_intro();near(px,160+(68+200)*fz);
   g_now=2900;draw_me_intro();near(px,160+68*fz);
   /* Jobin's drum (lorenzo 2026-11-23): the arena stands where the platforms are, a beetle on each side (the player's from the back), the player's
-   * trainer and the encounter's sprites leave the field while it is on and come back after; the meters ease over 600 ms; the Speed King is drawn 1:1 */
+   * trainer and the encounter's sprites leave the field while it is on and come back after; the meters ease over 600 ms (the Speed King has no sprite) */
   memset(&mine,0,sizeof mine);memset(&his,0,sizeof his);mine.species=123;his.species=127;strcpy(mine.name,"Scyther");strcpy(his.name,"Pinsir");
   assert(!bv_jobin_on());
   g_now=5000;bv_jobin_start(&mine,&his,100,100,0);assert(bv_jobin_on());
@@ -147,11 +147,6 @@ int main(void) {
   g_now=5400;{const float m=jobin_meter(0);assert(m<100&&m>65);const float s=jobin_meter(2);assert(s>0&&s<35);}
   g_now=5800;near(jobin_meter(0),65);near(jobin_meter(1),100);near(jobin_meter(2),35);
   g_now=5900;bv_jobin_set(65,40,60);g_now=6600;near(jobin_meter(0),65);near(jobin_meter(1),40);near(jobin_meter(2),60);
-  before=draws;draw_jobin_king();assert(draws==before);
-  bv_jobin_king(true);g_now=6700;before=draws;draw_jobin_king();assert(draws==before+1&&!strcmp(atlas,"images/trainer/custom/speed_king"));
-  assert((opts.tint&0xff)>0&&(opts.tint&0xff)<255);
-  g_now=7200;draw_jobin_king();assert((opts.tint&0xff)==255);
-  bv_jobin_king(false);before=draws;draw_jobin_king();assert(draws==before);
   bv_jobin_end();assert(!bv_jobin_on());
   before=draws;draw_jobin_arena();draw_jobin_spot(0);draw_jobin_spot(1);assert(draws==before);
   before=draws;draw_player_trainer();assert(draws==before+1);B.player_trainer_visible=false;

@@ -1007,9 +1007,8 @@ static bool handle_event(int i) {
         bv_jobin_start(&mine, &his, e->a, e->b, e->c);
       } else if (what == GC_JOBIN_HUD_UPDATE) {
         bv_jobin_set(e->a, e->b, e->c);
-        bv_jobin_king(false);
       } else if (what == GC_JOBIN_HUD_TELEGRAPH) {
-        bv_jobin_king(true);
+        /* the Speed King has no sprite (lorenzo 2026-11-23): the telegraph line says it */
       } else if (what == GC_JOBIN_HUD_END) {
         bv_jobin_set(e->a, e->b, e->c);
         bv_jobin_end();
