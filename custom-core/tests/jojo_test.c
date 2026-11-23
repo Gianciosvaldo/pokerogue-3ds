@@ -15,48 +15,48 @@ static const int SEQ[6][12] = {
     {31, 15, 31, 8, 30, 8, 30, 15, 31, 22, 30, 22},   /* the third batch: Ghiaccio's two biomes (Snowy Forest is one of his more_biomes), the Beach, the Slum, the Ruins */
 };
 static const struct { uint64_t seed; int seq; int want[12]; uint64_t state; } GOLDEN[] = {
-    {0x0ULL, 0, {22, -1, 1, 3, -1, -1, -1, 2, -1, -1, -1, -1}, 0x2DC6E5E736F71B91ULL},
-    {0x0ULL, 1, {6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x86BE3DC240E4526BULL},
-    {0x0ULL, 2, {22, -1, 1, 27, -1, -1, -1, 28, -1, -1, -1, -1}, 0xB4E8FF0139CD2B3DULL},
-    {0x0ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x4A4F4A4F424F5A41ULL},
-    {0x0ULL, 4, {19, -1, 30, 33, -1, -1, -1, 28, -1, -1, -1, -1}, 0x2DC6E5E736F71B91ULL},
-    {0x0ULL, 5, {34, -1, -1, -1, 10, 24, -1, -1, -1, -1, -1, 37}, 0xB4E8FF0139CD2B3DULL},
-    {0x1ULL, 0, {-1, -1, -1, 3, 9, -1, 27, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
-    {0x1ULL, 1, {-1, -1, -1, 6, -1, -1, -1, -1, -1, -1, -1, -1}, 0x6164AAEEBEC3C6A9ULL},
-    {0x1ULL, 2, {-1, -1, -1, 27, 1, -1, 22, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
-    {0x1ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x4A4F4A4F424F5A40ULL},
-    {0x1ULL, 4, {-1, -1, -1, 33, 23, -1, 21, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
-    {0x1ULL, 5, {-1, -1, -1, 24, 10, -1, 26, -1, -1, -1, -1, -1}, 0x8F8F6C2DB7AC9F7BULL},
-    {0x12d687ULL, 0, {-1, 2, 22, -1, 9, -1, -1, -1, -1, -1, 17, 20}, 0x2DC6E5E737054E16ULL},
-    {0x12d687ULL, 1, {-1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x24F5B77BC03D0105ULL},
-    {0x12d687ULL, 2, {-1, 28, 1, -1, 22, -1, -1, -1, -1, 27, -1, -1}, 0xF157F274387055ECULL},
-    {0x12d687ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x4A4F4A4F425D8CC6ULL},
-    {0x12d687ULL, 4, {-1, 29, 30, -1, 23, -1, -1, -1, -1, 22, 27, 28}, 0x6A35D95A359A4640ULL},
-    {0x12d687ULL, 5, {-1, 34, -1, 36, -1, 24, -1, -1, -1, -1, -1, -1}, 0xB4E8FF0139DB5DC2ULL},
-    {0xdeadbeefcafef00dULL, 0, {28, 2, -1, -1, -1, 35, -1, -1, -1, -1, 17, 13}, 0x785A90387D596B9CULL},
-    {0xdeadbeefcafef00dULL, 1, {6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0xD151E8138746A276ULL},
-    {0xdeadbeefcafef00dULL, 2, {28, 27, -1, -1, -1, 1, -1, -1, -1, 22, -1, -1}, 0x3BEB9CC57EC47372ULL},
-    {0xdeadbeefcafef00dULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0x94E2F4A088B1AA4CULL},
-    {0xdeadbeefcafef00dULL, 4, {19, 29, -1, -1, -1, 24, -1, -1, -1, 22, 28, -1}, 0x169209F1FCA3E7B1ULL},
-    {0xdeadbeefcafef00dULL, 5, {34, -1, -1, 36, -1, -1, -1, -1, -1, 37, -1, -1}, 0xC30DB5DF819A831EULL},
+    {0x0ULL, 0, {22, -1, 1, 3, -1, -1, -1, 2, -1, -1, -1, -1}, 0X2DC6E5E736F71B91ULL},
+    {0x0ULL, 1, {38, -1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X6164AAEEBEC3C6AAULL},
+    {0x0ULL, 2, {22, -1, 1, 27, -1, -1, -1, 28, -1, -1, -1, -1}, 0XB4E8FF0139CD2B3DULL},
+    {0x0ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X4A4F4A4F424F5A41ULL},
+    {0x0ULL, 4, {19, -1, 30, 33, -1, -1, -1, 28, -1, -1, -1, -1}, 0X2DC6E5E736F71B91ULL},
+    {0x0ULL, 5, {34, -1, -1, -1, 10, 24, -1, -1, -1, -1, -1, 37}, 0XB4E8FF0139CD2B3DULL},
+    {0x1ULL, 0, {-1, -1, -1, 3, 9, -1, 27, -1, -1, -1, -1, -1}, 0X8F8F6C2DB7AC9F7BULL},
+    {0x1ULL, 1, {-1, -1, -1, 6, 38, -1, -1, -1, -1, -1, -1, -1}, 0X9DD39E61BD58BED3ULL},
+    {0x1ULL, 2, {-1, -1, -1, 27, 1, -1, 22, -1, -1, -1, -1, -1}, 0X8F8F6C2DB7AC9F7BULL},
+    {0x1ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X4A4F4A4F424F5A40ULL},
+    {0x1ULL, 4, {-1, -1, -1, 33, 23, -1, 21, -1, -1, -1, -1, -1}, 0X8F8F6C2DB7AC9F7BULL},
+    {0x1ULL, 5, {-1, -1, -1, 24, 10, -1, 26, -1, -1, -1, -1, -1}, 0X8F8F6C2DB7AC9F7BULL},
+    {0x12d687ULL, 0, {-1, 2, 22, -1, 9, -1, -1, -1, -1, -1, 17, 20}, 0X2DC6E5E737054E16ULL},
+    {0x12d687ULL, 1, {-1, 38, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X6164AAEEBED1F92FULL},
+    {0x12d687ULL, 2, {-1, 28, 1, -1, 22, -1, -1, -1, -1, 27, -1, -1}, 0XF157F274387055ECULL},
+    {0x12d687ULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X4A4F4A4F425D8CC6ULL},
+    {0x12d687ULL, 4, {-1, 29, 30, -1, 23, -1, -1, -1, -1, 22, 27, 28}, 0X6A35D95A359A4640ULL},
+    {0x12d687ULL, 5, {-1, 34, -1, 36, -1, 24, -1, -1, -1, -1, -1, -1}, 0XB4E8FF0139DB5DC2ULL},
+    {0xdeadbeefcafef00dULL, 0, {28, 2, -1, -1, -1, 35, -1, -1, -1, -1, 17, 13}, 0X785A90387D596B9CULL},
+    {0xdeadbeefcafef00dULL, 1, {38, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0XDC0DB8685DB9AA0ULL},
+    {0xdeadbeefcafef00dULL, 2, {28, 27, -1, -1, -1, 1, -1, -1, -1, 22, -1, -1}, 0X3BEB9CC57EC47372ULL},
+    {0xdeadbeefcafef00dULL, 3, {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, 0X94E2F4A088B1AA4CULL},
+    {0xdeadbeefcafef00dULL, 4, {19, 29, -1, -1, -1, 24, -1, -1, -1, 22, 28, -1}, 0X169209F1FCA3E7B1ULL},
+    {0xdeadbeefcafef00dULL, 5, {34, -1, -1, 36, -1, -1, -1, -1, -1, 37, -1, -1}, 0XC30DB5DF819A831EULL},
 };
 static const struct { uint64_t seed; int want[12]; uint64_t state; } GOLDEN_SMALL[] = {
-    {0, {1, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1}, 0xDA4291D4BBEDB6FEULL},
-    {1, {-1, -1, -1, 1, 0, -1, 2, -1, -1, -1, -1, -1}, 0xB4E8FF0139CD2B3CULL},
-    {2, {0, -1, 1, 2, -1, -1, -1, -1, -1, -1, 3, -1}, 0xDA4291D4BBEDB700ULL},
-    {3, {-1, 0, 1, 2, -1, -1, -1, -1, -1, -1, -1, -1}, 0xDA4291D4BBEDB6FFULL},
-    {4, {-1, -1, -1, 0, -1, 2, 1, -1, -1, -1, 3, -1}, 0xB4E8FF0139CD2B41ULL},
-    {5, {1, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, 3}, 0x8F8F6C2DB7AC9F7FULL},
-    {6, {-1, -1, 1, -1, 2, 0, -1, -1, -1, -1, 3, -1}, 0x16B18547BA82AF2EULL},
-    {7, {2, 1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1}, 0xB4E8FF0139CD2B42ULL},
+    {0, {1, -1, 0, 2, -1, -1, -1, -1, -1, -1, -1, -1}, 0XDA4291D4BBEDB6FEULL},
+    {1, {-1, -1, -1, 1, 0, -1, 2, -1, -1, -1, -1, -1}, 0XB4E8FF0139CD2B3CULL},
+    {2, {0, -1, 1, 2, -1, -1, -1, -1, -1, -1, 3, -1}, 0XDA4291D4BBEDB700ULL},
+    {3, {-1, 0, 1, 2, -1, -1, -1, -1, -1, -1, -1, -1}, 0XDA4291D4BBEDB6FFULL},
+    {4, {-1, -1, -1, 0, -1, 2, 1, -1, -1, -1, 3, -1}, 0XB4E8FF0139CD2B41ULL},
+    {5, {1, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, 3}, 0X8F8F6C2DB7AC9F7FULL},
+    {6, {-1, -1, 1, -1, 2, 0, -1, -1, -1, -1, 3, -1}, 0X16B18547BA82AF2EULL},
+    {7, {2, 1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1}, 0XB4E8FF0139CD2B42ULL},
 };
 
 #define POOL_N 23
 static const int POOL[POOL_N] = {14, 4, 9, 29, 7, 5, 10, 19, 1, 30, 24, 20, 13, 41, 18, 23, 26, 2, 21, 8, 15, 31, 22};   /* the biomes some character is in */
-#define N_CHARS 38
+#define N_CHARS 39
 static const int BIOME_OF[N_CHARS] = {-1, 14, 4, 9, 29, 7, 5, 10, 19, 1, 30, -1, -1, 24, 20, 13, 41,
                                       20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 23, 26, 1, 41, 2,
-                                      15, 30, 8, 22};
+                                      15, 30, 8, 22, 5};
 
 static int same(const cc_jojo_state *a, const cc_jojo_state *b) { return a->rng_state == b->rng_state && a->used == b->used && a->fights == b->fights; }
 
@@ -102,14 +102,16 @@ static void test_table(void)
             }
         }
     }
-    CHECK_EQ(pool, 35u);       /* the Pillar Men are not in a biome pool */
+    CHECK_EQ(pool, 36u);       /* the Pillar Men are not in a biome pool */
     CHECK_EQ(passive, 3u);     /* Pucci, DIO and Kars */
-    CHECK_EQ(members, 185u);   /* Koichi lost Arcanine (lorenzo 2026-11-22) */
+    CHECK_EQ(members, 191u);   /* Koichi lost Arcanine (lorenzo 2026-11-22); Tooru's six */
     CHECK_EQ(more, 1u);        /* Ghiaccio's Snowy Forest */
     CHECK_EQ(doubles, 1u);     /* Prosciutto & Pesci */
     const int gh = cc_jojo_find("ghiaccio"), pp = cc_jojo_find("prosciutto");
     CHECK_EQ(gh, 34);
     CHECK_EQ(pp, 35);
+    CHECK_EQ(cc_jojo_find("tooru"), 38);
+    CHECK(cc_jojo_in_biome(&cc_jojo_chars[38], 5) && cc_jojo_chars[38].n_members == 6);   /* Tooru: the Forest, six members */
     CHECK_EQ(cc_jojo_find("jodio"), 36);
     CHECK_EQ(cc_jojo_find("jonathan"), 37);
     if (gh >= 0) {
@@ -194,7 +196,7 @@ static void test_rules(void)
             seen |= 1ull << r;
             dealt++;
         }
-        CHECK(dealt <= 35);
+        CHECK(dealt <= 36);
         CHECK_EQ(s.fights, dealt);
         CHECK_EQ(s.used, seen);
         total += dealt;

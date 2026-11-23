@@ -2235,7 +2235,7 @@ static void test_classic_plain(void) {
 /* a character's team as game-core takes it, and the live roll over a real run */
 static void test_jojo(void) {
   /* 1. every character of the table is a team game-core can build, and the items exist */
-  CHECK(cc_jojo_count == 38, "38 characters");
+  CHECK(cc_jojo_count == 39, "39 characters");
   for (unsigned i = 0; i < cc_jojo_count; i++) {
     gc_custom_team t;
     const char* why = "";
@@ -2333,7 +2333,7 @@ static void jojo_edit_slot(int mode) {
     if (mode == 2) ov[at + JB_USED + 2] = 0x20;   /* a character the table does not have is marked dealt: used bit 21 */
     if (mode == 3) ov[at + JB_LIVE] = 6;          /* a battle against character 5 that was never dealt (live is the index + 1) */
     if (mode == 4) ov[at + JB_LIVE] = 200;        /* a battle against a character the table does not have */
-    if (mode == 6) { ov[at + JB_USED + 4] = 0x40; ov[at + JB_FIGHTS] = 1; }   /* a mask bit in the high half (character 38) the table does not have */
+    if (mode == 6) { ov[at + JB_USED + 4] = 0x80; ov[at + JB_FIGHTS] = 1; }   /* a mask bit in the high half (character 39) the table does not have */
     CHECK(save_write(name, raw, len) == SAVE_OK, "the damaged file is written");
   }
   free(raw);

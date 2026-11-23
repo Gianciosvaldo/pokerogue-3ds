@@ -45,7 +45,7 @@ int main(void)
 
     /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
     {
-        assert(GC_JOJO_COUNT == 38 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
+        assert(GC_JOJO_COUNT == 39 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
                GC_ACHV_DARBY == GC_ACHV_JOJO3_FIRST - 2 && GC_ACHV_DARBY_REMATCH == GC_ACHV_JOJO3_FIRST - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
                GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_COUNT == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO));
         assert(GC_ACHV_COUNT <= 192);   /* upstream's own achievements use 192 and up in achievement_flags */
@@ -63,7 +63,7 @@ int main(void)
             assert(gc_achv_defs[a].name[0] && strlen(gc_achv_defs[a].name) <= 63);
             for (int b = 0; b < a; b++) assert(strcmp(gc_achv_defs[a].name, gc_achv_defs[b].name) != 0);
         }
-        assert(strstr(gc_achv_defs[26].desc, "38"));   /* Every Face names the number */
+        assert(strstr(gc_achv_defs[26].desc, "39"));   /* Every Face names the number */
         /* lorenzo's titles for the third batch (2026-11-22) */
         assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GHIACCIO)].name, "It's Pronounced Venezia!") && !strcmp(gc_achv_defs[gc_achv_flawless_id(GC_JOJO_GHIACCIO)].name, "Absolute Zero Casualties"));
         assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_PROSCIUTTO)].name, "Cut the Line, Beat the Heat") && !strcmp(gc_achv_defs[gc_achv_flawless_id(GC_JOJO_PROSCIUTTO)].name, "Not a Scratch, Not a Wrinkle"));
@@ -80,6 +80,8 @@ int main(void)
     {
         assert(gc_achv_flawless_id(-1) == -1 && gc_achv_flawless_id(GC_JOJO_COUNT) == -1 && gc_achv_flawless_id(0) == 118 && gc_achv_flawless_id(33) == 151);
         assert(gc_achv_flawless_id(GC_JOJO_GHIACCIO) == 155 && gc_achv_flawless_id(GC_JOJO_JONATHAN) == 161 && gc_achv_jojo_id(GC_JOJO_JONATHAN) == 160);
+        assert(gc_achv_jojo_id(GC_JOJO_TOORU) == 162 && gc_achv_flawless_id(GC_JOJO_TOORU) == 163 && !strcmp(gc_achv_defs[162].name, "Broke the Flow of Calamity") &&
+               !strcmp(gc_achv_defs[163].name, "We Went Beyond the Logic of This World") && !strcmp(gc_achv_defs[162].desc, "Defeat Tooru."));
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_flawless_id(j);
             const char *base = gc_achv_defs[gc_achv_jojo_id(j)].desc;   /* "Defeat X." */
@@ -100,12 +102,12 @@ int main(void)
             assert(gc_achv_unlocked(&S, id));
         }
         fresh();
-        S.achv.jojo_clean_mask_hi = 0xFFFFFFC0u;                                                   /* bits of characters this build does not have (38..63) */
+        S.achv.jojo_clean_mask_hi = 0xFFFFFF80u;                                                   /* bits of characters this build does not have (39..63) */
         eval(NULL);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
         fresh();
         S.achv.jojo_clean_mask = 0xFFFFFFFFu;                                                      /* a clean mask alone is not a beaten one, but the flag only asks the clean mask */
-        S.achv.jojo_clean_mask_hi = 0x3Fu;
+        S.achv.jojo_clean_mask_hi = 0x7Fu;
         eval(NULL);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
     }
@@ -133,7 +135,7 @@ int main(void)
         assert(gc_achv_progress_of(&S, SETS[k].id, &h, &n) && h == (uint32_t)SETS[k].n && n == (uint32_t)SETS[k].n);
     }
     /* every Part set but the Pillar Men's: the six Parts hold every challenger of Parts 2..7 (the Pillar Men sit in Battle Tendency) with nobody
-     * in two; Jonathan (Part 1) and Jodio (Part 9) have no Part set */
+     * in two; Jonathan (Part 1), Tooru (Part 8) and Jodio (Part 9) have no Part set */
     {
         fresh();
         uint32_t total = 0;
@@ -142,7 +144,7 @@ int main(void)
             assert(gc_achv_progress_of(&S, id, &h, &n) && h == 0);
             total += n;
         }
-        assert(total == GC_JOJO_COUNT - 2);
+        assert(total == GC_JOJO_COUNT - 3);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {   /* one challenger moves exactly one Part set's line (Jonathan and Jodio none) */
             fresh();
             gc_achv_jojo_won(&S, j, 1, false);
@@ -152,7 +154,7 @@ int main(void)
                 assert(gc_achv_progress_of(&S, id, &h, &n));
                 moved += h;
             }
-            assert(moved == (j == GC_JOJO_JONATHAN || j == GC_JOJO_JODIO ? 0 : 1));
+            assert(moved == (j == GC_JOJO_JONATHAN || j == GC_JOJO_JODIO || j == GC_JOJO_TOORU ? 0 : 1));
         }
     }
 
@@ -185,12 +187,12 @@ int main(void)
     /* a bit for a character the table does not have (a profile from a later build) counts for nothing, and neither do the ones it does have
      * towards another one's achievement */
     fresh();
-    S.achv.jojo_beaten_hi = 0xFFFFFFC0u;                /* indexes 38..63 */
+    S.achv.jojo_beaten_hi = 0xFFFFFF80u;                /* indexes 39..63 */
     eval(NULL);
     for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_jojo_id(j)));
     assert(!gc_achv_unlocked(&S, 24) && gc_achv_progress_of(&S, 24, &have, &need) && have == 0);
-    S.achv.jojo_beaten = 0xFFFFFFFFu;                   /* all 32 of the first word, and six of the second: all 38 */
-    S.achv.jojo_beaten_hi |= 0x3Fu;
+    S.achv.jojo_beaten = 0xFFFFFFFFu;                   /* all 32 of the first word, and seven of the second: all 39 */
+    S.achv.jojo_beaten_hi |= 0x7Fu;
     eval(NULL);
     assert(gc_achv_progress_of(&S, 26, &have, &need) && have == GC_JOJO_COUNT && need == GC_JOJO_COUNT && gc_achv_unlocked(&S, 26));
     fresh();
