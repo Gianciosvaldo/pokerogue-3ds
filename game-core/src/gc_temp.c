@@ -6,7 +6,7 @@ static bool temporary(const char *key) {
 }
 static bool context(gc_run *run,pr_reward_ctx *c) {
  memset(c,0,sizeof *c);c->run=&run->run;
- if(run->run.has_challenges||run->n_items<0||run->n_items>GC_MAX_ITEMS||run->n_items>PR_REWARD_MAX_OWNED||run->n_items>PR_MAX_MODIFIERS)return false;
+ if(gc_challenges_unplayed(run)||run->n_items<0||run->n_items>GC_MAX_ITEMS||run->n_items>PR_REWARD_MAX_OWNED||run->n_items>PR_MAX_MODIFIERS)return false;
  for(int j=0;j<run->n_items;j++) {
   const gc_item *it=&run->items[j];int item=gc_reward_item_index(it->key);
   if(item<0||it->virtual_stack||(temporary(it->key)&&(it->pokemon_id||it->detached)))return false;

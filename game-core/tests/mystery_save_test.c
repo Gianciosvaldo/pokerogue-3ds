@@ -15,8 +15,9 @@
 static gc_run run, back;
 static uint8_t buf[GC_SAVE_MAX], buf2[GC_SAVE_MAX];
 static int checks;
-#define CHECK(x) do { checks++; if (!(x)) { fprintf(stderr, "mystery save line %d (type %d): %s\n", __LINE__, cur_type, #x); exit(1); } } while (0)
+#define CHECK(x) do { checks++; if (!(x)) { fprintf(stderr, "mystery save line %d (type %d, mode %d): %s\n", __LINE__, cur_type, cur_mode, #x); exit(1); } } while (0)
 static int cur_type = -1;
+static int cur_mode = GAME_MODES_CLASSIC;   /* the mode of the runs the test starts: Classic, then Challenge Mode (upstream: hasMysteryEncounters is CLASSIC and CHALLENGE) */
 
 static const int starters[5] = {SPECIES_ID_CATERPIE, SPECIES_ID_WEEDLE, SPECIES_ID_PIDGEY, SPECIES_ID_RATTATA, SPECIES_ID_MAGNEMITE};
 
@@ -24,7 +25,7 @@ static void start(gc_run *r, const char *seed)
 {
     const char *why = NULL;
     memset(r, 0, sizeof *r);
-    gc_run_new(r, GAME_MODES_CLASSIC, seed, 777);
+    gc_run_new(r, cur_mode, seed, 777);
     gc_starter s[5];
     memset(s, 0, sizeof s);
     for (int i = 0; i < 5; i++) {
@@ -34,6 +35,10 @@ static void start(gc_run *r, const char *seed)
         memset(s[i].ivs, 15, sizeof s[i].ivs);
     }
     if (!gc_run_set_starters(r, s, 5, &why)) { fprintf(stderr, "starters: %s\n", why ? why : "?"); exit(1); }
+    if (cur_mode == GAME_MODES_CHALLENGE) {   /* a Challenge Mode run with one of its challenges on: the save carries the values, the load puts them back */
+        r->challenges.value[CHALLENGES_FRESH_START] = 1;
+        gc_challenge_sync(r);
+    }
     gc_event ev;
     while (gc_run_next_event(r, &ev)) {}
     gc_item_add(r, "LEFTOVERS", -1, r->party[0].b.id, 1);   /* an item for battle-core's list to carry */
@@ -89,6 +94,10 @@ static void same_question(const gc_run *a, const gc_run *b)
     CHECK(a->bt.n_party[0] == b->bt.n_party[0] && a->bt.n_party[0] == (uint8_t)a->n_party && a->bt.n_mods[0] == b->bt.n_mods[0] && a->bt.n_mods[0] > 0 && a->bt.n_mods[1] == b->bt.n_mods[1]);
     for (int i = 0; i < a->n_party; i++) CHECK(a->bt.party[0][i] == &a->party[a->party_order[i]].b && b->bt.party[0][i] == &b->party[b->party_order[i]].b);
     CHECK(a->mystery_type == b->mystery_type && a->mystery_tier == b->mystery_tier && a->n_mystery_history == b->n_mystery_history);
+    /* the not-ported counters: a setup that uses a stand-in (Fight or Flight's boss) counts it once in the saved run and, the load's setup being the same, once in the loaded one */
+    CHECK(!memcmp(a->unported, b->unported, sizeof a->unported) && !memcmp(a->stubs, b->stubs, sizeof a->stubs) && !memcmp(a->run_core_unported, b->run_core_unported, sizeof a->run_core_unported));
+    CHECK(a->run.mode == b->run.mode && a->run.mode == cur_mode && !memcmp(&a->challenges, &b->challenges, sizeof a->challenges)
+          && a->run.challenge_flags == b->run.challenge_flags && a->run.has_challenges == b->run.has_challenges && a->run.has_challenges == (cur_mode == GAME_MODES_CHALLENGE));
     CHECK(!memcmp(&a->run.rng, &b->run.rng, sizeof a->run.rng));   /* the screen's setup draws nothing from the run's RNG: the loaded one is where the saved one was */
     CHECK(!memcmp(&a->bt.battle_rng, &b->bt.battle_rng, sizeof a->bt.battle_rng) && a->bt.battle_rng_live == b->bt.battle_rng_live && a->bt.battle_rng.c == 3.0);   /* nor from the battle's, and what the last battle left there is kept */
     CHECK(!memcmp(&a->bt.rng, &b->bt.rng, sizeof a->bt.rng) && a->bt.rng_live == b->bt.rng_live && a->bt.rng_live);   /* and battle-core's mirror of the run's RNG, which the stress diagnostic folds */
@@ -243,16 +252,24 @@ static void damaged(void)
 int main(void)
 {
     int exercised = 0, answered = 0;
-    for (int type = 0; type < GC_ME_UPSTREAM_COUNT; type++) {
-        const int before = checks;
-        one_type(type, &answered);
-        if (checks != before) exercised++;
+    /* Classic, then Challenge Mode (a run with Fresh Start on): both have encounters upstream, so both save at the question */
+    const int modes[2] = {GAME_MODES_CLASSIC, GAME_MODES_CHALLENGE};
+    for (int m = 0; m < 2; m++) {
+        cur_mode = modes[m];
+        int ex = 0, ans = 0;
+        for (int type = 0; type < GC_ME_UPSTREAM_COUNT; type++) {
+            const int before = checks;
+            one_type(type, &ans);
+            if (checks != before) ex++;
+        }
+        /* the encounters this fixed party and money allow are most of them: a test that skipped them all would prove nothing */
+        CHECK(ex >= 24);
+        CHECK(ans >= 22);
+        if (m == 0) { exercised = ex; answered = ans; }
     }
-    /* the encounters this fixed party and money allow are most of them: a test that skipped them all would prove nothing */
-    CHECK(exercised >= 24);
-    CHECK(answered >= 22);
+    cur_mode = GAME_MODES_CLASSIC;
     damaged();
     gc_debug_force_mystery(-1, 1);
-    printf("mystery save: %d checks passed, %d of %d encounters exercised, %d answered\n", checks, exercised, GC_ME_UPSTREAM_COUNT, answered);
+    printf("mystery save: %d checks passed, %d of %d encounters exercised, %d answered (Classic and Challenge Mode)\n", checks, exercised, GC_ME_UPSTREAM_COUNT, answered);
     return 0;
 }

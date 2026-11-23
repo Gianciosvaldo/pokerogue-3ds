@@ -60,5 +60,9 @@ plant load-no-stats 's/^        if (!r.bad) get_block(&r, stat_fields, NF(stat_f
 plant load-no-ai-reset 's/^        gc_ai_reset(run);   \/\* the AI.*$/        (void)0;/'
 plant load-no-weird-reset 's/^        gc_weird_reset_ranges();   \/\* Weird Dream.*$/        (void)0;/'
 plant load-drops-question-check 's/    if (me_q \&\& (!v.in_battle || terminal.terminal_result || v.battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER || v.mystery_type < 0 || v.mystery_type >= GC_ME_COUNT/    if (0 \&\& (!v.in_battle || terminal.terminal_result || v.battle_type != BATTLE_TYPE_MYSTERY_ENCOUNTER || v.mystery_type < 0 || v.mystery_type >= GC_ME_COUNT/'
+# a load counts the question's setup a second time in the not-ported counters (the saved ones already hold the first)
+plant load-counts-setup-twice 's/^        in->me_loaded = true;$/        in->me_loaded = false;/'
+# a Challenge Mode question is refused by the load (upstream: hasMysteryEncounters is CLASSIC and CHALLENGE)
+plant load-refuses-challenge-question 's/|| v.me_battle || !gc_is_classic_mode(v.mode))) {/|| v.me_battle || v.mode != GAME_MODES_CLASSIC)) {/'
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"

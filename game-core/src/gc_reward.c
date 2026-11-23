@@ -596,7 +596,7 @@ static int apply_mint(gc_run *run, const gc_offer *o, int party, const char **wh
         *why = "partyUiHandler:anyEffect";
         return GC_APPLY_REFUSED;
     }
-    if (run->run.has_challenges) return GC_APPLY_UNHANDLED;
+    if (gc_challenges_unplayed(run)) return GC_APPLY_UNHANDLED;
     static const char *const stat_items[] = {"BASE_STAT_BOOSTER", "SOUL_DEW",
         "MYSTERY_ENCOUNTER_SHUCKLE_JUICE", "MYSTERY_ENCOUNTER_OLD_GATEAU",
         "MYSTERY_ENCOUNTER_MACHO_BRACE"};
@@ -637,7 +637,7 @@ static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char *
         return GC_APPLY_REFUSED;
     }
     if (o->arg < 0 || o->arg >= 6) { *why = "partyUiHandler:anyEffect"; return GC_APPLY_REFUSED; }
-    if (run->run.has_challenges || run->n_items < 0 || run->n_items > GC_MAX_ITEMS
+    if (gc_challenges_unplayed(run) || run->n_items < 0 || run->n_items > GC_MAX_ITEMS
         || run->n_items > PR_REWARD_MAX_OWNED || run->n_items > PR_MAX_MODIFIERS) return GC_APPLY_UNHANDLED;
     bool existing = false;
     /* ctx_base omits unknown keys and maps missing holders to -1. Do not let
@@ -690,7 +690,7 @@ static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char *
  * Pokemon in party order. Presentation/achievement validation stay caller-owned. */
 static int apply_money_item(gc_run *run, int item)
 {
-    if (run->run.has_challenges || run->n_items < 0 || run->n_items > PR_REWARD_MAX_OWNED
+    if (gc_challenges_unplayed(run) || run->n_items < 0 || run->n_items > PR_REWARD_MAX_OWNED
         || run->n_items > GC_MAX_ITEMS || run->n_party < 1 || run->n_party > PR_REWARD_MAX_PARTY)
         return GC_APPLY_UNHANDLED;
     /* ctx_base intentionally skips unknown keys: reject them before transport. */
