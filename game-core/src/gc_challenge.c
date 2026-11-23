@@ -22,10 +22,16 @@
  *                    POKEMON_FUSION (no fainted fusion), POKEMON_MOVE (no Revival Blessing for the player: battle-core)
  *   LIMITED_CATCH    POKEMON_ADD_TO_PARTY: a catch joins the party only on a biome's first wave (wave % 10 == 1) or after
  *                    Teleporting Hijinks' teleport                                                gc_catch_start
- * Not ported yet (a run that sets one is refused by gc_run_set_challenges): SINGLE_GENERATION, SINGLE_TYPE, MOVESET_RANDOMIZER.
+ *   SINGLE_TYPE      STARTER_CHOICE (run-core), the soft step through item form changes, STARTER_SELECT_MODIFY's genders, and
+ *                    POKEMON_IN_BATTLE (isAllowedInChallenge): battle-core's pr_challenge_allowed / pr_allowed_in_battle, read from
+ *                    bt->challenge_type (gc_challenge_to_battle) by every isActive/isAllowedInBattle site, TurnInitPhase's switch
+ *                    (pr_run_turn_init_challenge), the party screens, the rewards' allowed_in_challenge and the win's ribbons
+ * Not ported yet (a run that sets one is refused by gc_run_set_challenges): SINGLE_GENERATION (its in-battle rule is already in
+ * pr_challenge_allowed; its fixed battles are not), MOVESET_RANDOMIZER.
  *
  * Checked against the pinned upstream by tests/challenge-starters.producer.test.ts (tools/challengestartersdiff.sh). */
 #include "internal.h"
+#include "pr_item_forms.h"
 
 static const uint8_t challenge_max[GC_CHALLENGE_COUNT] = {
     9,  /* SINGLE_GENERATION */
@@ -50,7 +56,7 @@ int gc_challenge_max(int challenge)
 uint32_t gc_challenge_played_mask(void)
 {
     return (1u << CHALLENGES_FRESH_START) | (1u << CHALLENGES_INVERSE_BATTLE) | (1u << CHALLENGES_FLIP_STAT) | (1u << CHALLENGES_PASSIVES)
-           | (1u << CHALLENGES_LIMITED_CATCH) | (1u << CHALLENGES_LIMITED_SUPPORT) | (1u << CHALLENGES_HARDCORE);
+           | (1u << CHALLENGES_LIMITED_CATCH) | (1u << CHALLENGES_LIMITED_SUPPORT) | (1u << CHALLENGES_HARDCORE) | (1u << CHALLENGES_SINGLE_TYPE);
 }
 
 bool gc_challenge_set_valid(const gc_challenge_set *set, const char **why)
@@ -82,9 +88,19 @@ void gc_challenge_sync(gc_run *run)
     r->challenge_limited_support = set->value[CHALLENGES_LIMITED_SUPPORT];
     /* the battle rules (Inverse Battle, Flip Stat, Passives) are read from the battle: run->bt computes the stats of Pokemon made outside a
      * battle too (the starters, a Mystery Encounter's), so it carries them from here; a battle's setup sets them again */
-    run->bt.challenge_flags = r->mode == GAME_MODES_CHALLENGE ? r->challenge_flags : 0;
+    gc_challenge_to_battle(run, &run->bt);
     run->bt.challenge_flags_known = true;
-    run->bt.challenge_passives = r->mode == GAME_MODES_CHALLENGE ? r->challenge_passives : 0;
+}
+
+/* The challenge state battle-core reads (the battle rules, and isAllowedInChallenge's Single Generation and Single Type values), on `bt` */
+void gc_challenge_to_battle(const gc_run *run, pr_battle *bt)
+{
+    const bool challenge = run->run.mode == GAME_MODES_CHALLENGE;
+    bt->challenge_flags = challenge ? run->run.challenge_flags : 0;
+    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->challenge_passives = challenge ? run->run.challenge_passives : 0;
+    bt->challenge_generation = challenge ? run->run.challenge_generation : 0;
+    bt->challenge_type = challenge ? run->run.challenge_type : 0;
 }
 
 /* Whether the run has an active challenge whose rules game-core does not play yet. An active set nobody told game-core about (run.has_challenges
@@ -158,10 +174,22 @@ static bool choice_valid(const gc_challenge_set *set, int species, int form)
     return pr_run_challenge_starter_allowed(&tmp, species, form);
 }
 
-/* checkStarterValidForChallenge(starterId, props, soft). With `soft` the starter also passes when one of its evolutions does (the party select
- * allows such a starter next to a valid one); an evolution whose preFormKey is not the starter's form is not followed.
- * Not done: soft's other step, a species' item-triggered form change to a valid form (speciesDataRegistry.getFormChanges: no trigger data here).
- * None of the challenges played so far looks at the form, so it changes no answer. */
+/* checkSpeciesValidForChallenge(species, props, soft = true): the form in props passes, or (a species with form changes) one of its form
+ * changes whose trigger has an item ("item" in trigger: SpeciesFormChangeItemTrigger, the mega stones, plates, memories and the like) leads
+ * to a form that passes. battle-core's item-form registrations (pr_item_form_rules) are those changes: their `to` is the form. */
+static bool species_valid_soft(const gc_challenge_set *set, int species, int form)
+{
+    if (choice_valid(set, species, form)) return true;
+    for (int i = 0; i < PR_ITEM_FORM_RULE_COUNT; i++) {
+        const pr_item_form_rule *r = &pr_item_form_rules[i];
+        if (r->species == species && choice_valid(set, species, r->to)) return true;
+    }
+    return false;
+}
+
+/* checkStarterValidForChallenge(starterId, props, soft). With `soft` the starter also passes when it or one of its evolutions does
+ * (checkSpeciesValidForChallenge with soft: its item form changes count); the party select allows such a starter next to a valid one. An
+ * evolution whose preFormKey is not the starter's form is not followed. */
 bool gc_challenge_starter_valid(const gc_challenge_set *set, int species, int form, bool soft)
 {
     if (!set) set = &none;
@@ -173,15 +201,17 @@ bool gc_challenge_starter_valid(const gc_challenge_set *set, int species, int fo
     stack[n++] = (uint16_t)species;
     while (n > 0) {
         const int checking = stack[--n];
-        if (choice_valid(set, checking, form)) return true;
+        if (species_valid_soft(set, checking, form)) return true;
         const gc_species_evo *ev = evolutions_of(checking);
         if (!ev) continue;
         for (int k = 0; k < ev->n; k++) {
             const gc_evo *e = &gc_evo_data[ev->start + k];
-            if (e->pre_form != -1) {
-                /* `e.preFormKey === species.forms[props.formIndex].formKey`, the starter's own form against the evolving species' key */
+            if (e->pre_form != -1 && e->pre_form != -3) {
+                /* `!e.preFormKey || e.preFormKey === species.forms[props.formIndex].formKey`, the starter's own form against the evolving
+                 * species' key. An empty key ("") is falsy and is followed like none: -3 (no form has it: Hisuian Basculin, Dunsparce) or a
+                 * form whose key is "" */
                 const pr_form *pf = e->pre_form >= 0 ? gc_form(checking, e->pre_form) : NULL;
-                if (!pf || !own_key || strcmp(pf->form_key, own_key)) continue;
+                if (!(pf && !pf->form_key[0]) && (!pf || !own_key || strcmp(pf->form_key, own_key))) continue;
             }
             if (n < (int)(sizeof stack / sizeof stack[0])) stack[n++] = e->species;
         }
@@ -238,6 +268,26 @@ void gc_challenge_starter_view(const gc_system *sys, const gc_challenge_set *set
         out->nature_attr &= (1u << 1) | (1u << 7) | (1u << 13) | (1u << 19) | (1u << 25);
         for (int i = 0; i < 6; i++) if (out->ivs[i] > 15) out->ivs[i] = 15;
         if (fresh_start_form_reset(species)) out->caught_attr &= 0xFF;   /* (DexAttr.DEFAULT_FORM << 1) - 1: no forms but the default */
+    }
+    /* applyChallenges runs `ret ||= c.applyStarterSelectModify(..)`: once one challenge answers true the later ones are not called. Fresh
+     * Start, Single Generation and Single Type always answer true, so only the first of them that is on (in allChallenges' order) applies.
+     * DexAttr.MALE 4, FEMALE 8: the gender a form of the line needs to be of the challenge's generation or type */
+    if (!set || set->value[CHALLENGES_FRESH_START]) return;
+    if (set->value[CHALLENGES_SINGLE_GENERATION]) {
+        if (set->value[CHALLENGES_SINGLE_GENERATION] == 4) {   /* SingleGenerationChallenge: Ralts male (Gallade), Snorunt female (Froslass) */
+            if (species == SPECIES_ID_RALTS) out->caught_attr &= ~(uint64_t)8;
+            if (species == SPECIES_ID_SNORUNT) out->caught_attr &= ~(uint64_t)4;
+        }
+        return;
+    }
+    if (set->value[CHALLENGES_SINGLE_TYPE]) {
+        const int type = set->value[CHALLENGES_SINGLE_TYPE] - 1;
+        if (species == SPECIES_ID_RALTS && type == POKEMON_TYPE_FIGHTING) out->caught_attr &= ~(uint64_t)8;
+        else if (species == SPECIES_ID_SNORUNT && type == POKEMON_TYPE_GHOST) out->caught_attr &= ~(uint64_t)4;
+        else if (species == SPECIES_ID_BURMY) {
+            if (type == POKEMON_TYPE_FLYING) out->caught_attr &= ~(uint64_t)8;   /* Mothim */
+            else if (type == POKEMON_TYPE_GRASS || type == POKEMON_TYPE_GROUND || type == POKEMON_TYPE_STEEL) out->caught_attr &= ~(uint64_t)4;   /* Wormadam */
+        }
     }
 }
 

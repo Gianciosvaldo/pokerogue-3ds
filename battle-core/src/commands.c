@@ -50,7 +50,7 @@ bool pr_tag_restricts_move(pr_battle *bt, const pr_pokemon *p, const pr_battler_
     }
     case BATTLER_TAG_TYPE_IMPRISON: {
         const pr_pokemon *src = pr_pokemon_by_id(bt, t->source_id);
-        return src && in_moveset(src, move) && src->hp > 0 && src->on_field && !src->switch_out_status;
+        return src && in_moveset(src, move) && pr_allowed_in_battle(bt, src) && src->on_field && !src->switch_out_status;
     }
     }
     return false;
@@ -212,7 +212,7 @@ static bool commanded(const pr_battle *bt, const pr_pokemon *p)
     const pr_battler_tag *cmd = pr_get_battler_tag(p, BATTLER_TAG_TYPE_COMMANDED);
     if (!cmd) return false;
     const pr_pokemon *src = pr_pokemon_by_id(bt, cmd->source_id);
-    return src && src->hp > 0 && src->on_field && !src->switch_out_status;   /* getSourcePokemon()?.isActive(true) */
+    return src && pr_allowed_in_battle(bt, src) && src->on_field && !src->switch_out_status;   /* getSourcePokemon()?.isActive(true) */
 }
 
 bool pr_is_trapped(pr_battle *bt, const pr_pokemon *p, pr_msg *ab_msg)

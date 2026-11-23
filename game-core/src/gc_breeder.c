@@ -93,7 +93,7 @@ bool gc_breeder_picks(const gc_run *run, int out[3])
     int list[PR_MAX_PARTY], n = 0;
     for (int k = 0; k < run->n_party; k++) {
         const int idx = run->party_order[k];
-        if (gc_mon_allowed(&run->party[idx])) list[n++] = idx;
+        if (gc_mon_allowed(run, &run->party[idx])) list[n++] = idx;
     }
     for (int i = 1; i < n; i++) {   /* insertion sort: stable */
         const int v = list[i];
@@ -442,7 +442,7 @@ bool gc_breeder_game_over(gc_run *run)
     gc_rq_clear(run);
     /* handleMysteryEncounterBattleFailed(true): nobody left to fight is a lost game */
     bool able = false;
-    for (int i = 0; i < run->n_party; i++) able = able || gc_mon_allowed(&run->party[i]);
+    for (int i = 0; i < run->n_party; i++) able = able || gc_mon_allowed(run, &run->party[i]);
     if (!able) {
         gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0));
         return false;

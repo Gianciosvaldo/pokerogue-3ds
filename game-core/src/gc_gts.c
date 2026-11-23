@@ -467,7 +467,7 @@ bool gc_gts_pick_ok(const gc_run *run, int option, int idx)
 int gc_gts_allowed(const gc_run *run)
 {
     int n = 0;
-    for (int i = 0; i < run->n_party; i++) if (gc_mon_allowed(&run->party[i])) n++;
+    for (int i = 0; i < run->n_party; i++) if (gc_mon_allowed(run, &run->party[i])) n++;
     return n;
 }
 

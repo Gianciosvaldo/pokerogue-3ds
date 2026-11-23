@@ -45,8 +45,28 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
 /* the locale has desc.<value> for Fresh Start and Passives, a single desc for Inverse Battle and Flip Stat */
 bool i18n_exists(const char* key) { return !strstr(key, "inverseBattle.desc.") && !strstr(key, "flipStat.desc."); }
 const char* i18n_t(char* out, int n, const char* key, ...) {
-  snprintf(out, (size_t)n, "[%s]", key);
+  va_list ap;
+  va_start(ap, key);
+  const char* name = va_arg(ap, const char*);
+  const char* value = name ? va_arg(ap, const char*) : NULL;
+  va_end(ap);
+  if (name) snprintf(out, (size_t)n, "[%s %s=%s]", key, name, value);
+  else snprintf(out, (size_t)n, "[%s]", key);
   return out;
+}
+const char* i18n_type_name(int type) {
+  static char b[32];
+  snprintf(b, sizeof b, "type%d", type);
+  return b;
+}
+/* the types atlas' frames, as menus/menus_names.c names them; img_draw records the frame like a text */
+const char* const menu_type_frames[19] = {"normal", "fighting", "flying", "poison", "ground", "rock", "bug", "ghost", "steel", "fire",
+                                          "water", "grass", "electric", "psychic", "ice", "dragon", "dark", "fairy", "stellar"};
+void img_draw(const char* key, const char* frame, float x, float y, float ox, float oy) {
+  (void)x, (void)y, (void)ox, (void)oy;
+  char b[96];
+  snprintf(b, sizeof b, "<%s:%s>|", key, frame);
+  strncat(drawn, b, sizeof drawn - strlen(drawn) - 1);
 }
 
 static int n_start, n_back;
@@ -72,6 +92,25 @@ int main(void) {
   draw();
   CHECK(seen("[challenges:title]") && seen("[challenges:freshStart.name]") && seen("[challenges:freshStart.value.0]"), "title, row and its value are drawn");
   CHECK(seen("[challenges:noneSelected]") && !seen("[common:start]"), "None Selected until a challenge has a value");
+
+  /* Mono Type (PR 4a): the first row (Single Generation, before it upstream, is not played yet); its value is a type icon, UNKNOWN at 0,
+   * and its description is descDefault at 0, desc with the type's name after */
+  CHECK(strstr(drawn, "singleType.name") && strstr(drawn, "singleType.name") < strstr(drawn, "freshStart.name"), "Mono Type before Fresh Start");
+  CHECK(seen("<images/types:unknown>") && !seen("singleType.value"), "value 0: the unknown type icon, no text");
+  CHECK(seen("[challenges:singleType.descDefault]"), "value 0: the default description");
+  g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(seen("<images/types:normal>") && seen("[challenges:singleType.desc type=type0]") && seen("[common:start]"), "value 1: Normal");
+  g_screen->input(g_screen, BTN_LEFT);
+  for (int v = 0; v < 18; v++) g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(seen("<images/types:fairy>") && seen("[challenges:singleType.desc type=type17]"), "value 18: Fairy, the last");
+  CHECK(!g_screen->input(g_screen, BTN_RIGHT) || seen("<images/types:fairy>"), "Right stops at Fairy");
+  for (int v = 0; v < 18; v++) g_screen->input(g_screen, BTN_LEFT);
+  draw();
+  CHECK(seen("<images/types:unknown>") && seen("[challenges:noneSelected]"), "back to 0");
+  g_screen->input(g_screen, BTN_DOWN);   /* Fresh Start */
+  draw();
   CHECK(seen("[challenges:freshStart.desc.0]"), "the description of the highlighted value");
 
   /* the battle rules' rows: Inverse Battle, Flip Stat, Passives after Fresh Start (upstream's order); a challenge with one description text
@@ -98,7 +137,8 @@ int main(void) {
   CHECK(seen("[challenges:passives.value.2]") && seen("[challenges:passives.desc.2]"), "Passives goes to All");
   g_screen->input(g_screen, BTN_LEFT);
   g_screen->input(g_screen, BTN_LEFT);
-  g_screen->input(g_screen, BTN_DOWN);   /* back to Fresh Start (wraps) */
+  g_screen->input(g_screen, BTN_DOWN);   /* wraps to Mono Type */
+  g_screen->input(g_screen, BTN_DOWN);   /* back to Fresh Start */
   draw();
   CHECK(seen("[challenges:freshStart.desc.0]") && seen("[challenges:noneSelected]"), "back on Fresh Start, nothing chosen");
 
@@ -157,7 +197,7 @@ int main(void) {
   CHECK(strstr(drawn, "flipStat.name") < strstr(drawn, "limitedCatch.name") && strstr(drawn, "limitedCatch.name") < strstr(drawn, "limitedSupport.name") &&
         strstr(drawn, "limitedSupport.name") < strstr(drawn, "hardcore.name") && strstr(drawn, "hardcore.name") < strstr(drawn, "passives.name"),
         "in upstream's order");
-  for (int i = 0; i < 4; i++) g_screen->input(g_screen, BTN_DOWN);   /* Fresh Start, Inverse, Flip, Limited Catch, Limited Support */
+  for (int i = 0; i < 5; i++) g_screen->input(g_screen, BTN_DOWN);   /* Mono Type, Fresh Start, Inverse, Flip, Limited Catch, Limited Support */
   for (int v = 0; v <= 3; v++) {
     char want[64];
     draw();

@@ -377,6 +377,151 @@ static void run_rules(void)
     }
 }
 
+/* ---- Single Type (game-core/CHALLENGE-VALIDATION.md, "PR 4a"): the admission, the party rule's soft step, isAllowedInChallenge in battle,
+ * TurnInitPhase's switch of an illegal Pokemon, the party screen's refusal and the win's ribbons ---- */
+/* the text of the events drained since the last clear: game-core's own messages and battle-core's */
+static const char *seen[512];
+static int n_seen;
+static void drain_all(void)
+{
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_MESSAGE && e.msg.key && n_seen < 512) seen[n_seen++] = e.msg.key;
+        if (e.kind == GC_EV_BATTLE)
+            for (int i = 0; i < e.b; i++) {
+                const pr_event *be = &run.battle_events[e.a + i];
+                if (be->type == PR_EV_TEXT && be->msg.key && n_seen < 512) seen[n_seen++] = be->msg.key;
+            }
+    }
+}
+static int texts(const char *key) { int n = 0; for (int i = 0; i < n_seen; i++) n += !strcmp(seen[i], key); return n; }
+static bool try_choose(uint8_t kind, int a, const char **why)
+{
+    gc_choice c = {kind, (int16_t)a, -1, 0};
+    const bool ok = gc_run_choose(&run, &c, why);
+    drain_all();
+    return ok;
+}
+static void set_only_move(pr_pokemon *p, int move) { p->moves[0] = (uint16_t)move; p->n_moves = 1; p->pp_used[0] = 0; pr_sync_moveset_aliases(p); }
+
+/* wave 1 of a Single Type Fire run with Charmander, Cyndaquil and Torchic, a single wild battle; the foe only Splashes and does not faint */
+static void fire_run(void)
+{
+    const char *why = NULL;
+    gc_challenge_set fire = only(CHALLENGES_SINGLE_TYPE, POKEMON_TYPE_FIRE + 1);
+    for (int attempt = 0;; attempt++) {
+        CHECK(attempt < 64);
+        char seed[48];
+        snprintf(seed, sizeof seed, "single-type-%d", attempt);
+        gc_system_init_defaults(&sys);
+        gc_run_new(&run, GAME_MODES_CHALLENGE, seed, 777);
+        run.sys = &sys;
+        sys.dex[SPECIES_ID_CHARMANDER].nature_attr = sys.dex[SPECIES_ID_CYNDAQUIL].nature_attr = sys.dex[SPECIES_ID_TORCHIC].nature_attr = 0x3FFFFFEu;
+        CHECK(gc_run_set_challenges(&run, &fire, &why));
+        gc_starter st[3] = {bulbasaur(), bulbasaur(), bulbasaur()};
+        st[0].species = SPECIES_ID_CHARMANDER;
+        st[1].species = SPECIES_ID_CYNDAQUIL;
+        st[2].species = SPECIES_ID_TORCHIC;
+        if (!gc_run_set_starters(&run, st, 3, &why)) { fprintf(stderr, "starters: %s\n", why); exit(1); }
+        drain_all();
+        if (run.battle_type == BATTLE_TYPE_WILD && run.n_enemy == 1 && !run.bt.double_battle && run.screen.kind == GC_SCREEN_COMMAND) break;
+    }
+    pr_pokemon *foe = run.bt.field[2];
+    set_only_move(foe, MOVE_ID_SPLASH);
+    foe->stats[STAT_HP] = 100000; foe->hp = foe->stats[STAT_HP];
+    foe->custom_ability = ABILITY_ID_BALL_FETCH; foe->ability_override = -1; pr_refresh_ability(foe);
+    for (int i = 0; i < run.n_party; i++) set_only_move(&run.party[i].b, MOVE_ID_SPLASH);
+}
+static int party_index(const pr_pokemon *p) { for (int i = 0; i < run.n_party; i++) if (&run.party[i].b == p) return i; return -1; }
+
+static void single_type(void)
+{
+    const char *why = NULL;
+    /* the admission: Single Type is played, Single Generation not yet (PR 4b); the values reach the battle */
+    new_run(GAME_MODES_CHALLENGE);
+    gc_challenge_set fire = only(CHALLENGES_SINGLE_TYPE, POKEMON_TYPE_FIRE + 1), gen = only(CHALLENGES_SINGLE_GENERATION, 1);
+    CHECK(gc_run_set_challenges(&run, &fire, &why) && !gc_challenges_unplayed(&run));
+    CHECK(run.bt.challenge_type == POKEMON_TYPE_FIRE + 1 && (run.bt.challenge_flags & (1u << CHALLENGES_SINGLE_TYPE)) && run.bt.challenge_generation == 0);
+    CHECK(!gc_run_set_challenges(&run, &gen, &why) && !strcmp(why, "a challenge that is not ported yet"));
+
+    /* the party rule (checkStarterValidForChallenge): Flying. Pidgey is valid, Charmander only through Charizard (soft), Bulbasaur not at all.
+     * A party of soft-valid members alone is invalidParty */
+    gc_challenge_set fly = only(CHALLENGES_SINGLE_TYPE, POKEMON_TYPE_FLYING + 1), dragon = only(CHALLENGES_SINGLE_TYPE, POKEMON_TYPE_DRAGON + 1);
+    gc_starter pidgey = bulbasaur(), charm = bulbasaur(), bulb = bulbasaur();
+    pidgey.species = SPECIES_ID_PIDGEY;
+    charm.species = SPECIES_ID_CHARMANDER;
+    CHECK(gc_challenge_starter_valid(&fly, SPECIES_ID_PIDGEY, 0, false));
+    CHECK(!gc_challenge_starter_valid(&fly, SPECIES_ID_CHARMANDER, 0, false) && gc_challenge_starter_valid(&fly, SPECIES_ID_CHARMANDER, 0, true));
+    CHECK(!gc_challenge_starter_valid(&fly, SPECIES_ID_BULBASAUR, 0, true));
+    /* Dragon: only Mega Charizard X (an item form change of Charizard) is of it */
+    CHECK(!gc_challenge_starter_valid(&dragon, SPECIES_ID_CHARIZARD, 0, false) && gc_challenge_starter_valid(&dragon, SPECIES_ID_CHARMANDER, 0, true));
+    CHECK(!gc_challenge_party_ok(&fly, &charm, 1, &why) && !strcmp(why, "starterSelectUiHandler:invalidParty"));
+    gc_starter pc[2] = {charm, pidgey};
+    CHECK(gc_challenge_party_ok(&fly, pc, 2, &why));
+    CHECK(!gc_challenge_party_ok(&fly, &bulb, 1, &why) && !strcmp(why, "a starter this challenge does not allow"));
+
+    /* isAllowedInChallenge: the player's Pokemon only, its types without the tera type, Castform as Normal */
+    fire_run();
+    pr_pokemon *lead = run.bt.field[0], *foe = run.bt.field[2];
+    pr_pokemon *cynda = &run.party[1].b;
+    CHECK(lead && lead->species == SPECIES_ID_CHARMANDER && cynda->species == SPECIES_ID_CYNDAQUIL);
+    CHECK(pr_challenge_allowed(&run.bt, lead) && pr_allowed_in_battle(&run.bt, lead));
+    foe->species = SPECIES_ID_SQUIRTLE;
+    CHECK(pr_challenge_allowed(&run.bt, foe));
+    lead->tera_type = POKEMON_TYPE_WATER; lead->terastallized = true;
+    CHECK(pr_challenge_allowed(&run.bt, lead));
+    lead->terastallized = false;
+    static pr_battle normal;
+    normal = run.bt;
+    normal.challenge_type = POKEMON_TYPE_NORMAL + 1;
+    pr_pokemon castform = *cynda;
+    castform.species = SPECIES_ID_CASTFORM; castform.form = 1;   /* the sunny form: Fire */
+    CHECK(pr_challenge_allowed(&normal, &castform) && pr_challenge_allowed(&run.bt, &castform) && !pr_challenge_allowed(&normal, cynda));
+    cynda->hp = 0;
+    CHECK(pr_challenge_allowed(&run.bt, cynda) && !pr_allowed_in_battle(&run.bt, cynda));
+    cynda->hp = cynda->stats[STAT_HP];
+
+    /* TurnInitPhase: the lead is now a Water Pokemon. The turn ends, the next one starts with challenges:illegalEvolution, the lead leaves the
+     * field and the party screen asks for Cyndaquil (allowed 1 >= the battler count 1); the illegal lead itself is refused (cantBeUsed) */
+    lead->species = SPECIES_ID_SQUIRTLE;
+    run.party[2].b.species = SPECIES_ID_SQUIRTLE;   /* a barred member on the bench too: the switch screen does not offer it */
+    CHECK(!pr_challenge_allowed(&run.bt, lead));
+    n_seen = 0;
+    CHECK(try_choose(GC_CH_FIGHT, 0, &why));
+    CHECK(texts("challenges:illegalEvolution") == 1);
+    CHECK(run.screen.kind == GC_SCREEN_SWITCH && !lead->on_field);
+    CHECK(!try_choose(GC_CH_PICK, party_index(lead), &why) && !strcmp(why, "partyUiHandler:cantBeUsed"));
+    CHECK(!run.screen.pick_ok[2] && run.screen.pick_ok[1]);
+    CHECK(!try_choose(GC_CH_PICK, 2, &why) && !strcmp(why, "partyUiHandler:cantBeUsed"));
+    CHECK(try_choose(GC_CH_PICK, 1, &why));
+    CHECK(run.bt.field[0] == cynda && cynda->on_field && run.screen.kind == GC_SCREEN_COMMAND);
+    /* the command screen's switch refuses it as well */
+    CHECK(!try_choose(GC_CH_POKEMON, party_index(lead), &why) && !strcmp(why, "partyUiHandler:cantBeUsed"));
+    n_seen = 0;
+    const bool fought = try_choose(GC_CH_FIGHT, 0, &why);
+    if (!fought || run.screen.kind != GC_SCREEN_COMMAND) fprintf(stderr, "next turn: %d %s screen %d\n", fought, fought ? "" : why, run.screen.kind);
+    CHECK(fought && run.screen.kind == GC_SCREEN_COMMAND && texts("challenges:illegalEvolution") == 0 && run.bt.field[0] == cynda);
+
+    /* no Pokemon left that the challenge allows: clearPhaseQueue, then GameOverPhase. The clear drops the illegalEvolution message queued just
+     * before it (the pinned upstream's headless run shows TurnInitPhase then GameOverPhase, no MessagePhase) */
+    fire_run();
+    for (int i = 0; i < 3; i++) run.party[i].b.species = SPECIES_ID_SQUIRTLE;
+    n_seen = 0;
+    CHECK(try_choose(GC_CH_FIGHT, 0, &why));
+    CHECK(texts("challenges:illegalEvolution") == 0);
+    CHECK(run.screen.kind == GC_SCREEN_GAME_OVER);
+
+    /* the win's ribbons: only the members the challenge allows (POKEMON_IN_BATTLE), so not one that became Water */
+    fire_run();
+    run.party[1].b.species = SPECIES_ID_SQUIRTLE;
+    run.wave = 200;
+    finish(true);
+    CHECK(run.terminal_result == 2);
+    CHECK(sys.dex[SPECIES_ID_CHARMANDER].ribbon_flags == (GC_RIBBON_CLASSIC | (GC_RIBBON_MONO_NORMAL << POKEMON_TYPE_FIRE)));
+    CHECK(sys.dex[SPECIES_ID_SQUIRTLE].ribbon_flags == 0 && sys.dex[SPECIES_ID_CYNDAQUIL].ribbon_flags == 0);
+    CHECK(sys.dex[SPECIES_ID_TORCHIC].ribbon_flags == (GC_RIBBON_CLASSIC | (GC_RIBBON_MONO_NORMAL << POKEMON_TYPE_FIRE)));
+}
+
 int main(void)
 {
     admission();
@@ -386,6 +531,7 @@ int main(void)
     win();
     save();
     run_rules();
+    single_type();
     printf("Challenge host: %d checks passed\n", checks);
     return 0;
 }

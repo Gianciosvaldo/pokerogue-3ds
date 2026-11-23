@@ -119,7 +119,7 @@ void gc_snorlax_execute(gc_run *run, int option)
     /* the encounter's primaryPokemon: the first Pokemon allowed in battle in party order (the field slots are its first ones) */
     for (int k = 0; k < run->n_party; k++) {
         const int idx = run->party_order[k];
-        if (!gc_mon_allowed(&run->party[idx])) continue;
+        if (!gc_mon_allowed(run, &run->party[idx])) continue;
         gc_me_steal_exp(run, idx, SPECIES_ID_SNORLAX);
         break;
     }

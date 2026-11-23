@@ -16,7 +16,7 @@ static void summon_position_event(pr_battle *bt, pr_engine *e, int side, int fie
 {
     if (side != 0 || !bt->double_battle) return;
     int allowed = 0;
-    for (int k = 0; k < bt->n_party[0]; k++) if (bt->party[0][k] && bt->party[0][k]->hp > 0) allowed++;
+    for (int k = 0; k < bt->n_party[0]; k++) if (pr_allowed_in_battle(bt, bt->party[0][k])) allowed++;   /* getPokemonAllowedInBattle() */
     pr_event_add(bt, e, PR_EV_FIELD_CENTER, side * 2 + field, -1, 1, field == 0 && allowed == 1 ? 1 : 0, NULL);
 }
 
@@ -45,10 +45,10 @@ static bool side_has_unported_modifier(const pr_battle *bt, int side)
     return false;
 }
 
-/* isActive(true): allowed in battle (not fainted; challenges are not modelled) and on the field */
-static bool is_active_on_field(const pr_pokemon *p)
+/* isActive(true): allowed in battle (not fainted, allowed by the challenges) and on the field */
+static bool is_active_on_field(const pr_battle *bt, const pr_pokemon *p)
 {
-    return p && p->hp > 0 && p->on_field && !p->switch_out_status;
+    return pr_allowed_in_battle(bt, p) && p->on_field && !p->switch_out_status;
 }
 
 /* party.filter(p => p.isAllowedInBattle() && !p.isOnField()): the indexes, in party order */
@@ -58,7 +58,7 @@ static int eligible_switch_ins(const pr_battle *bt, int side, int out[PR_MAX_PAR
     for (int k = 0; k < bt->n_party[side]; k++) {
         const pr_pokemon *p = bt->party[side][k];
         bool on_field = p->on_field && !p->switch_out_status;
-        if (p->hp > 0 && !on_field) out[n++] = k;
+        if (pr_allowed_in_battle(bt, p) && !on_field) out[n++] = k;
     }
     return n;
 }
@@ -71,7 +71,7 @@ static int enemy_reserves(const pr_battle *bt, const pr_pokemon *out, bool same_
     for (int k = 0; k < bt->n_party[1]; k++) {
         const pr_pokemon *p = bt->party[1][k];
         bool on_field = p->on_field && !p->switch_out_status;
-        if (p->hp > 0 && !on_field && (!same_slot || p->trainer_slot == out->trainer_slot)) res[n++] = k;
+        if (pr_allowed_in_battle(bt, p) && !on_field && (!same_slot || p->trainer_slot == out->trainer_slot)) res[n++] = k;
     }
     return n;
 }
@@ -107,7 +107,7 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
     bool player = out->is_player;
     /* a Dondozo with an allied Tatsugiri in its mouth can't switch or be forced out */
     const pr_battler_tag *cmd = pr_get_battler_tag(out, BATTLER_TAG_TYPE_COMMANDED);
-    if (cmd && is_active_on_field(pr_pokemon_by_id(bt, cmd->source_id))) return false;
+    if (cmd && is_active_on_field(bt, pr_pokemon_by_id(bt, cmd->source_id))) return false;
 
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
@@ -267,7 +267,7 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
         if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)out->id)
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     pr_clear_enemy_held_item_modifiers(bt, out);
-    if (!is_active_on_field(ally) && out->hp > 0) {
+    if (!is_active_on_field(bt, ally) && out->hp > 0) {
         push_boundary(bt, e, PH_BATTLE_END);
         if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
         push_boundary(bt, e, PH_NEW_BATTLE);
@@ -334,7 +334,7 @@ int pr_wimp_out_can_apply(pr_battle *bt, const pr_pokemon *p, const pr_pokemon *
     /* getOpponents(): the other side's field, isActive(true), in field order */
     for (int k = 0; k < 2; k++) {
         const pr_pokemon *o = bt->field[(p->is_player ? 2 : 0) + k];
-        if (!is_active_on_field(o)) continue;
+        if (!is_active_on_field(bt, o)) continue;
         if (!helper_switch_out_condition(bt, p, o)) return 0;
     }
     return 1;
@@ -372,7 +372,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", p)));
         if (bt->double_battle && ally) pr_redirect_moves(bt, e, p, ally);
     }
-    if (!is_active_on_field(ally)) {
+    if (!is_active_on_field(bt, ally)) {
         /* clearEnemyHeldItemModifiers(): every enemy held item, then updateModifiers(false) */
         for (int i = 0; i < bt->n_mods[1]; i++)
             if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
@@ -395,13 +395,13 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
 void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     const pr_phase *s = &e->pool[ph];
-    /* challenges (isAllowedInChallenge) aren't modelled: every Pokemon that hasn't fainted is allowed */
     if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+    if (s->sw_illegal) { e->awaiting_pick = true; return; }   /* switchOut(): the party screen opens as it is */
     if (s->sw_modal) {
         bool all_on_field = true;                              /* getPokemonAllowedInBattle().every(isOnField) */
         for (int k = 0; k < bt->n_party[0]; k++) {
             const pr_pokemon *p = bt->party[0][k];
-            if (p->hp > 0 && !(p->on_field && !p->switch_out_status)) all_on_field = false;
+            if (pr_allowed_in_battle(bt, p) && !(p->on_field && !p->switch_out_status)) all_on_field = false;
         }
         if (all_on_field) return;
         if (!s->sw_do_return) {
@@ -417,7 +417,7 @@ void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph)
      * the screen and the switch go to field index 0 */
     if (bt->double_battle) {
         int allowed = 0;
-        for (int k = 0; k < bt->n_party[0]; k++) allowed += bt->party[0][k]->hp > 0;
+        for (int k = 0; k < bt->n_party[0]; k++) allowed += pr_allowed_in_battle(bt, bt->party[0][k]);
         if (allowed <= 1) e->pool[ph].sw_field_index = 0;
     }
     e->awaiting_pick = true;
@@ -582,7 +582,7 @@ static bool tag_affects(const pr_battle *bt, int side, const pr_pokemon *p)
 {
     for (int i = 0; i < 4; i++) {
         if (bt->field[i] != p) continue;
-        if (side == ARENA_TAG_SIDE_BOTH) return p->hp > 0;              /* getField(true) */
+        if (side == ARENA_TAG_SIDE_BOTH) return pr_allowed_in_battle(bt, p);   /* getField(true) */
         return (side == ARENA_TAG_SIDE_PLAYER) == (i < 2);
     }
     return false;
@@ -636,7 +636,7 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
         return;
     }
     case ARENA_TAG_TYPE_IMPRISON:
-        if (is_active_on_field(pr_pokemon_by_id(bt, t.source_id)) && p->hp > 0)
+        if (is_active_on_field(bt, pr_pokemon_by_id(bt, t.source_id)) && pr_allowed_in_battle(bt, p))
             pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_IMPRISON, 1, MOVE_ID_IMPRISON, t.source_id);
         return;
     default:
@@ -748,11 +748,11 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_hook_ab(bt, p, PR_AC_PreSummonAbAttr);
 
     /* preSummon: a Pokemon not allowed in battle is swapped with the first allowed one after it */
-    if (p->hp <= 0) {
+    if (!pr_allowed_in_battle(bt, p)) {
         if (p->on_field && !p->switch_out_status) pr_leave_field(bt, e, p, true);
         int legal = -1;
         for (int k = field + 1; k < bt->n_party[side] && legal < 0; k++)
-            if (bt->party[side][k]->hp > 0) legal = k;
+            if (pr_allowed_in_battle(bt, bt->party[side][k])) legal = k;
         if (legal < 0) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* clearPhaseQueue + GameOverPhase */
         bt->party[side][field] = bt->party[side][legal];
         bt->party[side][legal] = p;
@@ -803,7 +803,7 @@ void pr_init_encounter_phase(pr_battle *bt, pr_engine *e, int ph)
     (void)ph;
     for (int b = 0; b < 4; b++) {
         pr_pokemon *p = bt->field[b];
-        if (!p || p->hp <= 0 || !p->on_field || p->switch_out_status) continue;   /* getField(true) */
+        if (!pr_allowed_in_battle(bt, p) || !p->on_field || p->switch_out_status) continue;   /* getField(true) */
         if (b >= 2 || p->summoned_this_turn) pr_phase_unshift(bt, e, pr_phase_new(e, PH_POST_SUMMON, (int8_t)b));
     }
 }
@@ -817,7 +817,7 @@ void pr_check_switch_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *p = bt->field[field];
     if (!p || !p->on_field) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* SummonMissingPhase */
     bool others = false;
-    for (int k = 1; k < bt->n_party[0]; k++) others |= bt->party[0][k]->hp > 0;
+    for (int k = 1; k < bt->n_party[0]; k++) others |= pr_allowed_in_battle(bt, bt->party[0][k]);   /* slice(1).filter(isActive) */
     if (!others) return;
     if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_FRENZY) || pr_is_trapped(bt, p, NULL)
         || pr_get_battler_tag(p, BATTLER_TAG_TYPE_COMMANDED))

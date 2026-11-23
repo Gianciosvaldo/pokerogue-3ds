@@ -31,8 +31,8 @@ int gc_form_ability(int species, const pr_form *f, int ability_index)
 }
 
 bool gc_mon_fainted(const gc_mon *m) { return m->b.hp <= 0; }
-/* isAllowedInBattle(): not fainted (challenges aren't modelled) */
-bool gc_mon_allowed(const gc_mon *m) { return m->b.hp > 0; }
+/* isAllowedInBattle(): not fainted, and allowed by the challenges (battle-core's pr_allowed_in_battle, on the run's battle) */
+bool gc_mon_allowed(const gc_run *run, const gc_mon *m) { return pr_allowed_in_battle(&run->bt, &m->b); }
 
 static void init_common(gc_mon *m)
 {

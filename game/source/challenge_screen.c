@@ -12,6 +12,8 @@
 
 #define ROW_H 16.0f
 
+extern const char* const menu_type_frames[];   /* PokemonType[t].toLowerCase(): the types atlas' frames (menus/menus_names.c) */
+
 static struct {
   chsel_args a;
   chm_model m;
@@ -79,6 +81,13 @@ static void cs_draw(ui_screen* s, rr_screen which) {
     snprintf(key, sizeof key, "challenges:%s.name", chm_key(id));
     i18n_t(text, sizeof text, key, NULL);
     text_draw(TS_WINDOW, x + 18, ry, text, NULL);
+    if (id == CHALLENGES_SINGLE_TYPE) {
+      /* SingleTypeChallenge.getValue is PokemonType[value - 1].toLowerCase(), shown as that frame of the types atlas (monoTypeValue);
+       * value 0 is PokemonType.UNKNOWN */
+      const int v = C.m.v.value[id];
+      img_draw("images/types", v > 0 ? menu_type_frames[v - 1] : "unknown", x + w - 10, ry + 1, 1, 0);
+      continue;
+    }
     snprintf(key, sizeof key, "challenges:%s.value.%d", chm_key(id), (int)C.m.v.value[id]);
     i18n_t(text, sizeof text, key, NULL);
     text_draw(TS_WINDOW, x + w - 10, ry, text, &right);
@@ -90,7 +99,13 @@ static void cs_draw(ui_screen* s, rr_screen which) {
   /* what the highlighted challenge does at its value */
   ui_window(0, -48, 320, 48, WIN_NORMAL);
   const int id = chm_current(&C.m);
-  if (id >= 0) {
+  if (id == CHALLENGES_SINGLE_TYPE) {
+    /* SingleTypeChallenge.getDescription: descDefault at 0, else desc with the type's name (upstream also colours it: not here) */
+    const int v = C.m.v.value[id];
+    snprintf(key, sizeof key, v > 0 ? "challenges:singleType.desc" : "challenges:singleType.descDefault");
+    if (v > 0) i18n_t(text, sizeof text, key, "type", i18n_type_name(v - 1), NULL);
+    else i18n_t(text, sizeof text, key, NULL);
+  } else if (id >= 0) {
     /* getDescription: desc.<value>, or the one desc of a challenge that has a single text (Inverse Battle, Flip Stat) */
     snprintf(key, sizeof key, "challenges:%s.desc.%d", chm_key(id), (int)C.m.v.value[id]);
     if (!i18n_exists(key)) snprintf(key, sizeof key, "challenges:%s.desc", chm_key(id));

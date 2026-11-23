@@ -235,6 +235,7 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
 /* ---- Challenge Mode (src/gc_challenge.c) ---- */
 void gc_challenge_sync(gc_run *run);                     /* run.has_challenges / challenge_flags / ... from run.challenges */
 bool gc_challenge_add_to_party_ok(const gc_run *run);    /* applyChallenges(POKEMON_ADD_TO_PARTY): Limited Catch */
+void gc_challenge_to_battle(const gc_run *run, pr_battle *bt);   /* the challenge fields of a battle */
 bool gc_challenges_unplayed(const gc_run *run);          /* an active challenge game-core does not play yet (or an active set nobody listed) */
 void gc_challenge_modify_starter(gc_run *run, gc_mon *m);   /* ChallengeType.STARTER_MODIFY */
 uint64_t gc_challenge_ribbon_flags(const gc_run *run);   /* GameOverPhase.awardRibbons: the flags to give the party's lines, 0 = none */
@@ -288,7 +289,7 @@ void gc_mon_publish_ivs(gc_run *run, const gc_mon *source);
 bool gc_mon_remember_tm(gc_run *run, gc_mon *m, int move);
 void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calculateStats on a living Pokemon */
 bool gc_mon_fainted(const gc_mon *m);
-bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */
+bool gc_mon_allowed(const gc_run *run, const gc_mon *m);              /* isAllowedInBattle: not fainted, allowed by the challenges */
 
 /* ---- learnsets (src/gc_learnset.c): field/learnsets.ts getLevelMoves, as the reward screen reads it ---- */
 /* One row of PlayerPokemon.getLevelMoves: its level (-1 RELEARN_MOVE, 0 EVOLVE_MOVE), the move and its
@@ -496,7 +497,7 @@ bool gc_dance_execute(gc_run *run, int option, int b, int c);   /* false: the pi
 bool gc_dance_roll(gc_run *run, gc_mon *mon);                    /* onInit's Oricorio (the oracle's test reads it) */
 void gc_dance_tokens(gc_run *run, pr_msg_arg *name);             /* the token onInit sets: oricorioName */
 bool gc_is_dance_move(int move);                                 /* DANCING_MOVES */
-bool gc_dance_has_move(const gc_mon *m);                         /* allowed in battle with a dance move */
+bool gc_dance_has_move(const gc_run *run, const gc_mon *m);                      /* allowed in battle with a dance move */
 int gc_dance_first_move(const gc_mon *m);
 bool gc_dance_pick_ok(const gc_run *run, int option, int idx);   /* the party screen's filter: option 1 = learn its dance, 2 = show it a dance */
 bool gc_dance_move_ok(const gc_run *run, int member, int slot);  /* the second list of the third option */
@@ -508,6 +509,7 @@ void gc_me_win_rewards(gc_run *run);                            /* an encounter'
 void gc_snorlax_execute(gc_run *run, int option);                /* Slumbering Snorlax (src/gc_snorlax.c) */
 void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
+int gc_battle_turn_init_challenge(gc_run *run);                 /* TurnInitPhase: a Pokemon the challenges bar leaves the field: -1 = none */
 int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
 void gc_me_leave(gc_run *run);                                   /* leaveEncounterWithoutBattle(): no heal shop */
 bool gc_me_roll_boss_at(gc_run *run, pr_rng *stream, gc_mon *boss, int level);   /* the same boss at a level the encounter chose (Uncommon Breed), src/gc_fof.c */
@@ -636,7 +638,7 @@ void gc_breeder_outro(gc_run *run, const gc_rphase *p);
 void gc_enemy_finish_party_holders(gc_run *run, const gc_item *items, int n);   /* as _items, each item keeps the holder it names */
 int gc_fiery_primary(const gc_run *run);                           /* the third option's primary Pokemon (a storage index), -1 without */
 bool gc_fiery_option_ok(const gc_run *run);
-void gc_me_apply_damage(gc_mon *m, int damage);                    /* applyDamageToPokemon */
+void gc_me_apply_damage(const gc_run *run, gc_mon *m, int damage);  /* applyDamageToPokemon */
 void gc_me_exp_value(gc_run *run, int primary, double base_exp, bool use_wave_multiplier);   /* setEncounterExp(primary.id, base, wave multiplier) */
 /* The Mysterious Chest (src/gc_chest.c) */
 int gc_chest_roll(const gc_run *run);                       /* onPreOptionPhase's randSeedInt(100): below 30 is the trap */

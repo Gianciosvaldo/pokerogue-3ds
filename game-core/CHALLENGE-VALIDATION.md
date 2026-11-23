@@ -220,3 +220,121 @@ Plants (`tools/challengebattleplant.sh <trace>`, 26 in all, 0 missed): the 14 of
   scrolling list (upstream shows 9 rows and scrolls).
 * Nothing here was run on a 3DS or in Azahar.
 * run-core edits (disclosed, approved by lorenzo per PR): `include/pr/run.h`, `src/shop.c`.
+
+# Challenge Mode, part 4a: Single Type, and the in-battle rule it shares with Single Generation
+
+Mono Type (`SINGLE_TYPE`) is now in `gc_challenge_played_mask`: the challenge screen lists it first (Single Generation, before it upstream,
+is still refused), a run takes it, and a save that holds it loads. Single Generation's in-battle rule is ported with it (one function
+answers both), but Single Generation itself stays refused until its fixed battles are ported (part 4b).
+
+## What upstream does (8555c08, read and replayed)
+
+* **STARTER_CHOICE** (`checkSpeciesValidForChallenge`): the form's types (or generation) must match. With `soft`, a starter also passes when an
+  evolution of it does (an evolution whose `preFormKey` is set and is not the starter's form key is not followed; an empty key `""` is falsy and
+  is followed), or when one of the species' form changes whose trigger has an `item` leads to a form that does. The party select allows such a
+  "soft" starter next to a valid one (`starterSelectUiHandler:invalidParty` otherwise).
+* **STARTER_SELECT_MODIFY**: Single Type drops Ralts' female bit under Fighting (Gallade), Snorunt's male bit under Ghost (Froslass), Burmy's
+  female bit under Flying (Mothim) and its male bit under Grass, Ground and Steel (Wormadam); Single Generation 4 drops Ralts' female and Snorunt's
+  male bits. `applyChallenges` runs `ret ||= c.applyX(..)`, so once one challenge answers true the later ones are not called: Fresh Start,
+  Single Generation and Single Type all answer true, so only the first that is on (allChallenges order) applies.
+* **POKEMON_IN_BATTLE** (`isAllowedInChallenge`): only the player's Pokemon are judged. Single Type: `isOfType(value - 1, {includeTeraType:
+  false, bypassSummonData: true, ignoreThirdType: true})`, or Castform under Normal (`TYPE_OVERRIDES`). Single Generation: the species' and the
+  fusion species' generation. `isAllowedInBattle` is that and not fainted, and `isActive` is built on it, so every "is this Pokemon active" check
+  of the battle reads the challenge.
+* **TurnInitPhase**: a player Pokemon on the field that is not allowed gets `challenges:illegalEvolution`; with none allowed the phase queue is
+  cleared and `GameOverPhase` runs (the clear drops that message); with as many allowed as battlers (or, in a double, the first allowed one not on
+  the field) it is switched out through the party screen; otherwise it just leaves the field; a double with one allowed Pokemon toggles to a
+  single position.
+* The party screens refuse a member the challenge does not allow with `partyUiHandler:cantBeUsed` (`FilterChallengeLegal`), the rewards' pool
+  weights and the win's ribbons skip such members, and the Mystery Encounters' party helpers read `isAllowedInChallenge` / `isAllowedInBattle`.
+
+## Where it is ported
+
+| rule | file |
+|---|---|
+| `isAllowedInChallenge`, `isAllowedInBattle` | `battle-core/src/damage.c` (`pr_challenge_allowed`, `pr_allowed_in_battle`), the values on `pr_battle` (`challenge_generation`, `challenge_type`) |
+| every `isActive` site (the `hp > 0 && on_field && !switch_out_status` pattern) | `battle-core` `ab_attrs.c`, `arena_tags.c`, `battler_tags.c`, `called_moves.c`, `closures_*.c`, `commands.c`, `engine.c`, `item_transfer.c`, `modifiers.c`, `move_effects.c`, `phases.c`, `pokemon.c`, `switching.c` |
+| TurnInitPhase's switch | `battle-core/src/engine.c` `pr_run_turn_init_challenge`, called by game-core's `RP_TURN_INIT` (`gc_battle_turn_init_challenge`) |
+| the values on every battle | `gc_challenge_to_battle` (`gc_challenge.c`), used by `gc_battle.c`, `gc_encounter.c`, `gc_phases.c` |
+| STARTER_CHOICE soft step, STARTER_SELECT_MODIFY | `gc_challenge.c` (`species_valid_soft` over battle-core's `pr_item_form_rules`, `gc_challenge_starter_view`) |
+| party screens' refusal | `gc_battle.c` (command switch), `gc_phases.c` (`RP_SWITCH`), `game/source/party_screen.c` (the app's switch modes) |
+| rewards, ribbons, Mystery Encounter helpers | `gc_reward.c` (`allowed_in_challenge`), `gc_classic.c`, `gc_mon.c` (`gc_mon_allowed` now takes the run), `gc_mystery.c` |
+| the challenge screen's Mono Type row | `game/source/challenge_screen.c`: the type icon (`types` atlas frame, `unknown` at 0) and `singleType.desc` / `descDefault` |
+
+reward-core edit (disclosed): `reward_apply.c` no longer refuses a DNA Splicers fusion when either member is not allowed by the challenge.
+Upstream's `FusePokemonModifierType` filter checks only `isFusion` and Hardcore's `POKEMON_FUSION`; that refusal was this port's own.
+
+## Differential
+
+`tools/challengestartersdiff.sh <upstream> 400 <seed>` now also sets Single Generation (about 1 case in 4) and Single Type (3 in 4), and records
+`isAllowedInChallenge` for every starter and for 10 probes per case (member 0 made another species and form, from the form-change list or any
+species, fused from the 7th probe on). The starter view now covers Single Type's and Single Generation's genders and the `ret ||=` precedence.
+
+| seed | mono cases | allowed values | checks | TOTAL mismatches |
+|---|---|---|---|---|
+| 777 | 334 | 5486 | 209288 | 0 |
+| 9001 | 334 | 5404 | 205686 | 0 |
+| 4242 | 351 | 5403 | 205501 | 0 |
+| 31337 | 339 | 5409 | 205581 | 0 |
+
+The producer requires each coverage counter above 0: allowed, barred, fused and soft-form probes, and gender-dropped views. The cases without
+Fresh Start cycle through Single Generation 4 and Single Type Fighting, Ghost, Flying and Grass and query Ralts, Snorunt and Burmy with both
+genders caught (`J` lines: 174 views, about 60 with a gender dropped, on each seed); one case in ten starts its party with Calyrex, whose level
+moves are not in level order (Fresh Start's moveset sort, which the new random stream had stopped reaching). Seed 31337 found the soft step not
+following a `preFormKey` of `""` that no form has (Hisuian Basculin to Basculegion, Dunsparce to Dudunsparce); fixed.
+
+Plants:
+* `tools/challengestartersplant.sh <trace>`: 30, adding `choice-ignores-type`, `choice-ignores-gen`, `soft-no-item-forms`,
+  `soft-empty-prekey-not-followed`, `soft-no-form-prekey-not-followed`, `view-fresh-then-type`, `view-type-burmy`, `view-type-ralts`,
+  `view-gen-ralts`. On the seed 777 trace 28 exit 1; `soft-no-form-prekey-not-followed` is caught on the 31337 trace (the only one with that
+  case), and `default-tera-form` is missed as before (see part 1). On 31337, 28 exit 1 (`soft-empty-prekey-not-followed`, caught on 777, and
+  `default-tera-form` are missed).
+* `tools/challengebattleplant.sh <trace>`: 31, adding `allowed-type-off`, `allowed-gen-off`, `allowed-fusion-gen-off`, `allowed-first-type-only`,
+  `allowed-no-castform`. On the seed 777 trace: 31, 0 missed.
+
+## Host tests
+
+* `challenge_host_test` `single_type`: the admission (Single Type taken, its value on `run->bt`; Single Generation still refused); the party rule
+  under Flying (Pidgey valid, Charmander only soft through Charizard, Bulbasaur not at all, Charmander alone `invalidParty`) and under Dragon (Mega
+  Charizard X, an item form); `pr_challenge_allowed` for the foe (never judged), a Water tera (ignored), sunny Castform under Normal, a fainted
+  member (`pr_allowed_in_battle` false). Then a real wave-1 battle of a Fire run (Charmander, Cyndaquil, Torchic): the lead and Torchic become
+  Water, the next turn says `challenges:illegalEvolution`, the lead leaves, the switch screen offers Cyndaquil only and refuses the lead and Torchic
+  with `partyUiHandler:cantBeUsed`, Cyndaquil comes in and the next turn has no message; the command screen's switch refuses the lead too. With
+  every member Water: game over, and no message (upstream's `clearPhaseQueue` drops it). A win with one Water member: no ribbon for it.
+* `game/tests/challenge_screen_test`: Mono Type is the first row, its value is the type icon (`unknown` at 0, Normal at 1, Fairy at 18, no
+  further), its description `descDefault` at 0 and `desc` with the type's name after. `challenge_model_test` no longer assumes Fresh Start is the
+  first row.
+* Host plants (`tools/challengehostplant.sh`, which now copies battle-core for a `battle-core/` plant): 38, 0 missed, adding
+  `single-type-unplayed`, `type-not-on-the-battle`, `party-soft-alone-ok`, `soft-no-item-forms`, `allowed-counts-tera`, `allowed-judges-the-foe`,
+  `allowed-no-castform`, `allowed-fainted`, `turn-init-no-check`, `turn-init-leaves-only`, `turn-init-not-in-game-core`, `switch-refusal-no-energy`,
+  `switch-takes-the-barred`, `ribbons-for-the-barred`, `switch-screen-offers-the-barred`.
+
+Old plant and proof scripts whose anchors the new signatures changed (`gc_mon_allowed(run, m)`, `gc_dance_has_move(run, m)`, `is_active(bt, p)`
+and the like) were updated: `avarice`, `berries`, `breeder`, `chest`, `dance`, `fiery`, `fof`, `snorlax`, `training` plants and battle-core's
+`check-{arena,attention,commander,final-boss-faint,stance,weather,xerneas-active}-proof.py`. Every anchor was checked to match the new source;
+only `check-final-boss-faint-proof.py` (the one in CI) was run, the others need traces from upstream. Six plants that already matched nothing
+before this change (`berries win-callback-dropped`, five in `fofplant.sh`) were left as they were.
+
+## Gaps
+
+* **TurnInitPhase's timing.** In the pinned upstream (a headless GameManager run, Splash against Splash), `TurnInitPhase` queues the message,
+  opens the party screen and goes on: no CommandPhase is pushed for the empty slot, so the foe's move runs, and the switch-in (a deferred
+  `SwitchSummonPhase`) came only at the next turn's start, after another foe-only turn. How much of that is the test harness's timing of the pick
+  I don't know. This port asks for the pick first, brings the Pokemon in, then starts the turn again: the newcomer gets a command and the foe gets
+  no free turn.
+* The double-battle branches (leave the field only; ToggleDoublePositionPhase with one allowed Pokemon) are ported but not tested: no wave-1
+  double was found to host them.
+* The description does not colour the type's name (upstream: the type's colour and shadow). The `unknown` frame at value 0 is taken from upstream's
+  `setFrame`; it was not looked at on a 3DS.
+* The message names the Pokemon by its current name; upstream uses `p.name`, which a direct species change does not update (the probe printed
+  "Charmander" for the Squirtle-ified lead). Through a real evolution both say the new name, I believe, but did not check.
+* The rewards' Attack Type Booster weights that skip members the challenge bars are not in the differential (the trace's reward weights pass,
+  but no case isolates them).
+* The Mystery Encounters' party filters (Shady Vitamin Dealer, the offer screens, the damage helper) read the new rule, but none is host-tested
+  under Single Type, and their refusal texts stay the generic ones.
+* Not every one of the ~250 `hp > 0` sites in battle-core was audited by hand: the `hp > 0 && on_field && !switch_out_status` pattern
+  (upstream's `isActive(true)`) was converted everywhere; sites upstream writes as `isFainted()` / `hp > 0` (Counter, Revival Blessing, ability
+  `canApply` with bypassFaint, the enemy-only and custom JoJo sites) were left alone on purpose.
+* run-core still holds an unused `pr_run_challenge_capture_allowed` that has no upstream counterpart (from before part 3).
+* With Single Generation (part 4b) the window is 11 rows and no longer fits: the scrolling list comes with it.
+* Nothing here was run on a 3DS or in Azahar. No run-core edit in this part; one reward-core edit (above).

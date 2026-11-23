@@ -34,7 +34,7 @@ bool gc_fg_active(const gc_run *run) { return gc_int((gc_run *)run)->fg.active; 
 /* the party screen's selectableFilter: isPokemonValidForEncounterOptionSelection, any Pokemon allowed in battle */
 bool gc_fg_pick_ok(const gc_run *run, int idx)
 {
-    return idx >= 0 && idx < run->n_party && gc_mon_allowed(&run->party[idx]);
+    return idx >= 0 && idx < run->n_party && gc_mon_allowed(run, &run->party[idx]);
 }
 
 /* ---- Wobbuffet's moveset ---- */

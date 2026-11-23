@@ -34,7 +34,7 @@ int gc_berries_fastest(const gc_run *run)
     int best = -1;
     for (int k = 0; k < run->n_party; k++) {
         const int idx = run->party_order[k];
-        if (!gc_mon_allowed(&run->party[idx])) continue;
+        if (!gc_mon_allowed(run, &run->party[idx])) continue;
         if (best < 0 || run->party[best].b.stats[STAT_SPD] < run->party[idx].b.stats[STAT_SPD]) best = idx;
     }
     return best >= 0 ? best : (run->n_party > 0 ? run->party_order[0] : -1);

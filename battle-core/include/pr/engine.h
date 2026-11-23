@@ -112,6 +112,7 @@ typedef struct pr_phase {
      * doReturn, player) */
     int8_t sw_type, sw_field_index, sw_slot;
     bool sw_modal, sw_do_return, sw_player;
+    bool sw_illegal;                 /* the party screen of Pokemon.switchOut() for a Pokemon the challenges bar (TurnInitPhase): no skip */
     bool sw_use_name, position_double; /* encounter prompt/position constructor arguments */
     bool announce_double;            /* ToggleDoublePositionPhase queued by initFinalBossPhaseTwo: it says so (PR_EV_DOUBLE_START) */
     /* PostSummonPhase; PostSummonActivateAbilityPhase (the same phaseName) is one with
@@ -199,6 +200,13 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
 /* handleMysteryEncounterBattleStartEffects (TurnInitPhase, before the first CommandPhase): a MovePhase for each of bt->me_start, then the
  * MysteryEncounterBattleStartCleanupPhase; runs on to the next stop, as pr_run_turn (the queue empty: PH_TURN_INIT) */
 void pr_run_start_of_battle_effects(pr_battle *bt, pr_engine *e);
+
+/* TurnInitPhase.start's first step: a player field Pokemon on the field that the challenges no longer allow (it changed into an ineligible
+ * Pokemon: challenges:illegalEvolution) is switched out for a pick of the party screen (Pokemon.switchOut: no cancel, then a
+ * SwitchSummonPhase without the return), or only leaves the field in a double with no one to bring in (and a ToggleDoublePositionPhase
+ * when one Pokemon is left); with no allowed Pokemon left the game is over. Returns false, with nothing run, when every one is allowed;
+ * else runs on to the next stop (a pick, PH_GAME_OVER, or the queue empty: PH_TURN_INIT again). */
+bool pr_run_turn_init_challenge(pr_battle *bt, pr_engine *e);
 
 /* The start of a battle, from where upstream's EncounterPhase ends to the first turn: the
  * trainer sends out its Pokemon (SummonPhase), the player sends out theirs, and the PostSummon

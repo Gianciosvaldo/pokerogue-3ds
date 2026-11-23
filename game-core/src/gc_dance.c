@@ -33,9 +33,9 @@ bool gc_is_dance_move(int move)
 }
 
 /* MoveRequirement(DANCING_MOVES, true): allowed in battle, one of the moves among its moves */
-bool gc_dance_has_move(const gc_mon *m)
+bool gc_dance_has_move(const gc_run *run, const gc_mon *m)
 {
-    if (!gc_mon_allowed(m)) return false;
+    if (!gc_mon_allowed(run, m)) return false;
     for (int k = 0; k < m->b.n_moves; k++) if (m->b.moves[k] > 0 && gc_is_dance_move(m->b.moves[k])) return true;
     return false;
 }
@@ -132,7 +132,7 @@ bool gc_dance_pick_ok(const gc_run *run, int option, int idx)
     if (idx < 0 || idx >= run->n_party) return false;
     if (option == 1) return true;   /* selectPokemonForOption(onPokemonSelected): no filter */
     /* not fainted, allowed in the challenge, and the option's requirements: a dance move among its moves */
-    return option == 2 && gc_dance_has_move(&run->party[idx]);
+    return option == 2 && gc_dance_has_move(run, &run->party[idx]);
 }
 
 /* the second list of the third option: the move slots of the member that are dance moves */

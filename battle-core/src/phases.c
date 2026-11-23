@@ -12,16 +12,16 @@ static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f
 
 /* ---------------------------------------------------------------- Pokemon helpers */
 
-/* isActive(): isAllowedInBattle (not fainted; no challenges are modelled) */
+/* isActive(): isAllowedInBattle (not fainted, allowed by the challenges: pr_allowed_in_battle) */
 static bool is_classic_final_boss(const pr_battle *bt)
 {
     return (bt->game_mode == GAME_MODES_CLASSIC || bt->game_mode == GAME_MODES_CHALLENGE)
         && bt->wave_index == 200;
 }
 
-static bool is_active(const pr_pokemon *p) { return p && p->hp > 0; }
+static bool is_active(const pr_battle *bt, const pr_pokemon *p) { return pr_allowed_in_battle(bt, p); }
 static bool is_on_field(const pr_pokemon *p) { return p && p->on_field && !p->switch_out_status; }
-static bool is_active_on_field(const pr_pokemon *p) { return is_active(p) && is_on_field(p); }
+static bool is_active_on_field(const pr_battle *bt, const pr_pokemon *p) { return is_active(bt, p) && is_on_field(p); }
 static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, true); }
 
 /* getPokemon() of a PokemonPhase: the Pokemon in that field slot */
@@ -48,7 +48,7 @@ static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **o
 {
     int n = 0;
     for (int i = 0; i < 4; i++) {
-        if (!is_active(bt->field[i])) continue;
+        if (!is_active(bt, bt->field[i])) continue;
         for (int k = 0; t && k < t->n; k++)
             if (t->v[k] == i) { out[n++] = bt->field[i]; break; }
     }
@@ -139,7 +139,7 @@ static void form_change_body(pr_battle *bt, const pr_pokemon *p, int trigger_cla
         if(trigger_class==PR_FCT_SpeciesFormChangeAbilityTrigger){
             if(!strcmp(from->form_key,""))to=pr_get_hp_ratio(mon,false)>=0.5?"gulping":"gorging";
             else if(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging"))to="";
-        }else if(trigger_class==PR_FCT_SpeciesFormChangeActiveTrigger&&!is_active_on_field(mon)
+        }else if(trigger_class==PR_FCT_SpeciesFormChangeActiveTrigger&&!is_active_on_field(bt, mon)
             &&(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging")))to="";
         for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))target_form=i;
     } else if (pr_half_species(mon) == SPECIES_ID_XERNEAS) {
@@ -147,9 +147,9 @@ static void form_change_body(pr_battle *bt, const pr_pokemon *p, int trigger_cla
          * abilities. Match raw form keys before considering field activity. */
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
             const pr_form *from = pr_half_base_form(mon);
-            const char *key = is_active_on_field(mon) ? "active" : "neutral";
+            const char *key = is_active_on_field(bt, mon) ? "active" : "neutral";
             if (from->form_key && strcmp(from->form_key,key)) {
-                const char *previous = is_active_on_field(mon) ? "neutral" : "active";
+                const char *previous = is_active_on_field(bt, mon) ? "neutral" : "active";
                 if (!strcmp(from->form_key,previous))
                     for (int i=0;i<sp->nforms;i++)
                         if (!strcmp(pr_forms[sp->form0+i].form_key,key)) target_form=i;
@@ -157,7 +157,7 @@ static void form_change_body(pr_battle *bt, const pr_pokemon *p, int trigger_cla
         }
     } else if (stance) {
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
-            if (pr_half_form(mon) == 1 && !is_active_on_field(mon)) target_form = 0;
+            if (pr_half_form(mon) == 1 && !is_active_on_field(bt, mon)) target_form = 0;
         } else if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger
                    && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
             /* The registered trigger reads turnCommands, including for called moves. */
@@ -176,7 +176,7 @@ static void form_change_body(pr_battle *bt, const pr_pokemon *p, int trigger_cla
         int ability = pr_half_species(mon) == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
         bool raw = mon->base_ability == ability || mon->passive == ability;
         bool suppressed = pr_weather_effect_suppressed(bt);
-        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) target_form = 0;
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(bt, mon)) target_form = 0;
         else if (trigger_class == PR_FCT_SpeciesFormChangeWeatherTrigger
             && !mon->ability_suppressed && !suppressed && pr_has_ability_active(bt, mon, ability)) {
             if (bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN) target_form = 1;
@@ -445,7 +445,7 @@ int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, 
 static int default_battler(pr_battle *bt)
 {
     for (int i = 0; i < 4; i++)
-        if (is_active(bt->field[i])) return i;
+        if (is_active(bt, bt->field[i])) return i;
     return 0;
 }
 
@@ -654,7 +654,7 @@ static void turn_start(pr_battle *bt, pr_engine *e)
     int order[4], n = 0;
     for (int pass = 0; pass < 2; pass++)
         for (int i = 0; i < 4; i++) {
-            if (!is_active(bt->field[i])) continue;
+            if (!is_active(bt, bt->field[i])) continue;
             bool fight = bt->commands[i].command == COMMAND_FIGHT;
             if (fight == (pass == 1)) order[n++] = i;
         }
@@ -1340,7 +1340,7 @@ static void resolve_counter_attack_target(pr_battle *bt, pr_engine *e, int ph)
             /* in doubles, an attacker that is no longer active on the field: the first Pokemon of
              * its side's field with HP left, else ATTACKER */
             const pr_pokemon *dp = d >= 0 && d < 4 ? bt->field[d] : NULL;
-            if (bt->double_battle && !is_active_on_field(dp)) {
+            if (bt->double_battle && !is_active_on_field(bt, dp)) {
                 int side = d >= BATTLER_INDEX_ENEMY ? 2 : 0;
                 d = BATTLER_INDEX_ATTACKER;
                 for (int k = side; k < side + 2; k++)
@@ -1373,7 +1373,7 @@ void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     /* center-of-attention tags on the opponents (Follow Me, Rage Powder, Spotlight) */
     for (int i = 0; i < 4; i++) {
         pr_pokemon *o = bt->field[i];
-        if (!is_active_on_field(o) || !pr_is_opponent(bt, m->pokemon, o)) continue;
+        if (!is_active_on_field(bt, o) || !pr_is_opponent(bt, m->pokemon, o)) continue;
         const pr_battler_tag *tag = pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION);
         if (tag && (tag->source_move != MOVE_ID_RAGE_POWDER
                     || (!pr_is_of_type(m->pokemon, POKEMON_TYPE_GRASS)
@@ -1490,7 +1490,7 @@ static bool third_failure_check(pr_battle *bt, pr_engine *e, int ph)
             pr_target_list *tl = tlist(e, m->targets);
             for (int i = 0; i < 4 && !terrain; i++) {
                 pr_pokemon *o = bt->field[i];
-                if (!is_active(o) || !pr_is_opponent(bt, user, o)) continue;
+                if (!is_active(bt, o) || !pr_is_opponent(bt, user, o)) continue;
                 bool listed = false;
                 for (int k = 0; tl && k < tl->n; k++) listed |= tl->v[k] == i;
                 if (listed && pr_is_grounded(bt, o, false)) terrain = true;
@@ -1583,7 +1583,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
     pr_pokemon *user = m->pokemon;
-    if (!is_active_on_field(user)) {
+    if (!is_active_on_field(bt, user)) {
         queue_move_end(bt, e, ph);
         return;
     }
@@ -1777,7 +1777,7 @@ static void move_charge_phase(pr_battle *bt, pr_engine *e, int ph)
     int move = c->move.id;
     /* getTargetPokemon: getField(true).find(p => targetIndex === p.getBattlerIndex()) */
     pr_pokemon *target = slot(bt, c->charge_target);
-    if (target && !is_active(target)) target = NULL;              /* isActive(): on the field or not */
+    if (target && !is_active(bt, target)) target = NULL;              /* isActive(): on the field or not */
     if (!user || !target || !is_charging_move(move)) return;     /* super.end() only */
     const pr_move *mv = &pr_moves[move];
 
@@ -1960,7 +1960,7 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     *eff_out = 0;
     if (mv->target == MOVE_TARGET_USER) { *eff_out = 1; return HIT_CHECK_RESULT_HIT; }
     bool field_targeted = is_field_targeted(move);
-    if (!is_active_on_field(target) && !field_targeted) return HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD;
+    if (!is_active_on_field(bt, target) && !field_targeted) return HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD;
     /* Commander: moves against a Tatsugiri in its ally's mouth miss */
     if (!field_targeted && bt->double_battle) {
         const pr_pokemon *ally = pr_get_ally(bt, target);
@@ -2422,7 +2422,7 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
         && tl && tl->n > 0 && any_hit)
         for (int i = 0; i < 4; i++) {
             pr_pokemon *p = bt->field[i];
-            if (!is_active(p) || p == user) continue;
+            if (!is_active(bt, p) || p == user) continue;
             if ((pr_moves[fx->move_id].flags & MOVE_FLAGS_DANCE_MOVE)
                 && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE)
                 && pr_has_ability_with_attr(bt, p, PR_AC_PostDancingMoveAbAttr)) {
@@ -2479,7 +2479,7 @@ static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *h = PH(ph);
     pr_pokemon *p = h->pokemon;
     int move = h->move.id;
-    if (!is_active_on_field(p) || move == MOVE_ID_NONE || pr_moves[move].unimplemented) return;
+    if (!is_active_on_field(bt, p) || move == MOVE_ID_NONE || pr_moves[move].unimplemented) return;
     int max_pp = ref_move_pp(h);
     if (max_pp != -1 && ref_pp_used(h) >= max_pp) return;           /* isOutOfPp */
     const pr_move *mv = &pr_moves[move];
@@ -2683,7 +2683,7 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     }
     fx->first_hit = user->hit_count == user->hits_left;
     bool any_active = false;
-    for (int i = 0; i < nt; i++) any_active |= is_active_on_field(targets[i]);
+    for (int i = 0; i < nt; i++) any_active |= is_active_on_field(bt, targets[i]);
     fx->last_hit = user->hits_left == 1 || !any_active;
 
     /* the move's animation when it succeeded against a target or has a POST_TARGET effect: one per
@@ -2702,7 +2702,7 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         for (int b = 0; b < 4; b++) {
             bool listed = false;
             for (int k = 0; atl && k < atl->n; k++) listed |= atl->v[k] == b;
-            if (!listed || !is_active_on_field(bt->field[b])) continue;
+            if (!listed || !is_active_on_field(bt, bt->field[b])) continue;
             pr_event_add(bt, e, PR_EV_MOVE_ANIM, ub, b, move, 0, NULL);
             shown++;
         }
@@ -2771,7 +2771,7 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *me = PH(ph);
     pr_pokemon *p = slot(bt, me->battler);
     if (p) p->hits_left = -1;
-    if (!me->was_follow_up && is_active_on_field(p)) pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE);
+    if (!me->was_follow_up && is_active_on_field(bt, p)) pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE);
     bt->ignore_abilities = false;
     bt->ignoring_effect_source = -1;
     for (int i = 0; i < me->n_end_targets; i++) {
@@ -2932,12 +2932,12 @@ static void quiet_form_change_body(pr_battle *bt, pr_engine *e, int ph)
     int target = PH(ph)->move_id;
     /* the pin ends early for an off-field enemy without changing its form (source TODO) */
     bool enemy_hero = (bt->deviations & PR_DEV_ENEMY_ZERO_TO_HERO) && p && pr_half_species(p) == SPECIES_ID_PALAFIN;
-    if (!p || pr_half_form(p) == target || (!p->is_player && !is_active_on_field(p) && !enemy_hero)) return;
+    if (!p || pr_half_form(p) == target || (!p->is_player && !is_active_on_field(bt, p) && !enemy_hero)) return;
     pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
     pr_ab_params pp = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
     pr_change_half_form_state(bt, p, p->form_half, target);
-    if (is_active_on_field(p)) {
+    if (is_active_on_field(bt, p)) {
         uint16_t passive_ability = pr_get_passive_ability(p);
         bool active_seen = false, passive_seen = false;
         for (int i = 0; i < p->n_form_change_abilities; i++) {
@@ -3146,17 +3146,17 @@ static void the_world_turn_start(pr_battle *bt, pr_engine *e)
     int foe = -1;
     for (int b = 2; b < 4 && foe < 0; b++) {
         const pr_pokemon *p = bt->field[b];
-        if (is_active(p) && p->custom_passive == PR_CUSTOM_PASSIVE_THE_WORLD && !p->switch_out_status) foe = b;
+        if (is_active(bt, p) && p->custom_passive == PR_CUSTOM_PASSIVE_THE_WORLD && !p->switch_out_status) foe = b;
     }
     if (foe < 0) return;
     bool fight = false;
     for (int b = 0; b < 2; b++) {
         const struct pr_turn_command *c = &bt->commands[b];
-        if (is_active(bt->field[b]) && c->command == COMMAND_FIGHT && !c->skip) fight = true;
+        if (is_active(bt, bt->field[b]) && c->command == COMMAND_FIGHT && !c->skip) fight = true;
     }
     if (!fight) return;
     int left = 0;
-    for (int k = 0; k < bt->n_party[1]; k++) if (is_active(bt->party[1][k])) left++;
+    for (int k = 0; k < bt->n_party[1]; k++) if (is_active(bt, bt->party[1][k])) left++;
     const bool forced = bt->the_world_uses == 0 && left <= 1;
     if (!forced && pr_battle_rand_seed_int(bt, 100, 0) >= PR_THE_WORLD_PERCENT) return;
     bt->the_world_uses++;
@@ -3211,7 +3211,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     }
     for (int i = 0; i < 2; i++) {
         pr_pokemon *q = bt->field[i];
-        if (q && (is_active(q) || q->hp <= 0)) add_participant(bt, q->id);
+        if (q && (is_active(bt, q) || q->hp <= 0)) add_participant(bt, q->id);
     }
     if (is_classic_final_boss(bt) && !player) {
         if (p->form > 0) {
@@ -3280,7 +3280,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     if (player) {
         int legal = 0, bench = 0;
         for (int k = 0; k < bt->n_party[0]; k++) {
-            if (party_hp(bt, 0, k) <= 0) continue;
+            if (!pr_allowed_in_battle(bt, bt->party[0][k])) continue;   /* getPokemonAllowedInBattle() */
             legal++;
             if (!party_on_field(bt, 0, k)) bench++;
         }
@@ -3561,7 +3561,7 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
         bool cancelled = false;
         for(int j=0;j<4;j++) {
             pr_pokemon *opp=bt->field[j];
-            if(!opp || opp->is_player==p->is_player || !is_active_on_field(opp))continue;
+            if(!opp || opp->is_player==p->is_player || !is_active_on_field(bt, opp))continue;
             pr_ab_params pp = {.pokemon = opp, .move = -1, .flag = &cancelled};
             pr_apply_ab_attrs(bt, PR_AC_PreventBerryUseAbAttr, &pp);
         }
@@ -3612,7 +3612,7 @@ static void check_status_effect_phase(pr_battle *bt, pr_engine *e)
 static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = slot(bt, PH(ph)->battler);
-    if (!is_active_on_field(p) || !(p->status == STATUS_EFFECT_POISON || p->status == STATUS_EFFECT_TOXIC
+    if (!is_active_on_field(bt, p) || !(p->status == STATUS_EFFECT_POISON || p->status == STATUS_EFFECT_TOXIC
                                      || p->status == STATUS_EFFECT_BURN) || p->switch_out_status) {
         if (is_classic_final_boss(bt)) pr_init_final_boss_phase_two(bt,e,p);
         return;
@@ -3872,7 +3872,7 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *q = PH(ph);
     pr_pokemon *p = slot(bt, q->battler);
-    if (!is_active_on_field(p)) return;                                  /* isActive(true) */
+    if (!is_active_on_field(bt, p)) return;                                  /* isActive(true) */
     if (!q->ssc_processed) {
         /* applyStageMultipliers: StatStageChangeMultiplierAbAttr (Simple, Contrary), not simulated */
         if (!q->ssc_ignore_abilities) {
@@ -4097,7 +4097,7 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
     /* start(): CommonAnimPhase plays HEALTH_UP unless skipAnim or at full HP */
     if (p && !(f & PR_HEAL_SKIP_ANIM) && p->hp < max_hp(p))
         pr_event_add(bt, e, PR_EV_COMMON_ANIM, h->battler, -1, COMMON_ANIM_HEALTH_UP, 0, NULL);
-    if (!p || (!(f & PR_HEAL_REVIVE) && !is_active_on_field(p))) return;
+    if (!p || (!(f & PR_HEAL_REVIVE) && !is_active_on_field(bt, p))) return;
     if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_HEAL_BLOCK) && h->heal_hp > 0) {
         pr_queue_msg(bt, e, pr_msg_p(bt, "battlerTags:healBlockCannotHeal", p));
         return;
@@ -4151,7 +4151,7 @@ double pr_calculate_escape_chance(pr_battle *bt, int current_attempts)
 
     for (int i = 0; i < 2; i++) {
         pr_pokemon *p = bt->field[i];
-        if (p && p->hp > 0) {
+        if (pr_allowed_in_battle(bt, p)) {   /* getPlayerField(true) */
             player_speed += pr_get_stat(p, STAT_SPD, true);
         }
     }
@@ -4242,7 +4242,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
     } else {
         for (int b = 0; b < 2; b++) {
             pr_pokemon *pp = bt->field[b];
-            if (pp && pp->hp > 0) {
+            if (pr_allowed_in_battle(bt, pp)) {   /* getPlayerField(true) */
                 pp->failed_run_away = true;
             }
         }
@@ -4261,11 +4261,11 @@ static void toggle_double_position_phase(pr_battle *bt,pr_engine *e,int ph)
     int n = bt->n_party[0] < 2 ? bt->n_party[0] : 2;
     for (int k = 0; k < n; k++) {
         pr_pokemon *p = bt->party[0][k];
-        if (!is_active_on_field(p)) continue;
+        if (!is_active_on_field(bt, p)) continue;
         /* setFieldPosition(double && getPokemonAllowedInBattle().length > 1 ? LEFT : CENTER, 500): presentation only (the screen moves the
          * sprite and swaps the info box for the single battle's), no rule reads it. Every caller in a double passes double = true */
         int allowed = 0;
-        for (int j = 0; j < bt->n_party[0]; j++) if (party_hp(bt, 0, j) > 0) allowed++;
+        for (int j = 0; j < bt->n_party[0]; j++) if (pr_allowed_in_battle(bt, bt->party[0][j])) allowed++;
         pr_event_add(bt,e,PR_EV_FIELD_CENTER,-1,-1,0,allowed > 1 ? 0 : 1,NULL);
         if (k == 1) {
             bt->party[0][1] = bt->party[0][0];
@@ -4360,7 +4360,7 @@ void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     bt->double_battle = true;
     int count = 0;
     pr_pokemon *second = NULL;
-    for (int i=0; i<bt->n_party[0]; i++) if (is_active(bt->party[0][i])) {
+    for (int i=0; i<bt->n_party[0]; i++) if (is_active(bt, bt->party[0][i])) {
         if (++count == 2) second = bt->party[0][i];
     }
     if (count > 1) {

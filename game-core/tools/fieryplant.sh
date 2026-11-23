@@ -46,10 +46,10 @@ plant ability-list-thick-fat 's|ABILITY_ID_THICK_FAT, ||'
 plant ability-list-water-veil 's|ABILITY_ID_WATER_VEIL,|ABILITY_ID_NONE,|'
 # (ability-ignores-override is an equivalent mutant: ignoreOverride only skips a Skill Swap / Gastro Acid ability in the summon data, which a party Pokemon outside a battle does not have)
 plant fire-fainted-ok 's|        if (m->b.hp > 0 \&\& is_fire(m)) return true;|        if (is_fire(m)) return true;|'
-plant ability-fainted-ok 's|        if (gc_mon_allowed(m) \&\& fire_resistant_ability(m)) return true;|        if (fire_resistant_ability(m)) return true;|'
+plant ability-fainted-ok 's|        if (gc_mon_allowed(run, m) \&\& fire_resistant_ability(m)) return true;|        if (fire_resistant_ability(m)) return true;|'
 plant primary-fire-unfainted 's|        if (is_fire(\&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|        if (is_fire(\&run->party[run->party_order[k]]) \&\& run->party[run->party_order[k]].b.hp > 0) return run->party_order[k];|'
 plant primary-storage-order 's|        if (is_fire(\&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|        if (is_fire(\&run->party[k])) return k;|'
-plant primary-ability-fainted 's|        if (gc_mon_allowed(\&run->party\[run->party_order\[k\]\]) \&\& fire_resistant_ability(\&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|        if (fire_resistant_ability(\&run->party[run->party_order[k]])) return run->party_order[k];|'
+plant primary-ability-fainted 's|        if (gc_mon_allowed(run, \&run->party\[run->party_order\[k\]\]) \&\& fire_resistant_ability(\&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|        if (fire_resistant_ability(\&run->party[run->party_order[k]])) return run->party_order[k];|'
 plant calm-always-on 's|        s->option_ok\[2\] = gc_fiery_option_ok(run);|        s->option_ok[2] = true;|' gc_mystery.c
 plant token-volcarona 's|pr_arg_key("volcaronaName", "pokemon:volcarona")|pr_arg_key("volcaronaName", "pokemon:charizard")|' gc_mystery.c
 plant token-primary-name '395s|"option3PrimaryName"|"option2PrimaryName"|' gc_mystery.c
@@ -81,9 +81,9 @@ plant reward-no-fill 's|    in->me_reward.fill = true;|    in->me_reward.fill = 
 plant reward-callback-off 's|    in->me_reward.before = true;|    in->me_reward.before = false;|'
 plant lead-item-pending-off 's|    in->fiery_item = true;|    in->fiery_item = false;|'
 plant damage-percent 's|#define DAMAGE_PERCENTAGE 20|#define DAMAGE_PERCENTAGE 25|'
-plant damage-fire-too 's|        if (gc_mon_allowed(\&run->party\[idx\]) \&\& !is_fire(\&run->party\[idx\])) pool\[n++\] = idx;|        if (gc_mon_allowed(\&run->party[idx])) pool[n++] = idx;|'
+plant damage-fire-too 's|        if (gc_mon_allowed(run, \&run->party\[idx\]) \&\& !is_fire(\&run->party\[idx\])) pool\[n++\] = idx;|        if (gc_mon_allowed(run, \&run->party[idx])) pool[n++] = idx;|'
 # (damage-fainted-too is an equivalent mutant: the damage helper leaves a Pokemon at 0 HP as it is and a fainted one is no burn candidate)
-plant damage-faints 's|    if (m->b.hp > 0 \&\& m->b.hp - damage <= 0) damage = m->b.hp - 1;|    (void)damage;|' gc_mystery.c
+plant damage-faints 's|    if (gc_mon_allowed(run, m) \&\& m->b.hp - damage <= 0) damage = m->b.hp - 1;|    (void)damage;|' gc_mystery.c
 plant hunker-stream '/^static void hunker/,/^}/ s|pr_rng r = gc_me_option_rng(run);|pr_rng r = run->run.rng;|'
 plant burn-roll-min 's|burnable\[pr_rng_seed_int(\&r, nb, 0)\]|burnable[nb - 1 - pr_rng_seed_int(\&r, nb, 0)]|'
 plant burn-pool-all 's|status == STATUS_EFFECT_NONE) burnable|status >= STATUS_EFFECT_NONE) burnable|'

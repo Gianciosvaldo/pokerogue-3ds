@@ -192,8 +192,8 @@ static void imprison_callbacks(pr_battle *bt, pr_engine *e, const pr_arena_tag *
         pr_pokemon *p=bt->field[i];
         if(!p||!pr_arena_tag_on_side(tag,i<2?ARENA_TAG_SIDE_PLAYER:ARENA_TAG_SIDE_ENEMY))continue;
         /* getField(true) filters BOTH; side-specific field lists keep their slots. */
-        if(tag->side==ARENA_TAG_SIDE_BOTH && p->hp<=0)continue;
-        if(adding){if(p->hp>0)pr_add_tag(bt,e,p,BATTLER_TAG_TYPE_IMPRISON,1,MOVE_ID_IMPRISON,tag->source_id);}
+        if(tag->side==ARENA_TAG_SIDE_BOTH && !pr_allowed_in_battle(bt,p))continue;
+        if(adding){if(pr_allowed_in_battle(bt,p))pr_add_tag(bt,e,p,BATTLER_TAG_TYPE_IMPRISON,1,MOVE_ID_IMPRISON,tag->source_id);}
         else pr_remove_tag(bt,e,p,BATTLER_TAG_TYPE_IMPRISON);
     }
 }
@@ -373,7 +373,7 @@ void pr_arena_gas_source_leave(pr_battle *bt, pr_engine *e)
     if(gas->source_count!=1)return;
     for(int i=0;i<4;i++){
         pr_pokemon *p=bt->field[i];
-        if(!p||p->hp<=0||!p->on_field||p->switch_out_status||!has_gas_source_attr(p))continue;
+        if(!p||!pr_allowed_in_battle(bt, p)||!p->on_field||p->switch_out_status||!has_gas_source_attr(p))continue;
         bool primary=pr_ability_first_attr(p->ability,PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr)!=NULL;
         pr_ab_params pp={.pokemon=p,.move=-1,.only=primary?2:1,.on_gain=true};
         pr_apply_ab_attrs(bt,PR_AC_PostSummonAbAttr,&pp);
@@ -406,7 +406,7 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
         pr_arena_tag *t = &bt->arena_tags[i];
         if(t->type==ARENA_TAG_TYPE_IMPRISON){
             const pr_pokemon *source=pr_pokemon_by_id(bt,t->source_id);
-            ended[i]=!source||source->hp<=0||!source->on_field||source->switch_out_status;
+            ended[i]=!source||!pr_allowed_in_battle(bt, source)||!source->on_field||source->switch_out_status;
             continue;
         }
         if (t->type == ARENA_TAG_TYPE_PENDING_HEAL) {
@@ -514,7 +514,7 @@ static bool can_affect(const pr_battle *bt, const pr_arena_tag *t, const pr_poke
     switch (t->side) {
     case ARENA_TAG_SIDE_PLAYER: return b < 2;
     case ARENA_TAG_SIDE_ENEMY: return b >= 2;
-    default: return p->hp > 0;
+    default: return pr_allowed_in_battle(bt, p);   /* getField(true) */
     }
 }
 

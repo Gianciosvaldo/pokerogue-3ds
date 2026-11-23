@@ -34,7 +34,7 @@ plant inverse-keeps-super battle-core/src/damage.c 's/        else if (m > 1) m 
 plant flip-off battle-core/src/pokemon.c 's/const bool flip = (bt->challenge_flags \& (1u << CHALLENGES_FLIP_STAT)) != 0;/const bool flip = false;/'
 plant flip-wrong-pairs battle-core/src/pokemon.c 's/base\[s\] = f->base_stats\[flip ? 5 - s : s\];/base[s] = f->base_stats[flip ? (s + 3) % 6 : s];/'
 plant flip-not-on-the-fusion battle-core/src/pokemon.c 's/if (ff) fused\[s\] = ff->base_stats\[flip ? 5 - s : s\];/if (ff) fused[s] = ff->base_stats[s];/'
-plant flip-not-on-the-run-battle game-core/src/gc_challenge.c 's/run->bt.challenge_flags = r->mode == GAME_MODES_CHALLENGE ? r->challenge_flags : 0;/run->bt.challenge_flags = 0;/'
+plant flip-not-on-the-run-battle game-core/src/gc_challenge.c 's/bt->challenge_flags = challenge ? run->run.challenge_flags : 0;/bt->challenge_flags = 0;/'
 # Passives: hasPassive and applyPassiveAccess
 plant passives-no-trainer battle-core/src/pokemon.c 's/const bool trainer = p->has_trainer \&\& !p->is_player;/const bool trainer = false;/'
 plant passives-all-is-trainers battle-core/src/pokemon.c 's/bt->challenge_passives != 1) has = true;/bt->challenge_passives > 2) has = true;/'
@@ -57,5 +57,11 @@ plant usable-skips-challenge battle-core/src/commands.c 's/if (p->is_player \&\&
 plant copycat-skips-challenge battle-core/src/called_moves.c 's/return !pr_moves\[move\].unimplemented \&\& pr_challenge_move_allowed(bt, move);/return !pr_moves[move].unimplemented;/'
 plant limited-catch-any-wave game-core/src/gc_challenge.c 's/|| run->wave % 10 == 1;/|| run->wave % 10 != 0;/'
 plant limited-catch-no-teleport game-core/src/gc_challenge.c 's/return gc_int((gc_run \*)run)->me_teleport_catch || run->wave/return run->wave/'
+# isAllowedInChallenge (PR 4a): Single Type, Single Generation (the fusion's species too), Castform as Normal
+plant allowed-type-off battle-core/src/damage.c 's/if (bt->challenge_type \&\& (bt->challenge_flags \& (1u << CHALLENGES_SINGLE_TYPE))) {/if (0) {/'
+plant allowed-gen-off battle-core/src/damage.c 's/if (bt->challenge_generation \&\& (bt->challenge_flags \& (1u << CHALLENGES_SINGLE_GENERATION))) {/if (0) {/'
+plant allowed-fusion-gen-off battle-core/src/damage.c 's/        if (p->fusion_species) {/        if (0) {/'
+plant allowed-first-type-only battle-core/src/damage.c 's/        for (int i = 0; i < n; i++) of_type |= types\[i\] == want;/        for (int i = 0; i < n \&\& i < 1; i++) of_type |= types[i] == want;/'
+plant allowed-no-castform battle-core/src/damage.c 's/if (!of_type \&\& !(want == POKEMON_TYPE_NORMAL \&\& p->species == SPECIES_ID_CASTFORM)) return false;/if (!of_type) return false;/'
 echo "challenge battle plants: $total run, $fails not caught"
 [ "$fails" = 0 ]

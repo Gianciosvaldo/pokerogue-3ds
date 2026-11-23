@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='final-boss-faint-') as d:
             (void)p;'''),
   'skip-summon-reset':(prefix,'''    (void)p;
     if (!f->prevent_instant_revive) {'''),
-  'skip-participant':('''if (q && (is_active(q) || q->hp <= 0)) add_participant(bt, q->id);''','''if (q && is_active(q) && q->hp > 0) { (void)q; }'''),
+  'skip-participant':('''if (q && (is_active(bt, q) || q->hp <= 0)) add_participant(bt, q->id);''','''if (q && is_active(bt, q) && q->hp > 0) { (void)q; }'''),
   'extra-global-roll':('''            p->hp++;
             int damage''','''            p->hp++;
             (void)pr_rng_seed_int(&bt->rng, 100, 0);

@@ -26,6 +26,35 @@ bool pr_challenge_move_allowed(const pr_battle *bt, int move)
     return !(bt && (bt->challenge_flags & (1u << CHALLENGES_HARDCORE)) && move == MOVE_ID_REVIVAL_BLESSING);
 }
 
+bool pr_challenge_allowed(const pr_battle *bt, const pr_pokemon *p)
+{
+    if (!bt || !p || !p->is_player) return true;
+    if (bt->challenge_generation && (bt->challenge_flags & (1u << CHALLENGES_SINGLE_GENERATION))) {
+        /* speciesDataRegistry.getSpecies(pokemon.species.speciesId).generation, and the fusion species' */
+        const pr_species *sp = pr_pokemon_species(p);
+        if (!sp || sp->generation != bt->challenge_generation) return false;
+        if (p->fusion_species) {
+            const pr_species *fsp = pr_pokemon_fusion_species(p);
+            if (!fsp || fsp->generation != bt->challenge_generation) return false;
+        }
+    }
+    if (bt->challenge_type && (bt->challenge_flags & (1u << CHALLENGES_SINGLE_TYPE))) {
+        const int want = bt->challenge_type - 1;
+        int8_t types[PR_MAX_TYPES];
+        const int n = pr_get_types(p, types, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);
+        bool of_type = false;
+        for (int i = 0; i < n; i++) of_type |= types[i] == want;
+        /* TYPE_OVERRIDES: Castform counts as Normal (fusion false: the base species, fused or not) */
+        if (!of_type && !(want == POKEMON_TYPE_NORMAL && p->species == SPECIES_ID_CASTFORM)) return false;
+    }
+    return true;
+}
+
+bool pr_allowed_in_battle(const pr_battle *bt, const pr_pokemon *p)
+{
+    return p && p->hp > 0 && pr_challenge_allowed(bt, p);
+}
+
 static double type_mult(const pr_battle *bt, int atk, int def)
 {
     return pr_type_chart_multiplier(bt, atk, def);
@@ -90,7 +119,7 @@ double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *de
     for (int i = 0; i < n; i++) {
         double tm = type_mult(bt, move_type, types[i]);
         /* source?.isActive(true): on the field and not fainted */
-        if (source && source->hp > 0 && source->on_field && !source->switch_out_status && tm == 0) {
+        if (source && pr_allowed_in_battle(bt, source) && source->on_field && !source->switch_out_status && tm == 0) {
             /* checkIgnoreTypeImmunity: grounded Flying types, Foresight/Miracle Eye tags,
              * then IgnoreTypeImmunityAbAttr (Scrappy, Mind's Eye). */
             if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
@@ -220,7 +249,7 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
     int n_auras = 0;
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
-        if (!p || p->hp <= 0) continue;
+        if (!pr_allowed_in_battle(bt, p)) continue;   /* getField(true) */
         uint16_t abs[2] = {p->ability, p->passive};
         for (int k = 0; k < 2; k++) {
             if (k == 1 && !p->passive) continue;
@@ -531,7 +560,7 @@ pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_poke
     perfect_being_soften(bt, def, category, &r, &dmg);
     /* Friend Guard: the defender's ally, when it's active on the field */
     const pr_pokemon *fg = bt->double_battle ? pr_get_ally(bt, def) : NULL;
-    if (fg && fg->hp > 0 && fg->on_field && !fg->switch_out_status) {
+    if (fg && pr_allowed_in_battle(bt, fg) && fg->on_field && !fg->switch_out_status) {
         pr_ab_params fgp = rp;
         fgp.pokemon = fg;
         pr_apply_ab_attrs(bt, PR_AC_AlliedFieldDamageReductionAbAttr, &fgp);

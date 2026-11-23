@@ -69,7 +69,7 @@ bool pr_apply_turn_held_item_transfer(pr_battle *bt,pr_engine *e,pr_pokemon *p,c
     pr_pokemon *opponents[2];
     for (int k=other*2;k<other*2+2;k++) {
         pr_pokemon *q=bt->field[k];
-        if(q&&q->hp>0&&q->on_field&&!q->switch_out_status)opponents[n++]=q;
+        if(q&&pr_allowed_in_battle(bt, q)&&q->on_field&&!q->switch_out_status)opponents[n++]=q;
     }
     if (!n) return false;
     pr_pokemon *victim=opponents[pr_battle_rand_seed_int(bt,n,0)];

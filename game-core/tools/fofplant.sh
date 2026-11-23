@@ -59,7 +59,7 @@ plant shop-fill 's|c->fill_remaining = false;|c->fill_remaining = true;|'
 plant steal-exp-amount 's|gc_exp_party_queue(run, \&pp, gc_form(f.boss.b.species, 0)->base_exp, true);|gc_exp_party_queue(run, \&pp, gc_form(f.boss.b.species, 0)->base_exp + 1, true);|'
 plant steal-option-open 's|    if (option == 2) { gc_me_leave_with_heal_shop(run); return; }|    if (option == 2) { gc_me_end_shop(run); return; }|'
 plant thief-not-stealing 's|MOVE_ID_PLUCK, MOVE_ID_COVET, MOVE_ID_KNOCK_OFF, MOVE_ID_THIEF, MOVE_ID_TRICK, MOVE_ID_SWITCHEROO};|MOVE_ID_PLUCK, MOVE_ID_COVET, MOVE_ID_KNOCK_OFF, MOVE_ID_COVET, MOVE_ID_TRICK, MOVE_ID_SWITCHEROO};|' gc_mystery.c
-plant steal-needs-able '/static bool has_stealing_move/,/^}/ s|    if (!gc_mon_allowed(m)) return false;|    (void)0;|' gc_mystery.c
+plant steal-needs-able '/static bool has_stealing_move/,/^}/ s|    if (!gc_mon_allowed(run, m)) return false;|    (void)0;|' gc_mystery.c
 plant berry-cap 's|it->arg == BERRY_TYPE_SITRUS \|\| it->arg == BERRY_TYPE_LUM|it->arg == BERRY_TYPE_LUM|' gc_encounter.c
 plant booster-cap 's|return run->enemy\[i\].b.ivs\[it->arg\];|return 99;|' gc_encounter.c
 plant stack-cap-gone 's|if (token \|\| o->stack + 1 <= enemy_item_max_stack(run, o)) o->stack++;|o->stack++;|' gc_encounter.c

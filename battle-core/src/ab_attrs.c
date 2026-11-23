@@ -192,7 +192,7 @@ bool pr_weather_effect_suppressed(pr_battle *bt)
     bool immutable = pr_weather_immutable(bt->weather);
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
-        if (!p || p->hp <= 0) continue;
+        if (!pr_allowed_in_battle(bt, p)) continue;   /* getField(true) */
         const pr_attr *a = pr_ability_first_attr(p->ability, PR_AC_SuppressWeatherEffectAbAttr);
         if (!a && p->passive) a = pr_ability_first_attr(p->passive, PR_AC_SuppressWeatherEffectAbAttr);
         if (a && (!immutable || P(SuppressWeatherEffectAbAttr, a)->affectsImmutable)) return true;
@@ -390,7 +390,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     switch (a->cls) {
     case PR_AC_CommanderAbAttr: {
         const pr_pokemon *ally = pr_get_ally(bt, p);
-        GATE(bt->double_battle && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status
+        GATE(bt->double_battle && ally && pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status
              && ally->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(ally, BATTLER_TAG_TYPE_COMMANDED));
         if (!pp->simulated) {
             pr_lapse_tags(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
@@ -731,7 +731,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_pokemon *targets[2]; int n = 0;
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
-            if (q && q->is_player != p->is_player && q->hp > 0 && q->on_field && !q->switch_out_status
+            if (q && q->is_player != p->is_player && pr_allowed_in_battle(bt, q) && q->on_field && !q->switch_out_status
                 && pr_can_transform_into(p, q)) targets[n++] = q;
         }
         if (!n) return 0;
@@ -810,7 +810,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         for (int b = 0; b < 4 && !another; b++) {
             const pr_pokemon *q = bt->field[b];
             /* getField(true) checks legal/faint eligibility, not isOnField(). */
-            if (!q || q == p || q->hp <= 0) continue;
+            if (!q || q == p || !pr_allowed_in_battle(bt, q)) continue;
             for (int passive = 0; passive < 2 && !another; passive++) {
                 int ability = passive ? q->passive : q->ability;
                 if (!ability || !pr_can_apply_ability(bt, q, ability)) continue;
@@ -1002,7 +1002,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         bool any = false;
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
-            if (!q || q->hp <= 0 || !q->on_field || q->switch_out_status) continue;
+            if (!q || !pr_allowed_in_battle(bt, q) || !q->on_field || q->switch_out_status) continue;
             any |= weather_form_half(bt, q) >= 0;
         }
         GATE(any);
@@ -1015,7 +1015,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int nf = 0;
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
-            if (!q || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;   /* getField(true) */
+            if (!q || !(pr_allowed_in_battle(bt, q) && q->on_field && !q->switch_out_status)) continue;   /* getField(true) */
             if (weather_form_half(bt, q) >= 0) forms[nf++] = q;
         }
         if (!c->e) return -1;
@@ -1030,7 +1030,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int count = 0;
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
-            if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
+            if (!q || q->is_player == p->is_player || !(pr_allowed_in_battle(bt, q) && q->on_field && !q->switch_out_status)) continue;
             count++;
             def += pr_get_effective_stat(bt, q, STAT_DEF, NULL, -1, false, false);
             spdef += pr_get_effective_stat(bt, q, STAT_SPDEF, NULL, -1, false, false);
@@ -1051,7 +1051,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         bool any_moves = false;
         for (int k = 0; k < 4; k++) {
             const pr_pokemon *q = bt->field[k];
-            if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
+            if (!q || q->is_player == p->is_player || !(pr_allowed_in_battle(bt, q) && q->on_field && !q->switch_out_status)) continue;
             opps[no++] = q;
             any_moves |= PR_N_MOVES(q) > 0;
         }
@@ -1122,7 +1122,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         for (int k = 0; k < n; k++) {
             const pr_pokemon *q = bt->n_party[side] ? (k < bt->n_party[side] ? bt->party[side][k] : NULL)
                                                     : bt->field[side * 2 + k];
-            if (q && q->hp > 0) any = true;
+            if (pr_allowed_in_battle(bt, q)) any = true;
         }
         if (!c->e && !pp->simulated) return -1;
         GATE(any);
@@ -1140,7 +1140,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     }
     case PR_AC_PostSummonCopyAllyStatsAbAttr: {                        /* Costar */
         const pr_pokemon *ally = pr_get_ally(bt, p);
-        GATE(bt->double_battle && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        GATE(bt->double_battle && ally && pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status);
         if (pp->simulated) return 1;
         if (!c->e) return -1;
         pr_pokemon *user = (pr_pokemon *)p;
@@ -1163,7 +1163,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostSummonAllyHealAbAttr: {                             /* Hospitality */
         const pr_pokemon *ally = pr_get_ally(bt, p);
         /* The override checks ally.isActive(true), even at full HP. */
-        GATE(ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        GATE(ally && pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status);
         if (!pp->simulated) {
             if (!c->e) return -1;
             const pr_attr_PostSummonAllyHealAbAttr *x = P(PostSummonAllyHealAbAttr, a);
@@ -1182,7 +1182,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     }
     case PR_AC_PostSummonClearAllyStatStagesAbAttr: {                   /* Curious Medicine */
         const pr_pokemon *ally = pr_get_ally(bt, p);
-        GATE(ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        GATE(ally && pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status);
         if (!pp->simulated) {
             if (!c->e) return -1;
             memset(((pr_pokemon *)ally)->stat_stages, 0, sizeof ally->stat_stages);
@@ -1197,7 +1197,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int n = 0;
         for (int k = 0; k < 2; k++) {
             const pr_pokemon *t = bt->field[(p->is_player ? 2 : 0) + k];
-            if (!t || t->hp <= 0 || !t->on_field || t->switch_out_status) continue;
+            if (!t || !pr_allowed_in_battle(bt, t) || !t->on_field || t->switch_out_status) continue;
             if (!(pr_abilities[t->ability].flags & AB_FLAG_UNCOPIABLE) || t->ability == ABILITY_ID_WONDER_GUARD) tg[n++] = t;
         }
         if (n == 0) return 0;
@@ -1418,7 +1418,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             /* getOpponents() (active on the field, field order), then getAlly() */
             for (int k = 0; k < 4; k++) {
                 pr_pokemon *other = bt->field[k];
-                if (other && other->is_player != p->is_player && other->hp > 0 && other->on_field && !other->switch_out_status)
+                if (other && other->is_player != p->is_player && pr_allowed_in_battle(bt, other) && other->on_field && !other->switch_out_status)
                     pr_unshift_stat_stage_change_ex(bt, c->e, k, &st, &sg, 1, (pr_pokemon *)p, 0);
             }
             const pr_pokemon *ally = pr_get_ally(bt, p);
@@ -1707,7 +1707,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
                 pr_pokemon *first = bt->field[targets[0]];
                 pr_pokemon *ally = bt->field[targets[0] ^ 1];
                 if (first && first->hp <= 0 && first->is_player != p->is_player
-                    && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status) {
+                    && ally && pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status) {
                     targets[0] ^= 1; n = 1;
                 }
             }
@@ -1930,7 +1930,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         bool eligible=false;
         for(int j=0;j<4;j++){
             const pr_pokemon *v=bt->field[j];
-            if(v && pr_is_opponent(bt,p,v) && v->hp>0 && v->on_field && !v->switch_out_status
+            if(v && pr_is_opponent(bt,p,v) && pr_allowed_in_battle(bt, v) && v->on_field && !v->switch_out_status
                 && (v->status==STATUS_EFFECT_SLEEP || pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE))
                 && !pr_has_ability_with_attr(bt,v,PR_AC_BlockNonDirectDamageAbAttr))eligible=true;
         }
@@ -1940,7 +1940,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_speed_iter it;
         pr_speed_iter_init(bt,&it,p->is_player?ARENA_TAG_SIDE_ENEMY:ARENA_TAG_SIDE_PLAYER);
         for(pr_pokemon *v;(v=pr_speed_iter_next(bt,&it));){
-            if(!v || !pr_is_opponent(bt,p,v) || v->hp<=0 || !v->on_field || v->switch_out_status
+            if(!v || !pr_is_opponent(bt,p,v) || !pr_allowed_in_battle(bt, v) || !v->on_field || v->switch_out_status
                 || (v->status!=STATUS_EFFECT_SLEEP && !pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE)))continue;
             bool cancelled=false;
             /* Pinned source deliberately invokes the blocker on the ability HOLDER. */

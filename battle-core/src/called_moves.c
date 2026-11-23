@@ -193,8 +193,9 @@ int pr_call_move_get(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, co
 
 /* ---------------------------------------------------------------- getMoveTargets */
 
-static bool active(const pr_pokemon *p) { return p && p->hp > 0; }
-static bool active_on_field(const pr_pokemon *p) { return active(p) && p->on_field && !p->switch_out_status; }
+/* isActive() / isActive(true) */
+static bool active(const pr_battle *bt, const pr_pokemon *p) { return pr_allowed_in_battle(bt, p); }
+static bool active_on_field(const pr_battle *bt, const pr_pokemon *p) { return active(bt, p) && p->on_field && !p->switch_out_status; }
 
 int pr_get_move_targets(pr_battle *bt, const pr_pokemon *user, int move, int replace_target, int8_t out[4],
                         bool *multiple)
@@ -206,7 +207,7 @@ int pr_get_move_targets(pr_battle *bt, const pr_pokemon *user, int move, int rep
     pr_pokemon *opps[2];
     int no = 0;
     for (int i = opp; i < opp + 2; i++)
-        if (active(bt->field[i])) opps[no++] = bt->field[i];
+        if (active(bt, bt->field[i])) opps[no++] = bt->field[i];
 
     /* applyMoveAttrs("VariableTargetAttr", user, p, move, variableTarget) for each opponent */
     int target = replace_target >= 0 ? replace_target : mv->target;
@@ -271,7 +272,7 @@ int pr_get_move_targets(pr_battle *bt, const pr_pokemon *user, int move, int rep
     /* .filter(p => p?.isActive(true)).map(p => p.getBattlerIndex()) */
     int m = 0;
     for (int k = 0; k < n && m < 4; k++)
-        if (active_on_field(set[k])) out[m++] = (int8_t)pr_battler_index(bt, set[k]);
+        if (active_on_field(bt, set[k])) out[m++] = (int8_t)pr_battler_index(bt, set[k]);
     return m;
 }
 

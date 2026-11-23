@@ -210,7 +210,7 @@ int gc_party_luck(gc_run *run)
         /* getLuck(): luck + (isFusion() ? fusionLuck : 0) */
         m[i].fusion = run->party[i].b.fusion_species != 0;
         m[i].fusion_luck = run->party[i].fusion_luck;
-        m[i].allowed = gc_mon_allowed(&run->party[i]);
+        m[i].allowed = gc_mon_allowed(run, &run->party[i]);
     }
     /* getEventLuckBoost() and getEventLuckBoostedSpecies(): a timed event's luck and its species (gc/events.h), asked now; the Daily Run's
      * seeded luck has neither */
@@ -718,9 +718,7 @@ static void sync_wild_nature(gc_run *run, bool new_double,int idx)
     bool outgoing_double = bt->double_battle;
     bt->engine = &run->eng;
     bt->game_mode = run->run.mode;
-    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
-    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
-    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
+    gc_challenge_to_battle(run, bt);
     bt->wave_index = run->wave;
     bt->double_battle = new_double;
     bt->n_party[0] = run->n_party;
@@ -750,9 +748,7 @@ static double scene_double_chance(void *data, int wave)
      * not been constructed. Later calls retain the outgoing double/arena state. */
     bt->engine = &run->eng;
     bt->game_mode = run->run.mode;
-    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
-    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
-    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
+    gc_challenge_to_battle(run, bt);
     bt->n_party[0] = run->n_party;
     for (int k = 0; k < run->n_party; k++) {
         pr_pokemon *p = &run->party[run->party_order[k]].b;

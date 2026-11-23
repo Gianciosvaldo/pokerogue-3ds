@@ -67,8 +67,8 @@ plant rest-no-heal 's|gc_rq_push(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));|(void)0;|'
 plant rest-heal-shop 's|        gc_me_leave(run);|        gc_me_leave_with_heal_shop(run);|'
 plant steal-fill 's|reward_funcs(\&gc_int(run)->reward.me_custom, false);|reward_funcs(\&gc_int(run)->reward.me_custom, true);|'
 plant steal-exp-to-thief 's|gc_me_steal_exp(run, idx, SPECIES_ID_SNORLAX);|gc_me_steal_exp(run, gc_mystery_primary_pokemon(run, GC_ME_SLUMBERING_SNORLAX, 2), SPECIES_ID_SNORLAX);|'
-plant steal-exp-fainted-lead 's|if (!gc_mon_allowed(\&run->party\[idx\])) continue;|(void)0;|'
-plant steal-needs-able '/static bool has_stealing_move/,/^}/ s|    if (!gc_mon_allowed(m)) return false;|    (void)0;|' gc_mystery.c
+plant steal-exp-fainted-lead 's|if (!gc_mon_allowed(run, \&run->party\[idx\])) continue;|(void)0;|'
+plant steal-needs-able '/static bool has_stealing_move/,/^}/ s|    if (!gc_mon_allowed(run, m)) return false;|    (void)0;|' gc_mystery.c
 plant snore-never-queued 's|pr_unshift_move_phase(bt, e, source, bt->me_start\[i\].move, -1, \&target, 1, bt->me_start\[i\].use_mode, 0);|(void)target;|' battle-core/src/engine.c
 plant effects-copy 's|bt->me_start\[k\].move = gc_int(run)->me_start\[k\].move;|bt->me_start[k].move = MOVE_ID_TACKLE;|' gc_battle.c
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }

@@ -8,10 +8,10 @@ s=(root/'src/phases.c').read_text();inc=['-I'+str(root/'include'),'-I'+str(root/
 faults={
  'unset-ability-does-not-revert':('mon->ability_override != 0 && mon->ability_override != ability','mon->ability_override >= 0 && mon->ability_override != ability'),
  'none-ability-also-reverts':('mon->ability_override != 0 && mon->ability_override != ability','mon->ability_override != ability'),
- 'inactive-implicitly-delayed':('if (delayed) pr_phase_push(bt, e, ph);','if (delayed || (!stance && trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon))) pr_phase_push(bt,e,ph);'),
+ 'inactive-implicitly-delayed':('if (delayed) pr_phase_push(bt, e, ph);','if (delayed || (!stance && trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(bt, mon))) pr_phase_push(bt,e,ph);'),
  'all-transitions-delayed':('if (delayed) pr_phase_push(bt, e, ph);','if (true) pr_phase_push(bt,e,ph);'),
  'ignore-explicit-delay':('if (delayed) pr_phase_push(bt, e, ph);','if (false) pr_phase_push(bt,e,ph);'),
- 'inactive-revert-needs-ability':('trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) target_form = 0;','trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon) && pr_has_ability_active(bt,mon,ability)) target_form = 0;'),
+ 'inactive-revert-needs-ability':('trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(bt, mon)) target_form = 0;','trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(bt, mon) && pr_has_ability_active(bt,mon,ability)) target_form = 0;'),
  'weather-ignores-suppression':('&& !mon->ability_suppressed && !suppressed && pr_has_ability_active(bt, mon, ability)','&& pr_has_ability_active(bt, mon, ability)'),
 }
 for name,(old,new) in faults.items():
