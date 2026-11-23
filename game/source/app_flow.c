@@ -19,6 +19,7 @@
 #include "result_screen.h"
 #include "run_history.h"
 #include "achv_screen.h"
+#include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "run_saves.h"
 #include "run_settings.h"
@@ -51,6 +52,7 @@ static void show_radar(void);
 static void show_gacha(void);
 static void show_history(void);
 static void show_achievements(void);
+static void show_gamestats(void);
 static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
@@ -431,6 +433,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_ACHIEVEMENTS:
       show_achievements();
       break;
+    case TITLE_STATS:
+      show_gamestats();
+      break;
   }
 }
 
@@ -463,6 +468,18 @@ static void show_achievements(void) {
   }
   const achv_args a = {sysd_get(), on_achv_exit, NULL};
   achv_screen_open(&a);
+}
+
+/* ------------------------------------------------------------------ the Game Stats */
+
+static void on_gamestats_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+static void show_gamestats(void) {
+  const gamestats_args a = {sysd_get(), sysd_play_seconds, on_gamestats_exit, NULL};
+  gamestats_screen_open(&a);
 }
 
 /* ------------------------------------------------------------------ the Nemesis Radar */
