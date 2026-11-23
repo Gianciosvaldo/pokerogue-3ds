@@ -212,6 +212,47 @@ static void test_offer(void)
     printf("ok offer (Bizarre only, Great, waves 20..140, any biome, once: drawn %d of 600; never plain, before 20 or after 140)\n", bizarre);
 }
 
+/* lorenzo 2026-11-23: the pool's earlier stages may fight as the player's own beetle (only there). The oracle is the dex data's own
+ * prevolution links (gc_species_dex_info_data), walked down from each pool species, not the table in gc_jobin.c. */
+static int dex_prevolution(int species)
+{
+    for (int i = 0; i < gc_species_dex_info_count; i++) if (gc_species_dex_info_data[i].species == species) return gc_species_dex_info_data[i].prevolution;
+    return -1;
+}
+
+static void test_pre_evolutions(void)
+{
+    static bool want[2000];
+    int n_want = 0, n_pre = 0;
+    for (int i = 0; i < GC_JOBIN_POOL; i++)
+        for (int sp = gc_jobin_pool_species(i), guard = 0; sp > 0 && guard < 4; sp = dex_prevolution(sp), guard++) {
+            assert(sp < 2000);
+            if (!want[sp]) { want[sp] = true; n_want++; n_pre += !gc_jobin_in_pool(sp); }
+        }
+    assert(n_want == 21 && n_pre == 10);   /* Heracross and Pinsir have none; Scyther is Scizor's and Kleavor's */
+    assert(want[SPECIES_ID_DWEBBLE] && want[SPECIES_ID_SCYTHER] && want[SPECIES_ID_GRUBBIN] && want[SPECIES_ID_CHARJABUG] && want[SPECIES_ID_BLIPBUG] && want[SPECIES_ID_DOTTLER]);
+    for (int sp = 1; sp < 2000; sp++) assert(gc_jobin_own_species(sp) == want[sp]);
+    /* a party whose only beetles are earlier stages: the own option is there and either may be picked (they are never Jobin's species) */
+    static const int PRE_PARTY[3] = {SPECIES_ID_VENUSAUR, SPECIES_ID_DWEBBLE, SPECIES_ID_SCYTHER};
+    for (int i = 0; i < 20; i++) {
+        char prefix[16];
+        snprintf(prefix, sizeof prefix, "jp%d", i);
+        start(prefix, PRE_PARTY, 3, -1);
+        assert(run.screen.option_ok[GC_JOBIN_OWN] && gc_jobin_pick_ok(&run, 0, 1) && gc_jobin_pick_ok(&run, 0, 2) && !gc_jobin_pick_ok(&run, 0, 0));
+    }
+    assert(choose(GC_JOBIN_OWN, 1));
+    const gc_internal *in = gc_int(&run);
+    assert(in->jobin.active && !in->jobin.rental && in->jobin.own == 1 && in->jobin.you_species == SPECIES_ID_DWEBBLE && gc_jobin_in_pool(in->jobin.jobin_species));
+    /* Jobin's beetle and the loan never are an earlier stage */
+    for (int i = 0; i < 300; i++) {
+        char seed[16];
+        snprintf(seed, sizeof seed, "jq-%d", i);
+        make_run(seed, true, PRE_PARTY, 3, 20 + i % 121);
+        assert(gc_jobin_in_pool(gc_jobin_roll_species(&run)));
+    }
+    puts("ok pre-evolutions (the 10 earlier stages from the dex links may be your own beetle; Jobin's and the loan stay the pool of 11)");
+}
+
 static void test_first_screen(void)
 {
     /* walking away costs nothing and gives nothing */
@@ -608,6 +649,7 @@ int main(void)
     test_meters();
     test_offer();
     test_first_screen();
+    test_pre_evolutions();
     test_duels();
     test_win_own();
     test_win_rental();

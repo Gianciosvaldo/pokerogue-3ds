@@ -29,7 +29,20 @@ enum { K_HORN, K_DASH, K_SAP };                            /* Superheated Horn, 
 static const uint16_t POOL[GC_JOBIN_POOL] = {SPECIES_ID_HERACROSS, SPECIES_ID_PINSIR, SPECIES_ID_SCIZOR, SPECIES_ID_VIKAVOLT, SPECIES_ID_GOLISOPOD,
                                              SPECIES_ID_ORBEETLE, SPECIES_ID_LOKIX, SPECIES_ID_RABSCA, SPECIES_ID_KLEAVOR, SPECIES_ID_LEDIAN, SPECIES_ID_CRUSTLE};
 
+/* their earlier stages (lorenzo 2026-11-23: "add pre-evolutions for the pokemon in the beetle pool", then "your own beetle only"): they may fight as
+ * the player's own beetle; Jobin's beetle, the loaned one and the Clean Win shiny stay the pool above. Heracross and Pinsir have none; Scyther is
+ * Scizor's and Kleavor's. */
+static const uint16_t PRE[GC_JOBIN_PRE] = {SPECIES_ID_SCYTHER, SPECIES_ID_GRUBBIN, SPECIES_ID_CHARJABUG, SPECIES_ID_WIMPOD, SPECIES_ID_BLIPBUG,
+                                           SPECIES_ID_DOTTLER, SPECIES_ID_NYMBLE, SPECIES_ID_RELLOR, SPECIES_ID_LEDYBA, SPECIES_ID_DWEBBLE};
+
 int gc_jobin_pool_species(int i) { return i >= 0 && i < GC_JOBIN_POOL ? POOL[i] : -1; }
+
+bool gc_jobin_own_species(int species)
+{
+    if (gc_jobin_in_pool(species)) return true;
+    for (int i = 0; i < GC_JOBIN_PRE; i++) if (PRE[i] == species) return true;
+    return false;
+}
 
 bool gc_jobin_in_pool(int species)
 {
@@ -217,10 +230,10 @@ bool gc_jobin_pick_ok(const gc_run *run, int option, int idx)
     if (idx < 0 || idx >= run->n_party) return false;
     switch (run->screen.me_stage) {
     case GC_ME_STAGE_FIRST: {
-        /* his own beetle: a pool species in the party (a fainted one too), never the one Jobin drew (no same-species duel) */
+        /* his own beetle: a pool species or an earlier stage of one in the party (a fainted one too), never the species Jobin drew (no same-species duel) */
         if (option != 0) return false;
         const int sp = run->party[idx].b.species;
-        return gc_jobin_in_pool(sp) && sp != gc_jobin_roll_species(run);
+        return gc_jobin_own_species(sp) && sp != gc_jobin_roll_species(run);
     }
     case GC_ME_STAGE_JOBIN_KEEP: return option == 0 && run->n_party >= 6;   /* the member the beetle replaces */
     case GC_ME_STAGE_JOBIN_CHARCOAL: return option == 0;                    /* any Pokemon */
@@ -232,7 +245,7 @@ bool gc_jobin_own_available(const gc_run *run)
 {
     for (int i = 0; i < run->n_party; i++) {
         const int sp = run->party[i].b.species;
-        if (gc_jobin_in_pool(sp) && sp != gc_jobin_roll_species(run)) return true;
+        if (gc_jobin_own_species(sp) && sp != gc_jobin_roll_species(run)) return true;
     }
     return false;
 }
