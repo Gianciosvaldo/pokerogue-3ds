@@ -555,7 +555,7 @@ bool bv_darby_table(void) { return darby_dealt; }
 /* Jobin's duel: started on an encounter scene with a beetle on each side, the meters in 0..100, moved only while it is on, ended once */
 static bool jobin_on_now;
 static int n_jobin_punish_scenes;   /* scenes of the fight after Jobin catches the player cheating */
-static int n_jobin_starts, n_jobin_sets, n_jobin_ends;
+static int n_jobin_starts, n_jobin_sets, n_jobin_ends, n_jobin_anims;
 void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp) {
   if (!me_scene_up) BAD("Jobin's duel started with no encounter scene");
   if (!mine || mine->species <= 0 || !his || his->species <= 0) BAD("Jobin's duel with no beetle on a side");
@@ -834,6 +834,12 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (W.centred) n_centre_events++; else n_centre_back_events++;
         break;
       case BEV_MOVE_ANIM:
+        if (jobin_on_now) {   /* Jobin's duel: the two beetles are on the drum, the player's as battler 0, his as 2, and each move is aimed at the other */
+          if (!((e->battler == 0 && e->target == 2) || (e->battler == 2 && e->target == 0))) BAD("a duel animation from battler %d to %d", e->battler, e->target);
+          if (e->b != 0 /* BA_MOVE */ || e->a <= 0) BAD("a duel animation of kind %d, id %d", e->b, e->a);
+          n_jobin_anims++;
+          break;
+        }
         side_ok(e->battler, "move animation");
         break;
       case BEV_EXP:
@@ -2641,8 +2647,8 @@ int main(int argc, char** argv) {
   printf("D'Arby's table: %d deals, %d cards turned, %d cleared\n", n_darby_deals, n_darby_reveals, n_darby_clears);
   if (getenv("RUNTEST_DARBY") && custom_on && runs >= 10 && (!n_darby_deals || n_darby_reveals < 2 * n_darby_deals || !n_darby_clears)) BAD("D'Arby's table was not played through");
   printf("Jobin's team: %d fights after a catch, each drawn as him\n", n_jobin_punish_scenes);
-  printf("Jobin's duel: %d started, %d meter moves, %d ended\n", n_jobin_starts, n_jobin_sets, n_jobin_ends);
-  if (getenv("RUNTEST_JOBIN") && custom_on && runs >= 10 && (!n_jobin_starts || !n_jobin_sets)) BAD("Jobin's duel was not played");
+  printf("Jobin's duel: %d started, %d meter moves, %d move animations, %d ended\n", n_jobin_starts, n_jobin_sets, n_jobin_anims, n_jobin_ends);
+  if (getenv("RUNTEST_JOBIN") && custom_on && runs >= 10 && (!n_jobin_starts || !n_jobin_sets || !n_jobin_anims)) BAD("Jobin's duel was not played (no move animations)");
   if (getenv("RUNTEST_JOBIN") && custom_on && runs >= 30 && !n_jobin_punish_scenes) BAD("nobody was caught cheating in %d runs: his team was not fought", runs);
   if (n_jobin_starts < n_jobin_ends || n_jobin_starts > n_jobin_ends + 1) BAD("%d duels started, %d ended", n_jobin_starts, n_jobin_ends);
   if(custom_strong&&runs>=200&&!st->mystery_trainers)BAD("no same-wave mystery trainer scene was exercised");

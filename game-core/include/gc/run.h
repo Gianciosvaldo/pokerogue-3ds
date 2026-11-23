@@ -79,10 +79,11 @@ typedef enum {
     GC_EV_JOBIN,         /* Jobin's beetle duel (gc_jobin.c), presentation only: a = your Grip, b = Jobin's Grip, c = the Suspicion (0..100 each), hp = what
                           * happened in its low byte (GC_JOBIN_HUD_*: the duel starts, the meters moved, a Speed King attack is telegraphed, the duel is over)
                           * and, for a telegraph, the attack above it (hp >> 8: 0 Superheated Horn, 1 Thermal Dash, 2 Bubbling Sap); for the end hp >> 8 is
-                          * 1 you lost (Jobin victorious), 2 you won (Jobin defeated), 0 caught cheating (neither pose) */
+                          * 1 you lost (Jobin victorious), 2 you won (Jobin defeated), 0 caught cheating (neither pose). GC_JOBIN_HUD_MOVES (once a round, before its lines):
+                          * a = the MoveId whose animation your beetle plays, b = his (0: none); they play one after the other, yours first (lorenzo 2026-11-23) */
     GC_EV_COUNT,
 } gc_event_kind;
-enum { GC_JOBIN_HUD_START = 1, GC_JOBIN_HUD_UPDATE = 2, GC_JOBIN_HUD_TELEGRAPH = 3, GC_JOBIN_HUD_END = 4 };
+enum { GC_JOBIN_HUD_START = 1, GC_JOBIN_HUD_UPDATE = 2, GC_JOBIN_HUD_TELEGRAPH = 3, GC_JOBIN_HUD_END = 4, GC_JOBIN_HUD_MOVES = 5 };
 
 typedef struct {
     uint8_t kind;               /* gc_event_kind */

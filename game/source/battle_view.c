@@ -415,6 +415,7 @@ static const rr_frame* sprite_frame(side* sd) {
 
 /* The field as battle animations see it: where each Pokemon stands and its current frame. */
 static void mon_pos(const side* sd, bool player, float* x, float* y);
+static void jobin_anim_field(ba_mon out[4]);
 
 static void anim_field(ba_mon out[4]) {
   memset(out, 0, 4 * sizeof *out);
@@ -429,6 +430,7 @@ static void anim_field(ba_mon out[4]) {
     m->species = sd->mon.species;
     m->visible = !sd->mon.hidden;
   }
+  if (B.jobin.on) jobin_anim_field(out);
 }
 
 /* The player's Pokemon stands at y 132 instead of upstream's 148: upstream's message strip (132 down) covers its lower 16 px, and
@@ -947,6 +949,24 @@ static void draw_jobin_spot(int k) {
   o.origin_y = 1;
   o.scale_x = o.scale_y = B.jobin.scale[k] > 0 ? B.jobin.scale[k] : 1;
   rr_draw(f, JOBIN_SPOT_X(k), JOBIN_SPOT_Y(k), &o);
+}
+
+/* The duel's animations (lorenzo 2026-11-23): move animations play between the two beetles like between two Pokemon, the player's as battler 0 and
+ * Jobin's as 2 (the field's own numbering), standing where the drum's spots are; the battle's sides are not what is on the field here. */
+static void jobin_anim_field(ba_mon out[4]) {
+  for (int k = 0; k < 2; k++) {
+    ba_mon* m = &out[k == 0 ? 0 : 2];
+    memset(m, 0, sizeof *m);
+    if (!B.jobin.key[k][0]) continue;
+    m->on_field = true;
+    m->player = k == 0;
+    m->x = JOBIN_SPOT_X(k);
+    m->y = JOBIN_SPOT_Y(k);
+    m->frame = img_anim_frame(B.jobin.key[k], (int)(ui_now() * 10 / 1000));
+    const float sc = B.jobin.scale[k] > 0 ? B.jobin.scale[k] : 1;
+    m->half_h = (m->frame ? m->frame->src_h : 40) * sc / 2;
+    m->visible = true;
+  }
 }
 
 void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp) {

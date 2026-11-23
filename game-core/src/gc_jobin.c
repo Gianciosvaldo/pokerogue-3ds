@@ -70,6 +70,14 @@ void gc_jobin_king_delta(int king, int player, int *you, int *him, int *susp)
 
 int gc_jobin_bluff_move(int king) { return BLUFF_MOVE[king]; }
 
+/* The move animations (lorenzo 2026-11-23): the MoveId whose upstream animation plays for each action, 0 = none. Horn Lock, Dig In and Flank are
+ * Horn Attack, Harden and Lunge; the Speed King's powered attacks are Flare Blitz (Superheated Horn), Flame Charge (Thermal Dash) and Burning
+ * Bulwark (Bubbling Sap). The Stand Trick has no animation until lorenzo names one (Trick has no animation file in the port). */
+static const int ANIM_MOVE[4] = {MOVE_ID_HORN_ATTACK, MOVE_ID_HARDEN, MOVE_ID_LUNGE, 0};
+static const int ANIM_KING[3] = {MOVE_ID_FLARE_BLITZ, MOVE_ID_FLAME_CHARGE, MOVE_ID_BURNING_BULWARK};
+int gc_jobin_anim_move(int move) { return move >= 0 && move < 4 ? ANIM_MOVE[move] : 0; }
+int gc_jobin_anim_king(int king) { return king >= 0 && king < 3 ? ANIM_KING[king] : 0; }
+
 static int clamp100(int v) { return v < 0 ? 0 : v > 100 ? 100 : v; }
 
 /* One round: the player's move against Jobin's action (`king` >= 0: his Speed King attack, else `jobin` the normal move). The meters move, the result is
@@ -184,6 +192,16 @@ static void hud(gc_run *run, int what, int king)
     ev->b = s->grip_jobin;
     ev->c = s->susp;
     ev->hp = what | (king << 8);
+}
+
+/* the moves of this round, played one after the other (yours, then his) before the meters move: a = your move's MoveId, b = his (0: none) */
+static void hud_moves(gc_run *run, int you, int him)
+{
+    gc_event *ev = gc_ev_new(run, GC_EV_JOBIN);
+    if (!ev) return;
+    ev->a = you;
+    ev->b = him;
+    ev->hp = GC_JOBIN_HUD_MOVES;
 }
 
 /* ---------------------------------------------------------------- the beetles */
@@ -340,6 +358,8 @@ static void round_choose(gc_run *run, int player)
     if (!king_round) jobin = bluff ? BLUFF_MOVE[tele] : (int)pr_rng_seed_int(&s->r, 3, 0);
     s->round++;
     gc_jobin_round(s, player, jobin, king_round ? tele : -1);
+    /* a Speed King round: his powered attack; a bluff or a plain round: the normal move he picked (a Stand Trick round too: he still moves) */
+    hud_moves(run, gc_jobin_anim_move(player), king_round ? gc_jobin_anim_king(tele) : gc_jobin_anim_move(jobin));
     const pr_msg_arg you = species_arg("yourBeetle", s->you_species, s->you_form), him = species_arg("jobinBeetle", s->jobin_species, 0);
     if (bluff) say(run, JB "bluff.reveal", 1, him);
     if (king_round) say(run, KING_LINE[tele][player], 2, you, him);

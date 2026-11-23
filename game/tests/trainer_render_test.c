@@ -22,6 +22,11 @@ void rr_draw(const rr_frame* f,float x,float y,const rr_draw_opts* o) {
   assert(f==&frame);draws++;px=x;py=y;opts=*o;
 }
 void img_draw(const char* key,const char* name,float x,float y,float ox,float oy) {(void)name;(void)ox;(void)oy;snprintf(atlas,sizeof atlas,"%s",key);draws++;px=x;py=y;}
+/* anim_field (the duel's animations) asks for a sprite's frame and its foot gap: no atlas here, one frame without a gap */
+rr_atlas* img_get(const char* key) {(void)key;return NULL;}
+int rr_atlas_count(const rr_atlas* a) {(void)a;return 0;}
+const rr_frame* rr_atlas_frame(const rr_atlas* a,int i) {(void)a;(void)i;return &frame;}
+const rr_frame* menu_sprite_frame(const menu_sprite* s,uint32_t ms) {(void)s;(void)ms;return &frame;}
 static void near(float x,float y) { assert(fabsf(x-y)<0.001f); }
 static float g_now=1000; float ui_now(void) { return g_now; }   /* D'Arby's table runs on the screens' clock */
 static float zoom_now=1; static int zoom_sets;
@@ -147,7 +152,15 @@ int main(void) {
   g_now=5400;{const float m=jobin_meter(0);assert(m<100&&m>65);const float s=jobin_meter(2);assert(s>0&&s<35);}
   g_now=5800;near(jobin_meter(0),65);near(jobin_meter(1),100);near(jobin_meter(2),35);
   g_now=5900;bv_jobin_set(65,40,60);g_now=6600;near(jobin_meter(0),65);near(jobin_meter(1),40);near(jobin_meter(2),60);
+  /* the duel's animations play between the two beetles: the player's as battler 0 and his as 2, on the drum's spots (lorenzo 2026-11-23) */
+  {
+    ba_mon af[4];anim_field(af);
+    assert(af[0].on_field&&af[0].player&&af[0].visible&&af[2].on_field&&!af[2].player&&af[2].visible);
+    near(af[0].x,JOBIN_SPOT_X(0));near(af[0].y,JOBIN_SPOT_Y(0));near(af[2].x,JOBIN_SPOT_X(1));near(af[2].y,JOBIN_SPOT_Y(1));
+    assert(!af[1].on_field&&!af[3].on_field);
+  }
   bv_jobin_end();assert(!bv_jobin_on());
+  {ba_mon af[4];anim_field(af);assert(af[0].x!=JOBIN_SPOT_X(0)||!af[0].on_field);}   /* gone with the duel: the battle's own sides again */
   before=draws;draw_jobin_arena();draw_jobin_spot(0);draw_jobin_spot(1);assert(draws==before);
   before=draws;draw_player_trainer();assert(draws==before+1);B.player_trainer_visible=false;
   bv_jobin_set(1,1,1);assert(!bv_jobin_on());   /* no duel: nothing to move */
