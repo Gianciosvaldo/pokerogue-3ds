@@ -140,6 +140,8 @@ typedef struct {
     uint32_t jojo_clean_mask, jojo_clean_mask_hi; /* bit i (i - 32 in the second word): challenger i was beaten with none of the party fainted (a profile saved before: 0) */
     uint32_t darby_wins;    /* D'Arby the Gambler beaten (a profile saved before: 0) */
     uint32_t darby_rematch_wins;   /* his rematch won (a profile saved before: 0) */
+    uint32_t jobin_wins;           /* Jobin's beetle duel won (a profile saved before: 0) */
+    uint32_t jobin_punish_wins;    /* Jobin's team beaten after he caught the player cheating (a profile saved before: 0) */
 } gc_achv_progress;
 
 /* Overall system data (upstream GameData) */

@@ -195,6 +195,8 @@ static struct {
   int me_n;
   /* D'Arby's table (bv_darby_*): the two face-down cards on the platforms, the Pokemon each one hides, D'Arby sliding off and back */
   struct { bool on; char key[2][96]; float scale[2]; double t_deal, t_back, t_reveal[2]; } darby;
+  /* Jobin's beetle duel (bv_jobin_*): the drum instead of the platforms, a beetle on each side, both Grip bars and the Suspicion bar */
+  struct { bool on, king_on; char key[2][96]; float scale[2]; char name[2][BV_NAME_BYTES]; float from[3], to[3]; double t_move, t_king; } jobin;
   float trainer_show_ms; /* BEV_TRAINER_SHOW: ms into the defeated trainer's slide back in, 0 = not sliding */
   bool player_trainer_visible, opening_summon;
   /* BEV_DIALOGUE: the talk's copies of its strings (one per event of a chunk), the darkening of the field behind the portrait
@@ -917,7 +919,86 @@ void bv_darby_clear(void) {
 }
 bool bv_darby_table(void) { return B.darby.on; }
 
+/* Jobin's drum (lorenzo 2026-11-23): his arena art stands where the two platforms are, on the biome's own background; both beetles stand where the
+ * ordinary battle puts them (the player's from the back at 106,132, his at 236,84), the Speed King beside his, and the boxes are the ordinary ones
+ * (his top left, the player's bottom right). Positions are field coordinates (320 x 180); the arena image's top surface is an ellipse centred
+ * 134 px right of and 60 px below its top left corner, wide enough to hold both feet. Meters in percent, eased over JOBIN_TWEEN_MS. */
+#define JOBIN_ARENA_X 38.0f
+#define JOBIN_ARENA_Y 40.0f
+#define JOBIN_SPOT_X(k) ((k) == 0 ? 106.0f : 236.0f)
+#define JOBIN_SPOT_Y(k) ((k) == 0 ? 132.0f : 84.0f)
+#define JOBIN_KING_X 284.0f
+#define JOBIN_KING_Y 84.0f
+#define JOBIN_TWEEN_MS 600.0
+#define JOBIN_KING_MS 350.0
+static float jobin_meter(int i) {
+  const double u = B.jobin.t_move > 0 ? (ui_now() - B.jobin.t_move) / JOBIN_TWEEN_MS : 1;
+  const float e = ease(EASE_CUBIC_OUT, u <= 0 ? 0 : u >= 1 ? 1 : (float)u);
+  return B.jobin.from[i] + (B.jobin.to[i] - B.jobin.from[i]) * e;
+}
+static void draw_jobin_arena(void) {
+  if (!B.jobin.on) return;
+  img_draw("images/arenas/jobin_arena", NULL, JOBIN_ARENA_X, JOBIN_ARENA_Y, 0, 0);
+}
+/* k 0 the player's beetle (back sprite), 1 Jobin's */
+static void draw_jobin_spot(int k) {
+  if (!B.jobin.on || !B.jobin.key[k][0]) return;
+  const rr_frame* f = img_anim_frame(B.jobin.key[k], (int)(ui_now() * 10 / 1000));
+  if (!f) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = 0.5f;
+  o.origin_y = 1;
+  o.scale_x = o.scale_y = B.jobin.scale[k] > 0 ? B.jobin.scale[k] : 1;
+  rr_draw(f, JOBIN_SPOT_X(k), JOBIN_SPOT_Y(k), &o);
+}
+/* the Speed King beside Jobin's beetle while one of his attacks is telegraphed: his art 1:1 whatever the field's zoom, fading in */
+static void draw_jobin_king(void) {
+  if (!B.jobin.on || !B.jobin.king_on) return;
+  const rr_frame* f = img_anim_frame("images/trainer/custom/speed_king", 0);
+  if (!f) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = 0.5f;
+  o.origin_y = 1;
+  const double u = (ui_now() - B.jobin.t_king) / JOBIN_KING_MS;
+  o.tint = RR_RGBA(255, 255, 255, (int)(255 * (u <= 0 ? 0 : u >= 1 ? 1 : u)));
+  const float z = field_zoom_cur;
+  if (z != 1) rr_set_zoom(1, 160, 132);
+  rr_draw(f, 160 + (JOBIN_KING_X - 160) * z, 132 + (JOBIN_KING_Y - 132) * z, &o);
+  if (z != 1) rr_set_zoom(z, 160, 132);
+}
+
+void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp) {
+  memset(&B.jobin, 0, sizeof B.jobin);
+  B.jobin.on = true;
+  const bv_mon* m[2] = {mine, his};
+  for (int k = 0; k < 2; k++) {
+    if (!m[k] || m[k]->species <= 0) continue;
+    sprite_key(m[k], k == 0, B.jobin.key[k], sizeof B.jobin.key[k]);
+    B.jobin.scale[k] = get_mon_scale(m[k]);
+    snprintf(B.jobin.name[k], sizeof B.jobin.name[k], "%s", m[k]->name);
+  }
+  B.jobin.to[0] = B.jobin.from[0] = (float)grip_you;
+  B.jobin.to[1] = B.jobin.from[1] = (float)grip_him;
+  B.jobin.to[2] = B.jobin.from[2] = (float)susp;
+}
+void bv_jobin_set(int grip_you, int grip_him, int susp) {
+  if (!B.jobin.on) return;
+  for (int i = 0; i < 3; i++) B.jobin.from[i] = jobin_meter(i);
+  B.jobin.to[0] = (float)grip_you;
+  B.jobin.to[1] = (float)grip_him;
+  B.jobin.to[2] = (float)susp;
+  B.jobin.t_move = ui_now();
+}
+void bv_jobin_king(bool on) {
+  if (!B.jobin.on || B.jobin.king_on == on) return;
+  B.jobin.king_on = on;
+  B.jobin.t_king = ui_now();
+}
+void bv_jobin_end(void) { memset(&B.jobin, 0, sizeof B.jobin); }
+bool bv_jobin_on(void) { return B.jobin.on; }
+
 static void draw_me_intro(void) {
+  if (B.jobin.on) return;   /* Jobin and the encounter's props leave the field while the duel is on (the drum has the two beetles) */
   for (int i = 0; i < B.me_n; i++) {
     const me_intro_sprite* s = &B.me_sp[i];
     const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
@@ -952,7 +1033,7 @@ void bv_me_intro(const me_intro_sprite* sprites, int n) {
 static void draw_player_trainer(void) {
   if (!B.player_trainer_visible) return;
   /* D'Arby's table: his face-down card stands where the back sprite's feet are, so the trainer steps out of the way (lorenzo 2026-11-18: the two collided) */
-  if (B.darby.on) return;
+  if (B.darby.on || B.jobin.on) return;   /* (Jobin's duel: the player stands out of the picture, the beetle is the player's side) */
   char key[64];
   bool throwing=B.player_throw_ms>=0;
   snprintf(key,sizeof key,"images/trainer/trainer_%c_back%s",
@@ -1047,10 +1128,14 @@ static void draw_field_back(void) {
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
   /* doubles: the foes stand FOE_RAISE higher (field_pos), so their platform goes up with them (y grows downwards) */
   const float raise = -foe_raise();
-  if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, raise, 0, 0);
-  img_draw(k, NULL, B.arena_enemy_x, raise, 0, 0);
-  snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
-  img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
+  if (B.jobin.on) {
+    draw_jobin_arena();   /* the drum replaces both platforms */
+  } else {
+    if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, raise, 0, 0);
+    img_draw(k, NULL, B.arena_enemy_x, raise, 0, 0);
+    snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
+    img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
+  }
   field_zoom(false);
 }
 
@@ -1059,7 +1144,8 @@ static void draw_field_player(void) {
   draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
-  if (B.darby.on) draw_darby_spot(0);   /* the player's card (and the Pokemon played) stand in for the lead */
+  if (B.jobin.on) draw_jobin_spot(0);
+  else if (B.darby.on) draw_darby_spot(0);   /* the player's card (and the Pokemon played) stand in for the lead */
   else { draw_sprite(pl, true);draw_sparkle(pl,true); }
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   side *ally=&B.s[2];
@@ -1075,6 +1161,8 @@ static void draw_field_foes(void) {
   draw_trainers();
   draw_me_intro();
   draw_darby_spot(1);
+  draw_jobin_spot(1);
+  draw_jobin_king();
   draw_world_dio();
   draw_perfect_kars();
   for(int i=0;i<2;i++){
@@ -1357,6 +1445,49 @@ static void draw_enemy_info(side* sd) {
   if (boss) draw_boss_dividers(m, bar_x, bar_y, bar_w, hf ? (float)hf->src_h : 4);
   draw_stat_indicators(sd, false, bx, by);
   draw_stat_panel(sd,false,bx,by);
+}
+
+/* Jobin's two Grip bars and the Suspicion bar (lorenzo 2026-11-23): the ordinary enemy and player boxes (his at the top right, the player's under it,
+ * both on the right of the drum) with "Grip" where "HP" is, a Grip bar like an HP bar (green / yellow / red by the share left), and on the player's
+ * box the Suspicion bar where the EXP bar is: green below 36, yellow 36-60, orange 61-75, dark red from 76. */
+static const char* jobin_label(char* buf, int n, const char* key, const char* en) {
+  i18n_t(buf, n, key, NULL);
+  if (!strncmp(buf, "hud.", 4)) snprintf(buf, n, "%s", en);
+  return buf;
+}
+static void draw_jobin_hud(void) {
+  if (!B.jobin.on) return;
+  char grip[24], susp[24];
+  jobin_label(grip, sizeof grip, "mysteryEncounters/jobin:hud.grip", "Grip");
+  jobin_label(susp, sizeof susp, "mysteryEncounters/jobin:hud.suspicion", "Suspicion");
+  for (int k = 1; k >= 0; k--) {
+    const bool player = k == 0;
+    const float v = jobin_meter(k), ratio = fminf(fmaxf(v / 100.0f, 0), 1);
+    const float bx = player ? 310.0f : 140.0f, by = player ? -72.0f : -141.0f;   /* where the ordinary player's and enemy's boxes stand */
+    img_draw(player ? "images/ui/pbinfo_player" : "images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
+    const float name_x = player ? bx - 115 : bx - 124, name_y = player ? by - 15.2f : by - 11.2f;
+    name_text(name_x, name_y, B.jobin.name[k], 0, 0);
+    const float bar_x = player ? bx - 61 : bx - 71, bar_y = player ? by - 1 : by + 4.5f;
+    const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
+    int w = (int)floorf(48 * ratio + 0.5f);
+    if (w < 1 && v > 0.5f) w = 1;
+    if (hf && w > 0) rr_draw_cropped(hf, bar_x, bar_y, w, hf->src_h, NULL);
+    /* the label where "HP" is, right-aligned at the bar's left end */
+    const float lw = text_width(TS_INSTRUCTIONS_TEXT, grip, NULL);
+    name_text(bar_x - 1 - lw, (player ? by - 4.0f : by + 1.5f) + 1, grip, 0, 0);
+    if (player) {
+      char s[24];
+      snprintf(s, sizeof s, "%d/100", (int)ceilf(v - 0.001f));
+      draw_numbers("images/ui/numbers", s, bx - 15, by + 10, -1);
+      /* the Suspicion bar where the EXP bar is, 85 px wide */
+      const float sv = jobin_meter(2), sr = fminf(fmaxf(sv / 100.0f, 0), 1);
+      rr_color c = sv < 36 ? RR_RGBA(0x30, 0xc8, 0x50, 255) : sv < 61 ? RR_RGBA(0xf8, 0xd8, 0x28, 255)
+                 : sv < 76 ? RR_RGBA(0xf0, 0x88, 0x20, 255) : RR_RGBA(0x98, 0x10, 0x20, 255);
+      const int sw = (int)floorf(85 * sr + 0.5f);
+      name_text(bx - 98, by + 5.5f, susp, 0, 0);
+      if (sw > 0) rr_rect(bx - 98, by + 18, (float)sw, 2, c);
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ drawing: bottom strip */
@@ -3512,6 +3643,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
       draw_player_info(&B.s[0]);
       draw_enemy_info(&B.s[3]);
       draw_player_info(&B.s[2]);
+      draw_jobin_hud();
     }
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
     /* the strip and the item bar run across the border (the whole screen's width), so they come after it */

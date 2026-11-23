@@ -576,6 +576,13 @@ static void wave_black(void* arg) {
     s.trainer_keys[1][0] = 0;
     snprintf(s.trainer_name, sizeof s.trainer_name, "%s", "D'Arby");
   }
+  /* Jobin's team (the fight after he catches the player cheating, gc_jobin.c): his battle sprite, else his encounter sprite, alone, named Jobin */
+  if (trainer && gc_jobin_punish_battle(&G.run)) {
+    const char* key = img_has("images/trainer/custom/jobin_battle") ? "images/trainer/custom/jobin_battle" : "images/trainer/custom/jobin";
+    if (img_has(key)) snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);
+    s.trainer_keys[1][0] = 0;
+    snprintf(s.trainer_name, sizeof s.trainer_name, "%s", "Jobin");
+  }
   /* When only the old right ally survives, the next encounter promotes it to
    * the lead. Carry its already-visible sprite into slot 0 rather than duplicating
    * it or waiting for a SummonPhase that native correctly does not run. */
@@ -797,6 +804,7 @@ static bool handle_event(int i) {
 
     case GC_EV_WAVE:
       me_flow_set_darby_pose(0);   /* a new wave: D'Arby sits at his table again (the pose is only for his result lines) */
+      me_flow_set_jobin_pose(0);
       begin_wave(i);
       return true;
 
@@ -898,10 +906,13 @@ static bool handle_event(int i) {
         *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = field, .a = max_hp};
         sh->max_hp = max_hp;
       }
-      if (e->c > sh->hp)
-        *ev_new() = (bv_event){.type = BEV_HEAL, .battler = field, .a = e->c};
-      else if (e->c < sh->hp)
-        *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = field, .a = e->c, .b = HIT_RESULT_INDIRECT};
+      /* the event's HP was worked out against the maximum of its moment: a Minior in its Core form (299) healed at a battle's end whose form is back
+       * to Meteor (259) by the time the screen plays it, so the bar's maximum (the Pokemon's now) is its ceiling */
+      const int hp_to = max_hp > 0 && e->c > max_hp ? max_hp : e->c;
+      if (hp_to > sh->hp)
+        *ev_new() = (bv_event){.type = BEV_HEAL, .battler = field, .a = hp_to};
+      else if (hp_to < sh->hp)
+        *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = field, .a = hp_to, .b = HIT_RESULT_INDIRECT};
       break;
     }
 
@@ -977,8 +988,40 @@ static bool handle_event(int i) {
       break;
     }
 
+    case GC_EV_JOBIN: {
+      /* Jobin's beetle duel (game-core gc_jobin.c): the drum with the two beetles and the meters; a = your Grip, b = his, c = the Suspicion */
+      const int what = e->hp & 255, extra = e->hp >> 8;
+      gc_jobin_view v;
+      if (what == GC_JOBIN_HUD_START && gc_jobin_view_get(&G.run, &v)) {
+        bv_mon mine, his;
+        memset(&mine, 0, sizeof mine);
+        memset(&his, 0, sizeof his);
+        mine.species = v.you_species;
+        mine.form = v.you_form;
+        mine.shiny = v.you_shiny != 0;
+        mine.variant = v.you_variant;
+        his.species = v.jobin_species;
+        snprintf(mine.name, sizeof mine.name, "%s", i18n_species_name(mine.species));
+        snprintf(his.name, sizeof his.name, "%s", i18n_species_name(his.species));
+        if (v.you_index >= 0 && v.you_index < G.run.n_party) mine = make_mon(&G.run.party[v.you_index], true);   /* an own beetle: its own name */
+        bv_jobin_start(&mine, &his, e->a, e->b, e->c);
+      } else if (what == GC_JOBIN_HUD_UPDATE) {
+        bv_jobin_set(e->a, e->b, e->c);
+        bv_jobin_king(false);
+      } else if (what == GC_JOBIN_HUD_TELEGRAPH) {
+        bv_jobin_king(true);
+      } else if (what == GC_JOBIN_HUD_END) {
+        bv_jobin_set(e->a, e->b, e->c);
+        bv_jobin_end();
+        me_flow_set_jobin_pose(extra);   /* 1 victorious, 2 defeated, 0 caught (his ordinary sprite) */
+        field_sprites();
+      }
+      break;
+    }
+
     case GC_EV_MYSTERY: /* the encounter's own intro is said when its screen comes (mystery_screen) */
       me_flow_set_darby_pose(0);
+      me_flow_set_jobin_pose(0);
       break;
 
     case GC_EV_SAVE_POINT:

@@ -135,6 +135,8 @@ static bool new_enemy(gc_run *run, pr_rng *r, int species, int level, gc_mon *ou
     return true;
 }
 
+bool gc_new_enemy_mon(gc_run *run, pr_rng *r, int species, int level, gc_mon *out) { return new_enemy(run, r, species, level, out); }
+
 /* ---------------------------------------------------------------- onInit */
 static gc_mon options_store[GTS_PARTY][3];
 

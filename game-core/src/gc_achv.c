@@ -190,6 +190,9 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Unscathed by the Sunlight's Ripple", "Defeat Jonathan Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Broke the Flow of Calamity", "Defeat Tooru.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"We Went Beyond the Logic of This World", "Defeat Tooru without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    /* 164..165: Jobin's beetle duel (lorenzo 2026-11-23): his titles; the rewards are the normal and the Flawless JoJo ones. The conditions' wording is the author's. */
+    {"Not quite a lamborghini gallardo, but it will do", "Beat Jobin in the beetle duel.", RUN, V(GC_VOUCHER_REGULAR, 1)},
+    {"cheated and got away with it", "Beat Jobin's team after he catches you cheating.", RUN, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -448,6 +451,16 @@ void gc_achv_darby_rematch_won(gc_system *sys)
     if (sys) add_sat(&sys->achv.darby_rematch_wins, 1);
 }
 
+void gc_achv_jobin_won(gc_system *sys)
+{
+    if (sys) add_sat(&sys->achv.jobin_wins, 1);
+}
+
+void gc_achv_jobin_punish_won(gc_system *sys)
+{
+    if (sys) add_sat(&sys->achv.jobin_punish_wins, 1);
+}
+
 void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats)
 {
     if (!sys) return;
@@ -515,6 +528,8 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case GC_ACHV_GRAND_TOUR: h = regions_done(sys); n = GC_REGION_COUNT; break;
     case GC_ACHV_DARBY: h = a->darby_wins; n = 1; break;
     case GC_ACHV_DARBY_REMATCH: h = a->darby_rematch_wins; n = 1; break;
+    case GC_ACHV_JOBIN: h = a->jobin_wins; n = 1; break;
+    case GC_ACHV_JOBIN_PUNISH: h = a->jobin_punish_wins; n = 1; break;
     case 91: h = a->fb_wins; n = 1; break;
     case 92: h = a->fb_wins; n = 10; break;
     case 93: h = a->fb_wins; n = 50; break;
