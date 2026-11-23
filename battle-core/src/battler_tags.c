@@ -138,10 +138,10 @@ static bool source_linked(int type)
     return is_trap(type) || type == BATTLER_TAG_TYPE_INFATUATED;
 }
 
-/* isActive(true): not fainted, and on the field */
-static bool active_on_field(const pr_pokemon *p)
+/* isActive(true): allowed in battle (not fainted, allowed by the challenges), and on the field */
+static bool active_on_field(const pr_battle *bt, const pr_pokemon *p)
 {
-    return p->hp > 0 && p->on_field && !p->switch_out_status;
+    return pr_allowed_in_battle(bt, p) && p->on_field && !p->switch_out_status;
 }
 
 /* the moveset slot holding `move` with PP left (moveset.find(m => m.moveId === move &&
@@ -992,7 +992,7 @@ static bool seed_drain(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_batt
     pr_pokemon *source = NULL;
     for (int i = 0; i < 4 && !source; i++) {
         pr_pokemon *o = bt->field[i];
-        if (o && o->is_player != p->is_player && o->hp > 0 && o->on_field && !o->switch_out_status
+        if (o && o->is_player != p->is_player && pr_allowed_in_battle(bt, o) && o->on_field && !o->switch_out_status
             && t->source_index >= 0 && pr_battler_index(bt, o) == t->source_index)
             source = o;
     }
@@ -1261,10 +1261,10 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
                 pr_cancel_current_move(e,NULL);
             }
         }
-        return active_on_field(source);
+        return active_on_field(bt, source);
     }
     case BATTLER_TAG_TYPE_TORMENT:                /* only leaving the field ends it */
-        return active_on_field(p);
+        return active_on_field(bt, p);
     case BATTLER_TAG_TYPE_ENCORE:
         /* no longer added this turn; it ends early once the move has no PP left */
         t->added_this_turn = false;
@@ -1310,7 +1310,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* ends at once when its source is gone or off the field; else the message and Speed -1
          * (the Pokemon as its own source), then BattlerTag.lapse */
         pr_pokemon *source = tag_source(bt, t);
-        if (!source || !active_on_field(source)) return false;
+        if (!source || !active_on_field(bt, source)) return false;
         say(bt, e, "battlerTags:syrupBombLapse", p);
         int32_t spd = STAT_SPD;
         if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &spd, 1, -1, p) < 0 && e) e->overflow = true;
@@ -1391,7 +1391,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_PSYCHO_SHIFT:
         /* heals the user of the status it passed on once its move is over (isActive(true)):
          * the message, then resetStatus() as a phase (revive = true) */
-        if (p->status && p->hp > 0 && p->on_field && !p->switch_out_status) {
+        if (p->status && pr_allowed_in_battle(bt, p) && p->on_field && !p->switch_out_status) {
             pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_HEAL, p));   /* getStatusEffectHealText */
             pr_reset_status_phase(bt, e, p, true);
         }
@@ -1472,7 +1472,7 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
         return;
     case BATTLER_TAG_TYPE_COMMANDED: {
         const pr_pokemon *source = tag_source(bt, t);
-        if (source && active_on_field(source))
+        if (source && active_on_field(bt, source))
             pr_unshift_pokemon_anim_for(bt, e, p, POKEMON_ANIM_TYPE_COMMANDER_REMOVE);
         return;
     }

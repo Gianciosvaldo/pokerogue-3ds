@@ -85,7 +85,7 @@ plant plea-stream '/^static void reason/,/^}/ s|    pr_rng r = gc_me_option_rng(
 plant plea-no-heal-shop '/^static void reason/,/^}/ s|    gc_me_leave_with_heal_shop(run);|    gc_me_leave(run);|'
 plant plea-party-storage-order '/^static void reason/,/^}/ s|const gc_mon \*m = \&run->party\[run->party_order\[k\]\];|const gc_mon *m = \&run->party[k];|'
 plant feast-level 's|run->party\[high\].b.level - 2 : 1;|run->party[high].b.level - 1 : 1;|'
-plant feast-skip-fainted 's|        const int idx = run->party_order\[k\];|        const int idx = run->party_order[k]; if (!gc_mon_allowed(\&run->party[idx])) continue;|'
+plant feast-skip-fainted 's|        const int idx = run->party_order\[k\];|        const int idx = run->party_order[k]; if (!gc_mon_allowed(run, \&run->party[idx])) continue;|'
 plant feast-shiny-lock 's|    ec.shiny_lock = true;|    ec.shiny_lock = false;|'
 plant feast-passive 's|    greedent.b.passive_flag = true;|    greedent.b.passive_flag = false;|'
 plant feast-move-thrash 's|gc_mon_set_move(\&greedent, 0, MOVE_ID_THRASH);|gc_mon_set_move(\&greedent, 0, MOVE_ID_OUTRAGE);|'

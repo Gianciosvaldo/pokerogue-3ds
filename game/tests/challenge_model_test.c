@@ -41,7 +41,8 @@ int main(void) {
   chm_step(&m);
   CHECK(m.v.value[fs] == 1, "a tap turns it on");
 
-  /* Up / Down wrap over the rows */
+  /* Up / Down wrap over the rows (from the first row: Fresh Start is no longer it once Mono Type is played) */
+  while (m.cursor != 0) chm_move(&m, 1);
   const int first = chm_current(&m);
   for (int i = 0; i < m.n; i++) chm_move(&m, 1);
   CHECK(chm_current(&m) == first, "Down over every row is back where it was");

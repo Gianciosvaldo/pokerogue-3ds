@@ -45,7 +45,9 @@ bool gc_classic_finish(gc_run *run,bool victory,const char **why) {
   int species=run->party[run->party_order[k]].b.species;
   int root=gc_species_root_id(species),starter=gc_species_root_for_starter(species);
   if(!count_root(&next,root)||(root!=starter&&!count_root(&next,starter)))return false;
-  /* awardRibbons: Classic's ribbon, or in Challenge Mode the challenges' (none for Moveset Randomizer), to the Pokemon and its prevolutions */
+  /* awardRibbons: Classic's ribbon, or in Challenge Mode the challenges' (none for Moveset Randomizer), to the Pokemon and its prevolutions,
+   * for each Pokemon the challenges allow (applyChallenges(POKEMON_IN_BATTLE)) */
+  if(!pr_challenge_allowed(&run->bt,&run->party[run->party_order[k]].b))continue;
   for(int depth=0;species>0&&depth<10;depth++){next.dex[species].ribbon_flags|=ribbons;species=gc_species_prevolution(species);}
  }
  next.unlocks.endless_mode=next.unlocks.mini_black_hole=true;

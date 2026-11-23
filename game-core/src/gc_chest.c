@@ -55,7 +55,7 @@ static int highest_level(const gc_run *run)
     int best = -1;
     for (int k = 0; k < run->n_party; k++) {
         const int idx = run->party_order[k];
-        if (!gc_mon_allowed(&run->party[idx])) continue;
+        if (!gc_mon_allowed(run, &run->party[idx])) continue;
         if (best < 0 || run->party[best].b.level < run->party[idx].b.level) best = idx;
     }
     return best;
@@ -140,7 +140,7 @@ void gc_chest_execute(gc_run *run, int option)
         gc_ev_msg(run, "battle:fainted", 1, pr_arg_pokemon(&run->bt, "pokemonNameWithAffix", &ko->b));
         /* no legal Pokemon left: game over, the phase queue cleared */
         bool any = false;
-        for (int i = 0; i < run->n_party; i++) any |= gc_mon_allowed(&run->party[i]);
+        for (int i = 0; i < run->n_party; i++) any |= gc_mon_allowed(run, &run->party[i]);
         if (!any) {
             gc_rq_clear(run);
             gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0));

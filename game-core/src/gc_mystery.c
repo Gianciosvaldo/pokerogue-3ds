@@ -128,7 +128,7 @@ static int seen_count(const gc_run *r, int type)
 static int legal_party(const gc_run *r)
 {
     int n = 0;
-    for (int i = 0; i < r->n_party; i++) if (gc_mon_allowed(&r->party[i])) n++;
+    for (int i = 0; i < r->n_party; i++) if (gc_mon_allowed(r, &r->party[i])) n++;
     return n;
 }
 
@@ -158,11 +158,12 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (idx < 0 || idx >= run->n_party) return false;
     const gc_mon *m = &run->party[idx];
     if (type == GC_ME_SHADY_VITAMIN_DEALER) {
+        if (!pr_challenge_allowed(&run->bt, &m->b)) return false;   /* isAllowedInChallenge(), first: partyUiHandler:cantBeUsed */
         if (option == 0) return hp_ratio_in_half_to_full(&m->b);
-        if (option == 1) return gc_mon_allowed(m);
+        if (option == 1) return gc_mon_allowed(run, m);
     }
     /* Part Timer's first two options: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
-    if (type == GC_ME_PART_TIMER && option < 2) return gc_mon_allowed(m);
+    if (type == GC_ME_PART_TIMER && option < 2) return gc_mon_allowed(run, m);
     /* Fun and Games!: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
     if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
     if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
@@ -297,9 +298,9 @@ void gc_mystery_increment_miss(gc_run *run)
 
 /* applyDamageToPokemon(pokemon, damage): a Pokemon that is allowed in battle and would faint is left at 1 HP;
  * applyHpChangeToPokemon rounds, clamps to 0..max HP */
-static void me_apply_damage(gc_mon *m, int damage)
+static void me_apply_damage(const gc_run *run, gc_mon *m, int damage)
 {
-    if (m->b.hp > 0 && m->b.hp - damage <= 0) damage = m->b.hp - 1;
+    if (gc_mon_allowed(run, m) && m->b.hp - damage <= 0) damage = m->b.hp - 1;
     const int next = m->b.hp - damage;
     m->b.hp = next < m->b.stats[0] ? (next > 0 ? next : 0) : m->b.stats[0];
 }
@@ -308,7 +309,7 @@ static bool lost_at_sea_move_ok(const gc_run *run, int option)
 {
     const int move = option == 0 ? MOVE_ID_SURF : MOVE_ID_FLY;
     for (int i = 0; i < run->n_party; i++)
-        if (gc_mon_allowed(&run->party[i]) && gc_can_learn_move(&run->party[i], move)) return true;
+        if (gc_mon_allowed(run, &run->party[i]) && gc_can_learn_move(&run->party[i], move)) return true;
     return false;
 }
 
@@ -338,10 +339,10 @@ static int extortion_ability_of(const gc_mon *m)
 static bool has_extortion_ability(const gc_mon *m) { return extortion_ability_of(m) != 0; }
 
 /* STEALING_MOVES (requirement-groups.ts) and MoveRequirement(STEALING_MOVES, true): allowed in battle, one of the moves among its moves */
-static bool has_stealing_move(const gc_mon *m)
+static bool has_stealing_move(const gc_run *run, const gc_mon *m)
 {
     static const int moves[] = {MOVE_ID_PLUCK, MOVE_ID_COVET, MOVE_ID_KNOCK_OFF, MOVE_ID_THIEF, MOVE_ID_TRICK, MOVE_ID_SWITCHEROO};
-    if (!gc_mon_allowed(m)) return false;
+    if (!gc_mon_allowed(run, m)) return false;
     for (int k = 0; k < m->b.n_moves; k++)
         for (size_t j = 0; j < sizeof moves / sizeof moves[0]; j++) if (m->b.moves[k] > 0 && m->b.moves[k] == moves[j]) return true;
     return false;
@@ -355,9 +356,9 @@ static bool is_charming_move(int move)
 }
 
 /* MoveRequirement(CHARMING_MOVES, true): a Pokemon allowed in battle with a charming move among its moves */
-static bool has_charming_move(const gc_mon *m)
+static bool has_charming_move(const gc_run *run, const gc_mon *m)
 {
-    if (!gc_mon_allowed(m)) return false;
+    if (!gc_mon_allowed(run, m)) return false;
     for (int k = 0; k < m->b.n_moves; k++) if (m->b.moves[k] > 0 && is_charming_move(m->b.moves[k])) return true;
     return false;
 }
@@ -995,7 +996,7 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
         for (int by_move = 1; by_move >= 0; by_move--)
             for (int k = 0; k < run->n_party; k++) {
                 const gc_mon *m = &run->party[run->party_order[k]];
-                if (!gc_mon_allowed(m)) continue;
+                if (!gc_mon_allowed(run, m)) continue;
                 if (by_move ? has_extortion_move(m) : has_extortion_ability(m)) return run->party_order[k];
             }
         return -1;
@@ -1004,20 +1005,20 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
         /* MoveRequirement(STEALING_MOVES, true): the first Pokemon of the party allowed in battle with one of the moves */
         if (option != (type == GC_ME_FIGHT_OR_FLIGHT ? 1 : 2)) return -1;
         for (int k = 0; k < run->n_party; k++)
-            if (has_stealing_move(&run->party[run->party_order[k]])) return run->party_order[k];
+            if (has_stealing_move(run, &run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
     if (type == GC_ME_DANCING_LESSONS) {
         /* MoveRequirement(DANCING_MOVES, true): the first Pokemon of the party allowed in battle with a dance move */
         if (option != 2) return -1;
         for (int k = 0; k < run->n_party; k++)
-            if (gc_dance_has_move(&run->party[run->party_order[k]])) return run->party_order[k];
+            if (gc_dance_has_move(run, &run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
     if (type == GC_ME_PART_TIMER || type == GC_ME_UNCOMMON_BREED) {
         if (option != 2) return -1;
         for (int k = 0; k < run->n_party; k++)
-            if (has_charming_move(&run->party[run->party_order[k]])) return run->party_order[k];
+            if (has_charming_move(run, &run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
     if (type != GC_ME_LOST_AT_SEA || option < 0 || option > 1 || !lost_at_sea_move_ok(run, option)) return -1;
@@ -1041,7 +1042,7 @@ static void lost_at_sea(gc_run *run, int option)
         }
     } else {
         for (int i = 0; i < run->n_party; i++)
-            if (gc_mon_allowed(&run->party[i])) me_apply_damage(&run->party[i], (int)floor(run->party[i].b.stats[0] * 0.25));
+            if (gc_mon_allowed(run, &run->party[i])) me_apply_damage(run, &run->party[i], (int)floor(run->party[i].b.stats[0] * 0.25));
     }
     end_mystery_encounter_leave(run);
 }
@@ -1223,6 +1224,7 @@ int gc_offer_terms(const gc_run *run, double *price)
     int best_total = 0;
     for (int k = 0; k < run->n_party; k++) {
         const gc_mon *m = &run->party[run->party_order[k]];
+        if (!pr_challenge_allowed(&run->bt, &m->b)) continue;   /* getHighestStatTotalPlayerPokemon(isAllowed true, isFainted true) */
         int total = 0;
         for (int j = 0; j < 6; j++) total += m->b.stats[j];
         if (best < 0 || best_total < total) { best = run->party_order[k]; best_total = total; }
@@ -1417,7 +1419,7 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p)
         gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:noBadEffects", 0);
         return;
     }
-    me_apply_damage(m, (int)floor(m->b.stats[0] / 2.0));
+    me_apply_damage(run, m, (int)floor(m->b.stats[0] / 2.0));
     /* the nature is drawn until it differs from Pokemon.nature, the base one (not a Mint's), and set as the custom one */
     pr_rng r = pr_run_seed_offset_rng(&run->run, (run->wave * 1000 + 512) * 2000, NULL);
     const int current = m->has_custom_nature ? m->base_nature : m->b.nature;
@@ -1602,7 +1604,7 @@ pr_rng gc_me_option_rng(const gc_run *run) { return me_option_rng(run); }
 void gc_me_prune_items(gc_run *run) { me_prune_items(run); }
 void gc_me_update_modifiers(gc_run *run) { me_update_modifiers(run); }
 void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }
-void gc_me_apply_damage(gc_mon *m, int damage) { me_apply_damage(m, damage); }
+void gc_me_apply_damage(const gc_run *run, gc_mon *m, int damage) { me_apply_damage(run, m, damage); }
 
 void gc_me_leave(gc_run *run) { end_mystery_encounter_leave(run); }
 void gc_me_give_vitamin(gc_run *run, int idx, int stat) { if (idx >= 0 && idx < run->n_party && stat >= 0 && stat < 6) me_give_vitamin(run, idx, stat); }

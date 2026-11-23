@@ -98,7 +98,7 @@ static const gc_mon *field_lead(const gc_run *run)
 {
     if (run->n_party <= 0) return NULL;
     const gc_mon *m = &run->party[run->party_order[0]];
-    return gc_mon_allowed(m) ? m : NULL;
+    return gc_mon_allowed(run, m) ? m : NULL;
 }
 
 /* the player's modifier of a persistent kind (findModifier(m instanceof ...)) is at its maximum stack: existing.getStackCount() >= getMaxStackCount() */

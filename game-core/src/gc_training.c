@@ -24,10 +24,10 @@
 #include <math.h>
 #include <string.h>
 
-/* isPokemonValidForEncounterOptionSelection: allowed in challenge (not modelled) and in battle */
+/* isPokemonValidForEncounterOptionSelection: allowed in challenge and in battle */
 bool gc_training_pick_ok(const gc_run *run, int idx)
 {
-    return idx >= 0 && idx < run->n_party && gc_mon_allowed(&run->party[idx]);
+    return idx >= 0 && idx < run->n_party && gc_mon_allowed(run, &run->party[idx]);
 }
 
 /* the dex entry of the species itself, not its root, answers checkSpeciesNatureUnlocked */
@@ -121,7 +121,7 @@ void gc_training_execute(gc_run *run, int option, int member, int choice)
     gc_me_prune_items(run);
     gc_me_update_modifiers(run);
     bool able = false;
-    for (int i = 0; i < run->n_party; i++) able = able || gc_mon_allowed(&run->party[i]);
+    for (int i = 0; i < run->n_party; i++) able = able || gc_mon_allowed(run, &run->party[i]);
     if (!able) {
         /* nobody left to fight the clone: the run is over */
         in->training.away = false;

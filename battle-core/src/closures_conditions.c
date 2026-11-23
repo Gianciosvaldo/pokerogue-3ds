@@ -34,8 +34,8 @@ static bool ab_swappable(int ab) { return !(pr_abilities[ab].flags & (AB_FLAG_UN
 
 static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
 static bool is_full_hp(const pr_pokemon *p) { return p->hp >= pr_get_stat(p, STAT_HP, true); }
-/* isActive(): isAllowedInBattle (not fainted; challenges are not modelled) */
-static bool is_active(const pr_pokemon *p) { return p && p->hp > 0; }
+/* isActive(): isAllowedInBattle (not fainted, allowed by the challenges) */
+static bool is_active(const pr_battle *bt, const pr_pokemon *p) { return pr_allowed_in_battle(bt, p); }
 static bool is_on_field(const pr_pokemon *p) { return p && p->on_field && !p->switch_out_status; }
 /* PlayerPokemon.hasTrainer() is true; EnemyPokemon's is !!trainerSlot */
 static bool has_trainer(const pr_pokemon *p) { return p->is_player || p->has_trainer; }
@@ -663,7 +663,7 @@ static double plus_minus_on_side(ARGS)
     UNUSED;
     const pr_pokemon *ps[2] = {u, pr_get_ally(bt, u)};
     for (int i = 0; i < 2; i++)
-        if (is_active(ps[i]) && (has_ability_any(ps[i], ABILITY_ID_PLUS) || has_ability_any(ps[i], ABILITY_ID_MINUS)))
+        if (is_active(bt, ps[i]) && (has_ability_any(ps[i], ABILITY_ID_PLUS) || has_ability_any(ps[i], ABILITY_ID_MINUS)))
             return 1;
     return 0;
 }
@@ -750,7 +750,7 @@ static double flower_shield(ARGS)
     UNUSED;
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
-        if (is_active(p) && is_of_type_orig(p, POKEMON_TYPE_GRASS)
+        if (is_active(bt, p) && is_of_type_orig(p, POKEMON_TYPE_GRASS)
             && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE))
             return 1;
     }

@@ -13,7 +13,7 @@ faults={
  'bulk-drops-callbacks':('arena_tags.c','for(int i=0;i<bt->n_arena_tags;i++)on_remove(bt,e,&bt->arena_tags[i],false);','/* callbacks removed */','arena-remove-all-test',a.bulk,[]),
  'bulk-quiet-messages':('arena_tags.c','for(int i=0;i<bt->n_arena_tags;i++)on_remove(bt,e,&bt->arena_tags[i],false);','for(int i=0;i<bt->n_arena_tags;i++)on_remove(bt,e,&bt->arena_tags[i],true);','arena-remove-all-test',a.bulk,[]),
  'imprison-restricts-permanent-moves':('commands.c','return src && in_moveset(src, move)','return src && src->moves[0]==move','imprison-test',a.imprison,[]),
- 'imprison-counts-down':('battler_tags.c','return active_on_field(source);','return --t->turn_count>0 && active_on_field(source);','imprison-test',a.imprison,[]),
+ 'imprison-counts-down':('battler_tags.c','return active_on_field(bt, source);','return --t->turn_count>0 && active_on_field(bt, source);','imprison-test',a.imprison,[]),
  'imprison-no-cancellation':('battler_tags.c','if(pr_tag_restricts_move(bt,p,t,move))','if(false)','imprison-test',a.imprison,[]),
  'cleanup-drops-tag-callbacks':('engine.c','    pr_arena_remove_all_tags(bt, e);','    bt->n_arena_tags=0;','reset-arena-test',a.cleanup,['--effects']),
  'cleanup-clears-permanent-weather':('engine.c','if (bt->weather_turns_left != 0)','if (true)','reset-arena-test',a.cleanup,['--effects']),

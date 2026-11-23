@@ -462,11 +462,6 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
 
-            if (!p1->allowed_in_challenge || !p2->allowed_in_challenge) {
-                if (msg) *msg = NO_EFFECT_MSG;
-                return false;
-            }
-
             bool first_valid_status = p1->status != STATUS_EFFECT_NONE && p1->status != STATUS_EFFECT_FAINT;
             bool second_valid_status = p2->status != STATUS_EFFECT_NONE && p2->status != STATUS_EFFECT_FAINT;
             int original_max_hp = p1->max_hp;

@@ -424,9 +424,7 @@ static void post_battle_money(gc_run *run, bool victory)
     pr_battle *bt = &run->bt;
     bt->game_mode = run->run.mode;
     bt->wave_index = run->wave;
-    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
-    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
-    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
+    gc_challenge_to_battle(run, bt);
     bt->n_party[0] = run->n_party;
     for (int k = 0; k < run->n_party; k++) {
         pr_pokemon *p = &run->party[run->party_order[k]].b;
@@ -714,12 +712,17 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     switch (p->type) {
     case RP_NEW_BATTLE: {
         bool any = false;
-        for (int i = 0; i < run->n_party; i++) any |= gc_mon_allowed(&run->party[i]);
+        for (int i = 0; i < run->n_party; i++) any |= gc_mon_allowed(run, &run->party[i]);
         if (!any) { gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0)); return true; }
         gc_new_battle(run);
         return true;
     }
-    case RP_TURN_INIT:
+    case RP_TURN_INIT: {
+        /* TurnInitPhase.start: first a player Pokemon on the field that the challenges no longer allow is switched out; the turn starts
+         * again from here once that is done */
+        const int illegal = gc_battle_turn_init_challenge(run);
+        if (illegal >= 0) { after_stop(run, illegal); return true; }
+    }
         if (gc_fg_turn_init(run)) return true;   /* handleMysteryEncounterTurnStartEffects: the minigame decides before the commands */
         gc_battle_turn_init(run);
         if (run->bt.n_me_start) {   /* handleMysteryEncounterBattleStartEffects: the encounter's moves before the first command */
@@ -730,7 +733,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         for(int field=0;field<(run->bt.double_battle?2:1);field++) {
             if(run->bt.field[field]&&run->bt.field[field]->hp>0)continue;
             bool bench=false,alive=false;
-            for(int i=0;i<run->n_party;i++){bool allowed=gc_mon_allowed(&run->party[i]);alive|=allowed;bench|=allowed&&!run->party[i].b.on_field;}
+            for(int i=0;i<run->n_party;i++){bool allowed=gc_mon_allowed(run, &run->party[i]);alive|=allowed;bench|=allowed&&!run->party[i].b.on_field;}
             if(!alive){gc_rq_unshift(run,gc_rp(RP_GAME_OVER,0,0,0));return true;}
             if(bench){gc_rq_unshift(run,gc_rp(RP_SWITCH,1,field,0));return true;}
         }
@@ -740,7 +743,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_COMMAND:
         run->screen.slot=p->a;
-        if(!run->bt.field[p->a]||run->bt.field[p->a]->hp<=0||run->bt.commands[p->a].skip)return true;
+        /* a CommandPhase for each isActive() Pokemon of the field */
+        if(!pr_allowed_in_battle(&run->bt,run->bt.field[p->a])||run->bt.commands[p->a].skip)return true;
         if (gc_battle_queued_command(run)) return true;
         gc_battle_command_screen(run);
         return false;
@@ -759,7 +763,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
             memset(s, 0, sizeof *s);
             s->kind = GC_SCREEN_SWITCH;
             s->slot=p->b;
-            for (int i = 0; i < run->n_party; i++) s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
+            for (int i = 0; i < run->n_party; i++) s->pick_ok[i] = gc_mon_allowed(run, &run->party[i]) && !run->party[i].b.on_field;
             return false;
         }
         gc_battle_switch_screen(run);
@@ -992,7 +996,9 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         if (c->kind != GC_CH_PICK) { *why = "pick a Pokemon"; return false; }
         const gc_screen *s = &run->screen;
         if (c->a == -1 ? !s->can_skip : (c->a < 0 || c->a >= run->n_party || !s->pick_ok[c->a])) {
-            *why = s->revival_blessing ? "partyUiHandler:hasEnergy" : "partyUiHandler:noEnergy";
+            const bool barred = !s->revival_blessing && c->a >= 0 && c->a < run->n_party && run->party[c->a].b.hp > 0
+                                && !run->party[c->a].b.on_field && !pr_challenge_allowed(&run->bt, &run->party[c->a].b);
+            *why = s->revival_blessing ? "partyUiHandler:hasEnergy" : barred ? "partyUiHandler:cantBeUsed" : "partyUiHandler:noEnergy";
             return false;
         }
         *ok = true;

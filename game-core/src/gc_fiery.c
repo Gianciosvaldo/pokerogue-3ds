@@ -56,7 +56,7 @@ bool gc_fiery_option_ok(const gc_run *run)
     for (int k = 0; k < run->n_party; k++) {
         const gc_mon *m = &run->party[run->party_order[k]];
         if (m->b.hp > 0 && is_fire(m)) return true;
-        if (gc_mon_allowed(m) && fire_resistant_ability(m)) return true;
+        if (gc_mon_allowed(run, m) && fire_resistant_ability(m)) return true;
     }
     return false;
 }
@@ -69,7 +69,7 @@ int gc_fiery_primary(const gc_run *run)
     for (int k = 0; k < run->n_party; k++)
         if (is_fire(&run->party[run->party_order[k]])) return run->party_order[k];
     for (int k = 0; k < run->n_party; k++)
-        if (gc_mon_allowed(&run->party[run->party_order[k]]) && fire_resistant_ability(&run->party[run->party_order[k]])) return run->party_order[k];
+        if (gc_mon_allowed(run, &run->party[run->party_order[k]]) && fire_resistant_ability(&run->party[run->party_order[k]])) return run->party_order[k];
     return -1;
 }
 
@@ -168,11 +168,11 @@ static void hunker(gc_run *run)
     int pool[PR_MAX_PARTY], n = 0;
     for (int k = 0; k < run->n_party; k++) {
         const int idx = run->party_order[k];
-        if (gc_mon_allowed(&run->party[idx]) && !is_fire(&run->party[idx])) pool[n++] = idx;
+        if (gc_mon_allowed(run, &run->party[idx]) && !is_fire(&run->party[idx])) pool[n++] = idx;
     }
     for (int k = 0; k < n; k++) {
         gc_mon *m = &run->party[pool[k]];
-        gc_me_apply_damage(m, (int)floor(m->b.stats[0] * ((double)DAMAGE_PERCENTAGE / 100)));
+        gc_me_apply_damage(run, m, (int)floor(m->b.stats[0] * ((double)DAMAGE_PERCENTAGE / 100)));
     }
     int burnable[PR_MAX_PARTY], nb = 0;
     for (int k = 0; k < n; k++) if (run->party[pool[k]].b.status == STATUS_EFFECT_NONE) burnable[nb++] = pool[k];

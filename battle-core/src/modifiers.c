@@ -990,7 +990,7 @@ static bool spread_with_several_targets(pr_battle *bt, int move, const pr_pokemo
     const pr_pokemon *ally = pr_get_ally(bt, user);
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
-        if (!p || p->hp <= 0) continue;
+        if (!pr_allowed_in_battle(bt, p)) continue;
         if ((p == user && user_in) || (p == ally && ally && ally_in) || (pr_is_opponent(bt, user, p) && opponents_in)) n++;
     }
     return n > 1;

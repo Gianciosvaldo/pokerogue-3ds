@@ -601,6 +601,8 @@ typedef struct pr_battle {
     uint32_t challenge_flags;  /* active gameMode challenges, bit per Challenges enum id */
     bool challenge_flags_known; /* distinguishes an explicit empty set from missing mode context */
     uint8_t challenge_passives; /* the Passives challenge's value (0 off, 1, 2) */
+    uint8_t challenge_generation; /* the Single Generation challenge's value (0 off, 1..9) */
+    uint8_t challenge_type;     /* the Single Type challenge's value (0 off, 1..18: PokemonType + 1) */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool player_teras_used_known; /* explicit arena.playerTerasUsed input */
@@ -1064,6 +1066,13 @@ double pr_type_chart_multiplier(const pr_battle *bt, int atk, int def);
  * bt may be NULL). PokemonMove.isUsable asks it for the player's Pokemon, CallMoveAttrWithBanlist.isMoveAllowed for any user. MovePhase's
  * checkValidity asks it from a FALSE holder, which Hardcore leaves alone, so that check never cancels a move and is not here. */
 bool pr_challenge_move_allowed(const pr_battle *bt, int move);
+/* Pokemon.isAllowedInChallenge(): applyChallenges(POKEMON_IN_BATTLE) from a true holder, which judges the player's Pokemon only.
+ * SingleGenerationChallenge: the species' generation, and the fused species' when fused, is the value. SingleTypeChallenge: the Pokemon is of
+ * the value's type (isOfType with no tera type, past summonData's types, no third type), or is Castform under Normal (TYPE_OVERRIDES).
+ * bt may be NULL (no challenge). */
+bool pr_challenge_allowed(const pr_battle *bt, const pr_pokemon *p);
+/* Pokemon.isAllowedInBattle(): not fainted and allowed by the challenges */
+bool pr_allowed_in_battle(const pr_battle *bt, const pr_pokemon *p);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
 /* the same with simulated = false passed through (IgnoreTypeImmunityAbAttr, the Strong Winds message) */

@@ -182,7 +182,7 @@ int main(int argc, char **argv)
         {
             const int ok_wave = wave >= 30 && wave <= 180;
             int allowed = 0;
-            for (int m = 0; m < run.n_party; m++) allowed += gc_mon_allowed(&run.party[m]);   /* PartySizeRequirement(3, 6, excludeDisallowedPokemon) */
+            for (int m = 0; m < run.n_party; m++) allowed += gc_mon_allowed(&run, &run.party[m]);   /* PartySizeRequirement(3, 6, excludeDisallowedPokemon) */
             const int spawn_c = ok_wave && allowed >= 3 && gc_superfan_spawnable(&run);
             EQ("the encounter's requirements", spawn_c, meets[0]);
             spawn[spawn_c]++;

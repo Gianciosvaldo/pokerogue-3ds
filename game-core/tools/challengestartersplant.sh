@@ -1,5 +1,5 @@
 #!/bin/sh
-# The Challenge Mode starter rules (Fresh Start): show the comparator can fail. Replays one trace (from tools/challengestartersdiff.sh) through copies of game-core, each
+# The Challenge Mode starter rules (Fresh Start, Single Type, Single Generation): show the comparator can fail. Replays one trace (from tools/challengestartersdiff.sh) through copies of game-core, each
 # with one line of src/gc_challenge.c (or gc_mon.c) changed, and prints each one's totals. Every copy must exit 1.
 # Usage: tools/challengestartersplant.sh <trace>   (CHALLENGE_PLANT_FROM=<name> starts at that plant)
 set -e
@@ -51,6 +51,16 @@ plant mon-luck 's/m->luck = 0; /m->luck = m->luck; /'
 plant mon-form-reset 's/if (p->form > 0 \&\& fresh_start_form_reset(p->species)) p->form = 0;/if (p->form > 0 \&\& 0) p->form = 0;/'
 plant mon-iv-cap 's/for (int i = 0; i < 6; i++) if (p->ivs\[i\] > 15) p->ivs\[i\] = 15;/for (int i = 0; i < 6; i++) if (p->ivs[i] > 16) p->ivs[i] = 16;/'
 plant mon-tera 's/if (f0) p->tera_type = f0->type1; /if (f0) p->tera_type = p->tera_type; /'
+# Single Type and Single Generation (PR 4a): STARTER_CHOICE, the soft step, STARTER_SELECT_MODIFY's genders and its `ret ||=` precedence
+plant choice-ignores-type 's/tmp.challenge_type = set->value\[CHALLENGES_SINGLE_TYPE\];/tmp.challenge_type = 0;/'
+plant choice-ignores-gen 's/tmp.challenge_generation = set->value\[CHALLENGES_SINGLE_GENERATION\];/tmp.challenge_generation = 0;/'
+plant soft-no-item-forms 's/if (r->species == species \&\& choice_valid(set, species, r->to)) return true;/(void)r;/'
+plant soft-empty-prekey-not-followed 's/if (!(pf \&\& !pf->form_key\[0\]) \&\& (!pf/if ((!pf/'
+plant soft-no-form-prekey-not-followed 's/if (e->pre_form != -1 \&\& e->pre_form != -3) {/if (e->pre_form != -1) {/'
+plant view-fresh-then-type 's/    if (!set || set->value\[CHALLENGES_FRESH_START\]) return;/    if (!set) return;/'
+plant view-type-burmy 's/else if (species == SPECIES_ID_BURMY) {/else if (0) {/'
+plant view-type-ralts 's/if (species == SPECIES_ID_RALTS \&\& type == POKEMON_TYPE_FIGHTING) out->caught_attr \&= ~(uint64_t)8;/if (species == SPECIES_ID_RALTS \&\& type == POKEMON_TYPE_FIGHTING) out->caught_attr \&= ~(uint64_t)4;/'
+plant view-gen-ralts 's/            if (species == SPECIES_ID_RALTS) out->caught_attr \&= ~(uint64_t)8;/            if (species == SPECIES_ID_RALTS) out->caught_attr \&= ~(uint64_t)4;/'
 # the unchallenged starter's default tera type: the species' own, not the form's
 plant default-tera-form 's/gc_form(s->species, 0)->type1)/f->type1)/' gc_mon.c
 echo "challenge starters plant: $total planted, $fails not caught"

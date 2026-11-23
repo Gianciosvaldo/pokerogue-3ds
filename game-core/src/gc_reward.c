@@ -211,7 +211,7 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     }
     r->n_base_moves = r->n_moves;
     r->pause_evolutions = m->pause_evolutions;
-    r->allowed_in_challenge = true;   /* no challenge is modelled */
+    r->allowed_in_challenge = pr_challenge_allowed(&run->bt, p);   /* isAllowedInChallenge(): the Attack Type Booster's move-type weights */
     /* canSetStatus(TOXIC | BURN, quiet, overrideStatus, no source, ignoreField): the Toxic and Flame Orbs' weights */
     r->can_toxic = pr_can_set_status(&run->bt, &run->eng, p, STATUS_EFFECT_TOXIC, true, true, NULL, true);
     r->can_burn = pr_can_set_status(&run->bt, &run->eng, p, STATUS_EFFECT_BURN, true, true, NULL, true);

@@ -31,7 +31,7 @@ change('wrong-tag-move','battler_tags','    case BATTLER_TAG_TYPE_COMMANDED:\n  
 change('uncached-form','battler_tags','        if (source) t->commanded_form_key = (uint16_t)(pr_pokemon_base_form(source) - pr_forms + 1);','')
 change('half-commander-boost','battler_tags','pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 5, 2, p);','pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 5, 1, p);')
 change('missing-remove-animation','battler_tags','            pr_unshift_pokemon_anim_for(bt, e, p, POKEMON_ANIM_TYPE_COMMANDER_REMOVE);','            (void)p;')
-change('always-remove-animation','battler_tags','if (source && active_on_field(source))\n            pr_unshift_pokemon_anim_for','if (source)\n            pr_unshift_pokemon_anim_for')
+change('always-remove-animation','battler_tags','if (source && active_on_field(bt, source))\n            pr_unshift_pokemon_anim_for','if (source)\n            pr_unshift_pokemon_anim_for')
 change('order-parent-hp-gate','move_effects','    case PR_AC_OrderUpStatBoostAttr: {\n        /* This override','    case PR_AC_OrderUpStatBoostAttr: {\n        if (!effect_can_apply(ef, user, target)) return;\n        /* This override')
 change('live-order-form','move_effects','        const char *key = pr_commanded_form_key(tag);','        const pr_pokemon *src = pr_pokemon_by_id(bt, tag->source_id);\n        const char *key = src ? pr_pokemon_base_form(src)->form_key : "curly";')
 change('wrong-droopy-stat','move_effects','!strcmp(key, "droopy") ? STAT_DEF','!strcmp(key, "droopy") ? STAT_SPDEF')

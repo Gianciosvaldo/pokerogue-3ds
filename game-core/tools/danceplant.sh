@@ -87,13 +87,13 @@ plant show-pick-unfiltered 's|    if (option != 0 \&\& !gc_dance_pick_ok(run, op
 plant show-move-unchecked 's|    if (option == 2 \&\& !gc_dance_move_ok(run, b, c)) return false;|    if (0 \&\& !gc_dance_move_ok(run, b, c)) return false;|'
 plant stub-silent 's|        gc_stub(run, GC_STUB_UNPORTED_ENEMY);|        (void)run;|'
 plant pick-lesson-fainted 's|    if (option == 1) return true;   /\* selectPokemonForOption|    if (option == 1) return run->party[idx].b.hp > 0; /* selectPokemonForOption|'
-plant pick-show-option 's|    return option == 2 \&\& gc_dance_has_move(\&run->party\[idx\]);|    return option == 1 \&\& gc_dance_has_move(\&run->party[idx]);|'
+plant pick-show-option 's|    return option == 2 \&\& gc_dance_has_move(run, \&run->party\[idx\]);|    return option == 1 \&\& gc_dance_has_move(run, \&run->party[idx]);|'
 plant pick-range 's|    if (idx < 0 \|\| idx >= run->n_party) return false;|    if (idx < 0) return false;|'
 plant move-not-a-dance 's|    return run->party\[member\].b.moves\[slot\] > 0 \&\& gc_is_dance_move(run->party\[member\].b.moves\[slot\]);|    return run->party[member].b.moves[slot] > 0;|'
 plant dance-aqua-step 's|    return move == MOVE_ID_AQUA_STEP|    return move == MOVE_ID_TACKLE|'
 plant dance-fiery-list 's|move == MOVE_ID_FIERY_DANCE \|\| move == MOVE_ID_LUNAR_DANCE|move == MOVE_ID_TACKLE \|\| move == MOVE_ID_LUNAR_DANCE|'
 plant dance-quiver 's|move == MOVE_ID_QUIVER_DANCE|move == MOVE_ID_TACKLE|'
-plant has-move-allowed 's|    if (!gc_mon_allowed(m)) return false;|    (void)m;|'
+plant has-move-allowed 's|    if (!gc_mon_allowed(run, m)) return false;|    (void)m;|'
 plant first-move-token 's|gc_is_dance_move(m->b.moves\[k\])) return m->b.moves\[k\];|gc_is_dance_move(m->b.moves[k])) return MOVE_ID_REVELATION_DANCE;|'
 POST='/p->me_post_summon == PR_ME_POST_DANCE/,/pr_unshift_stat_stage_change/'
 plant post-count "$POST"'s|stats, 4, 1, p|stats, 3, 1, p|' battle-core/src/switching.c
@@ -110,7 +110,7 @@ plant ui-token-move "$SCREEN"'s|gc_dance_first_move(\&run->party\[p\])|MOVE_ID_R
 plant ui-token-name "$SCREEN"'s|"option3PrimaryName"|"option2PrimaryName"|' gc_mystery.c
 plant ui-option-ok '/else if (type == GC_ME_DANCING_LESSONS) {/{n;n;s|>= 0;|>= 1;|}' gc_mystery.c
 plant primary-option '/if (type == GC_ME_DANCING_LESSONS) {/{n;n;s|option != 2|option != 1|}' gc_mystery.c
-plant primary-order 's|if (gc_dance_has_move(\&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|if (gc_dance_has_move(\&run->party[k])) return k;|' gc_mystery.c
+plant primary-order 's|if (gc_dance_has_move(run, \&run->party\[run->party_order\[k\]\])) return run->party_order\[k\];|if (gc_dance_has_move(run, \&run->party[k])) return k;|' gc_mystery.c
 plant ui-move-list 's|return option == 2 \&\& gc_dance_move_ok(run, member, slot);|return option == 1 \&\& gc_dance_move_ok(run, member, slot);|' gc_mystery.c
 plant ui-pick-ok 's|    if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);|    if (type == GC_ME_DANCING_LESSONS) return true;|' gc_mystery.c
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }

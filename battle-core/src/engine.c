@@ -233,7 +233,7 @@ static int side_field(pr_battle *bt, int side, pr_pokemon **out)
     int n = 0;
     for (int i = 0; i < 4; i++) {
         pr_pokemon *p = bt->field[i];
-        if (!p || p->hp <= 0) continue;          /* isActive(): not fainted */
+        if (!pr_allowed_in_battle(bt, p)) continue;   /* isActive(): not fainted, allowed by the challenges */
         if (side == ARENA_TAG_SIDE_PLAYER && i >= 2) continue;
         if (side == ARENA_TAG_SIDE_ENEMY && i < 2) continue;
         out[n++] = p;
@@ -688,7 +688,7 @@ int pr_targets_new(pr_engine *e, const int8_t *v, int n)
  * shared array, so the command and history entries sharing it follow) */
 void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally)
 {
-    if (!bt->double_battle || !ally || !(ally->hp > 0 && ally->on_field && !ally->switch_out_status)) return;
+    if (!bt->double_battle || !ally || !(pr_allowed_in_battle(bt, ally) && ally->on_field && !ally->switch_out_status)) return;
     int rb = pr_battler_index(bt, removed), ab = pr_battler_index(bt, ally);
     for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
         const pr_phase *mp = &e->pool[e->dyn[PH_MOVE][i]];
@@ -819,6 +819,61 @@ void pr_run_start_of_battle_effects(pr_battle *bt, pr_engine *e)
     run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }
 
+bool pr_run_turn_init_challenge(pr_battle *bt, pr_engine *e)
+{
+    /* getPlayerField(): the first party slots (two in a double), each `isOnField() && !isAllowedInBattle()` */
+    const int n_field = bt->n_party[0] < (bt->double_battle ? 2 : 1) ? bt->n_party[0] : (bt->double_battle ? 2 : 1);
+    bool any = false;
+    for (int k = 0; k < n_field; k++) {
+        const pr_pokemon *p = bt->party[0][k];
+        any |= p && p->on_field && !p->switch_out_status && !pr_allowed_in_battle(bt, p);
+    }
+    if (!any) return false;
+    engine_reset(bt, e);
+    for (int k = 0; k < n_field; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!p || !p->on_field || p->switch_out_status || pr_allowed_in_battle(bt, p)) continue;
+        pr_queue_msg(bt, e, pr_msg1("challenges:illegalEvolution", pr_arg_pokemon_plain_name(bt, "pokemon", p)));
+        /* getPokemonAllowedInBattle() */
+        const pr_pokemon *first = NULL;
+        int n_allowed = 0;
+        for (int j = 0; j < bt->n_party[0]; j++)
+            if (pr_allowed_in_battle(bt, bt->party[0][j])) { if (!n_allowed) first = bt->party[0][j]; n_allowed++; }
+        if (n_allowed == 0) {
+            /* clearPhaseQueue(), then unshiftNew("GameOverPhase") */
+            engine_reset(bt, e);
+            pr_phase_push(bt, e, pr_phase_new(e, PH_GAME_OVER, -1));
+            break;
+        }
+        const int battlers = bt->double_battle ? 2 : 1;
+        const bool first_active = first->on_field && !first->switch_out_status;   /* allowed already: isActive(true) */
+        const int field = pr_battler_index(bt, p);
+        if (n_allowed >= battlers || (bt->double_battle && !first_active)) {
+            /* switchOut(): leaveField(true), then the party screen (FAINT_SWITCH) for its field index */
+            pr_leave_field(bt, e, p, true);
+            const int sw = pr_phase_new(e, PH_SWITCH, -1);
+            if (sw < 0) { e->overflow = true; break; }
+            pr_phase *s = &e->pool[sw];
+            s->sw_type = SWITCH_TYPE_SWITCH;
+            s->sw_field_index = (int8_t)(field < 0 ? k : field % 2);
+            s->sw_modal = true;
+            s->sw_do_return = false;
+            s->sw_player = true;
+            s->sw_illegal = true;
+            pr_phase_push(bt, e, sw);
+        } else {
+            pr_leave_field(bt, e, p, true);   /* leaveField(): no one to bring in */
+        }
+        if (n_allowed == 1 && bt->double_battle) {
+            const int t = pr_phase_new(e, PH_TOGGLE_DOUBLE_POSITION, -1);
+            if (t >= 0) e->pool[t].position_double = true;
+            pr_phase_unshift(bt, e, t);
+        }
+    }
+    run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
+    return true;
+}
+
 static void engine_reset(pr_battle *bt, pr_engine *e)
 {
     memset(e, 0, sizeof *e);
@@ -881,7 +936,7 @@ void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory)
     engine_reset(bt, e);
     for (int k = 0; k < bt->n_party[0]; k++) {
         pr_pokemon *p = bt->party[0][k];
-        if (!p || p->hp <= 0) continue;
+        if (!pr_allowed_in_battle(bt, p)) continue;   /* getPokemonAllowedInBattle() */
         pr_ab_params pp = {.pokemon = p, .move = -1, .victory = victory};
         pr_apply_ab_attrs(bt, PR_AC_PostBattleAbAttr, &pp);
     }
@@ -901,7 +956,7 @@ void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded)
         if(bt->party[1][k]->shiny)pr_unshift_new(bt,e,PH_SHINY_SPARKLE,2+k);
     if(!loaded){
         const pr_pokemon *allowed[PR_MAX_PARTY];int n_allowed=0;
-        for(int k=0;k<bt->n_party[0];k++)if(bt->party[0][k]->hp>0)allowed[n_allowed++]=bt->party[0][k];
+        for(int k=0;k<bt->n_party[0];k++)if(pr_allowed_in_battle(bt,bt->party[0][k]))allowed[n_allowed++]=bt->party[0][k];
         if(!n_allowed){pr_note_unported(bt,PR_FEAT_PARTY);return;}
         if(!allowed[0]->on_field||allowed[0]->switch_out_status){
             int s=pr_phase_new(e,PH_SUMMON,0);

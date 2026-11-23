@@ -39,7 +39,7 @@ plant() {
   [ "$st" = 1 ] || [ "$ht" != 0 ] || fails=$((fails + 1))
 }
 plant segments-moderate 's|option == 0 ? 50 : option == 1 ? 40 : 30|option == 0 ? 50 : option == 1 ? 41 : 30|'
-plant pick-fainted 's|return idx >= 0 \&\& idx < run->n_party \&\& gc_mon_allowed(\&run->party\[idx\]);|return idx >= 0 \&\& idx < run->n_party;|'
+plant pick-fainted 's|return idx >= 0 \&\& idx < run->n_party \&\& gc_mon_allowed(run, \&run->party\[idx\]);|return idx >= 0 \&\& idx < run->n_party;|'
 plant nature-mask 's|(1u << (nature + 1))|(1u << nature)|'
 plant ability-dedupe 's|if (!is_new\[j\] \&\& ability_of_slot|if (ability_of_slot|'
 plant ability-count 's|f->ability_hidden == 0 ? 2 : 3|f->ability_hidden == 0 ? 3 : 3|'

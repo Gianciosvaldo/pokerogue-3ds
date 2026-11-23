@@ -469,7 +469,7 @@ void pr_illusion_on_summon(pr_battle *bt, pr_pokemon *p)
         const pr_pokemon *last = NULL;
         for (int i = 0; i < bt->n_party[side]; i++) {
             const pr_pokemon *q = bt->party[side][i];
-            if (q && q != p && q->hp > 0) last = q;
+            if (q && q != p && pr_allowed_in_battle(bt, q)) last = q;
         }
         if (!last) return;
         if ((last->species == SPECIES_ID_OGERPON || last->species == SPECIES_ID_TERAPAGOS) && (last->terastallized || p->terastallized))
@@ -667,7 +667,7 @@ double pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, con
     bool field_applied = false;
     for (int i = 0; i < 4 && !field_applied; i++) {
         const pr_pokemon *f = bt->field[i];
-        if (!f || f->hp <= 0) continue;
+        if (!pr_allowed_in_battle(bt, f)) continue;
         pr_ab_params fp = {.pokemon = f, .opponent = p, .move = -1, .simulated = sp->simulated, .stat = stat,
                            .value = &v, .flag = &field_applied};
         pr_apply_ab_attrs(bt, PR_AC_FieldMultiplyStatAbAttr, &fp);

@@ -16,6 +16,9 @@
  * the party heal and PREVENT_REVIVE, POKEMON_MOVE through battle-core's three readers (the challenge, PokemonMove.isUsable for the player's
  * member, Copycat's isMoveAllowed), and POKEMON_ADD_TO_PARTY (gc_challenge_add_to_party_ok on the wave the enemy was met; in Teleporting
  * Hijinks after its teleport, the flag gc_teleport.c sets, which mystery_teleport_test checks per option).
+ * And Single Generation and Single Type: the starter rules above under their values (the soft check's item form changes, the genders
+ * getStarterData keeps), and POKEMON_IN_BATTLE (isAllowedInChallenge) through battle-core's pr_challenge_allowed on member 0 made each species,
+ * form and fusion the trace names.
  * Usage: challenge_starters_diff_test <trace> */
 #include "../src/internal.h"
 #include <math.h>
@@ -29,6 +32,10 @@ static long checks, failures, cases, queries, members, fresh_cases, views_change
 static long chart_values, effectiveness_values, passive_values, enemy_passives;
 static int inverse_v, flip_v, passives_v;   /* the case's Inverse Battle, Flip Stat and Passives values */
 static int catch_v, support_v, hardcore_v;  /* Limited Catch, Limited Support, Hardcore */
+static int gen_v, type_v;                   /* Single Generation, Single Type */
+static char exp_x[16][80];
+static int got_x;
+static long allowed_values, mono_cases, gender_views, gender_dropped;
 static char exp_g[2][800], exp_h[40], exp_k[3][60], exp_a[3][60];
 static int got_g, got_k, got_a;
 static long shop_lists, shop_items, rule_values, move_values, add_values;
@@ -48,6 +55,8 @@ static void set_battle(int wave)
     bt.challenge_flags = run.run.challenge_flags;
     bt.challenge_flags_known = true;
     bt.challenge_passives = run.run.challenge_passives;
+    bt.challenge_generation = run.run.challenge_generation;
+    bt.challenge_type = run.run.challenge_type;
 }
 
 #define FAIL(...) do { if (failures < 40) { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } failures++; } while (0)
@@ -99,8 +108,17 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
     set.value[CHALLENGES_LIMITED_CATCH] = (uint8_t)catch_v;
     set.value[CHALLENGES_LIMITED_SUPPORT] = (uint8_t)support_v;
     set.value[CHALLENGES_HARDCORE] = (uint8_t)hardcore_v;
+    set.value[CHALLENGES_SINGLE_GENERATION] = (uint8_t)gen_v;
+    set.value[CHALLENGES_SINGLE_TYPE] = (uint8_t)type_v;
     const char *why = NULL;
-    CHECK(gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges refused Fresh Start %d, Inverse %d, Flip %d, Passives %d: %s", idx, fresh, inverse_v, flip_v, passives_v, why ? why : "");
+    if (gen_v) {
+        /* Single Generation is not played yet (its fixed battles): a run refuses it, so its rules are read from the values set directly */
+        CHECK(!gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges took Single Generation %d", idx, gen_v);
+        run.challenges = set;
+        gc_challenge_sync(&run);
+    } else
+        CHECK(gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges refused Fresh Start %d, Inverse %d, Flip %d, Passives %d, Single Type %d: %s", idx, fresh, inverse_v,
+              flip_v, passives_v, type_v, why ? why : "");
     run.run.rng = before;
     gc_starters_build_party(&run, team, n);
     CHECK(run.n_party == n, "case %d: %d members, expected %d", idx, run.n_party, n);
@@ -196,7 +214,8 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
         }
     }
     /* the rewards: the weights with both unlocked, then a Mint and a vitamin on the first member (its storage index) */
-    if (exp_r[0] && run.n_party > 0) {
+    /* (a run with Single Generation applies no reward: game-core refuses rewards while an unplayed challenge is on) */
+    if (exp_r[0] && run.n_party > 0 && !gen_v) {
         sys.unlocks.eviolite = sys.unlocks.mini_black_hole = true;
         pr_reward_thresholds th;
         pr_reward_regenerate_thresholds(gc_reward_ctx(&run), 0, &th);
@@ -285,6 +304,25 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
         CHECK((long)got_allowed == allowed, "case %d (Hardcore %d): Copycat may call %ld: %d, upstream %ld", idx, hardcore_v, move, got_allowed, allowed);
         move_values += 3;
     }
+    /* POKEMON_IN_BATTLE: member 0 made each species, form and fusion of the X lines */
+    for (int x = 0; x < got_x && run.n_party > 0; x++) {
+        char line[80];
+        memcpy(line, exp_x[x], sizeof line);
+        char *xs = NULL;
+        strtok_r(line, " \n", &xs);   /* X */
+        const long species = inum(&xs), form = inum(&xs), fusion = inum(&xs), fusion_form = inum(&xs), want = inum(&xs);
+        pr_pokemon p = run.party[run.party_order[0]].b;
+        p.species = (uint16_t)species;
+        p.form = (uint8_t)form;
+        p.fusion_species = fusion < 0 ? 0 : (uint16_t)fusion;
+        p.fusion_form = fusion < 0 ? 0 : (uint8_t)fusion_form;
+        set_battle(run.wave);
+        const bool got = pr_challenge_allowed(&bt, &p);
+        CHECK((long)got == want, "case %d (Single Generation %d, Single Type %d): %ld form %ld fused with %ld form %ld allowed %d, upstream %ld", idx, gen_v, type_v, species, form,
+              fusion, fusion_form, got, want);
+        allowed_values++;
+    }
+    if (gen_v || type_v) mono_cases++;
     for (int a = 0; a < got_a; a++) {
         char line[60];
         memcpy(line, exp_a[a], sizeof line);
@@ -336,8 +374,8 @@ int main(int argc, char **argv)
             exp_f[0] = 0;
             exp_r[0] = exp_n[0] = exp_u[0] = 0;
             exp_h[0] = 0;
-            got_g = got_k = got_a = 0;
-            catch_v = support_v = hardcore_v = 0;
+            got_g = got_k = got_a = got_x = 0;
+            catch_v = support_v = hardcore_v = gen_v = type_v = 0;
             idx = (int)inum(&save);
             fresh = (int)inum(&save);
             const long budget = inum(&save);
@@ -393,6 +431,17 @@ int main(int argc, char **argv)
                 CHECK(want == v.ivs[i], "case %d (Fresh Start %d): %d IV %d is %d, upstream %ld", idx, fresh, sp, i, v.ivs[i], want);
             }
             if (fresh && (v.value_reduction != sys.starters[sp].value_reduction || v.egg_moves != sys.starters[sp].egg_moves)) views_changed++;
+        } else if (!strcmp(kind, "J")) {
+            /* both genders caught: the view of Ralts, Snorunt or Burmy under the case's values (STARTER_SELECT_MODIFY's genders) */
+            const int sp = (int)inum(&save);
+            const uint64_t had = hex(&save), want = hex(&save);
+            sys.dex[sp].caught_attr = had;
+            gc_starter_view v;
+            gc_challenge_starter_view(&sys, &set, sp, &v);
+            CHECK(want == v.caught_attr, "case %d (Single Generation %d, Single Type %d): %d's caught attributes %llx, upstream %llx", idx, gen_v, type_v, sp,
+                  (unsigned long long)v.caught_attr, (unsigned long long)want);
+            gender_views++;
+            if (want != had) gender_dropped++;
         } else if (!strcmp(kind, "B")) {
             n = (int)inum(&save);
             before = read_rng(&save);
@@ -436,6 +485,14 @@ int main(int argc, char **argv)
             set.value[CHALLENGES_LIMITED_CATCH] = (uint8_t)catch_v;
             set.value[CHALLENGES_LIMITED_SUPPORT] = (uint8_t)support_v;
             set.value[CHALLENGES_HARDCORE] = (uint8_t)hardcore_v;
+        } else if (!strcmp(kind, "I")) {
+            gen_v = (int)inum(&save);
+            type_v = (int)inum(&save);
+            set.value[CHALLENGES_SINGLE_GENERATION] = (uint8_t)gen_v;
+            set.value[CHALLENGES_SINGLE_TYPE] = (uint8_t)type_v;
+        } else if (!strcmp(kind, "X")) {
+            if (got_x < 16) snprintf(exp_x[got_x++], sizeof exp_x[0], "X %s", save);
+            else FAIL("case %d: more than sixteen X lines", idx);
         } else if (!strcmp(kind, "G")) {
             if (got_g < 2) snprintf(exp_g[got_g++], sizeof exp_g[0], "G %s", save);
             else FAIL("case %d: more than two G lines", idx);
@@ -471,9 +528,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "incomplete trace: %ld of %ld cases, end marker %d\n", cases, n_cases, saw_end);
         return 2;
     }
-    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld rewardWeights=%ld rewardApplies=%ld shopLists=%ld shopItems=%ld ruleValues=%ld moveValues=%ld addValues=%ld checks=%ld\n",
+    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld rewardWeights=%ld rewardApplies=%ld shopLists=%ld shopItems=%ld ruleValues=%ld moveValues=%ld addValues=%ld monoCases=%ld allowedValues=%ld genderViews=%ld genderDropped=%ld checks=%ld\n",
            cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, reward_weights, reward_applies,
-           shop_lists, shop_items, rule_values, move_values, add_values, checks);
+           shop_lists, shop_items, rule_values, move_values, add_values, mono_cases, allowed_values, gender_views, gender_dropped, checks);
+    if (!gender_dropped) { fprintf(stderr, "no gender view was dropped: the trace does not cover STARTER_SELECT_MODIFY's genders\n"); failures++; }
     printf("TOTAL mismatches=%ld\n", failures);
     return failures ? 1 : 0;
 }

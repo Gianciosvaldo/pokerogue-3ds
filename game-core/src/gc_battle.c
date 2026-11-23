@@ -274,9 +274,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->trainer_partner = gc_trainer_is_double(run);
     bt->wave_index = run->wave;
     bt->game_mode = (int8_t)run->run.mode;
-    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
-    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
-    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
+    gc_challenge_to_battle(run, bt);
     bt->battle_type = (uint8_t)run->battle_type;
     bt->me_no_flee = gc_int(run)->me_no_flee;
     if (!restoring) {
@@ -311,7 +309,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
             pr_reset_turn_data(&run->party[i].b);
         }
         int first = -1;
-        for (int k = 0; k < run->n_party; k++) if (gc_mon_allowed(&run->party[run->party_order[k]])) { first = k; break; }
+        for (int k = 0; k < run->n_party; k++) if (gc_mon_allowed(run, &run->party[run->party_order[k]])) { first = k; break; }
         if (first > 0) {
             int8_t t = run->party_order[0];
             run->party_order[0] = run->party_order[first];
@@ -371,7 +369,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     }
     gc_sync_party_order(run);
     run->run.rng = bt->rng;
-    return !keep_lead && run->n_party && gc_mon_allowed(&run->party[run->party_order[0]]);
+    return !keep_lead && run->n_party && gc_mon_allowed(run, &run->party[run->party_order[0]]);
 }
 
 bool gc_battle_setup_field(gc_run *run, bool reset_arena)
@@ -412,7 +410,7 @@ void gc_battle_turn_init(gc_run *run)
     }
     for (int s = 0; s < 4; s++) {
         pr_pokemon *p = bt->field[s];
-        if (!p || !p->on_field || p->hp <= 0) continue;
+        if (!p || !p->on_field || !pr_allowed_in_battle(bt, p)) continue;   /* isActive() */
         if (s < 2) {
             bool have = false;
             for (int i = 0; i < bt->n_participants; i++) have |= bt->participants[i] == p->id;
@@ -452,7 +450,7 @@ static int allowed_bench(const gc_run *run)
 {
     int n = 0;
     for (int i = 0; i < run->n_party; i++)
-        if (gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field) n++;
+        if (gc_mon_allowed(run, &run->party[i]) && !run->party[i].b.on_field) n++;
     return n;
 }
 
@@ -582,8 +580,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
     }
     if (c->kind == GC_CH_POKEMON) {
         int k = c->a;
-        if (k < 0 || k >= run->n_party || run->party[k].b.on_field || !gc_mon_allowed(&run->party[k])) {
-            *why = "partyUiHandler:noEnergy";
+        if (k < 0 || k >= run->n_party || run->party[k].b.on_field || !gc_mon_allowed(run, &run->party[k])) {
+            /* the party screen's filter, then FilterChallengeLegal for SEND_OUT: partyUiHandler:cantBeUsed */
+            const bool barred = k >= 0 && k < run->n_party && !run->party[k].b.on_field && run->party[k].b.hp > 0;
+            *why = barred ? "partyUiHandler:cantBeUsed" : "partyUiHandler:noEnergy";
             return false;
         }
         pr_msg refusal={0};
@@ -902,6 +902,17 @@ int gc_battle_start_effects(gc_run *run)
     return engine_returned(run);
 }
 
+/* TurnInitPhase.start's challenge step (pr_run_turn_init_challenge): -1 when every player Pokemon on the field is allowed, else the stop */
+int gc_battle_turn_init_challenge(gc_run *run)
+{
+    if (run->run.mode != GAME_MODES_CHALLENGE) return -1;
+    gc_wallet_to_battle(run);
+    balls_to_battle(run);
+    if (!pr_run_turn_init_challenge(&run->bt, &run->eng)) return -1;
+    gc_int(run)->at_save_point = false;
+    return engine_returned(run);
+}
+
 int gc_battle_continue(gc_run *run)
 {
     gc_wallet_to_battle(run);
@@ -937,7 +948,7 @@ void gc_battle_switch_screen(gc_run *run)
     const pr_pokemon *leaving = s->slot >= 0 && s->slot < 2 ? run->bt.field[s->slot] : NULL;
     bool any = false;
     for (int i = 0; i < run->n_party; i++) {
-        s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field && &run->party[i].b != leaving;
+        s->pick_ok[i] = gc_mon_allowed(run, &run->party[i]) && !run->party[i].b.on_field && &run->party[i].b != leaving;
         any |= s->pick_ok[i];
     }
     /* a modal SwitchPhase (after a faint) must be answered; a move's switch-out can be left empty */

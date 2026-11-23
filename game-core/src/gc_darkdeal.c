@@ -84,8 +84,8 @@ int gc_species_by_starter_cost(pr_rng *r, int min, int max, const uint16_t *excl
     return list[index];
 }
 
-/* getRandomPlayerPokemon(true, false, true) on `r`: the party index (in party order) of the Pokemon it returns. Every Pokemon is
- * allowed in a challenge here (this port has no challenges) */
+/* getRandomPlayerPokemon(true, false, true) on `r`: the party index (in party order) of the Pokemon it returns. isAllowed false: the
+ * challenges are not asked */
 static int random_player_pokemon(gc_run *run, pr_rng *r)
 {
     int able[6], n_able = 0, fainted[6], n_fainted = 0;

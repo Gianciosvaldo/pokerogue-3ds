@@ -68,7 +68,7 @@ static double anticipation(ARGS)
     UNUSED;
     for (int k = 0; k < 4; k++) {
         const pr_pokemon *o = bt->field[k];
-        if (!o || o->is_player == a->is_player || !(o->hp > 0 && o->on_field && !o->switch_out_status)) continue;
+        if (!o || o->is_player == a->is_player || !(pr_allowed_in_battle(bt, o) && o->on_field && !o->switch_out_status)) continue;
         for (int j = 0; j < 4; j++) {
             int mv = PR_MOVES(o)[j];
             if (!mv || pr_moves[mv].category == MOVE_CATEGORY_STATUS) continue;     /* move.is("AttackMove") */
@@ -317,7 +317,7 @@ static bool field_has_ability(pr_battle *bt, int ability)
 {
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
-        if (p && p->hp > 0 && pr_has_ability_active(bt, p, ability)) return true;
+        if (pr_allowed_in_battle(bt, p) && pr_has_ability_active(bt, p, ability)) return true;
     }
     return false;
 }

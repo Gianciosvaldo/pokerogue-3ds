@@ -219,11 +219,14 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
 /* ---- callbacks ---- */
 
 static const char* filter_non_fainted(void* ctx, int slot) {
-  /* PartyUiHandler.FilterNonFainted */
+  /* PartyUiHandler.FilterNonFainted, then (sending a Pokemon out) FilterChallengeLegal: applyChallenges(POKEMON_IN_BATTLE) */
   (void)ctx;
   static char buf[160];
-  if (S.party[slot].hp > 0) return NULL;
-  return i18n_t(buf, sizeof buf, "partyUiHandler:noEnergy", "pokemonName", S.party[slot].name, NULL);
+  if (S.party[slot].hp <= 0) return i18n_t(buf, sizeof buf, "partyUiHandler:noEnergy", "pokemonName", S.party[slot].name, NULL);
+  if ((S.mode == PARTY_SWITCH || S.mode == PARTY_FAINT_SWITCH || S.mode == PARTY_POST_BATTLE_SWITCH) && S.bt && slot < S.bt->n_party[0]
+      && !pr_challenge_allowed(S.bt, S.bt->party[0][slot]))
+    return i18n_t(buf, sizeof buf, "partyUiHandler:cantBeUsed", "pokemonName", S.party[slot].name, NULL);
+  return NULL;
 }
 
 static const char* filter_fainted(void* ctx, int slot) {

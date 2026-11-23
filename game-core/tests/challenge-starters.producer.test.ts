@@ -32,6 +32,11 @@
  *                                                      CallMoveAttrWithBanlist.isMoveAllowed(move)
  *   A metWave me option valid                          applyChallenges(POKEMON_ADD_TO_PARTY, enemy, true) for an enemy met on metWave, in a battle with no
  *                                                      encounter (me -1), Teleporting Hijinks (0) or Fight or Flight (1), its option 0..2 selected
+ *   I singleGeneration singleType                      the case's Single Generation and Single Type values (after L; they change Q and W too)
+ *   J species caughtAttr viewCaughtAttr                getStarterData(species).dexEntry.caughtAttr of Ralts, Snorunt and Burmy with both genders caught
+ *                                                      (cases without Fresh Start)
+ *   X species form fusionSpecies fusionForm allowed    isAllowedInChallenge() of member 0 made that species and form (fusion -1: none), each
+ *                                                      member as it is first (its own species and form)
  * GC_CHALLENGE_N=400 GC_CHALLENGE_SEED=777 GC_CHALLENGE_OUT=/abs/trace.txt, Node 22. */
 import { BattleScene } from "#app/battle-scene";
 import { getGameMode } from "#app/game-mode";
@@ -56,6 +61,7 @@ import { EnemyPokemon } from "#field/pokemon";
 import { TrainerSlot } from "#enums/trainer-slot";
 import { GameModes } from "#enums/game-modes";
 import { SpeciesId } from "#enums/species-id";
+import { PokemonType } from "#enums/pokemon-type";
 import { Pokemon } from "#field/pokemon";
 import { SelectStarterPhase } from "#phases/select-starter-phase";
 import { GameManager } from "#test/framework/game-manager";
@@ -94,8 +100,14 @@ it("native Challenge Mode starter rules", async () => {
 
   const lines: string[] = [`V 1 ${SEED} ${N}`];
   let seenChart = 0;
-  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshPools: 0, openPools: 0, flipRewards: 0, hardShops: 0, closedShops: 0, noHeals: 0, refusedMoves: 0, refusedAdds: 0, teleportAdds: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
+  const cover = { genderDropped: 0, monoAllowed: 0, monoBarred: 0, monoFused: 0, monoSoftForm: 0, monoGender: 0, inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshPools: 0, openPools: 0, flipRewards: 0, hardShops: 0, closedShops: 0, noHeals: 0, refusedMoves: 0, refusedAdds: 0, teleportAdds: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
   const FORM_SPECIES = [SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.PICHU, SpeciesId.ROTOM, SpeciesId.MELOETTA];
+  // species whose forms change by an item (mega stones, plates, memories, masks...) or whose types depend on the form, and the ones whose
+  // gender Single Generation / Single Type keep
+  const FORM_CHANGE_SPECIES = [SpeciesId.CHARIZARD, SpeciesId.AMPHAROS, SpeciesId.GYARADOS, SpeciesId.PINSIR, SpeciesId.LOPUNNY, SpeciesId.ALTARIA,
+    SpeciesId.SCEPTILE, SpeciesId.AUDINO, SpeciesId.ARCEUS, SpeciesId.SILVALLY, SpeciesId.OGERPON, SpeciesId.ZACIAN, SpeciesId.GROUDON,
+    SpeciesId.NECROZMA, SpeciesId.CASTFORM, SpeciesId.MELOETTA, SpeciesId.ROTOM, SpeciesId.ORICORIO, SpeciesId.RALTS, SpeciesId.SNORUNT,
+    SpeciesId.BURMY, SpeciesId.WORMADAM, SpeciesId.SHAYMIN, SpeciesId.GIRATINA, SpeciesId.KYUREM, SpeciesId.CALYREX];
   const hex = (b: bigint) => b.toString(16);
 
   for (let i = 0; i < N; i++) {
@@ -124,6 +136,19 @@ it("native Challenge Mode starter rules", async () => {
     scene.gameMode.setChallengeValue(Challenges.LIMITED_SUPPORT, support);
     scene.gameMode.setChallengeValue(Challenges.HARDCORE, hardcore);
     lines.push(`L ${limitedCatch} ${support} ${hardcore}`);
+    // Single Generation (a quarter of the cases) and Single Type (most): the starter rules (Q, W) and isAllowedInChallenge (X) read them
+    let singleGen = rnd(4) === 0 ? 1 + rnd(9) : 0;
+    let singleType = rnd(4) === 0 ? 0 : 1 + rnd(18);
+    // the cases without Fresh Start (whose STARTER_SELECT_MODIFY would answer first) cycle through the values that drop a gender: Single
+    // Generation 4 (Ralts, Snorunt), then Single Type Fighting (Ralts), Ghost (Snorunt), Flying and Grass (Burmy), then a random one
+    if (!fresh) {
+      const j = Math.floor(i / 7) % 6;
+      if (j === 0) { singleGen = 4; singleType = 0; }
+      else if (j <= 4) { singleGen = 0; singleType = 1 + [PokemonType.FIGHTING, PokemonType.GHOST, PokemonType.FLYING, PokemonType.GRASS][j - 1]; }
+    }
+    scene.gameMode.setChallengeValue(Challenges.SINGLE_GENERATION, singleGen);
+    scene.gameMode.setChallengeValue(Challenges.SINGLE_TYPE, singleType);
+    lines.push(`I ${singleGen} ${singleType}`);
     // getTypeDamageMultiplier over the whole chart (UNKNOWN, the 18 types and Stellar), once for each Inverse Battle value
     if (!(seenChart >> inverse & 1)) {
       seenChart |= 1 << inverse;
@@ -133,8 +158,11 @@ it("native Challenge Mode starter rules", async () => {
     }
 
     // profile queries: a random profile for a handful of starters
-    for (let q = 0; q < 12; q++) {
-      const id = rnd(3) === 0 ? defaultStarterSpecies[rnd(defaultStarterSpecies.length)] : ids[rnd(ids.length)];   // a third from the species Fresh Start 1 allows
+    for (let q = 0; q < 16; q++) {
+      // a third from the species Fresh Start 1 allows; some with item form changes (Single Type's soft check reads them) or the genders
+      // Single Generation and Single Type keep
+      const pick = rnd(6);
+      const id = pick === 0 ? speciesDataRegistry.getSpecies(FORM_CHANGE_SPECIES[rnd(FORM_CHANGE_SPECIES.length)]).getRootSpeciesId() : pick <= 2 ? defaultStarterSpecies[rnd(defaultStarterSpecies.length)] : ids[rnd(ids.length)];
       const species = speciesDataRegistry.getSpecies(id);
       const dex = scene.gameData.dexData[id];
       const sd = scene.gameData.starterData[id];
@@ -167,6 +195,7 @@ it("native Challenge Mode starter rules", async () => {
       if (hard) cover.validHard++;
       else cover.invalidHard++;
       if (!hard && soft) cover.softOnly++;
+      if (singleType && !hard && soft && pick === 0) cover.monoSoftForm++;
       lines.push(`Q ${id} ${form} ${+props.shiny} ${props.variant} ${+props.female} ${cost} ${+hard} ${+soft}`);
       const view = getStarterData(id);
       lines.push(
@@ -174,6 +203,18 @@ it("native Challenge Mode starter rules", async () => {
       );
       if (fresh && FORM_SPECIES.includes(id) && (view.dexEntry.caughtAttr & ~255n) === 0n && (caught & ~255n) !== 0n) cover.formReset++;
       if (fresh && sd.eggMoves && view.starterDataEntry.eggMoves === 0) cover.eggRemoved++;
+      if ((singleGen || singleType) && (view.dexEntry.caughtAttr & 12n) !== (caught & 12n)) cover.monoGender++;
+    }
+
+    // the species whose gender Single Generation and Single Type keep, both genders caught, in every case without Fresh Start
+    if (!fresh) {
+      for (const id of [SpeciesId.RALTS, SpeciesId.SNORUNT, SpeciesId.BURMY]) {
+        const dex = scene.gameData.dexData[id];
+        dex.caughtAttr = 1n | 4n | 8n | 16n | 128n | (id === SpeciesId.BURMY ? 256n | 512n : 0n);
+        const view = getStarterData(id);
+        if ((view.dexEntry.caughtAttr & 12n) !== 12n) cover.genderDropped++;
+        lines.push(`J ${id} ${hex(dex.caughtAttr)} ${hex(view.dexEntry.caughtAttr)}`);
+      }
     }
 
     // a party through SelectStarterPhase.initBattle
@@ -183,7 +224,8 @@ it("native Challenge Mode starter rules", async () => {
     const eggByRoot = new Map<number, number>();   // the species of one line share their root's egg moves, set once for the party
     while (starters.length < n) {
       // lean toward the species Fresh Start has special rules for
-      const id = rnd(4) === 0 ? FORM_SPECIES[rnd(FORM_SPECIES.length)] : ids[rnd(ids.length)];
+      // and, in one case in ten, Calyrex first: its level moves are not in level order (Fresh Start's moveset sorts them)
+      const id = starters.length === 0 && i % 10 === 3 ? SpeciesId.CALYREX : rnd(4) === 0 ? FORM_SPECIES[rnd(FORM_SPECIES.length)] : ids[rnd(ids.length)];
       if (used.has(id)) continue;
       used.add(id);
       const species = speciesDataRegistry.getSpecies(id);
@@ -249,6 +291,7 @@ it("native Challenge Mode starter rules", async () => {
       // getAttackTypeEffectiveness of the member against each of the 18 types, and hasPassive() (the battle rules read the challenges)
       lines.push(`E ${k} ${[...Array(18).keys()].map(t => p.getAttackTypeEffectiveness(t, { simulated: true })).join(" ")}`);
       lines.push(`P ${k} ${+p.hasPassive()}`);
+      lines.push(`X ${p.species.speciesId} ${p.formIndex} -1 0 ${+p.isAllowedInChallenge()}`);
       if (fresh) {
         if (s.shiny) cover.shinyFresh++;
         if (p.ivs.join() !== given[k].ivs.join() || p.abilityIndex !== given[k].abilityIndex || p.passive !== given[k].passive) cover.moved++;
@@ -318,6 +361,39 @@ it("native Challenge Mode starter rules", async () => {
       if (flip && minted && boosted) cover.flipRewards++;
       scene.modifiers = [];
     }
+    // isAllowedInChallenge (POKEMON_IN_BATTLE: Single Generation and Single Type) of member 0 made other species and forms, fused or not
+    {
+      const a: any = party[0];
+      const keep = { sp: a.species, f: a.formIndex, fs: a.fusionSpecies, ff: a.fusionFormIndex };
+      for (let t = 0; t < 10; t++) {
+        const sid = rnd(2) === 0 ? FORM_CHANGE_SPECIES[rnd(FORM_CHANGE_SPECIES.length)] : ids[rnd(ids.length)];
+        const sp = speciesDataRegistry.getSpecies(sid);
+        a.species = sp;
+        a.formIndex = sp.forms.length ? rnd(sp.forms.length) : 0;
+        let fid = -1, fform = 0;
+        if (t >= 6) {
+          fid = rnd(2) === 0 ? FORM_CHANGE_SPECIES[rnd(FORM_CHANGE_SPECIES.length)] : ids[rnd(ids.length)];
+          const fsp = speciesDataRegistry.getSpecies(fid);
+          fform = fsp.forms.length ? rnd(fsp.forms.length) : 0;
+          a.fusionSpecies = fsp;
+          a.fusionFormIndex = fform;
+        } else {
+          a.fusionSpecies = null;
+          a.fusionFormIndex = 0;
+        }
+        const allowed = a.isAllowedInChallenge();
+        if (singleGen || singleType) {
+          if (allowed) cover.monoAllowed++;
+          else cover.monoBarred++;
+          if (fid >= 0) cover.monoFused++;
+        }
+        lines.push(`X ${sid} ${a.formIndex} ${fid} ${fform} ${+allowed}`);
+      }
+      a.species = keep.sp;
+      a.formIndex = keep.f;
+      a.fusionSpecies = keep.fs;
+      a.fusionFormIndex = keep.ff;
+    }
     // The run rules. SHOP and SHOP_ITEM on two waves (one late enough for every row), PARTY_HEAL and PREVENT_REVIVE, POKEMON_MOVE through its three
     // readers, POKEMON_ADD_TO_PARTY for enemies met on a biome's first wave or not, in and out of an encounter
     {
@@ -372,13 +448,15 @@ it("native Challenge Mode starter rules", async () => {
       enemy.destroy?.();
       scene.currentBattle = null;
     }
+    scene.gameMode.setChallengeValue(Challenges.SINGLE_GENERATION, 0);
+    scene.gameMode.setChallengeValue(Challenges.SINGLE_TYPE, 0);
     for (const p of party) p.destroy?.();
     scene.party = [];
   }
   lines.push("Z");
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
   console.log(
-    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} freshPools=${cover.freshPools} openPools=${cover.openPools} flipRewards=${cover.flipRewards} hardShops=${cover.hardShops} closedShops=${cover.closedShops} noHeals=${cover.noHeals} refusedMoves=${cover.refusedMoves} refusedAdds=${cover.refusedAdds} teleportAdds=${cover.teleportAdds} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
+    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} freshPools=${cover.freshPools} openPools=${cover.openPools} flipRewards=${cover.flipRewards} hardShops=${cover.hardShops} closedShops=${cover.closedShops} noHeals=${cover.noHeals} refusedMoves=${cover.refusedMoves} refusedAdds=${cover.refusedAdds} teleportAdds=${cover.teleportAdds} monoAllowed=${cover.monoAllowed} monoBarred=${cover.monoBarred} monoFused=${cover.monoFused} monoSoftForm=${cover.monoSoftForm} monoGender=${cover.monoGender} genderDropped=${cover.genderDropped} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
   );
-  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive && cover.freshPools && cover.openPools && cover.flipRewards && cover.hardShops && cover.closedShops && cover.noHeals && cover.refusedMoves && cover.refusedAdds && cover.teleportAdds).toBeGreaterThan(0);
+  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive && cover.freshPools && cover.openPools && cover.flipRewards && cover.hardShops && cover.closedShops && cover.noHeals && cover.refusedMoves && cover.refusedAdds && cover.teleportAdds && cover.monoAllowed && cover.monoBarred && cover.monoFused && cover.monoSoftForm && cover.monoGender && cover.genderDropped).toBeGreaterThan(0);
 }, 900000);

@@ -892,7 +892,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         /* no canApply check: a target that fainted to the hit is reset too */
         if (P(ResetStatsAttr, a)->targetAllPokemon) {
             for (int i = 0; i < 4; i++)
-                if (bt->field[i] && bt->field[i]->hp > 0) memset(bt->field[i]->stat_stages, 0, sizeof bt->field[i]->stat_stages);
+                if (pr_allowed_in_battle(bt, bt->field[i])) memset(bt->field[i]->stat_stages, 0, sizeof bt->field[i]->stat_stages);
         } else {
             memset(target->stat_stages, 0, sizeof target->stat_stages);
         }
