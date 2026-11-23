@@ -103,6 +103,9 @@ typedef struct { uint8_t n, n_items, taken, battle; uint8_t level[3]; } sv_darby
 static const sfield darby_fields[]={SF(sv_darby,n),SF(sv_darby,n_items),SF(sv_darby,taken),SF(sv_darby,battle),SF(sv_darby,level)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
+/* Challenge Mode's values (gc_run.challenges): a section of its own, written only in that mode, so a save from before it loads as it was written
+ * and counts nothing as dropped. run.challenge_flags and the rest come from the values (gc_challenge_sync) */
+static const sfield challenge_fields[]={SF(gc_challenge_set,value)};
 static const sfield run_fields[] = {
     SF(sv_run, mode), SF(sv_run, has_challenges), SF(sv_run, offset_gym), SF(sv_run, daily_custom),
     SF(sv_run, seed), SF(sv_run, seed_len), SF(sv_run, wave_seed), SF(sv_run, wave_seed_len), SF(sv_run, rng),
@@ -479,11 +482,11 @@ bool gc_run_can_save(const gc_run *run)
 {
     if(!run||run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS)return false;
     if (run->terminal_result) return run->finished && run->terminal_result >= 1 && run->terminal_result <= 2
-        && !run->in_battle && run->run.mode == GAME_MODES_CLASSIC
+        && !run->in_battle && gc_is_classic_mode(run->run.mode)
         && run->n_party >= 1 && run->n_party <= 6 && run->n_enemy >= 1 && run->n_enemy <= 6
         && run->n_items >= 0 && run->n_items <= GC_MAX_ITEMS
         && run->n_enemy_items >= 0 && run->n_enemy_items <= GC_MAX_ITEMS
-        && run->wave >= 1 && (run->terminal_result == 2 ? run->wave >= 200 && !run->run.has_challenges : run->wave <= 200)
+        && run->wave >= 1 && (run->terminal_result == 2 ? run->wave >= 200 && !gc_challenges_unplayed(run) : run->wave <= 200)
         && run->screen.kind == (run->terminal_result == 2 ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER);
     gc_internal *in = gc_int((gc_run *)run);
     if (!in->at_save_point || !run->in_battle || run->screen.kind != GC_SCREEN_COMMAND) return false;
@@ -704,6 +707,9 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
             put_block(&w,nickname_fields,NF(nickname_fields),&in->chips.mon[0].b,sizeof(gc_mon),in->chips.n);
             section_end(&w,s);
         }
+    }
+    if (run->run.mode == GAME_MODES_CHALLENGE) {
+        s=section_start(&w,"challenges");put_block(&w,challenge_fields,NF(challenge_fields),&run->challenges,sizeof run->challenges,1);section_end(&w,s);
     }
     if (run->terminal_result) {
         sv_terminal terminal={run->terminal_result};
@@ -1172,7 +1178,19 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     }
     if (!tr.bad && (get_block(&tr,terminal_fields,NF(terminal_fields),&terminal,sizeof terminal,1,&dropped)!=1
         || tr.bad || tr.pos!=tr.n || terminal.terminal_result<1 || terminal.terminal_result>2)) { *why="the terminal save is damaged";return false; }
-    if (terminal.terminal_result && (v.in_battle || v.mode!=GAME_MODES_CLASSIC || (terminal.terminal_result==2&&(v.wave<200||v.has_challenges))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
+    /* Challenge Mode's values: the section is there exactly when the run is a Challenge Mode one, holds values within their maximums, and only
+     * challenges this build plays (a save that uses another one is refused: it would play out without its rules) */
+    gc_challenge_set chal;memset(&chal,0,sizeof chal);
+    reader cr=section(&body,"challenges");
+    if (cr.bad != (v.mode==GAME_MODES_CHALLENGE ? false : true)) { *why="the challenges are damaged";return false; }
+    uint32_t chal_flags=0;
+    if (!cr.bad) {
+        if (get_block(&cr,challenge_fields,NF(challenge_fields),&chal,sizeof chal,1,&dropped)!=1||cr.bad||cr.pos!=cr.n||!gc_challenge_set_valid(&chal,NULL)) { *why="the challenges are damaged";return false; }
+        for (int i=0;i<GC_CHALLENGE_COUNT;i++) if (chal.value[i]) chal_flags|=1u<<i;
+        if (chal_flags & ~gc_challenge_played_mask()) { *why="the save uses a challenge this build does not play";return false; }
+    }
+    const bool unplayed = v.mode==GAME_MODES_CHALLENGE ? false : v.has_challenges;   /* a Challenge Mode save's set was checked above */
+    if (terminal.terminal_result && (v.in_battle || !gc_is_classic_mode(v.mode) || (terminal.terminal_result==2&&(v.wave<200||unplayed))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
     if ((!v.in_battle && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
         || v.n_items < 0 || v.n_items > PR_MAX_MODIFIERS || v.n_enemy_items < 0 || v.n_enemy_items > PR_MAX_MODIFIERS
         || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
@@ -1199,6 +1217,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     gc_rq_reset(&in->rq);
     run->run.mode = v.mode;
     run->run.has_challenges = v.has_challenges;
+    if (v.mode == GAME_MODES_CHALLENGE) { run->challenges = chal; gc_challenge_sync(run); }
     run->run.offset_gym = v.offset_gym;
     run->run.daily_custom = v.daily_custom;
     memcpy(run->run.seed.u, v.seed, sizeof v.seed);

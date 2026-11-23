@@ -10,8 +10,8 @@ static bool clean_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
      * The trainer continuation in gc_encounter.c handles its validated domain.
      * Daily/custom and challenge constructors need their own validated boundary. */
     if (m->b.has_trainer || m->trainer_slot || run->me_battle || run->battle_type != BATTLE_TYPE_WILD
-        || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS)
-        || run->run.has_challenges || g->fusion_species >= 0 || m->b.fusion_species)
+        || (!gc_is_classic_mode(run->run.mode) && run->run.mode != GAME_MODES_ENDLESS)
+        || gc_challenges_unplayed(run) || g->fusion_species >= 0 || m->b.fusion_species)
         return false;
 
     /* Before enemy items/summon effects, calculate constructor stats on a copy.
@@ -51,8 +51,8 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
 {
     if (clean_enemy_moveset(run, m, g)) return true;
     if (m->b.has_trainer || m->trainer_slot || run->me_battle
-        || run->battle_type != BATTLE_TYPE_WILD || run->run.has_challenges
-        || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS
+        || run->battle_type != BATTLE_TYPE_WILD || gc_challenges_unplayed(run)
+        || (!gc_is_classic_mode(run->run.mode) && run->run.mode != GAME_MODES_ENDLESS
             && run->run.mode != GAME_MODES_SPLICED_ENDLESS)
         || m->b.passive_flag) return false;
     const pr_species *sp = gc_species(m->b.species);

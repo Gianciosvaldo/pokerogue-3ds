@@ -332,6 +332,10 @@ typedef struct {
                                  * = starter.nickname when set); "" = none. Must pass gc_nickname_valid */
 } gc_starter;
 
+/* Challenge Mode's twelve challenges (upstream Challenges, battle-core's CHALLENGES_*), each a value 0 (off) .. its maximum */
+#define GC_CHALLENGE_COUNT 12
+typedef struct { uint8_t value[GC_CHALLENGE_COUNT]; } gc_challenge_set;
+
 #define GC_MAX_EVENTS 256
 #define GC_MAX_UNPORTED (PR_FEAT_COUNT_ + 16)
 #define GC_MAX_BATTLE_EVENTS 384
@@ -363,6 +367,7 @@ typedef struct gc_run {
     gc_faint_record last_faint[2]; /* most recent actual faint per side; not saved mid-battle */
     gc_system *sys;             /* overall system data across runs (NULL = no system updates) */
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
+    gc_challenge_set challenges; /* Challenge Mode's values (gc_run_set_challenges); all 0 in the other modes. run.challenge_flags and the rest are derived from it */
     pr_biome_depths depths;
     int wave, biome;
     int wave_cycle_offset;
@@ -475,6 +480,23 @@ extern const char *const gc_stub_name[GC_STUB_COUNT_];
  * run seed; NULL = a new random one from `entropy`). Waits on the STARTERS screen. */
 void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy);
 
+/* Challenge Mode (GAME_MODES_CHALLENGE): the player's challenge values, set on the STARTERS screen before gc_run_set_starters. A value above the
+ * challenge's maximum (gc_challenge_max) is refused, and so is a challenge this build does not play yet (gc_challenge_played_mask): *why says which.
+ * Fills run.has_challenges / challenge_flags / challenge_generation / challenge_type / challenge_fresh_start from the values.
+ * Upstream's Challenge Mode lists ten challenges: Lower Max Starter Cost and Lower Starter Points (ids 2 and 3) are not among them, their maximum here is 0. */
+bool gc_run_set_challenges(gc_run *run, const gc_challenge_set *set, const char **why);
+int gc_challenge_max(int challenge);                    /* the challenge's highest value (Challenge.maxValue); -1 = no such challenge */
+uint32_t gc_challenge_played_mask(void);                /* bit CHALLENGES_* of the challenges the run plays out with every rule ported */
+bool gc_challenge_set_valid(const gc_challenge_set *set, const char **why);   /* every value within its maximum (does not look at the played mask) */
+/* The challenge rules of the starter select (the screen asks them of the profile before a run exists; `set` is NULL or all 0 outside Challenge Mode).
+ *   gc_challenge_starter_cost:   getSpeciesStarterValue (STARTER_COST: Fresh Start ignores the value reduction)
+ *   gc_challenge_starter_valid:  checkStarterValidForChallenge (STARTER_CHOICE); soft = also true when an evolution of it is valid
+ *   gc_challenge_starter_view:   getStarterData (STARTER_SELECT_MODIFY): what the profile offers for the species under Fresh Start */
+double gc_challenge_starter_cost(const gc_system *sys, const gc_challenge_set *set, int species);
+bool gc_challenge_starter_valid(const gc_challenge_set *set, int species, int form, bool soft);
+typedef struct { uint64_t caught_attr; uint32_t nature_attr, ability_attr, passive_attr, value_reduction; uint8_t egg_moves, ivs[6]; } gc_starter_view;
+void gc_challenge_starter_view(const gc_system *sys, const gc_challenge_set *set, int species, gc_starter_view *out);
+
 /* The starter select screen's result: validates the cost budget (gc_starter_budget) and each starter,
  * builds the party, and runs to the first screen. false (and *why, an i18n key or a plain reason) if
  * the list isn't allowed. */
@@ -556,6 +578,7 @@ int gc_starter_cost(int species);                      /* base speciesStarterCos
 void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
+bool gc_starter_is_available_set(const gc_system *sys, const gc_challenge_set *set, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */
 int gc_starter_default_moves(int species, uint16_t out[4]);
 /* Unique native starting-level moves for this form, then unlocked egg moves.

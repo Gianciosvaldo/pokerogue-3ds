@@ -243,6 +243,21 @@ enum { GC_ACHV_CLASSIC_VICTORY=192, GC_ACHV_UNEVOLVED_CLASSIC,
  GC_ACHV_10_RIBBONS, GC_ACHV_25_RIBBONS, GC_ACHV_50_RIBBONS,
  GC_ACHV_75_RIBBONS, GC_ACHV_100_RIBBONS };
 #define GC_RIBBON_CLASSIC UINT64_C(0x08000000)
+/* The rest of RibbonData (src/system/ribbons/ribbon-data.ts): the challenge ribbons. Mono type n (PokemonType n, 0 Normal .. 17 Fairy) is
+ * GC_RIBBON_MONO_NORMAL << n, mono generation n (1..9) GC_RIBBON_MONO_GEN_1 << (n - 1) */
+#define GC_RIBBON_MONO_NORMAL    UINT64_C(0x1)
+#define GC_RIBBON_MONO_GEN_1     UINT64_C(0x40000)
+#define GC_RIBBON_NUZLOCKE       UINT64_C(0x010000000)
+#define GC_RIBBON_FRIENDSHIP     UINT64_C(0x020000000)
+#define GC_RIBBON_FLIP_STATS     UINT64_C(0x040000000)
+#define GC_RIBBON_INVERSE        UINT64_C(0x080000000)
+#define GC_RIBBON_FRESH_START    UINT64_C(0x100000000)
+#define GC_RIBBON_HARDCORE       UINT64_C(0x200000000)
+#define GC_RIBBON_LIMITED_CATCH  UINT64_C(0x400000000)
+#define GC_RIBBON_NO_HEAL        UINT64_C(0x800000000)
+#define GC_RIBBON_NO_SHOP        UINT64_C(0x1000000000)
+#define GC_RIBBON_NO_SUPPORT     UINT64_C(0x2000000000)
+#define GC_RIBBON_PASSIVE        UINT64_C(0x4000000000)
 /* Achievements, Ribbons, and Stat Milestones helpers */
 bool gc_system_has_achievement(const gc_system *sys, int achievement_id);
 bool gc_system_unlock_achievement(gc_system *sys, int achievement_id);

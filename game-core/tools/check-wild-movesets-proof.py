@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='wild-movesets-proof-')as td:
  else:
   faults=[
    ('gc_moveset.c','return gc_generate_moveset(run, &run->run.rng, m);','return false;','disconnect weighted owner'),
-   ('gc_movegen.c','if (run->run.has_challenges) return false;','if (m->b.fusion_species || run->run.has_challenges) return false;','restore fusion rejection'),
+   ('gc_movegen.c','if (gc_challenges_unplayed(run)) return false;','if (m->b.fusion_species || gc_challenges_unplayed(run)) return false;','restore fusion rejection'),
    ('gc_movegen.c','    c->bt.weather = run->bt.weather;','    c->bt = run->bt; c->bt.weather = run->bt.weather;','use previous battle modifiers'),
    ('gc_movegen.c','    c->p = m->b;','    c->p = m->b; c->p.level = (uint16_t)c->p.level;','narrow wide level'),
    ('gc_movegen.c','gc_level_moves(m, 1, true, true, c.trainer, rows, 512)','gc_level_moves(m, 1, false, false, c.trainer, rows, 512)','omit evolution pool rows'),

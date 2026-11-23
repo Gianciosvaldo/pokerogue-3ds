@@ -46,7 +46,7 @@ void gc_queue_battle_end(gc_run *run)
     gc_darby_rematch_won(run);   /* D'Arby's rematch: after his money and rewards, a screen for each sealed soul */
     const int mode = run->run.mode, wave = run->wave;
     const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
-    const bool classic = mode == GAME_MODES_CLASSIC;
+    const bool classic = gc_is_classic_mode(mode);
     if (endless || !pr_run_is_wave_final(mode, wave)) {
         gc_rq_push(run, gc_rp(RP_EGG_LAPSE, 0, 0, 0));
         if (classic && wave == 165) {
@@ -484,7 +484,7 @@ static void battle_end(gc_run *run, gc_rphase *p)
         else if (!bt->successful_run) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
     }
     in->last_battle_type = run->battle_type;
-    in->last_final_boss = run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave);
+    in->last_final_boss = gc_is_classic_mode(run->run.mode) && pr_run_is_wave_final(run->run.mode, run->wave);
     in->last_max_exp_level = bt->max_exp_level;
     gc_battle_end_cleanup(run);
 }
@@ -888,9 +888,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         if (!p->a && gc_breeder_game_over(run)) return true;   /* GameOverPhase: the encounter's onGameOver says the run goes on */
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);
-        bool clear = p->a || (run->run.mode == GAME_MODES_CLASSIC && run->wave > 200);
+        bool clear = p->a || (gc_is_classic_mode(run->run.mode) && run->wave > 200);
         if (run->terminal_result) clear = run->terminal_result == 2;
-        if (run->run.mode == GAME_MODES_CLASSIC && !gc_classic_finish(run,clear,NULL)) gc_stub(run,GC_STUB_REWARD_INPUT);
+        if (gc_is_classic_mode(run->run.mode) && !gc_classic_finish(run,clear,NULL)) gc_stub(run,GC_STUB_REWARD_INPUT);
         s->kind = clear ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER;
         if (run->in_battle) gc_battle_end_cleanup(run);
         run->finished = true;

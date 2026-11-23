@@ -425,10 +425,10 @@ void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int 
 
     if (sys) {
         int mode = run ? run->run.mode : 0;
-        int mult = (mode == GAME_MODES_CLASSIC) ? 3 : 1;
+        int mult = gc_is_classic_mode(mode) ? 3 : 1;
         /* getClassicFriendshipMultiplier(): CLASSIC_CANDY_FRIENDSHIP_MULTIPLIER (3), or a timed event's own (gc/events.h, asked now). An
          * event here only gives: a value at or below 3 changes nothing. Classic only, as upstream's isClassic branch. */
-        if (run && mode == GAME_MODES_CLASSIC) {   /* with no run there is no event source to ask */
+        if (run && gc_is_classic_mode(mode)) {   /* with no run there is no event source to ask */
             const int ev = gc_event_effects_now(run).candy_mult;
             if (ev > mult) mult = ev;
         }

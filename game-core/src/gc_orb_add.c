@@ -4,7 +4,7 @@
 static bool is_orb(int item){return item==PR_ITEM_TOXIC_ORB||item==PR_ITEM_FLAME_ORB;}
 static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target) {
  memset(c,0,sizeof *c);c->run=&run->run;
- if(run->run.has_challenges||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY
+ if(gc_challenges_unplayed(run)||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY
     ||storage<0||storage>=run->n_party||run->n_items<0||run->n_items>GC_MAX_ITEMS
     ||run->n_items>PR_REWARD_MAX_OWNED||run->n_items>PR_MAX_MODIFIERS)return false;
  bool used[PR_REWARD_MAX_PARTY]={0};*target=-1;
