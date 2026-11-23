@@ -1,6 +1,6 @@
 /*
  * scroll_grid: upstream's ScrollableGridHelper (src/ui/utils/scrollable-grid-helper.ts) as a plain model, the cursor and scrolling of a grid of
- * `rows` x `cols` cells over `total` elements that scrolls one row at a time (the Egg List now, the Pokedex list next). No drawing: the owner
+ * `rows` x `cols` cells over `total` elements that scrolls one row at a time (the Egg List; the Pokedex list has its own navigation, upstream does not use this helper for it). No drawing: the owner
  * gives three hooks, exactly the calls the upstream helper makes on its handler.
  *
  *   set_cursor(ud, c)       the handler's setCursor: true when its own cursor changed (the helper's return value is built from this)

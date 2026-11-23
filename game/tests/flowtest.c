@@ -32,6 +32,7 @@
 #include "history_screen.h"
 #include "achv_screen.h"
 #include "egglist_screen.h"
+#include "pokedex_screen.h"
 #include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "result_screen.h"
@@ -198,6 +199,12 @@ static int n_egglist;
 void egglist_screen_open(const egglist_args* a) {
   EV = *a;
   n_egglist++;
+}
+static pokedex_args PV;
+static int n_pokedex;
+void pokedex_screen_open(const pokedex_args* a) {
+  PV = *a;
+  n_pokedex++;
 }
 static gamestats_args GV;
 static int n_gamestats;
@@ -528,6 +535,13 @@ int main(void) {
   n_title--;
   sysd_get()->n_eggs = 0;
   sysd_get()->eggs[1].id = 0;
+
+  /* the title's Pokedex opens the list over the profile, and B comes back to the title */
+  T.on_choose(TITLE_POKEDEX, T.arg);
+  CHECK(n_pokedex == 1 && PV.sys == sysd_get() && PV.on_exit, "Pokedex opens the list over the profile");
+  PV.on_exit(PV.arg);
+  CHECK(n_title == 3, "leaving it shows the title again");
+  n_title--;
 
   /* an egg hatched outside the list's own screen counts when it opens: the unlock is told with the achievement bar (First Hatch), once */
   sysd_get()->stats.total_hatches = 1;
