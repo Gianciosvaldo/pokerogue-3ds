@@ -71,7 +71,7 @@ static void run_fixture(const char* path) {
   while (fgets(line, sizeof line, f)) {
     line[strcspn(line, "\n")] = 0;
     if (!strncmp(line, "LOC pokemonNumber ", 18)) {
-      snprintf(number_fmt, sizeof number_fmt, "%s", line + 18);
+      snprintf(number_fmt, sizeof number_fmt, "%.63s", line + 18);
     } else if (!strncmp(line, "SPN ", 4)) {
       int id;
       char nm[64];
