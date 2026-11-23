@@ -31,6 +31,7 @@
 #include "radar_screen.h"
 #include "history_screen.h"
 #include "achv_screen.h"
+#include "egglist_screen.h"
 #include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "result_screen.h"
@@ -192,6 +193,12 @@ void achv_screen_open(const achv_args* a) {
 }
 
 /* the Game Stats screen: records how it was opened */
+static egglist_args EV;
+static int n_egglist;
+void egglist_screen_open(const egglist_args* a) {
+  EV = *a;
+  n_egglist++;
+}
 static gamestats_args GV;
 static int n_gamestats;
 void gamestats_screen_open(const gamestats_args* a) {
@@ -509,6 +516,18 @@ int main(void) {
   GV.on_exit(GV.arg);
   CHECK(n_title == 3, "leaving it shows the title again");
   n_title--;
+
+  /* the title's Egg List opens the list over the profile's own eggs, with the device's time zone, and B comes back to the title */
+  sysd_get()->n_eggs = 2;
+  sysd_get()->eggs[1].id = 77;
+  T.on_choose(TITLE_EGGLIST, T.arg);
+  CHECK(n_egglist == 1 && EV.eggs == sysd_get()->eggs && EV.n == 2 && EV.tz_offset && EV.on_exit, "Egg List opens the list over the profile's eggs");
+  CHECK(EV.eggs[1].id == 77, "it is given the profile's own eggs");
+  EV.on_exit(EV.arg);
+  CHECK(n_title == 3, "leaving it shows the title again");
+  n_title--;
+  sysd_get()->n_eggs = 0;
+  sysd_get()->eggs[1].id = 0;
 
   /* an egg hatched outside the list's own screen counts when it opens: the unlock is told with the achievement bar (First Hatch), once */
   sysd_get()->stats.total_hatches = 1;

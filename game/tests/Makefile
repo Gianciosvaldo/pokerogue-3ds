@@ -683,3 +683,35 @@ build/title_events_test: $(TEV_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(TEV_SRCS) -lm -o $@
 title_events_test: build/title_events_test
 .PHONY: title_events_test
+
+# the Egg List's model (source/egglist_model.c, source/scroll_grid.c) against upstream's own EggListUiHandler (fixtures/egg-list.native.txt.gz, made by
+# egglist.producer.test.ts); make egglist_model_test && build/egglist_model_test fixtures/egg-list.native.txt.gz
+EGM_OWN := egglist_model_test.c ../source/egglist_model.c ../source/scroll_grid.c
+build/egglist_model_test: $(EGM_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined $(EGM_OWN) build/ptx_core.a -lm -o $@
+egglist_model_test: build/egglist_model_test
+.PHONY: egglist_model_test
+# the same test built over another copy of the model files (egglist_model_plant.sh): make EGM_MODEL=<egglist_model.c> EGM_GRID=<scroll_grid.c> EGM_OUT=<exe> <exe>
+EGM_MODEL ?= ../source/egglist_model.c
+EGM_GRID ?= ../source/scroll_grid.c
+EGM_OUT ?= build/egglist_model_test
+ifneq ($(EGM_OUT),build/egglist_model_test)
+$(EGM_OUT): egglist_model_test.c $(EGM_MODEL) $(EGM_GRID) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined egglist_model_test.c $(EGM_MODEL) $(EGM_GRID) build/ptx_core.a -lm -o $@
+endif
+
+# the Egg List screen (source/egglist_screen.c) over the real model and a fake drawing layer; make egglist_screen_test && build/egglist_screen_test
+ELS_OWN := egglist_screen_test.c ../source/egglist_screen.c ../source/egglist_model.c ../source/scroll_grid.c
+build/egglist_screen_test: $(ELS_OWN) build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined $(ELS_OWN) build/ptx_core.a -lm -o $@
+egglist_screen_test: build/egglist_screen_test
+.PHONY: egglist_screen_test
+# the same test built over another copy of the screen (egglist_screen_plant.sh): make ELS_SCREEN=<screen.c> ELS_OUT=<exe> <exe>
+ELS_SCREEN ?= ../source/egglist_screen.c
+ELS_OUT ?= build/egglist_screen_test
+ifneq ($(ELS_OUT),build/egglist_screen_test)
+$(ELS_OUT): egglist_screen_test.c $(ELS_SCREEN) ../source/egglist_model.c ../source/scroll_grid.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined egglist_screen_test.c $(ELS_SCREEN) ../source/egglist_model.c ../source/scroll_grid.c build/ptx_core.a -lm -o $@
+endif

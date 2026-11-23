@@ -229,6 +229,8 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_ACHIEVEMENTS;
   i18n_t(T.labels[n], sizeof T.labels[n], "menu:stats", NULL); /* upstream's own string for the Game Stats entry */
   T.choice[n++] = TITLE_STATS;
+  i18n_t(T.labels[n], sizeof T.labels[n], "menuUiHandler:eggList", NULL); /* upstream's own string for the Egg List entry */
+  T.choice[n++] = TITLE_EGGLIST;
   snprintf(T.labels[n], sizeof T.labels[n], "Football Playoff");
   T.choice[n++] = TITLE_FOOTBALL;
   for (int i = 0; i < n; i++) T.label_ptrs[i] = T.labels[i];

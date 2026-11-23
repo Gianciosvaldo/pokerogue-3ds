@@ -19,6 +19,7 @@
 #include "result_screen.h"
 #include "run_history.h"
 #include "achv_screen.h"
+#include "egglist_screen.h"
 #include "gamestats_screen.h"
 #include "achv_toast.h"
 #include "run_saves.h"
@@ -53,6 +54,7 @@ static void show_gacha(void);
 static void show_history(void);
 static void show_achievements(void);
 static void show_gamestats(void);
+static void show_egglist(void);
 static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
@@ -436,6 +438,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_STATS:
       show_gamestats();
       break;
+    case TITLE_EGGLIST:
+      show_egglist();
+      break;
   }
 }
 
@@ -480,6 +485,29 @@ static void on_gamestats_exit(void* arg) {
 static void show_gamestats(void) {
   const gamestats_args a = {sysd_get(), sysd_play_seconds, on_gamestats_exit, NULL};
   gamestats_screen_open(&a);
+}
+
+/* ------------------------------------------------------------------ the Egg List */
+
+static void on_egglist_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+/* how far local time is ahead of UTC at that moment: the same wall-clock fields read as local and as UTC, both through mktime (isdst off) */
+static int egglist_tz_offset(uint64_t timestamp_ms) {
+  const time_t t = (time_t)(timestamp_ms / 1000u);
+  struct tm local, utc;
+  if (!localtime_r(&t, &local) || !gmtime_r(&t, &utc)) return 0;
+  local.tm_isdst = 0;
+  utc.tm_isdst = 0;
+  return (int)(mktime(&local) - mktime(&utc));
+}
+
+static void show_egglist(void) {
+  const gc_system* sys = sysd_get();
+  const egglist_args a = {sys->eggs, sys->n_eggs, egglist_tz_offset, on_egglist_exit, NULL};
+  egglist_screen_open(&a);
 }
 
 /* ------------------------------------------------------------------ the Nemesis Radar */
