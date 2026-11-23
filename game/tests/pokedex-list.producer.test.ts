@@ -12,7 +12,9 @@
 import { globalScene } from "#app/global-scene";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { Button } from "#enums/buttons";
+import { DropDownColumn } from "#enums/drop-down-column";
 import { UiMode } from "#enums/ui-mode";
+import { DropDownState } from "#ui/dropdown";
 import { GameManager } from "#test/framework/game-manager";
 import { variantData } from "#sprites/variant";
 import * as fs from "node:fs";
@@ -76,7 +78,35 @@ it("dump pokedex list", async () => {
   }
 
   const buttons = [Button.UP, Button.DOWN, Button.LEFT, Button.RIGHT];
+  const F: any = {};
+  const STATE = [DropDownState.OFF, DropDownState.ON, DropDownState.EXCLUDE, DropDownState.ONE, DropDownState.TWO, DropDownState.UNLOCKABLE];
+  const CAUGHT = ["SHINY3", "SHINY2", "SHINY", "NORMAL", "UNCAUGHT"];
+  const bits = (mask: number, n: number) => [...new Array(n).keys()].filter(i => mask & (1 << i));
+  handler.filterBar.getVals = (col: DropDownColumn) => {
+    switch (col) {
+      case DropDownColumn.GEN: return bits(F.gens, 9).map(i => i + 1);
+      case DropDownColumn.TYPES: return bits(F.types, 18).map(i => i + 1);
+      case DropDownColumn.BIOME: return [...new Array(36).keys()];
+      case DropDownColumn.CAUGHT: return bits(F.caught, 5).map(i => CAUGHT[i]);
+      case DropDownColumn.UNLOCKS: return [{ val: "PASSIVE", state: STATE[F.passive] }, { val: "COST_REDUCTION", state: STATE[F.reduction] }];
+      case DropDownColumn.MISC:
+        return [
+          { val: "STARTER", state: STATE[F.starter] },
+          { val: "FAVORITE", state: STATE[F.favorite] },
+          { val: "WIN", state: STATE[F.win] },
+          { val: "HIDDEN_ABILITY", state: STATE[F.ha] },
+          { val: "SEEN_SPECIES", state: STATE[F.seen] },
+          { val: "ENCOUNTERED_SPECIES", state: STATE[F.enc] },
+          { val: "EGG", state: STATE[F.egg] },
+          { val: "POKERUS", state: STATE[F.pokerus] },
+        ];
+      default: return [{ val: F.sort, dir: F.desc ? 1 : -1 }];
+    }
+  };
+  const DEFAULT_F = { gens: 0x1ff, types: 0x3ffff, caught: 31, passive: 0, reduction: 0, starter: 0, favorite: 0, win: 0, ha: 0, seen: 0, enc: 0, egg: 0, pokerus: 0, sort: 0, desc: 0 };
+  Object.assign(F, DEFAULT_F);
   for (let c = 0; c < cases; c++) {
+    Object.assign(F, DEFAULT_F); // each case opens with the default filters (show() resets the drop-downs, which this stub stands in for)
     // the roots of the evolution lines first: their catches mask the others'
     const caughtOf = (full: bigint) => {
       let v = 0n;
@@ -94,10 +124,31 @@ it("dump pokedex list", async () => {
       e.caughtAttr = caught ? (outside ? (caughtOf(0xfffffn) & ~full) | 1n << 19n : caughtOf(full) | (rnd.integerInRange(0, 4) === 0 ? caughtOf(0xfffffn) : 0n)) : 0n;
       e.seenAttr = rnd.integerInRange(0, 3) === 0 ? caughtOf(full) || 1n : 0n;
     }
+    // the numbers the filters and sorts read: counts, IVs, and the starters' candies, passives, cost reductions, wins and hidden abilities
+    const pick = (xs: number[]) => xs[rnd.integerInRange(0, xs.length - 1)];
+    for (const s of all) {
+      const e = gameData.dexData[s.speciesId];
+      e.seenCount = pick([0, 0, 1, 3, 20]);
+      e.caughtCount = pick([0, 0, 1, 2, 5, 40]);
+      e.hatchedCount = pick([0, 0, 0, 1, 2, 7, 30]);
+      e.ivs = [0, 1, 2, 3, 4, 5].map(() => pick([0, 5, 15, 25, 31]));
+      const sd = gameData.starterData[s.speciesId];
+      if (sd) {
+        sd.candyCount = pick([0, 0, 20, 50, 100, 300, 800, 2000]);
+        sd.passiveAttr = pick([0, 0, 1, 3]);
+        sd.valueReduction = pick([0, 0, 1, 2]);
+        sd.classicWinCount = pick([0, 0, 0, 1, 5]);
+        sd.abilityAttr = pick([1, 1, 3, 5, 7]);
+        if (s.speciesId === 25) (sd.passiveAttr = 0), (sd.valueReduction = 0); // Pikachu has no egg moves: the Exclude filters must meet it unlocked-less
+      }
+    }
     out.push(`CASE ${c}`);
     for (const s of all) {
       const e = gameData.dexData[s.speciesId];
       out.push(`DEX ${s.speciesId} ${e.seenAttr} ${e.caughtAttr}`);
+      out.push(`DX2 ${s.speciesId} ${e.seenCount} ${e.caughtCount} ${e.hatchedCount} ${e.ivs.join(" ")}`);
+      const sd = gameData.starterData[s.speciesId];
+      if (sd) out.push(`SD ${s.speciesId} ${sd.candyCount} ${sd.passiveAttr} ${sd.valueReduction} ${sd.classicWinCount} ${sd.abilityAttr}`);
     }
     // stored form preferences: only valid ones (a selectable form the starter has caught), as the starter select stores them
     handler.starterPreferences = {};
@@ -136,6 +187,50 @@ it("dump pokedex list", async () => {
       if (handler.filterMode) handler.setFilterMode(false);
       if (handler.filterTextMode) handler.setFilterTextMode(false);
       out.push(`NAV ${b} ${ok ? 1 : 0} ${handler.cursor} ${handler.scrollCursor} ${mode} ${state()}`);
+    }
+    // the filters: the drop-downs are not driven (the bar is a screen of its own); what they would answer is, and the handler rebuilds its list from it
+    const starters = speciesDataRegistry.getAllStarters();
+    const prk: number[] = [];
+    while (prk.length < 3) {
+      const id = rnd.pick(starters) as number;
+      if (!prk.includes(id)) prk.push(id);
+    }
+    handler.pokerusSpecies = prk;
+    out.push(`PRK ${prk.join(" ")}`);
+    const nFilters = Number(process.env.GC_PX_FILTERS ?? 40);
+    for (let k = 0; k < nFilters; k++) {
+      Object.assign(F, DEFAULT_F);
+      const columns = ["gens", "types", "caught", "passive", "reduction", "starter", "favorite", "win", "ha", "seen", "enc", "egg", "pokerus", "sort"];
+      const active = k === 0 ? 0 : rnd.integerInRange(1, 3);
+      for (let a = 0; a < active; a++) {
+        const col = rnd.pick(columns);
+        if (col === "gens") F.gens = rnd.integerInRange(1, 0x1ff);
+        else if (col === "types") F.types = rnd.integerInRange(1, 0x3ffff);
+        else if (col === "caught") F.caught = rnd.integerInRange(1, 31);
+        else if (col === "passive") F.passive = rnd.pick([0, 1, 2, 5]);
+        else if (col === "reduction") F.reduction = rnd.pick([0, 1, 2, 3, 4, 5]);
+        else if (col === "sort") (F.sort = rnd.integerInRange(0, 6)), (F.desc = rnd.integerInRange(0, 1));
+        else F[col] = rnd.pick([1, 2]);
+      }
+      // the Exclude states one at a time (they depend on whether the starter has egg moves)
+      const forced = [{ passive: 2 }, { reduction: 2 }, { egg: 2 }, { ha: 2 }, { passive: 5 }, { reduction: 5 }, { win: 2 }];
+      if (k >= 3 && k < 3 + forced.length) Object.assign(F, DEFAULT_F, forced[k - 3]);
+      if (k === 1) Object.assign(F, { sort: 4, desc: 0 }); // by name, both ways, with nothing else
+      if (k === 2) Object.assign(F, { sort: 4, desc: 1 });
+      handler.updateStarters();
+      handler.setCursor(handler.cursor);
+      out.push(`FILT ${F.gens} ${F.types} ${F.caught} ${F.passive} ${F.reduction} ${F.starter} ${F.favorite} ${F.win} ${F.ha} ${F.seen} ${F.enc} ${F.egg} ${F.pokerus} ${F.sort} ${F.desc}`);
+      out.push(`LIST ${handler.filteredPokemonData.length} ${handler.filteredPokemonData.map((d: any) => d.species.speciesId).join(" ")}`);
+      out.push(`NAV -1 1 ${handler.cursor} ${handler.scrollCursor} grid ${state()}`);
+      // a few presses on the new list (the end of a short one, wrapping)
+      for (let n = 0; n < 6; n++) {
+        const b = rnd.pick([Button.DOWN, Button.DOWN, Button.UP, Button.LEFT, Button.RIGHT]);
+        const ok = handler.processInput(b);
+        const mode = handler.filterMode ? "bar" : handler.filterTextMode ? "text" : "grid";
+        if (handler.filterMode) handler.setFilterMode(false);
+        if (handler.filterTextMode) handler.setFilterTextMode(false);
+        out.push(`NAV ${b} ${ok ? 1 : 0} ${handler.cursor} ${handler.scrollCursor} ${mode} ${state()}`);
+      }
     }
   }
   fs.writeFileSync(outFile, `${out.join("\n")}\n`);

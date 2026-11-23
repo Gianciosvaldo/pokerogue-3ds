@@ -6,6 +6,7 @@
 
 #include "i18n.h"
 #include "pokedex_assets.h"
+#include "pokedex_filter_menu.h"
 #include "pokedex_model.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -31,13 +32,36 @@
 #define SCROLL_W 5
 #define SCROLL_H 155 /* the window's 161 - 6 */
 
+#define FILTER_X 6 /* the filter button, in the strip where upstream's filter bar sits */
+#define FILTER_Y 1
+#define FILTER_W 80
+#define FILTER_H 16
+
 static const char* const HINTS[2] = {"B: back", "D-pad: move"};
 
 static struct {
   pokedex_args args;
   pdx_state L;
+  pdf_filter F; /* what the menu changes */
   bool left;
 } S;
+
+static const char* name_of(uint16_t id) {
+  const char* n = i18n_species_name(id);
+  return n ? n : "";
+}
+
+/* the filter changed: the list again, the cursor on its first species */
+static void filter_changed(void* arg) {
+  (void)arg;
+  pdx_apply_filter(&S.L, &S.F);
+  S.L.cursor = 0;
+}
+
+static void open_filter(void) {
+  const pfm_args a = {&S.F, filter_changed, NULL};
+  pfm_open(&a);
+}
 
 static float cell_x(int i) { return (float)(BOX_X + (i % PDX_COLS) * CELL_W); }
 static float cell_y(int i) { return (float)(BOX_Y + ROW0_Y + (i / PDX_COLS) * CELL_H); }
@@ -51,8 +75,12 @@ static bool pd_input(ui_screen* s, ui_button b) {
     case BTN_LEFT:
     case BTN_RIGHT: {
       pdx_mode mode = PDX_GRID;
-      /* a press that upstream answers by entering the filter bar or the filter text changes nothing here (not ported yet) */
-      if (pdx_input(&S.L, (pdx_button)(b - BTN_UP), &mode) && mode == PDX_GRID) ui_play_select();
+      /* UP in the first row enters upstream's filter bar: the menu; a press that enters the text filters changes nothing here (not ported yet) */
+      const bool moved = pdx_input(&S.L, (pdx_button)(b - BTN_UP), &mode);
+      if (mode == PDX_FILTER_BAR) {
+        ui_play_select();
+        open_filter();
+      } else if (moved && mode == PDX_GRID) ui_play_select();
       return true;
     }
     case BTN_CANCEL:
@@ -68,6 +96,11 @@ static bool pd_input(ui_screen* s, ui_button b) {
 static bool pd_touch(ui_screen* s, float x, float y) {
   if (S.left) return true;
   if (y >= HINT_Y - 8) return hint_at(TS_INSTRUCTIONS_TEXT, HINT_X, HINTS, 2, x) == 0 ? pd_input(s, BTN_CANCEL) : false;
+  if (x >= FILTER_X && x < FILTER_X + FILTER_W && y >= FILTER_Y && y < FILTER_Y + FILTER_H) {
+    ui_play_select();
+    open_filter();
+    return true;
+  }
   const float gx = x - (float)BOX_X, gy = y - (float)(BOX_Y + ROW0_Y);
   if (gx < 0 || gy < 0) return false;
   const int col = (int)(gx / CELL_W), row = (int)(gy / CELL_H);
@@ -92,6 +125,7 @@ static void draw_scroll_bar(void) {
 }
 
 static void draw_panel(void) {
+  if (!pdx_cell_visible(&S.L, S.L.cursor)) return; /* an empty list has no species under the cursor */
   pdx_panel p;
   pdx_panel_of(&S.L, &p);
   char number[64], dex[8];
@@ -109,11 +143,17 @@ static void draw_bottom(void) {
   ui_window(143, 18, 175, 161, WIN_NORMAL);
   img_draw("images/ui/starter_container_bg", NULL, 144, 19, 0, 0);
   draw_panel();
+  {
+    char label[24];
+    ui_window(FILTER_X, FILTER_Y, FILTER_W, FILTER_H, WIN_NORMAL);
+    text_draw(TS_WINDOW, FILTER_X + 6, FILTER_Y + 2, pfm_button_label(&S.F, label, sizeof label), NULL);
+  }
+  if (S.L.n == 0) text_draw(TS_WINDOW, BOX_X + 6, 70, "No species fit the filter.", NULL);
   /* the icons: upstream's sprites at scale 0.5 at (-2, 2) in the cell, tinted by what is known of the species; the one under the cursor, when its
    * line is caught, bobs between 0 and -2 every 200 ms (PokemonIconAnimHelper, ACTIVE) */
   const int bob = ((int)(ui_now() / 200.0f)) & 1;
   const uint16_t cur_species = S.L.cell_species[S.L.cursor];
-  const bool cur_caught = S.args.sys->dex[pdx_starter_of(cur_species)].caught_attr != 0;
+  const bool cur_caught = pdx_cell_visible(&S.L, S.L.cursor) && S.args.sys->dex[pdx_starter_of(cur_species)].caught_attr != 0;
   for (int i = 0; i < PDX_CELLS; i++) {
     if (!pdx_cell_visible(&S.L, i)) continue;
     const char t = pdx_cell_tint(&S.L, i);
@@ -142,5 +182,8 @@ void pokedex_screen_open(const pokedex_args* a) {
   memset(&S, 0, sizeof S);
   S.args = *a;
   pdx_open(&S.L, a->sys);
+  S.L.name = name_of;
+  S.L.pokerus = a->pokerus;
+  pdf_reset(&S.F);
   ui_set(&g_screen);
 }

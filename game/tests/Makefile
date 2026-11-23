@@ -733,16 +733,18 @@ $(PXM_OUT): pokedex_model_test.c $(PXM_MODEL) build/ptx_core.a
 endif
 
 # the Pokedex list screen (source/pokedex_screen.c) over the real model and a fake drawing layer; make pokedex_screen_test && build/pokedex_screen_test
-PXS_OWN := pokedex_screen_test.c ../source/pokedex_screen.c ../source/pokedex_model.c
+PXS_OWN := pokedex_screen_test.c ../source/pokedex_screen.c ../source/pokedex_filter_menu.c ../source/pokedex_model.c
 build/pokedex_screen_test: $(PXS_OWN) build/ptx_core.a
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PXS_OWN) build/ptx_core.a -lm -o $@
 pokedex_screen_test: build/pokedex_screen_test
 .PHONY: pokedex_screen_test
-# the same test built over another copy of the screen (pokedex_screen_plant.sh): make PXS_SCREEN=<screen.c> PXS_OUT=<exe> <exe>
+# the same test built over another copy of the screen or of the filter menu (pokedex_screen_plant.sh, pokedex_filter_menu_plant.sh):
+# make PXS_SCREEN=<screen.c> PXS_MENU=<menu.c> PXS_OUT=<exe> <exe>
 PXS_SCREEN ?= ../source/pokedex_screen.c
+PXS_MENU ?= ../source/pokedex_filter_menu.c
 PXS_OUT ?= build/pokedex_screen_test
 ifneq ($(PXS_OUT),build/pokedex_screen_test)
-$(PXS_OUT): pokedex_screen_test.c $(PXS_SCREEN) ../source/pokedex_model.c build/ptx_core.a
-	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined pokedex_screen_test.c $(PXS_SCREEN) ../source/pokedex_model.c build/ptx_core.a -lm -o $@
+$(PXS_OUT): pokedex_screen_test.c $(PXS_SCREEN) $(PXS_MENU) ../source/pokedex_model.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -I../include -fsanitize=address,undefined -fno-sanitize-recover=undefined pokedex_screen_test.c $(PXS_SCREEN) $(PXS_MENU) ../source/pokedex_model.c build/ptx_core.a -lm -o $@
 endif

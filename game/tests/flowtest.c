@@ -538,7 +538,7 @@ int main(void) {
 
   /* the title's Pokedex opens the list over the profile, and B comes back to the title */
   T.on_choose(TITLE_POKEDEX, T.arg);
-  CHECK(n_pokedex == 1 && PV.sys == sysd_get() && PV.on_exit, "Pokedex opens the list over the profile");
+  CHECK(n_pokedex == 1 && PV.sys == sysd_get() && PV.on_exit && PV.pokerus == ss_has_pokerus, "Pokedex opens the list over the profile, with the starter select's Pokerus");
   PV.on_exit(PV.arg);
   CHECK(n_title == 3, "leaving it shows the title again");
   n_title--;
