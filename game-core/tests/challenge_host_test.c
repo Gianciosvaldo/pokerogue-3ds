@@ -128,6 +128,21 @@ static void starters(void)
     CHECK(gc_run_set_starters(&run, &st, 1, &why) && run.party[0].b.ivs[0] == 31);
 }
 
+static void party_rule(void)
+{
+    const char *why = NULL;
+    gc_challenge_set f1 = fresh(1), off = fresh(0);
+    gc_starter bulb = bulbasaur(), mewtwo = bulbasaur();
+    mewtwo.species = SPECIES_ID_MEWTWO;
+    CHECK(gc_challenge_starter_valid(&f1, SPECIES_ID_BULBASAUR, 0, false) && !gc_challenge_starter_valid(&f1, SPECIES_ID_MEWTWO, 0, false));
+    CHECK(!gc_challenge_starter_valid(&f1, SPECIES_ID_MEWTWO, 0, true));   /* no evolution to rescue it (the soft step proper comes with Single Type) */
+    CHECK(gc_challenge_party_ok(&f1, &bulb, 1, &why));
+    CHECK(!gc_challenge_party_ok(&f1, &mewtwo, 1, &why));
+    gc_starter pair[2] = {bulb, mewtwo};
+    CHECK(!gc_challenge_party_ok(&f1, pair, 2, &why) && !strcmp(why, "a starter this challenge does not allow"));
+    CHECK(gc_challenge_party_ok(&off, pair, 2, &why));   /* no Fresh Start: every starter is valid */
+}
+
 static void ribbons(void)
 {
     typedef struct { const char *what; uint8_t v[GC_CHALLENGE_COUNT]; uint64_t want; } rc;
@@ -230,6 +245,7 @@ int main(void)
 {
     admission();
     starters();
+    party_rule();
     ribbons();
     win();
     save();

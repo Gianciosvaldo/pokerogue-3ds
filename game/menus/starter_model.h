@@ -84,6 +84,9 @@ typedef struct {
   int budget;                 /* getRunValueLimit: 10 in Classic */
   int (*rnd)(void* ctx, int n); /* Math.floor(Math.random() * n) for the Randomize button */
   void* rnd_ctx;
+  /* Challenge Mode (NULL: none): a species may be added to the team, and a team may start. Both get rnd_ctx back, then the team. */
+  bool (*pick_ok)(void* ctx, uint16_t species, const uint16_t* party, int n_party);
+  bool (*party_ok)(void* ctx, const uint16_t* party, int n_party);
 
   sm_focus focus;
   int cursor;                 /* the grid cursor, 0..SM_PAGE-1, on screen (upstream's this.cursor) */
@@ -96,6 +99,9 @@ typedef struct {
 
 /* `entries` must outlive the model. The cursor starts on the first species (show(): setCursor(0)). */
 void sm_init(sm_model* m, const sm_entry* entries, int n, int budget, int (*rnd)(void*, int), void* rnd_ctx);
+
+/* Challenge Mode's rules: checkStarterValidForChallenge for adding a species (greyed icons, Add to Party, Randomize) and isPartyValid for Start. */
+void sm_set_challenge(sm_model* m, bool (*pick_ok)(void*, uint16_t, const uint16_t*, int), bool (*party_ok)(void*, const uint16_t*, int));
 
 /* The list after a filter or sort: the cursor goes back to the first species and the scroll to the top (updateStarters: scrollCursor = 0),
  * the team stays. `entries` must outlive the model. */

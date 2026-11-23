@@ -21,7 +21,7 @@ static void scene_of(const gc_run* r, bgm_scene* s) {
   s->battle_type = W.battle_type;
   s->me_default = W.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER; /* the encounters are stand-ins that set no music of their own */
   s->started = W.started;
-  s->final_boss = r->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(r->run.mode, W.wave);
+  s->final_boss = (r->run.mode == GAME_MODES_CLASSIC || r->run.mode == GAME_MODES_CHALLENGE) && pr_run_is_wave_final(r->run.mode, W.wave);
   s->all_gens = true; /* the default music preference; the app has no settings screen */
   s->trainer_type = r->trainer_type;
   s->trainer_variant = r->trainer_variant;

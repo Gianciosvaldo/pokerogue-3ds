@@ -2,7 +2,7 @@
  * run_settings: the screen New Game opens before the slot list (this port's own, lorenzo's layout; upstream has no such step), and the
  * settings it keeps on the SD card.
  *
- *   Mode        Classic, Classic (Bizarre), Endless, Endless (Spliced): the last three once their unlock is earned (a Classic win opens Bizarre
+ *   Mode        Classic, Classic (Bizarre), Challenge, Endless, Endless (Spliced): the last four once their unlock is earned (Challenge with Endless, as upstream lists them) (a Classic win opens Bizarre
  *               and Endless; the Spliced one needs a winning party with a fusion). Remembered as the next screen's default. Bizarre is the
  *               Classic run with the JoJo trainers and the Pillar Men on (custom_run.h); Classic and Bizarre both have the Nemesis rematches.
  *   Game Speed  upstream's gameSpeed setting (settings-ui-items.ts): Slow 2, Normal 3, Fast 4, Turbo 5. Upstream divides every tween,
@@ -30,7 +30,7 @@ enum { RSET_SPEED_SLOW = 2, RSET_SPEED_NORMAL = 3, RSET_SPEED_FAST = 4, RSET_SPE
 
 typedef struct {
   int speed; /* RSET_SPEED_* */
-  int mode;  /* GAME_MODES_CLASSIC / ENDLESS / SPLICED_ENDLESS, or RSET_MODE_BIZARRE */
+  int mode;  /* GAME_MODES_CLASSIC / CHALLENGE / ENDLESS / SPLICED_ENDLESS, or RSET_MODE_BIZARRE */
 } rset_values;
 
 /* The saved values ("settings" on the SD card), or the defaults (Classic, Normal) when there is none or it can't be read. */

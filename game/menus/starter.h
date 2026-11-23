@@ -60,6 +60,10 @@ typedef struct {
   /* "Rename" in the options menu of `species` (the row is there only when this is given): the caller asks for the nickname and keeps it. The screen has
    * closed its menu; the caller calls starter_refresh when the name changed, to have the panel show it. */
   void (*rename)(void* ctx, uint16_t species);
+  /* Challenge Mode (both may be NULL): checkStarterValidForChallenge for adding `species` to the team `party`, and isPartyValid for Start. A species
+   * the first refuses is greyed in the grid and left out of Add to Party and Randomize; the second refuses Start. */
+  bool (*pick_ok)(void* ctx, uint16_t species, const uint16_t* party, int n_party);
+  bool (*party_ok)(void* ctx, const uint16_t* party, int n_party);
 } starter_events;
 
 typedef struct {

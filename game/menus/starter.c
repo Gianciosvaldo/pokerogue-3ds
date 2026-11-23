@@ -126,6 +126,7 @@ void starter_open(const starter_args* args, const starter_events* ev) {
   S.active = true;
   sm_init(&S.m, args->entries, args->n, args->budget, ev->rnd ? ev->rnd : default_rnd, ev->ctx);
   if (args->pool) sm_set_pool(&S.m, args->pool, args->n_pool);
+  sm_set_challenge(&S.m, ev->pick_ok, ev->party_ok);
   S.sprite_wait = SPRITE_DELAY_MS;
   follow_cursor();
 }

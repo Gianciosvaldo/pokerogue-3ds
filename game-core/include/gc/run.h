@@ -578,6 +578,8 @@ int gc_starter_cost(int species);                      /* base speciesStarterCos
 void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
+/* The party select's challenge rules for a team (see gc_challenge.c); false with `why` when a member is not allowed or none is valid. */
+bool gc_challenge_party_ok(const gc_challenge_set *set, const gc_starter *team, int n, const char **why);
 bool gc_starter_is_available_set(const gc_system *sys, const gc_challenge_set *set, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */
 int gc_starter_default_moves(int species, uint16_t out[4]);

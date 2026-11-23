@@ -62,6 +62,8 @@ int main(void) {
   const char endless[] = {RSET_SPEED_SLOW, 0, GAME_MODES_ENDLESS};
   load_case(endless, sizeof endless, (rset_values){.speed=RSET_SPEED_SLOW,.mode=GAME_MODES_ENDLESS},
             "Endless mode persists");
+  const char challenge[] = {RSET_SPEED_NORMAL, 0, GAME_MODES_CHALLENGE};
+  load_case(challenge, sizeof challenge, (rset_values){.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_CHALLENGE}, "Challenge mode persists");
   const char spliced[] = {RSET_SPEED_TURBO, 0, GAME_MODES_SPLICED_ENDLESS};
   load_case(spliced, sizeof spliced, (rset_values){.speed=RSET_SPEED_TURBO,.mode=GAME_MODES_SPLICED_ENDLESS},
             "Spliced Endless mode persists");
@@ -73,6 +75,8 @@ int main(void) {
   const rset_values write_bizarre = {.speed=RSET_SPEED_TURBO,.mode=RSET_MODE_BIZARRE};
   CHECK(rset_save(&write_bizarre) && saved_len == 3 && saved[0] == RSET_SPEED_TURBO && saved[1] == 1 && saved[2] == RSET_MODE_BIZARRE,
         "saving Bizarre writes the old Custom switch on too");
+  const rset_values write_challenge = {.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_CHALLENGE};
+  CHECK(rset_save(&write_challenge) && saved_len == 3 && saved[1] == 0 && saved[2] == GAME_MODES_CHALLENGE, "Challenge mode is saved as the mode, Bizarre off");
   CHECK(!rset_save(&(rset_values){.speed=RSET_SPEED_NORMAL,.mode=99}), "invalid modes are not saved");
   CHECK(!rset_save(&(rset_values){.speed=RSET_SPEED_NORMAL,.mode=GAME_MODES_DAILY}), "a Daily Run is not saved");
   read_result = SAVE_NOT_FOUND;

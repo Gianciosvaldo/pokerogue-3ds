@@ -36,6 +36,7 @@
 #include "run_history.h"
 #include "run_saves.h"
 #include "run_settings.h"
+#include "challenge_select.h"
 #include "save.h"
 #include "slot_screen.h"
 #include "starter_data.h"
@@ -77,6 +78,14 @@ void ui_push_options(const char* const* labels,int n,bool cancel,void (*done)(in
   ++n_football_notice;
 }
 
+/* the challenge screen (Challenge Mode): records how it was opened; the test answers as the player would */
+static chsel_args CS;
+static int n_chsel;
+void chsel_open(const chsel_args* a) {
+  CS = *a;
+  n_chsel++;
+}
+
 /* the run settings before New Game's slot list: started at once with what the test picks (the real screen: run_settings_screen.c) */
 static rset_args RS;
 static int n_rset;
@@ -90,7 +99,7 @@ void rset_open(const rset_args* a) {
   n_rset++;
   rset_values v = a->values;
   v.mode = rset_pick_mode;
-  if (rset_pick_mode == GAME_MODES_ENDLESS) sysd_get()->unlocks.endless_mode = true;
+  if (rset_pick_mode == GAME_MODES_ENDLESS || rset_pick_mode == GAME_MODES_CHALLENGE) sysd_get()->unlocks.endless_mode = true;
   if (rset_pick_mode == RSET_MODE_BIZARRE) sysd_get()->stats.classic_wins = 1;
   if (a->on_start) a->on_start(&v, a->arg);
 }
@@ -218,6 +227,7 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   (void)sys;
   if (!sh_has_species) return false;
   SH = *ev;
+  ss_set_challenges(ev->challenges); /* what the real host does when it opens */
   n_sh++;
   snprintf(sh_notice, sizeof sh_notice, "%s", notice ? notice : "");
   return true;
@@ -1103,6 +1113,48 @@ int main(void) {
     rset_pick_mode = GAME_MODES_ENDLESS;
     remove(cp);
     cs_reset();
+  }
+
+  /* Challenge Mode: the run settings, the slot list, the challenge screen, then the starter select with the challenges; Exit on the starter
+   * select returns to the challenge screen, B on it to the title; the run starts as a Challenge run (not a custom one) with the chosen values */
+  {
+    rset_pick_mode = GAME_MODES_CHALLENGE;
+    app_start(&plain);
+    const int slots0 = n_slots, sh0 = n_sh, start0 = n_start, cs0 = n_chsel, title0 = n_title;
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    CHECK(n_slots == slots0 + 1 && S.mode == SLOTS_NEW && RS.endless_unlocked, "Challenge is picked on the run settings and the slot list follows");
+    S.on_pick(3, S.arg);
+    CHECK(n_chsel == cs0 + 1 && n_sh == sh0 && n_start == start0, "the challenge screen opens before the starter select");
+    CHECK(CS.on_start && CS.on_back, "with its two exits");
+    CS.on_back(CS.arg);
+    CHECK(n_title == title0 + 1 && n_sh == sh0, "B on it is the title");
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(3, S.arg);
+    gc_challenge_set fresh = {{0}};
+    fresh.value[CHALLENGES_FRESH_START] = 1;
+    CS.on_start(&fresh, CS.arg);
+    CHECK(n_sh == sh0 + 1 && SH.mode == GAME_MODES_CHALLENGE && SH.challenges && SH.challenges->value[CHALLENGES_FRESH_START] == 1,
+          "Start opens the starter select with the challenges");
+    const int cs1 = n_chsel;
+    SH.on_exit(SH.arg);
+    CHECK(n_chsel == cs1 + 1 && CS.values.value[CHALLENGES_FRESH_START] == 1 && n_sh == sh0 + 1,
+          "Exit on the starter select is the challenge screen again, with the values as they were");
+    CS.on_start(&CS.values, CS.arg);
+    CHECK(n_sh == sh0 + 2, "Start again opens the starter select again");
+    sh_confirm(1);
+    CHECK(n_start == start0 + 1 && CFG.mode == GAME_MODES_CHALLENGE && CFG.challenges.value[CHALLENGES_FRESH_START] == 1 && !CFG.custom &&
+          !CFG.bizarre && CFG.slot == 3 && CFG.n_team == 1,
+          "the run starts as a Challenge run with Fresh Start in slot 3");
+    driver_end(GC_SCREEN_GAME_OVER);
+    R.on_done(R.arg);
+    ss_set_challenges(NULL);
+    /* the next Classic run has no challenges */
+    rset_pick_mode = GAME_MODES_CLASSIC;
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(3, S.arg);
+    CHECK(SH.mode == GAME_MODES_CLASSIC && !SH.challenges, "a later Classic run's starter select has no challenges");
+    SH.on_exit(SH.arg);
+    rset_pick_mode = GAME_MODES_ENDLESS;
   }
 
   /* the capsule preview is debug only: it opens before the title when the debug file asks for it, and leaving it is the title */

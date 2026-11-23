@@ -47,7 +47,7 @@ int wg_collect(const gc_system* a, const struct gc_run* run, wg_gains* out) {
     if (run->finished && run->screen.kind == GC_SCREEN_CLEAR) add(out, WG_PREMIUM, 0);
     return out->n;
   }
-  if (run->run.mode != GAME_MODES_CLASSIC) return 0;
+  if (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_CHALLENGE) return 0;   /* gameMode.isClassic: Challenge Mode counts as Classic */
   /* validateAchv(CLASSIC_VICTORY): the bar, then the voucher that achievement unlocks */
   if (new_achv(a, GC_ACHV_CLASSIC_VICTORY)) {
     add(out, WG_ACHV, GC_ACHV_CLASSIC_VICTORY);

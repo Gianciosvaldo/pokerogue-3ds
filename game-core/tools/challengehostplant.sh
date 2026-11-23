@@ -31,5 +31,8 @@ plant moveset-randomizer-ribbons gc_challenge.c 's/if (v\[CHALLENGES_MOVESET_RAN
 plant save-no-value-check gc_save.c 's/||!gc_challenge_set_valid(&chal,NULL)//'
 plant save-takes-unplayed gc_save.c 's/if (chal_flags \& ~gc_challenge_played_mask())/if (0)/'
 plant finish-takes-unplayed gc_classic.c 's/gc_challenges_unplayed(run)/0/'
+plant party-never-valid gc_challenge.c 's/        any_valid |= valid;/        any_valid |= 0;/'
+# (the "no member is hard-valid" branch of gc_challenge_party_ok is not reachable with Fresh Start alone: every member is hard-valid or refused first;
+#  it gets its test and plant with Single Type, the first challenge with a soft-valid member)
 echo "challenge host plants: $total run, $fails not caught"
 [ "$fails" = 0 ]

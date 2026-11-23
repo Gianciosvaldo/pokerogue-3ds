@@ -24,6 +24,7 @@
 #include "run_settings.h"
 #include "slot_screen.h"
 #include "starter_host.h"
+#include "challenge_select.h"
 #include "football_screen.h"
 #include "system_data.h"
 #include "title_screen.h"
@@ -43,6 +44,8 @@ static struct {
   bool bizarre;             /* ... and it is a Classic (Bizarre) one: the JoJo trainers and the Pillar Men are on. Only read for a run about to start */
   bool kind[RSV_SLOTS];     /* what each slot of the list holds: true = a custom run (csession_<n>), false = an ordinary one */
   rset_values settings;     /* the run settings screen's last values */
+  gc_challenge_set challenges;  /* Challenge Mode: the challenge screen's last values (the screen opens on them again) */
+  bool challenges_chosen;   /* ... and the player has confirmed them for the run about to start (cleared when the run settings start again) */
   char note[CS_WHY_LEN + 64];
 } A;
 
@@ -71,6 +74,7 @@ static rs_config run_config(int slot, bool fresh) {
   c.bizarre = A.custom && A.bizarre;
   c.ask_switch = true; /* upstream's default battle style (SWITCH): "Will you switch?" at a wild battle's start */
   c.mode = A.settings.mode;
+  if (c.mode == GAME_MODES_CHALLENGE) c.challenges = A.challenges;
   /* each run has its own randomness: the session's base, and when the player got here (frames since boot) */
   c.entropy = A.first.entropy ^ (A.runs_started * 0x9E3779B1u) ^ (ui_frame() * 2654435761u);
   A.runs_started++;
@@ -165,8 +169,27 @@ static void start_new_run(int slot, const gc_starter* team, int n_team, bool fro
 
 static void on_starters_chosen(const gc_starter* team, int n, void* arg) { start_new_run((int)(long)arg, team, n, true); }
 
-/* upstream's Exit on the starter select: back to the title */
+static void new_run_in(int slot);
+
+/* upstream's Exit on the starter select: back to the title; a Challenge Mode run goes back to the challenge screen (tryExit: SelectChallengePhase) */
 static void on_starters_exit(void* arg) {
+  if (A.settings.mode == GAME_MODES_CHALLENGE) {
+    A.challenges_chosen = false;
+    new_run_in((int)(long)arg);
+    return;
+  }
+  show_title();
+}
+
+/* the challenge screen's Start: the values are the run's; the starter select follows */
+static void on_challenges_start(const gc_challenge_set* set, void* arg) {
+  A.challenges = *set;
+  A.challenges_chosen = true;
+  new_run_in((int)(long)arg);
+}
+
+/* B on the challenge screen: back to the title */
+static void on_challenges_back(void* arg) {
   (void)arg;
   show_title();
 }
@@ -218,8 +241,14 @@ static void new_run_in(int slot) {
     snprintf(notice, sizeof notice, "%s The file is left as it is, and nothing is saved to it until it is removed.", why);
     text = notice;
   }
+  /* Challenge Mode: the challenge screen first (SelectChallengePhase), then the starter select with its rules */
+  if (A.settings.mode == GAME_MODES_CHALLENGE && !A.challenges_chosen) {
+    const chsel_args ca = {.values=A.challenges,.on_start=on_challenges_start,.on_back=on_challenges_back,.arg=(void*)(long)slot};
+    chsel_open(&ca);
+    return;
+  }
   const sh_events ev = {.on_start=on_starters_chosen,.on_exit=on_starters_exit,.arg=(void*)(long)slot,
-                        .mode=A.settings.mode};
+                        .mode=A.settings.mode,.challenges=A.settings.mode==GAME_MODES_CHALLENGE?&A.challenges:NULL};
   if (!sh_open(sysd_get(), text, &ev)) tell("There is no Pokemon to start with.");
 }
 
@@ -244,7 +273,7 @@ static void on_run_end(int kind, void* arg) {
   A.result.report = co_report_get(); /* taken by the run driver as the run ended, before the slot is cleared below */
   A.result.on_done = on_result_done;
   /* the win's unlocks, vouchers and ribbons: game-core has already changed the system data as the run was cleared */
-  A.result.ending = A.result.victory && rs_run()->run.mode == GAME_MODES_CLASSIC;
+  A.result.ending = A.result.victory && (rs_run()->run.mode == GAME_MODES_CLASSIC || rs_run()->run.mode == GAME_MODES_CHALLENGE);
   A.result.endless_ending = A.result.victory && (rs_run()->run.mode == GAME_MODES_ENDLESS || rs_run()->run.mode == GAME_MODES_SPLICED_ENDLESS);
   static wg_gains gains;
   A.result.gains = A.result.victory && wg_collect(rs_run()->sys, rs_run(), &gains) > 0 ? &gains : NULL;
@@ -370,9 +399,10 @@ static void on_settings_start(const rset_values* v, void* arg) {
   A.settings = *v;
   const gc_system* sys=sysd_get();
   if(A.settings.mode==RSET_MODE_BIZARRE&&!gc_system_bizarre_unlocked(sys))A.settings.mode=GAME_MODES_CLASSIC;
-  if(A.settings.mode==GAME_MODES_ENDLESS&&(!sys||!sys->unlocks.endless_mode))A.settings.mode=GAME_MODES_CLASSIC;
+  if((A.settings.mode==GAME_MODES_ENDLESS||A.settings.mode==GAME_MODES_CHALLENGE)&&(!sys||!sys->unlocks.endless_mode))A.settings.mode=GAME_MODES_CLASSIC;
   if(A.settings.mode==GAME_MODES_SPLICED_ENDLESS&&(!sys||!sys->unlocks.spliced_endless_mode))
     A.settings.mode=sys&&sys->unlocks.endless_mode?GAME_MODES_ENDLESS:GAME_MODES_CLASSIC;
+  A.challenges_chosen = false;
   A.bizarre = A.settings.mode == RSET_MODE_BIZARRE;
   if (A.bizarre) A.settings.mode = GAME_MODES_CLASSIC;   /* the run underneath is a Classic one */
   A.custom = A.settings.mode == GAME_MODES_CLASSIC;

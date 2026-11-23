@@ -29,6 +29,20 @@ extern "C" {
 /* An upper bound for ss_list (game-core has 572 starter species). */
 #define SS_MAX_ENTRIES 640
 
+/* Challenge Mode: the challenges the screen is for (NULL = none, the default). The list leaves out what no challenge allows (upstream's
+ * filterStarters: isStarterValidForChallenge), ss_team applies them and the party rules, and the three below answer checkStarterValidForChallenge
+ * for the screen. The caller keeps the set alive while it is set. The attribute side of Fresh Start (what the dex and the starter entries show)
+ * is not here: the caller hands in a system whose entries have it applied (gc_challenge_starter_view). */
+void ss_set_challenges(const gc_challenge_set* set);
+/* Fresh Start's getStarterData: a malloc'd copy of the system whose dex and starter entries are as a new save shows them (the caller frees it;
+ * the player's own data is never changed). NULL when the copy cannot be allocated. */
+gc_system* ss_fresh_view(const gc_system* sys, const gc_challenge_set* set);
+bool ss_challenge_listed(uint16_t species);
+/* the species picked with its defaults is valid (soft: or an evolution of it is); true with no challenges */
+bool ss_challenge_pick_valid(const gc_system* sys, uint16_t species, bool soft);
+/* at least one of the team is valid: isPartyValid (true with no challenges) */
+bool ss_challenge_party_valid(const gc_system* sys, const uint16_t* species, int n);
+
 /* The starters to list: upstream's default filter (the species whose dex entry says caught, a non-shiny or a shiny with a variant),
  * in species order, less the ones game-core would refuse with their defaults (gc_starter_is_available): `refused` (may be NULL)
  * gets how many those were. `sys` NULL lists nothing. Returns how many were written.

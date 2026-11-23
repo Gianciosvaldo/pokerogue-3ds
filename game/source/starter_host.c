@@ -2,6 +2,7 @@
 #include "starter_host.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "gc/gacha.h"
@@ -18,7 +19,8 @@ const pr_species* menu_species(uint16_t id);
 #include "ui.h"
 
 static struct {
-  gc_system* sys;
+  gc_system* sys;       /* what the screen reads and edits: the real data, or the copy with Fresh Start applied */
+  gc_system* real;      /* the real data while `sys` is the copy, else NULL */
   sh_events ev;
   sm_entry all[SS_MAX_ENTRIES];     /* every species the dex lists, in species order */
   sm_entry entries[SS_MAX_ENTRIES]; /* what the screen shows: `all` less the filter, in the sort's order */
@@ -51,7 +53,21 @@ static int rnd(void* ctx, int n) {
 
 /* the game mode whose starter budget this screen shows and enforces: the caller's (Classic when it names none) */
 static int game_mode(void) {
+  if (H.ev.mode == GAME_MODES_CHALLENGE) return GAME_MODES_CHALLENGE;
   return H.ev.mode >= GAME_MODES_CLASSIC && H.ev.mode <= GAME_MODES_SPLICED_ENDLESS ? H.ev.mode : GAME_MODES_CLASSIC;
+}
+
+/* Fresh Start is on: the copy of the data, no purchases */
+static bool fresh_start(void) { return H.ev.challenges && H.ev.challenges->value[CHALLENGES_FRESH_START]; }
+
+/* Challenge Mode's rules for the screen: checkStarterValidForChallenge with soft = isPartyValid, and isPartyValid */
+static bool pick_ok(void* ctx, uint16_t species, const uint16_t* party, int n) {
+  (void)ctx;
+  return ss_challenge_pick_valid(H.sys, species, ss_challenge_party_valid(H.sys, party, n));
+}
+static bool party_ok(void* ctx, const uint16_t* party, int n) {
+  (void)ctx;
+  return ss_challenge_party_valid(H.sys, party, n);
 }
 
 /* The team was confirmed: game-core's rules decide whether it is a team. The screen only offers what the dex holds, so a refusal
@@ -75,7 +91,7 @@ static bool on_start(void* ctx, const uint16_t* species, int n) {
   return true;
 }
 
-static void on_exit(void* ctx) {
+static void on_exit_cb(void* ctx) {
   (void)ctx;
   if (H.ev.on_exit) H.ev.on_exit(H.ev.arg);
 }
@@ -166,7 +182,7 @@ static void editor_show(int mode) {
     editor_add(EDIT_SHINY,"Shiny tier");editor_add(EDIT_ABILITY,"Ability");
     if(ss_can_cycle_form(H.sys,H.editing))editor_add(EDIT_FORM,"Form");
     if(ss_can_cycle_gender(H.sys,H.editing))editor_add(EDIT_GENDER,"Gender");
-    snprintf(label,sizeof label,"Use candies (%d)",p->candy_count);editor_add(EDIT_CANDY,label);
+    if(!fresh_start()){snprintf(label,sizeof label,"Use candies (%d)",p->candy_count);editor_add(EDIT_CANDY,label);}
     if(p->passive_attr&1)editor_add(-3,(p->passive_attr&2)?"Disable passive":"Enable passive");
     editor_add(-1,"Back");
   } else if(mode==EDIT_NATURE) {
@@ -256,12 +272,13 @@ static void rename_done(const char* text, void* arg) {
   const uint16_t species = (uint16_t)(long)arg;
   ui_pop();
   if (!text) return;
+  gc_system* base = H.real ? H.real : H.sys;   /* a nickname is kept in the player's own data, even under Fresh Start's copy */
   char old[GC_STARTER_NICKNAME_BYTES];
-  snprintf(old, sizeof old, "%s", gc_system_starter_nickname(H.sys, species));
+  snprintf(old, sizeof old, "%s", gc_system_starter_nickname(base, species));
   if (!strcmp(old, text)) {ui_play_select();return;} /* the same again: nothing to write */
   /* settle any pending profile transaction before the change, as the Customize lists do */
   if(!editor_save()) {starter_message("The profile could not be saved. Nothing was changed.");return;}
-  const int r = ss_set_nickname(H.sys, species, text);
+  const int r = ss_set_nickname(base, species, text);
   if (r != GC_STARTER_NICK_OK) { /* name_entry's keys cannot make bad text; a full table can happen */
     ui_play_error();
     if (r == GC_STARTER_NICK_FULL) {
@@ -272,11 +289,12 @@ static void rename_done(const char* text, void* arg) {
     return;
   }
   if(!editor_save()) {
-    ss_set_nickname(H.sys, species, old); /* what it was: replaces, or puts back, or clears; it cannot be refused */
+    ss_set_nickname(base, species, old); /* what it was: replaces, or puts back, or clears; it cannot be refused */
     editor_refresh();
     starter_message("The profile could not be saved. Nothing was changed.");
     return;
   }
+  if (H.real) ss_set_nickname(H.sys, species, text);   /* the copy the screen reads shows it too */
   ui_play_select();
   editor_refresh(); /* the panel shows the new name */
 }
@@ -450,6 +468,12 @@ static void sh_draw(ui_screen* s, rr_screen which) {
 static void sh_leave(ui_screen* s) {
   (void)s;
   starter_close();
+  ss_set_challenges(NULL);
+  if (H.real) {
+    free(H.sys);   /* the copy (a screen that is left is not coming back: sh_open makes it again) */
+    H.sys = H.real;
+    H.real = NULL;
+  }
 }
 
 /* SelectStarterPhase.start: the menu music */
@@ -468,16 +492,33 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   img_drop_prefix("images/arenas/");
   img_drop_prefix("images/battle_anims/");
   img_drop_prefix("images/effects/");
+  H.real = NULL;
   H.sys = sys;
-  time_t now=time(NULL);H.pokerus_bucket=now>0?(uint64_t)now/10800:0;
   H.ev = *ev;
+  ss_set_challenges(ev->challenges);
+  if (fresh_start()) {
+    /* Fresh Start's getStarterData: the dex and starter entries as a new save shows them. A copy: the player's own data is never changed by it */
+    gc_system* view = ss_fresh_view(sys, ev->challenges);
+    if (!view) { ss_set_challenges(NULL); return false; }
+    H.real = sys;
+    H.sys = view;
+  }
+  time_t now=time(NULL);H.pokerus_bucket=now>0?(uint64_t)now/10800:0;
   ssf_reset(&H.filter);
   rebuild();
-  if (H.n == 0) return false;
+  if (H.n == 0) {
+    ss_set_challenges(NULL);
+    if (H.real) { free(H.sys); H.sys = H.real; H.real = NULL; }
+    return false;
+  }
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
   const starter_args args = {H.entries, H.n, gc_starter_budget(game_mode()), H.all, H.n_all};
-  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label, cycle, rename_starter};
+  starter_events events = {describe, on_start, on_exit_cb, rnd, NULL, configure, open_filter, filter_label, cycle, rename_starter};
+  if (ev->challenges) {
+    events.pick_ok = pick_ok;
+    events.party_ok = party_ok;
+  }
   starter_open(&args, &events);
   ui_set(&g_screen);
   if (notice && *notice) starter_message(notice);

@@ -829,6 +829,53 @@ static void test_budget_endless(void) {
   }
 }
 
+/* Challenge Mode with Fresh Start: the screen shows the dex as a new save would (a copy: the player's own system is never changed), the team
+ * built through it is accepted by game-core with the same challenges, and the real data is as it was afterwards */
+static gc_system SYS_BEFORE;
+static void test_fresh_start_screen(void) {
+  gc_system_init_defaults(&SYS);
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    SYS.dex[id].caught_attr = gc_species_full_unlocks_data(id);
+    SYS.dex[id].nature_attr = 0x3FFFFFEu;
+    SYS.starters[id].ability_attr = 7;
+    SYS.starters[id].passive_attr = 3;
+    SYS.starters[id].value_reduction = 2;
+  }
+  memcpy(&SYS_BEFORE, &SYS, sizeof SYS);
+  gc_challenge_set fresh = {{0}};
+  fresh.value[CHALLENGES_FRESH_START] = 1;
+  memset(&R, 0, sizeof R);
+  g_screen = NULL;
+  g_option_cb = NULL;
+  reset_logs();
+  sh_events ev = {on_start, on_exit_cb, NULL};
+  ev.mode = GAME_MODES_CHALLENGE;
+  ev.challenges = &fresh;
+  CHECK(sh_open(&SYS, NULL, &ev), "Challenge Mode: the starter select opens with Fresh Start");
+  CHECK(starter_model()->n > 0 && starter_model()->pick_ok && starter_model()->party_ok, "with the challenge callbacks");
+  draw();
+  CHECK(drawn("0/10"), "the Challenge budget is Classic's 10");
+  for (int rounds = 0; rounds < starter_model()->n && rounds < 400; rounds++) {
+    press(MB_ACTION);
+    press(MB_ACTION);
+    press(MB_RIGHT);
+  }
+  press(MB_MENU);
+  tick(2500);
+  press(MB_ACTION);
+  CHECK(R.started == 1 && R.n_team >= 1, "the team begins (%d members)", R.n_team);
+  CHECK(!memcmp(&SYS_BEFORE, &SYS, sizeof SYS), "the player's own system data is as it was after the screen");
+  const char* why = NULL;
+  gc_run_new(&RUN, GAME_MODES_CHALLENGE, "starteruitestseed0000001", 7);
+  RUN.sys = &SYS;
+  CHECK(gc_run_set_challenges(&RUN, &fresh, &why), "game-core takes the challenges: %s", why ? why : "");
+  CHECK(R.started && gc_run_set_starters(&RUN, R.team, R.n_team, &why), "game-core takes the team under Fresh Start: %s", why ? why : "");
+  ui_screen other = {0};
+  ui_set(&other); /* the app moves on: the screen is left */
+  CHECK(ss_challenge_listed(1) && ss_challenge_pick_valid(&SYS, 1, false), "the challenges are off again after the screen");
+}
+
 /* random buttons on random systems: nothing breaks, and every team handed over starts a run */
 static void test_fuzz(int sessions) {
   long presses = 0, teams = 0, exits = 0;
@@ -1443,6 +1490,7 @@ int main(int argc, char** argv) {
   test_long_notice();
   test_budget();
   test_budget_endless();
+  test_fresh_start_screen();
   test_fuzz(sessions);
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

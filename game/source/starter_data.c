@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "gc/data.h"
 #include "i18n.h"
@@ -32,6 +33,11 @@ const pr_species* menu_species(uint16_t id);
 #define PASSIVE_ENABLED 2u
 
 uint64_t ss_clock_override_ms=0;
+
+/* the challenges the screen is for (Challenge Mode), NULL = none: the list, the picks and the team follow them */
+static const gc_challenge_set* g_set;
+void ss_set_challenges(const gc_challenge_set* set) { g_set = set; }
+
 
 bool ss_has_pokerus(uint16_t species){
   static uint64_t last=UINT64_MAX;static uint16_t ids[3];
@@ -269,6 +275,51 @@ bool ss_cycle_gender(gc_system* sys, uint16_t species) {
   return store_prefs(sys, species, &p);
 }
 
+/* isStarterValidForChallenge: some form the starter select offers (or the species itself when it has no forms) is valid for the challenges,
+ * counting an evolution of it (checkStarterValidForChallenge soft) */
+gc_system* ss_fresh_view(const gc_system* sys, const gc_challenge_set* set) {
+  gc_system* view = malloc(sizeof *view);
+  if (!view) return NULL;
+  memcpy(view, sys, sizeof *view);
+  for (int sp = 1; sp <= GC_MAX_SPECIES_ID; sp++) {
+    gc_starter_view v;
+    gc_challenge_starter_view(sys, set, sp, &v);
+    view->dex[sp].caught_attr = v.caught_attr;
+    view->dex[sp].nature_attr = v.nature_attr;
+    memcpy(view->dex[sp].ivs, v.ivs, sizeof v.ivs);
+    view->starters[sp].ability_attr = v.ability_attr;
+    view->starters[sp].passive_attr = v.passive_attr;
+    view->starters[sp].value_reduction = v.value_reduction;
+    view->starters[sp].egg_moves = v.egg_moves;
+  }
+  return view;
+}
+
+bool ss_challenge_listed(uint16_t species) {
+  if (!g_set) return true;
+  const pr_species* sp = menu_species(species);
+  if (!sp) return false;
+  if (sp->nforms <= 1) return gc_challenge_starter_valid(g_set, species, 0, true);
+  bool valid = false;
+  for (int f = 0; f < sp->nforms && f < 57; f++)
+    if (form_selectable(species, f)) valid |= gc_challenge_starter_valid(g_set, species, f, true);
+  return valid;
+}
+
+bool ss_challenge_pick_valid(const gc_system* sys, uint16_t species, bool soft) {
+  if (!g_set) return true;
+  gc_starter s;
+  if (!ss_starter(sys, species, &s)) return false;
+  return gc_challenge_starter_valid(g_set, species, s.form, soft);
+}
+
+bool ss_challenge_party_valid(const gc_system* sys, const uint16_t* species, int n) {
+  if (!g_set) return true;
+  for (int i = 0; i < n; i++)
+    if (ss_challenge_pick_valid(sys, species[i], false)) return true;
+  return false;
+}
+
 int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused) {
   int n = 0;
   if (refused) *refused = 0;
@@ -276,12 +327,13 @@ int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused) {
   for (int i = 0; i < gc_starter_cost_count; i++) {
     const uint16_t id = gc_starter_costs[i].id;
     props p;
+    if (!ss_challenge_listed(id)) continue;   /* filterStarters: the challenge's own exclusion comes first */
     if (!caught(sys, id) || !defaults(sys, id, &p)) continue;
     /* What upstream lists, game-core must also be able to start: a species whose defaults gc_starter_is_available refuses would be
      * one the player sees and cannot begin with. The one known case: a prevolution caught only through an evolved form (a Litleo
      * after a female Pyroar) has no form bit in its dex entry, which upstream lets through with form 0 and game-core refuses. */
     gc_starter s;
-    if (!ss_starter(sys, id, &s) || !gc_starter_is_available(sys, &s, NULL, NULL)) {
+    if (!ss_starter(sys, id, &s) || !gc_starter_is_available_set(sys, g_set, &s, NULL, NULL)) {
       if (refused) (*refused)++;
       continue;
     }
@@ -386,7 +438,7 @@ bool ss_team(const gc_system* sys, int mode, const uint16_t* species, int n, gc_
       *why = "not a starter species";
       return false;
     }
-    if (!gc_starter_is_available(sys, &t[i], &cost, why)) return false;
+    if (!gc_starter_is_available_set(sys, g_set, &t[i], &cost, why)) return false;
     for (int k = 0; k < i; k++) {
       if (t[k].species == t[i].species) {
         *why = "the same species twice";
@@ -395,6 +447,7 @@ bool ss_team(const gc_system* sys, int mode, const uint16_t* species, int n, gc_
     }
     total += cost;
   }
+  if (g_set && !gc_challenge_party_ok(g_set, t, n, why)) return false;
   if (total > (double)gc_starter_budget(mode) + 1e-9) {
     *why = "starterSelectUiHandler:cost";
     return false;

@@ -29,6 +29,11 @@ typedef struct {
   /* Optional mode-specific validator, before accepting or leaving the selector. */
   bool (*validate_team)(const gc_starter* team, int n, void* arg, const char** why);
   int mode; /* game mode whose starter budget is shown; omitted initializers default to Classic */
+  /* Challenge Mode (mode GAME_MODES_CHALLENGE; NULL: none): the run's challenges. The grid lists what they allow, the team follows their rules
+   * and, with Fresh Start, the screen works on a copy of the system data with Fresh Start's view applied (gc_challenge_starter_view): the dex,
+   * natures, abilities, IVs and the costs a new save would show, no egg moves, no passives, no candy purchases. What the player changes there (forms,
+   * moves, shiny tier...) is not remembered; a nickname is, in the real data. The set must outlive the screen. */
+  const gc_challenge_set* challenges;
 } sh_events;
 
 /* Shows the screen (the UI fades to it, replacing the one on top) with the species `sys` has caught. `notice` (may be NULL) is a

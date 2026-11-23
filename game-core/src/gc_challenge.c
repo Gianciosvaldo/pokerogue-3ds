@@ -165,6 +165,25 @@ bool gc_challenge_starter_valid(const gc_challenge_set *set, int species, int fo
     return false;
 }
 
+/* The party select's challenge rules: every member is valid, or (next to a valid one) one an evolution of which is (checkStarterValidForChallenge
+ * with soft = isPartyValid), and the party starts only with at least one valid member (isPartyValid). `why` is the locale key / reason on a refusal. */
+bool gc_challenge_party_ok(const gc_challenge_set *set, const gc_starter *team, int n, const char **why)
+{
+    const char *dummy;
+    if (!why) why = &dummy;
+    bool any_valid = false;
+    for (int i = 0; i < n; i++) {
+        const bool valid = gc_challenge_starter_valid(set, team[i].species, team[i].form, false);
+        if (!valid && !gc_challenge_starter_valid(set, team[i].species, team[i].form, true)) {
+            *why = "a starter this challenge does not allow";
+            return false;
+        }
+        any_valid |= valid;
+    }
+    if (!any_valid) { *why = "starterSelectUiHandler:invalidParty"; return false; }
+    return true;
+}
+
 /* The species whose forms Fresh Start takes back to the default one (FreshStartChallenge: Pikachu, Eevee, Pichu, Rotom, Meloetta) */
 static bool fresh_start_form_reset(int species)
 {
