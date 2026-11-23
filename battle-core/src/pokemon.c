@@ -356,8 +356,7 @@ const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p)
     return &pr_forms[fs->form0 + (p->fusion_form < fs->nforms ? p->fusion_form : 0)];
 }
 
-/* calculateStats() with calculateBaseStats(). Challenge FLIP_STAT remains
- * separate; Wonder Guard reads the permanent ability and the passive. */
+/* calculateStats() with calculateBaseStats(). Wonder Guard reads the permanent ability and the passive. */
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     int32_t hp = p->hp, last_max = p->stats[STAT_HP];
@@ -369,19 +368,23 @@ void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
-    if (bt->game_mode == GAME_MODES_CHALLENGE && (!bt->challenge_flags_known
-        || (bt->challenge_flags & (1u << CHALLENGES_FLIP_STAT))))
+    if (bt->game_mode == GAME_MODES_CHALLENGE && !bt->challenge_flags_known)
         pr_note_unported(bt, PR_FEAT_WAVE);
+    const bool flip = (bt->challenge_flags & (1u << CHALLENGES_FLIP_STAT)) != 0;
     const pr_form *f = pr_pokemon_base_form(p);
     const pr_form *ff = pr_pokemon_fusion_form(p);
-    double base[6];
-    for (int s = 0; s < 6; s++) base[s] = f->base_stats[s];
+    double base[6], fused[6];
+    /* applyChallenges(FLIP_STAT, pokemon, baseStats): HP with Speed, Attack with Sp. Def, Defense with Sp. Atk (the species, then the fusion's) */
+    for (int s = 0; s < 6; s++) {
+        base[s] = f->base_stats[flip ? 5 - s : s];
+        if (ff) fused[s] = ff->base_stats[flip ? 5 - s : s];
+    }
     /* Source applies total/flat effects to the primary species before averaging
      * with the fusion or halving an unfused Spliced Endless actor. */
     pr_apply_base_stat_before_fusion(bt, p, base);
     for (int s = 0; s < 6; s++) {
         if (ff) {
-            base[s] = ceil((base[s] + ff->base_stats[s]) / 2.0);
+            base[s] = ceil((base[s] + fused[s]) / 2.0);
         } else if (bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
             /* calculateBaseStats: an unfused Pokemon has halved base stats in spliced-only mode. */
             base[s] = ceil(base[s] / 2.0);
@@ -776,14 +779,23 @@ double js_round(double x)
 bool pr_has_passive(pr_battle *bt, const pr_pokemon *p)
 {
     int gm = bt->game_mode, w = bt->wave_index;
-    if (gm == GAME_MODES_CHALLENGE && (!bt->challenge_flags_known
-        || (bt->challenge_flags & (1u << CHALLENGES_PASSIVES))))
+    if (gm == GAME_MODES_CHALLENGE && !bt->challenge_flags_known)
         pr_note_unported(bt, PR_FEAT_WAVE);
+    const bool passives = (bt->challenge_flags & (1u << CHALLENGES_PASSIVES)) != 0;
     bool endless = gm == GAME_MODES_ENDLESS || gm == GAME_MODES_SPLICED_ENDLESS;
-    if (!p->is_player && ((gm == GAME_MODES_CLASSIC && w == 200) || (endless && (w % 250 == 0 || w % 1000 == 0))))
+    /* a Challenge Mode game is a Classic one: its final boss (wave 200) has no passive unless the Passives challenge is on */
+    const bool classic_like = gm == GAME_MODES_CLASSIC || gm == GAME_MODES_CHALLENGE;
+    if (!p->is_player && !passives && ((classic_like && w == 200) || (endless && (w % 250 == 0 || w % 1000 == 0))))
         return false;
     if (gm == GAME_MODES_DAILY && p->custom_passive != -1) return true;
-    return p->passive_flag || p->is_boss;
+    /* PassivesChallenge.applyPassiveAccess: value 1 leaves the Pokemon as it is, except for a trainer's Pokemon (and the final boss, which
+     * is a boss: isBoss() below gives it the passive anyway); value 2 gives every Pokemon its passive */
+    bool has = p->passive_flag;
+    if (passives) {
+        const bool trainer = p->has_trainer && !p->is_player;
+        if (trainer || bt->challenge_passives != 1) has = true;
+    }
+    return has || p->is_boss;
 }
 
 uint16_t pr_get_passive_ability(const pr_pokemon *p)

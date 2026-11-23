@@ -22,7 +22,8 @@ plant() {
   echo "$NAME: exit $st"
   total=$((total + 1)); [ "$st" = 1 ] || fails=$((fails + 1))
 }
-plant played-mask-inverse gc_challenge.c 's/return 1u << CHALLENGES_FRESH_START;/return (1u << CHALLENGES_FRESH_START) | (1u << CHALLENGES_INVERSE_BATTLE);/'
+plant played-mask-hardcore gc_challenge.c 's/| (1u << CHALLENGES_PASSIVES);/| (1u << CHALLENGES_PASSIVES) | (1u << CHALLENGES_HARDCORE);/'
+plant battle-rules-not-on-the-run-battle gc_challenge.c 's/run->bt.challenge_passives = r->mode == GAME_MODES_CHALLENGE ? r->challenge_passives : 0;/run->bt.challenge_passives = 0;/'
 plant nuzlocke-without-hardcore gc_challenge.c 's/v\[CHALLENGES_LIMITED_CATCH\] \&\& v\[CHALLENGES_HARDCORE\]) f |= GC_RIBBON_NUZLOCKE/v[CHALLENGES_LIMITED_CATCH]) f |= GC_RIBBON_NUZLOCKE/'
 plant nuzlocke-without-fresh gc_challenge.c 's/v\[CHALLENGES_FRESH_START\] \&\& v\[CHALLENGES_LIMITED_CATCH\] \&\& v\[CHALLENGES_HARDCORE\]) f |= GC_RIBBON_NUZLOCKE/v[CHALLENGES_LIMITED_CATCH] \&\& v[CHALLENGES_HARDCORE]) f |= GC_RIBBON_NUZLOCKE/'
 plant flip-inverse-keeps-others gc_challenge.c 's/if (flip_or_inverse) return flip_or_inverse;/if (flip_or_inverse) return f;/'

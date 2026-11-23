@@ -25,7 +25,11 @@ enum {
     PR_CHALLENGE_SINGLE_GENERATION = 1u << 0, /* Challenges.SINGLE_GENERATION */
     PR_CHALLENGE_SINGLE_TYPE       = 1u << 1, /* Challenges.SINGLE_TYPE */
     PR_CHALLENGE_FRESH_START       = 1u << 4, /* Challenges.FRESH_START */
-    PR_CHALLENGE_RULES_PORTED = PR_CHALLENGE_SINGLE_GENERATION | PR_CHALLENGE_SINGLE_TYPE | PR_CHALLENGE_FRESH_START,
+    PR_CHALLENGE_INVERSE_BATTLE    = 1u << 5, /* Challenges.INVERSE_BATTLE */
+    PR_CHALLENGE_FLIP_STAT         = 1u << 6, /* Challenges.FLIP_STAT */
+    PR_CHALLENGE_PASSIVES          = 1u << 10, /* Challenges.PASSIVES */
+    PR_CHALLENGE_RULES_PORTED = PR_CHALLENGE_SINGLE_GENERATION | PR_CHALLENGE_SINGLE_TYPE | PR_CHALLENGE_FRESH_START
+                                | PR_CHALLENGE_INVERSE_BATTLE | PR_CHALLENGE_FLIP_STAT | PR_CHALLENGE_PASSIVES,
 };
 
 typedef struct pr_run {
@@ -35,6 +39,7 @@ typedef struct pr_run {
     uint8_t challenge_generation; /* SINGLE_GENERATION value: 0 off, 1..9 */
     uint8_t challenge_type;       /* SINGLE_TYPE value: 0 off, 1..18 (PokemonType + 1) */
     uint8_t challenge_fresh_start;/* FRESH_START value: 0 off, 1..2 */
+    uint8_t challenge_passives;   /* PASSIVES value: 0 off, 1..2 */
     pr_seedstr seed;           /* globalScene.seed: the run seed */
     pr_seedstr wave_seed;      /* globalScene.waveSeed */
     pr_rng rng;                /* Phaser.Math.RND */

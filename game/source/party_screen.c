@@ -153,7 +153,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->types[1] = nt > 1 ? types[1] : -1;
   m->ability = p->base_ability;
   m->passive = p->passive;
-  m->has_passive = p->passive_flag;
+  m->has_passive = p->passive_flag || p->passive != 0; /* hasPassive(): also the Passives challenge's (p->passive is set only when it has one) */
   m->nature = p->nature;
   for (int i = 0; i < 6; i++) {
     m->stats[i] = (uint32_t)p->stats[i];
@@ -198,7 +198,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->types[1] = nt > 1 ? types[1] : -1;
   m->ability = p->base_ability;
   m->passive = p->passive;
-  m->has_passive = p->passive_flag;
+  m->has_passive = p->passive_flag || p->passive != 0; /* hasPassive(): also the Passives challenge's (p->passive is set only when it has one) */
   m->nature = p->nature;
   for (int i = 0; i < 6; i++) {
     m->stats[i] = (uint32_t)p->stats[i];

@@ -23,9 +23,10 @@ int main(void){
  learn.b=MOVE_ID_GROWL;CHECK(gc_phase_start(&run,&learn));CHECK(gc_rq_next(&gc_int(&run)->rq,&form));CHECK(form.b==0);CHECK(gc_phase_start(&run,&form));CHECK(p->form==0);drain();CHECK(!run.bt.n_unported);
  /* Daily rejects both form directions, even after a successful learn. */
  for(int f=0;f<2;f++){start();p=run.bt.field[0];p->form=f;run.bt.game_mode=GAME_MODES_DAILY;learn.b=f?MOVE_ID_GROWL:MOVE_ID_SECRET_SWORD;CHECK(gc_phase_start(&run,&learn));CHECK(!gc_rq_has(&run,RP_REWARD_FORM)&&p->form==f);}
- /* Known empty challenge sets are supported; unknown/passive/Flip Stat inputs stay visible. */
+ /* Known empty challenge sets are supported; unknown inputs stay visible. Passives and Flip Stat are ported
+  * (challenge part 2, tools/challengestartersdiff.sh), so a known set holding them is no longer an unported note. */
  start();p=run.bt.field[0];run.bt.game_mode=GAME_MODES_CHALLENGE;run.bt.challenge_flags_known=true;pr_update_passive(&run.bt,p);CHECK(!run.bt.n_unported);
- run.bt.challenge_flags_known=false;pr_update_passive(&run.bt,p);CHECK(run.bt.n_unported>0);run.bt.n_unported=0;run.bt.challenge_flags_known=true;run.bt.challenge_flags=1u<<CHALLENGES_PASSIVES;pr_update_passive(&run.bt,p);CHECK(run.bt.n_unported>0);run.bt.n_unported=0;run.bt.challenge_flags=1u<<CHALLENGES_FLIP_STAT;pr_calculate_stats(&run.bt,p);CHECK(run.bt.n_unported>0);
+ run.bt.challenge_flags_known=false;pr_update_passive(&run.bt,p);CHECK(run.bt.n_unported>0);run.bt.n_unported=0;run.bt.challenge_flags_known=true;run.bt.challenge_flags=1u<<CHALLENGES_PASSIVES;run.bt.challenge_passives=2;pr_update_passive(&run.bt,p);CHECK(!run.bt.n_unported&&p->passive==pr_get_passive_ability(p));run.bt.challenge_flags=1u<<CHALLENGES_FLIP_STAT;pr_calculate_stats(&run.bt,p);CHECK(!run.bt.n_unported);
  start();p=run.bt.field[0];gc_mon_set_move(&run.party[0],0,MOVE_ID_SECRET_SWORD);run.bt.game_mode=-1;uint16_t missing_target;CHECK(!pr_learned_form_target(&run.bt,p,&missing_target));CHECK(run.bt.n_unported>0);
  printf("Keldeo learn/cached-form/profile/save: %d checks passed\n",checks);return 0;
 }

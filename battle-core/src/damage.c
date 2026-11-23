@@ -6,11 +6,23 @@
 #include "pr/engine.h"
 #include <math.h>
 
-static double type_mult(int atk, int def)
+/* getTypeDamageMultiplier(attackType, defType): the chart, then Inverse Battle's applyTypeEffectiveness
+ * (less than 1 becomes 2, more than 1 becomes 0.5, 1 stays). Every read of the chart goes through here. */
+double pr_type_chart_multiplier(const pr_battle *bt, int atk, int def)
 {
     if (atk == POKEMON_TYPE_UNKNOWN || def == POKEMON_TYPE_UNKNOWN) return 1;
     if (atk < 0 || atk >= PR_TYPE_COUNT || def < 0 || def >= PR_TYPE_COUNT) return 1;
-    return pr_type_chart_x2[atk][def] / 2.0;
+    double m = pr_type_chart_x2[atk][def] / 2.0;
+    if (bt && (bt->challenge_flags & (1u << CHALLENGES_INVERSE_BATTLE))) {
+        if (m < 1) m = 2;
+        else if (m > 1) m = 0.5;
+    }
+    return m;
+}
+
+static double type_mult(const pr_battle *bt, int atk, int def)
+{
+    return pr_type_chart_multiplier(bt, atk, def);
 }
 
 /* for (const ally of p.getAlliesGenerator()) applyAbAttrs(cls, {...params, pokemon: ally}):
@@ -70,7 +82,7 @@ double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *de
 
     double multi = 1;
     for (int i = 0; i < n; i++) {
-        double tm = type_mult(move_type, types[i]);
+        double tm = type_mult(bt, move_type, types[i]);
         /* source?.isActive(true): on the field and not fainted */
         if (source && source->hp > 0 && source->on_field && !source->switch_out_status && tm == 0) {
             /* checkIgnoreTypeImmunity: grounded Flying types, Foresight/Miracle Eye tags,
@@ -91,7 +103,7 @@ double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *de
     }
     if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
     if (!ignore_strong_winds && bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
-        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
+        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(bt, move_type, POKEMON_TYPE_FLYING) == 2) {
         multi /= 2;
         if (!simulated && bt->engine) pr_queue_msg(bt, bt->engine, pr_msg0("weather:strongWindsEffectMessage"));
     }

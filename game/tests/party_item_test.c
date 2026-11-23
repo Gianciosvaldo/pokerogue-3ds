@@ -471,11 +471,19 @@ int main(void) {
     for (int j = 0; j < 4; j++) p->max_pp_override[j] = -1;
   }
   run.party[0].pokerus=true;ps_set_run(&run);
+  /* hasPassive() on the summary: the passive the Pokemon has (p->passive, set by battle-core's pr_update_passive: the Passives challenge's
+   * value 2 gives one with no unlock), not only the unlock flag */
+  run.party[0].b.passive_flag=false;run.party[0].b.passive=ABILITY_ID_BLAZE;
   open();input(BTN_ACTION);input(BTN_DOWN);input(BTN_ACTION);
-  assert(summary_calls==1&&summary_mon.pokerus);ps_close();
+  assert(summary_calls==1&&summary_mon.pokerus&&summary_mon.has_passive);ps_close();
   run.bt.n_party[0]=3;for(int i=0;i<3;i++)run.bt.party[0][i]=&run.party[i].b;
   ps_open(&run.bt,PS_SWITCH,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);
-  assert(summary_calls==2&&summary_mon.pokerus);ps_close();
+  assert(summary_calls==2&&summary_mon.pokerus&&summary_mon.has_passive);ps_close();
+  run.party[0].b.passive=0;
+  open();input(BTN_ACTION);input(BTN_DOWN);input(BTN_ACTION);
+  assert(summary_calls==3&&!summary_mon.has_passive);ps_close();
+  ps_open(&run.bt,PS_SWITCH,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);
+  assert(summary_calls==4&&!summary_mon.has_passive);ps_close();
   open();
   pf_clear_text();
   ui_screen* s = ui_top();

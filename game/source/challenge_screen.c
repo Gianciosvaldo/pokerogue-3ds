@@ -83,7 +83,9 @@ static void cs_draw(ui_screen* s, rr_screen which) {
   ui_window(0, -48, 320, 48, WIN_NORMAL);
   const int id = chm_current(&C.m);
   if (id >= 0) {
+    /* getDescription: desc.<value>, or the one desc of a challenge that has a single text (Inverse Battle, Flip Stat) */
     snprintf(key, sizeof key, "challenges:%s.desc.%d", chm_key(id), (int)C.m.v.value[id]);
+    if (!i18n_exists(key)) snprintf(key, sizeof key, "challenges:%s.desc", chm_key(id));
     i18n_t(text, sizeof text, key, NULL);
   } else {
     text[0] = 0;

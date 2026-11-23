@@ -20,6 +20,24 @@
 static gc_run run;
 static gc_system sys;
 static long checks, failures, cases, queries, members, fresh_cases, views_changed, soft_only;
+static long chart_values, effectiveness_values, passive_values, enemy_passives;
+static int inverse_v, flip_v, passives_v;   /* the case's Inverse Battle, Flip Stat and Passives values */
+static char exp_e[6][400], exp_p[6][40];
+static char exp_y[32][80];
+static char exp_f[200];
+static long fusion_stats;
+static int got_y;
+static pr_battle bt;   /* the battle rules are read from the challenge fields of a battle: nothing else of it is looked at */
+
+static void set_battle(int wave)
+{
+    memset(&bt, 0, sizeof bt);
+    bt.game_mode = GAME_MODES_CHALLENGE;
+    bt.wave_index = wave;
+    bt.challenge_flags = run.run.challenge_flags;
+    bt.challenge_flags_known = true;
+    bt.challenge_passives = run.run.challenge_passives;
+}
 
 #define FAIL(...) do { if (failures < 40) { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } failures++; } while (0)
 #define CHECK(c, ...) do { checks++; if (!(c)) FAIL(__VA_ARGS__); } while (0)
@@ -55,8 +73,11 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
     gc_challenge_set set;
     memset(&set, 0, sizeof set);
     set.value[CHALLENGES_FRESH_START] = (uint8_t)fresh;
+    set.value[CHALLENGES_INVERSE_BATTLE] = (uint8_t)inverse_v;
+    set.value[CHALLENGES_FLIP_STAT] = (uint8_t)flip_v;
+    set.value[CHALLENGES_PASSIVES] = (uint8_t)passives_v;
     const char *why = NULL;
-    CHECK(gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges refused Fresh Start %d: %s", idx, fresh, why ? why : "");
+    CHECK(gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges refused Fresh Start %d, Inverse %d, Flip %d, Passives %d: %s", idx, fresh, inverse_v, flip_v, passives_v, why ? why : "");
     run.run.rng = before;
     gc_starters_build_party(&run, team, n);
     CHECK(run.n_party == n, "case %d: %d members, expected %d", idx, run.n_party, n);
@@ -97,6 +118,59 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
             const long got = s < p->n_moves ? p->moves[s] : 0;
             CHECK(want == got, "case %d (Fresh Start %d) member %d (%ld): move %d is %ld, upstream %ld", idx, fresh, k, species, s, got, want);
         }
+        /* the battle rules: Inverse Battle in the type effectiveness against the member, Passives in hasPassive() (a player's Pokemon, no battle yet) */
+        set_battle(0);
+        char *es = NULL;
+        strtok_r(exp_e[k], " \n", &es);   /* E */
+        inum(&es);   /* k */
+        for (int t = 0; t < 18; t++) {
+            const double want = num(&es), got = pr_get_attack_type_effectiveness(&bt, p, t, NULL, -1);
+            CHECK(want == got, "case %d (Inverse %d) member %d (%ld): effectiveness of type %d is %g, upstream %g", idx, inverse_v, k, species, t, got, want);
+            effectiveness_values++;
+        }
+        char *ps = NULL;
+        strtok_r(exp_p[k], " \n", &ps);   /* P */
+        inum(&ps);
+        const long want_passive = inum(&ps);
+        CHECK(want_passive == (pr_has_passive(&bt, p) ? 1 : 0), "case %d (Passives %d) member %d (%ld): hasPassive %d, upstream %ld", idx, passives_v, k, species, pr_has_passive(&bt, p), want_passive);
+        passive_values++;
+    }
+    /* Flip Stat on a fusion: member 0 fused with member 1's species and form, its stats recalculated */
+    if (exp_f[0] && run.n_party >= 2) {
+        char line[200];
+        snprintf(line, sizeof line, "%s", exp_f);
+        char *fs = NULL;
+        strtok_r(line, " \n", &fs);   /* F */
+        pr_pokemon fused = run.party[run.party_order[0]].b;
+        fused.fusion_species = (uint16_t)inum(&fs);
+        fused.fusion_form = (uint8_t)inum(&fs);
+        set_battle(0);
+        pr_calculate_stats(&bt, &fused);
+        for (int s = 0; s < 6; s++) {
+            const long want = inum(&fs);
+            CHECK(want == fused.stats[s], "case %d (Flip %d): member 0 fused with %d form %d: stat %d is %d, upstream %ld", idx, flip_v, fused.fusion_species, fused.fusion_form, s,
+                  fused.stats[s], want);
+        }
+        fusion_stats++;
+    }
+    /* an enemy's hasPassive(): the first member's Pokemon with the enemy's fields set, on each wave */
+    if (n > 0 && run.n_party > 0) {
+        pr_pokemon enemy = run.party[run.party_order[0]].b;
+        for (int y = 0; y < got_y; y++) {
+            char line[80];
+            snprintf(line, sizeof line, "%s", exp_y[y]);
+            char *ys = NULL;
+            strtok_r(line, " \n", &ys);   /* Y */
+            const long trainer = inum(&ys), boss = inum(&ys), flag = inum(&ys), wave = inum(&ys), want = inum(&ys);
+            enemy.is_player = false;
+            enemy.has_trainer = trainer != 0;
+            enemy.is_boss = boss != 0;
+            enemy.passive_flag = flag != 0;
+            set_battle((int)wave);
+            const bool got = pr_has_passive(&bt, &enemy);
+            CHECK((long)got == want, "case %d (Passives %d): an enemy (trainer %ld boss %ld passive %ld) on wave %ld has passive %d, upstream %ld", idx, passives_v, trainer, boss, flag, wave, got, want);
+            enemy_passives++;
+        }
     }
     cases++;
 }
@@ -130,9 +204,14 @@ int main(int argc, char **argv)
         } else if (!strcmp(kind, "C")) {
             if (open_case) replay_party(idx, fresh, n, before, after, team, exp);
             open_case = false;
+            got_y = 0;
+            exp_f[0] = 0;
             idx = (int)inum(&save);
             fresh = (int)inum(&save);
             const long budget = inum(&save);
+            inverse_v = (int)inum(&save);
+            flip_v = (int)inum(&save);
+            passives_v = (int)inum(&save);
             memset(&set, 0, sizeof set);
             set.value[CHALLENGES_FRESH_START] = (uint8_t)fresh;
             CHECK(gc_starter_budget(GAME_MODES_CHALLENGE) == budget, "case %d: the cost limit is %d, upstream getRunValueLimit() %ld", idx, gc_starter_budget(GAME_MODES_CHALLENGE), budget);
@@ -206,6 +285,25 @@ int main(int argc, char **argv)
         } else if (!strcmp(kind, "M")) {
             snprintf(exp[got_m], sizeof exp[got_m], "M %s", save);
             got_m++;
+        } else if (!strcmp(kind, "E")) {
+            snprintf(exp_e[(int)strtol(save, NULL, 10)], sizeof exp_e[0], "E %s", save);
+        } else if (!strcmp(kind, "P")) {
+            snprintf(exp_p[(int)strtol(save, NULL, 10)], sizeof exp_p[0], "P %s", save);
+        } else if (!strcmp(kind, "F")) {
+            snprintf(exp_f, sizeof exp_f, "F %s", save);
+        } else if (!strcmp(kind, "Y")) {
+            snprintf(exp_y[got_y++], sizeof exp_y[0], "Y %s", save);
+        } else if (!strcmp(kind, "T")) {
+            /* getTypeDamageMultiplier over the whole chart under the Inverse Battle value: the one function every read of the chart goes through */
+            const int inv = (int)inum(&save);
+            memset(&bt, 0, sizeof bt);
+            bt.challenge_flags = inv ? 1u << CHALLENGES_INVERSE_BATTLE : 0;
+            for (int a = -1; a <= 18; a++)
+                for (int d = -1; d <= 18; d++) {
+                    const double want = num(&save), got = pr_type_chart_multiplier(&bt, a, d);
+                    CHECK(want == got, "Inverse %d: the chart value of %d against %d is %g, upstream %g", inv, a, d, got, want);
+                    chart_values++;
+                }
         } else if (!strcmp(kind, "Z")) {
             saw_end = true;
         }
@@ -217,8 +315,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "incomplete trace: %ld of %ld cases, end marker %d\n", cases, n_cases, saw_end);
         return 2;
     }
-    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld checks=%ld\n", cases, fresh_cases, queries, members, soft_only,
-           views_changed, checks);
+    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld checks=%ld\n",
+           cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, checks);
     printf("TOTAL mismatches=%ld\n", failures);
     return failures ? 1 : 0;
 }

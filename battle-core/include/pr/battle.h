@@ -599,6 +599,7 @@ typedef struct pr_battle {
     bool has_biome;
     uint32_t challenge_flags;  /* active gameMode challenges, bit per Challenges enum id */
     bool challenge_flags_known; /* distinguishes an explicit empty set from missing mode context */
+    uint8_t challenge_passives; /* the Passives challenge's value (0 off, 1, 2) */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool player_teras_used_known; /* explicit arena.playerTerasUsed input */
@@ -1056,6 +1057,8 @@ bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulne
 int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move);
 /* HiddenPowerTypeAttr: Hidden Power's type from the user's IVs */
 int pr_hidden_power_type(const pr_pokemon *u);
+/* getTypeDamageMultiplier: the single-type chart value (0, 0.5, 1, 2), reversed under Inverse Battle (bt->challenge_flags; bt may be NULL) */
+double pr_type_chart_multiplier(const pr_battle *bt, int atk, int def);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
 /* the same with simulated = false passed through (IgnoreTypeImmunityAbAttr, the Strong Winds message) */

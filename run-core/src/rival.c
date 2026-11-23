@@ -154,14 +154,22 @@ static bool ground_immune(const pr_form *f)
     /* Mirror upstream's hidden-ability test, including its ability2 reference. */
     return g1 && (!a2 || g2) && (!ah || g2);
 }
+/* getTypeDamageMultiplier in rival-team-gen's weakness walk: Inverse Battle reverses the chart (set by pr_run_gen_rival_party) */
+static bool g_inverse;
+static double chart_mult(int atk,int def)
+{
+    double m=pr_type_chart_x2[atk][def]/2.0;
+    if(g_inverse){if(m<1)m=2;else if(m>1)m=0.5;}
+    return m;
+}
 static void add_weaknesses(int species, int counts[PR_TYPE_COUNT])
 {
     const pr_form *f=base_form(species); if(!f)return;
     for(int atk=0;atk<PR_TYPE_COUNT;atk++){
         if(atk==POKEMON_TYPE_UNKNOWN||atk==POKEMON_TYPE_STELLAR)continue;
         if(atk==POKEMON_TYPE_GROUND&&ground_immune(f))continue;
-        double m=pr_type_chart_x2[atk][f->type1]/2.0;
-        if(m>=2&&f->type2>=0)m*=pr_type_chart_x2[atk][f->type2]/2.0;
+        double m=chart_mult(atk,f->type1);
+        if(m>=2&&f->type2>=0)m*=chart_mult(atk,f->type2);
         if(m>=2)counts[atk]++;
     }
 }
@@ -257,6 +265,7 @@ int pr_run_gen_rival_party(pr_run *run,const pr_trainer_party_ctx *ctx,int fight
 {
     memset(out,0,sizeof *out);
     if(fight<1||fight>6)return -1;
+    g_inverse=run->mode==GAME_MODES_CHALLENGE&&(run->challenge_flags&PR_CHALLENGE_INVERSE_BATTLE);
     uint16_t chosen_final[6]={0};
     const pr_rng saved=run->rng;
     for(int slot=0;slot<ctx->n_levels&&slot<6;slot++){
