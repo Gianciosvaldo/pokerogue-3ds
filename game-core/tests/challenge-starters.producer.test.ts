@@ -33,6 +33,10 @@ import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { activeOverrides } from "#app/overrides";
 import { speciesEggMoves } from "#balance/egg-moves";
 import { Challenges } from "#enums/challenges";
+import { ModifierTier } from "#enums/modifier-tier";
+import { Unlockables } from "#enums/unlockables";
+import { modifierPool } from "#modifiers/modifier-pools";
+import { BaseStatBoosterModifierType, PokemonNatureChangeModifierType } from "#modifiers/modifier-type";
 import { getTypeDamageMultiplier } from "#data/type";
 import { EnemyPokemon } from "#field/pokemon";
 import { TrainerSlot } from "#enums/trainer-slot";
@@ -76,7 +80,7 @@ it("native Challenge Mode starter rules", async () => {
 
   const lines: string[] = [`V 1 ${SEED} ${N}`];
   let seenChart = 0;
-  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
+  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshPools: 0, openPools: 0, flipRewards: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
   const FORM_SPECIES = [SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.PICHU, SpeciesId.ROTOM, SpeciesId.MELOETTA];
   const hex = (b: bigint) => b.toString(16);
 
@@ -264,13 +268,41 @@ it("native Challenge Mode starter rules", async () => {
       enemy.destroy?.();
       scene.currentBattle = null;
     }
+    // The rewards read the challenges too. The Eviolite's and the Mini Black Hole's pool weights with both unlocked (Fresh Start turns them
+    // off), then a Mint and a vitamin on the first member (calculateStats with Flip Stat): the stats and hp each leaves
+    {
+      scene.gameData.unlocks[Unlockables.EVIOLITE] = true;
+      scene.gameData.unlocks[Unlockables.MINI_BLACK_HOLE] = true;
+      const weight = (tier: ModifierTier, id: string) => {
+        const w: any = modifierPool[tier].find((e: any) => e.modifierType.id === id);
+        expect(w).toBeDefined();
+        return typeof w.weight === "function" ? w.weight(party, 0) : w.weight;
+      };
+      const ev = weight(ModifierTier.ULTRA, "EVIOLITE"), mbh = weight(ModifierTier.MASTER, "MINI_BLACK_HOLE");
+      if (fresh && !ev && !mbh) cover.freshPools++;
+      if (!fresh && ev && mbh) cover.openPools++;
+      lines.push(`R ${ev} ${mbh}`);
+      const p: any = party[0];
+      const nature = (p.getNature() + 1 + (i % 24)) % 25;
+      const minted = scene.addModifier(new PokemonNatureChangeModifierType(nature).newModifier(p), false, false);
+      lines.push(`N ${nature} ${+minted} ${p.hp} ${p.stats.join(" ")}`);
+      const stat = i % 6;
+      const vitamin: any = new BaseStatBoosterModifierType(stat);
+      vitamin.id = "BASE_STAT_BOOSTER";
+      // addModifier answers false for a persistent modifier it added (only a form change item sets success): whether it is held is the answer
+      const held = vitamin.newModifier(p);
+      const boosted = vitamin.selectFilter(p) == null && (scene.addModifier(held, false, false), scene.modifiers.includes(held));
+      lines.push(`U ${stat} ${+boosted} ${p.hp} ${p.stats.join(" ")}`);
+      if (flip && minted && boosted) cover.flipRewards++;
+      scene.modifiers = [];
+    }
     for (const p of party) p.destroy?.();
     scene.party = [];
   }
   lines.push("Z");
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
   console.log(
-    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
+    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} freshPools=${cover.freshPools} openPools=${cover.openPools} flipRewards=${cover.flipRewards} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
   );
-  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive).toBeGreaterThan(0);
+  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive && cover.freshPools && cover.openPools && cover.flipRewards).toBeGreaterThan(0);
 }, 900000);

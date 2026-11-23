@@ -2,6 +2,7 @@
  * BattleScene.updateModifiers. Caller owns UI, affordability and persistence. */
 #include "pr/reward.h"
 #include "pr/battle.h"
+#include "reward_internal.h"
 #include <math.h>
 #include <string.h>
 
@@ -32,9 +33,9 @@ enum pr_reward_vitamin_status pr_reward_apply_vitamin(pr_reward_ctx *ctx, int st
     if (!ctx || ctx->n_party < 1 || ctx->n_party > PR_REWARD_MAX_PARTY
         || party_idx < 0 || party_idx >= ctx->n_party || stat < 0 || stat >= 6
         || !isfinite(cost) || (cost != -1 && cost < 0)
-        || ctx->n_items < 0 || ctx->n_items > PR_REWARD_MAX_OWNED
-        || (ctx->challenges & (1u << CHALLENGES_FLIP_STAT))) return PR_REWARD_VITAMIN_UNSUPPORTED;
-    pr_pokemon party[PR_REWARD_MAX_PARTY] = {{0}}; pr_battle bt = {0};
+        || ctx->n_items < 0 || ctx->n_items > PR_REWARD_MAX_OWNED) return PR_REWARD_VITAMIN_UNSUPPORTED;
+    pr_pokemon party[PR_REWARD_MAX_PARTY] = {{0}}; pr_battle bt;
+    pr_reward_stats_battle(ctx, &bt);
     for (int j = 0; j < ctx->n_party; j++) {
         if (!stat_mon(&ctx->party[j], &party[j])
             || (ctx->party[j].fusion_species < 0 && ctx->run && ctx->run->mode == GAME_MODES_SPLICED_ENDLESS))

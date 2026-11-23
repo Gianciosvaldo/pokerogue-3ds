@@ -3,9 +3,19 @@
  * PORTED_WEIGHT_FUNCS) and fails when upstream adds one, so each case below is one of upstream's closures. */
 #include "pr/reward.h"
 #include "reward_internal.h"
+#include "pr/battle.h"
+#include <string.h>
 #include <math.h>
 
 bool pr_reward_is_classic(const pr_run *run) { return run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE; }
+void pr_reward_stats_battle(const pr_reward_ctx *ctx, pr_battle *bt)
+{
+    memset(bt, 0, sizeof *bt);
+    if (!(ctx->challenges & (1u << CHALLENGES_FLIP_STAT))) return;
+    bt->game_mode = GAME_MODES_CHALLENGE;   /* applyChallenges(FLIP_STAT) in calculateBaseStats: the only challenge stats read */
+    bt->challenge_flags = 1u << CHALLENGES_FLIP_STAT;
+    bt->challenge_flags_known = true;
+}
 static bool is_endless(const pr_run *run) { return run->mode == GAME_MODES_ENDLESS || run->mode == GAME_MODES_SPLICED_ENDLESS; }
 static bool has_challenge(const pr_reward_ctx *ctx, int c) { return (ctx->challenges >> c) & 1; }
 
