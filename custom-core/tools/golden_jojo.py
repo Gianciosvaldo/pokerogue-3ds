@@ -8,7 +8,7 @@ M = (1 << 64) - 1
 SALT = 0x4A4F4A4F424F5A41
 BIOMES = [-1, 14, 4, 9, 29, 7, 5, 10, 19, 1, 30, -1, -1, 24, 20, 13, 41,   # kars gyro diavolo kira pucci jolyne joseph jotaro dio koichi mista wamuu esidisi valentine polnareff risotto stroheim
           20, 29, 18, 24, 23, 14, 21, 8, 19, 30, 14, 14, 23, 26, 1, 41, 2,   # caesar kakyoin avdol vanillaice holhorse iggy narancia bruno abbacchio weather johnny sandman diego shigechi josuke rohan giorno
-          15, 30, 8, 22, 5]   # ghiaccio prosciutto jodio jonathan tooru
+          15, 30, 8, 22, 5, 25]   # ghiaccio prosciutto jodio jonathan tooru okuyasu
 MORE = {34: [31]}   # Ghiaccio: Ice Cave and Snowy Forest
 P = 30
 

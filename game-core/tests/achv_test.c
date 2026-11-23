@@ -45,15 +45,16 @@ int main(void)
 
     /* the ids of the "Defeat X": the first 17 by index, the second batch from GC_ACHV_JOJO2_FIRST; all distinct, all JoJo group, none out of range */
     {
-        assert(GC_JOJO_COUNT == 39 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
+        assert(GC_JOJO_COUNT == 40 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
                GC_ACHV_DARBY == GC_ACHV_JOJO3_FIRST - 2 && GC_ACHV_DARBY_REMATCH == GC_ACHV_JOJO3_FIRST - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
-               GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_COUNT == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO) + 2 && GC_ACHV_JOBIN == GC_ACHV_COUNT - 2 && GC_ACHV_JOBIN_PUNISH == GC_ACHV_COUNT - 1);
+               GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_JOBIN == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_OKUYASU - GC_JOJO_GHIACCIO) && GC_ACHV_JOBIN_PUNISH == GC_ACHV_JOBIN + 1 &&
+               GC_ACHV_JOJO4_FIRST == GC_ACHV_JOBIN + 2 && GC_ACHV_COUNT == GC_ACHV_JOJO4_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU));
         assert(GC_ACHV_COUNT <= 192);   /* upstream's own achievements use 192 and up in achievement_flags */
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_jojo_id(j);
             assert(id >= 0 && id < GC_ACHV_COUNT && gc_achv_defs[id].group == GC_ACHV_GROUP_JOJO);
-            assert(id == (j < 17 ? j : j < 34 ? 100 + j - 17 : 154 + 2 * (j - 34)));
+            assert(id == (j < 17 ? j : j < 34 ? 100 + j - 17 : j < 39 ? 154 + 2 * (j - 34) : 166 + 2 * (j - 39)));   /* 164, 165 are Jobin's */
             for (int k = 0; k < j; k++) assert(gc_achv_jojo_id(k) != id);
         }
         assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GIORNO)].desc, "Defeat Giorno Giovanna.") && !strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_KARS)].desc, "Defeat Kars."));
@@ -63,7 +64,7 @@ int main(void)
             assert(gc_achv_defs[a].name[0] && strlen(gc_achv_defs[a].name) <= 63);
             for (int b = 0; b < a; b++) assert(strcmp(gc_achv_defs[a].name, gc_achv_defs[b].name) != 0);
         }
-        assert(strstr(gc_achv_defs[26].desc, "39"));   /* Every Face names the number */
+        assert(strstr(gc_achv_defs[26].desc, "40"));   /* Every Face names the number */
         /* lorenzo's titles for the third batch (2026-11-22) */
         assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_GHIACCIO)].name, "It's Pronounced Venezia!") && !strcmp(gc_achv_defs[gc_achv_flawless_id(GC_JOJO_GHIACCIO)].name, "Absolute Zero Casualties"));
         assert(!strcmp(gc_achv_defs[gc_achv_jojo_id(GC_JOJO_PROSCIUTTO)].name, "Cut the Line, Beat the Heat") && !strcmp(gc_achv_defs[gc_achv_flawless_id(GC_JOJO_PROSCIUTTO)].name, "Not a Scratch, Not a Wrinkle"));
@@ -82,6 +83,8 @@ int main(void)
         assert(gc_achv_flawless_id(GC_JOJO_GHIACCIO) == 155 && gc_achv_flawless_id(GC_JOJO_JONATHAN) == 161 && gc_achv_jojo_id(GC_JOJO_JONATHAN) == 160);
         assert(gc_achv_jojo_id(GC_JOJO_TOORU) == 162 && gc_achv_flawless_id(GC_JOJO_TOORU) == 163 && !strcmp(gc_achv_defs[162].name, "Broke the Flow of Calamity") &&
                !strcmp(gc_achv_defs[163].name, "We Went Beyond the Logic of This World") && !strcmp(gc_achv_defs[162].desc, "Defeat Tooru."));
+        assert(gc_achv_jojo_id(GC_JOJO_OKUYASU) == 166 && gc_achv_flawless_id(GC_JOJO_OKUYASU) == 167 && !strcmp(gc_achv_defs[166].name, "Not as Dumb as He Looks") &&
+               !strcmp(gc_achv_defs[167].name, "He Couldn't Erase a Single Thing") && !strcmp(gc_achv_defs[166].desc, "Defeat Okuyasu Nijimura."));   /* after Jobin's 164, 165 */
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
             const int id = gc_achv_flawless_id(j);
             const char *base = gc_achv_defs[gc_achv_jojo_id(j)].desc;   /* "Defeat X." */
@@ -102,12 +105,12 @@ int main(void)
             assert(gc_achv_unlocked(&S, id));
         }
         fresh();
-        S.achv.jojo_clean_mask_hi = 0xFFFFFF80u;                                                   /* bits of characters this build does not have (39..63) */
+        S.achv.jojo_clean_mask_hi = 0xFFFFFF00u;                                                   /* bits of characters this build does not have (40..63) */
         eval(NULL);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
         fresh();
         S.achv.jojo_clean_mask = 0xFFFFFFFFu;                                                      /* a clean mask alone is not a beaten one, but the flag only asks the clean mask */
-        S.achv.jojo_clean_mask_hi = 0x7Fu;
+        S.achv.jojo_clean_mask_hi = 0xFFu;
         eval(NULL);
         for (int j = 0; j < GC_JOJO_COUNT; j++) assert(gc_achv_unlocked(&S, gc_achv_flawless_id(j)));
     }
@@ -117,7 +120,7 @@ int main(void)
         {17, {GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI}, 3},
         {18, {GC_JOJO_JOSEPH, GC_JOJO_KARS, GC_JOJO_WAMUU, GC_JOJO_ESIDISI, GC_JOJO_STROHEIM, GC_JOJO_CAESAR}, 6},
         {19, {GC_JOJO_JOTARO, GC_JOJO_DIO, GC_JOJO_POLNAREFF, GC_JOJO_KAKYOIN, GC_JOJO_AVDOL, GC_JOJO_VANILLAICE, GC_JOJO_HOLHORSE, GC_JOJO_IGGY}, 8},
-        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA, GC_JOJO_JOSUKE, GC_JOJO_ROHAN, GC_JOJO_SHIGECHI}, 5},
+        {20, {GC_JOJO_KOICHI, GC_JOJO_KIRA, GC_JOJO_JOSUKE, GC_JOJO_ROHAN, GC_JOJO_SHIGECHI, GC_JOJO_OKUYASU}, 6},
         {21, {GC_JOJO_DIAVOLO, GC_JOJO_MISTA, GC_JOJO_RISOTTO, GC_JOJO_GIORNO, GC_JOJO_BRUNO, GC_JOJO_ABBACCHIO, GC_JOJO_NARANCIA, GC_JOJO_GHIACCIO, GC_JOJO_PROSCIUTTO}, 9},
         {22, {GC_JOJO_JOLYNE, GC_JOJO_PUCCI, GC_JOJO_WEATHER}, 3},
         {23, {GC_JOJO_VALENTINE, GC_JOJO_GYRO, GC_JOJO_JOHNNY, GC_JOJO_SANDMAN, GC_JOJO_DIEGO}, 5},
@@ -187,12 +190,12 @@ int main(void)
     /* a bit for a character the table does not have (a profile from a later build) counts for nothing, and neither do the ones it does have
      * towards another one's achievement */
     fresh();
-    S.achv.jojo_beaten_hi = 0xFFFFFF80u;                /* indexes 39..63 */
+    S.achv.jojo_beaten_hi = 0xFFFFFF00u;                /* indexes 40..63 */
     eval(NULL);
     for (int j = 0; j < GC_JOJO_COUNT; j++) assert(!gc_achv_unlocked(&S, gc_achv_jojo_id(j)));
     assert(!gc_achv_unlocked(&S, 24) && gc_achv_progress_of(&S, 24, &have, &need) && have == 0);
-    S.achv.jojo_beaten = 0xFFFFFFFFu;                   /* all 32 of the first word, and seven of the second: all 39 */
-    S.achv.jojo_beaten_hi |= 0x7Fu;
+    S.achv.jojo_beaten = 0xFFFFFFFFu;                   /* all 32 of the first word, and eight of the second: all 40 */
+    S.achv.jojo_beaten_hi |= 0xFFu;
     eval(NULL);
     assert(gc_achv_progress_of(&S, 26, &have, &need) && have == GC_JOJO_COUNT && need == GC_JOJO_COUNT && gc_achv_unlocked(&S, 26));
     fresh();

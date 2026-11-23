@@ -36,13 +36,13 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"The Pillar Men", "Defeat Kars, Wamuu and Esidisi.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Battle Tendency", "Defeat Joseph, Caesar, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse and Iggy.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan and Shigechi.", J, V(GC_VOUCHER_REGULAR, 2)},
+    {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan, Shigechi and Okuyasu.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio, Narancia, Ghiaccio and Prosciutto & Pesci.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stone Ocean", "Defeat Jolyne, Pucci and Weather Report.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Steel Ball Run", "Defeat Valentine, Gyro, Johnny, Sandman and Diego.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Five Faces", "Defeat 5 different challengers.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Ten Faces", "Defeat 10 different challengers.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Every Face", "Defeat all 39 different challengers.", J, SHINY(2)},
+    {"Every Face", "Defeat all 40 different challengers.", J, SHINY(2)},
     {"Hat Trick", "Defeat 3 challengers in one run.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Hundred Duels", "Win 100 challenger battles.", J, EGG(3)},
     {"Untouched", "Defeat a challenger without any of your Pokemon fainting.", J, V(GC_VOUCHER_PLUS, 1)},
@@ -193,6 +193,9 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     /* 164..165: Jobin's beetle duel (lorenzo 2026-11-23): his titles; the rewards are the normal and the Flawless JoJo ones. The conditions' wording is the author's. */
     {"Not quite a lamborghini gallardo, but it will do", "Beat Jobin in the beetle duel.", RUN, V(GC_VOUCHER_REGULAR, 1)},
     {"cheated and got away with it", "Beat Jobin's team after he catches you cheating.", RUN, V(GC_VOUCHER_REGULAR, 2)},
+    /* 166..: the fourth batch (lorenzo 2026-11-23), after Jobin's two: "Defeat X" then "Flawless X" in table order (GC_ACHV_JOJO4_FIRST) */
+    {"Not as Dumb as He Looks", "Defeat Okuyasu Nijimura.", J, V(GC_VOUCHER_REGULAR, 1)},
+    {"He Couldn't Erase a Single Thing", "Defeat Okuyasu Nijimura without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
@@ -209,23 +212,38 @@ typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
 static uint64_t beaten_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32) & JOJO_VALID; }
 static uint64_t clean_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_clean_mask | (uint64_t)a->jojo_clean_mask_hi << 32) & JOJO_VALID; }
 
+/* the third and fourth batches: a "Defeat X" id and the "Flawless X" after it, per challenger; Jobin's two (164, 165) sit between the batches */
+static int pair_id(int jojo)
+{
+    return jojo >= GC_JOJO_OKUYASU ? GC_ACHV_JOJO4_FIRST + 2 * (jojo - GC_JOJO_OKUYASU) : GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+}
+
+/* the challenger whose pair holds an id of the third or fourth batch, or -1 */
+static int pair_of_id(int id)
+{
+    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_OKUYASU - GC_JOJO_GHIACCIO)) return GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
+    if (id >= GC_ACHV_JOJO4_FIRST && id < GC_ACHV_JOJO4_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU)) return GC_JOJO_OKUYASU + (id - GC_ACHV_JOJO4_FIRST) / 2;
+    return -1;
+}
+
 int gc_achv_jojo_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
-    if (jojo >= GC_JOJO_GHIACCIO) return GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+    if (jojo >= GC_JOJO_GHIACCIO) return pair_id(jojo);
     return jojo < GC_JOJO_CAESAR ? jojo : GC_ACHV_JOJO2_FIRST + (jojo - GC_JOJO_CAESAR);
 }
 
 int gc_achv_flawless_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
-    return jojo >= GC_JOJO_GHIACCIO ? GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO) + 1 : GC_ACHV_FLAWLESS_FIRST + jojo;
+    return jojo >= GC_JOJO_GHIACCIO ? pair_id(jojo) + 1 : GC_ACHV_FLAWLESS_FIRST + jojo;
 }
 
 /* the challenger an achievement id is the "Flawless X" of, or -1 */
 static int flawless_of_id(int id)
 {
-    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2 : -1;
+    const int j = pair_of_id(id);
+    if (j >= 0) return id == pair_id(j) + 1 ? j : -1;
     return id >= GC_ACHV_FLAWLESS_FIRST && id < GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO ? id - GC_ACHV_FLAWLESS_FIRST : -1;
 }
 
@@ -234,8 +252,8 @@ static int jojo_of_id(int id)
 {
     if (id >= 0 && id < GC_JOJO_CAESAR) return id;
     if (id >= GC_ACHV_JOJO2_FIRST && id < GC_ACHV_JOJO2_FIRST + (GC_JOJO_GHIACCIO - GC_JOJO_CAESAR)) return GC_JOJO_CAESAR + (id - GC_ACHV_JOJO2_FIRST);
-    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? -1 : GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
-    return -1;
+    const int j = pair_of_id(id);
+    return j >= 0 && id == pair_id(j) ? j : -1;
 }
 
 int gc_achv_order(int pos)
@@ -263,7 +281,7 @@ static const uint64_t SET_PILLAR = JB(GC_JOJO_KARS) | JB(GC_JOJO_WAMUU) | JB(GC_
 static const uint64_t SET_P2 = SET_PILLAR | JB(GC_JOJO_JOSEPH) | JB(GC_JOJO_STROHEIM) | JB(GC_JOJO_CAESAR);
 static const uint64_t SET_P3 = JB(GC_JOJO_JOTARO) | JB(GC_JOJO_DIO) | JB(GC_JOJO_POLNAREFF) | JB(GC_JOJO_KAKYOIN) | JB(GC_JOJO_AVDOL) |
                                JB(GC_JOJO_VANILLAICE) | JB(GC_JOJO_HOLHORSE) | JB(GC_JOJO_IGGY);
-static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI);
+static const uint64_t SET_P4 = JB(GC_JOJO_KOICHI) | JB(GC_JOJO_KIRA) | JB(GC_JOJO_JOSUKE) | JB(GC_JOJO_ROHAN) | JB(GC_JOJO_SHIGECHI) | JB(GC_JOJO_OKUYASU);
 static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_JOJO_RISOTTO) | JB(GC_JOJO_GIORNO) | JB(GC_JOJO_BRUNO) |
                                JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA) | JB(GC_JOJO_GHIACCIO) | JB(GC_JOJO_PROSCIUTTO);
 static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI) | JB(GC_JOJO_WEATHER);
