@@ -22,10 +22,12 @@ static struct {
   int cursor; /* 0 Mode, 1 Game Speed, 2 Start */
 } R;
 
-/* The Mode row's values: Classic, then Classic (Bizarre) beside it, then upstream's Endless modes, each once unlocked */
-static int available_modes(int out[4]) {
+/* The Mode row's values: Classic, then Classic (Bizarre) beside it, then upstream's Challenge and Endless modes, each once unlocked (upstream's
+ * title phase lists Challenge with Endless: both come with Unlockables.ENDLESS_MODE) */
+static int available_modes(int out[5]) {
   int n=0;out[n++]=GAME_MODES_CLASSIC;
   if(R.a.bizarre_unlocked)out[n++]=RSET_MODE_BIZARRE;
+  if(R.a.endless_unlocked)out[n++]=GAME_MODES_CHALLENGE;
   if(R.a.endless_unlocked)out[n++]=GAME_MODES_ENDLESS;
   if(R.a.spliced_endless_unlocked)out[n++]=GAME_MODES_SPLICED_ENDLESS;
   return n;
@@ -33,7 +35,7 @@ static int available_modes(int out[4]) {
 
 static void change(int row, int dir) {
   if (row == 0) {
-    int modes[4],n=available_modes(modes),current=0;
+    int modes[5],n=available_modes(modes),current=0;
     for(int i=0;i<n;i++)if(modes[i]==R.v.mode)current=i;
     current=(current+dir+n)%n;R.v.mode=modes[current];
   } else if (row == 1) {
@@ -97,7 +99,7 @@ static void rs_draw(ui_screen* s, rr_screen which) {
   snprintf(label[0], sizeof label[0], "Mode");
   i18n_t(label[1], sizeof label[1], "settings:gameSpeed", NULL);
   i18n_t(label[2], sizeof label[2], "settings:confirm", NULL);
-  static const char* const MODE_KEYS[] = {"gameMode:classic","gameMode:endless","gameMode:endlessSpliced"};
+  static const char* const MODE_KEYS[] = {"gameMode:classic","gameMode:endless","gameMode:endlessSpliced","gameMode:dailyRun","gameMode:challenge"};
   if (R.v.mode == RSET_MODE_BIZARRE)
     snprintf(value[0], sizeof value[0], "%s", BIZARRE_NAME); /* the port's own mode: no upstream string */
   else
@@ -119,6 +121,7 @@ static void rs_draw(ui_screen* s, rr_screen which) {
     !R.a.bizarre_unlocked ? "Classic Pokemon with Nemesis rematches. More modes unlock after a Classic win."
     : R.v.mode == RSET_MODE_BIZARRE ? "Classic rules, with JoJo trainers and the Pillar Men on top."
     : R.v.mode == GAME_MODES_CLASSIC ? "Classic rules with Nemesis rematches. Left and Right pick the mode."
+    : R.v.mode == GAME_MODES_CHALLENGE ? "Classic with challenge modifiers, upstream's rules. No rematches."
     : "Endless modes have no Nemesis rematches.",
     "How fast animations and text play.", "Choose a slot and start the run."};
   text_opts help = text_defaults();
@@ -140,9 +143,9 @@ void rset_open(const rset_args* a) {
   memset(&R, 0, sizeof R);
   R.a = *a;
   R.v = a->values;
-  if(R.v.mode< GAME_MODES_CLASSIC || R.v.mode>RSET_MODE_BIZARRE || R.v.mode==GAME_MODES_DAILY || R.v.mode==GAME_MODES_CHALLENGE)R.v.mode=GAME_MODES_CLASSIC;
+  if(R.v.mode< GAME_MODES_CLASSIC || R.v.mode>RSET_MODE_BIZARRE || R.v.mode==GAME_MODES_DAILY)R.v.mode=GAME_MODES_CLASSIC;
   if(R.v.mode==RSET_MODE_BIZARRE&&!a->bizarre_unlocked)R.v.mode=GAME_MODES_CLASSIC;
-  if(R.v.mode==GAME_MODES_ENDLESS&&!a->endless_unlocked)R.v.mode=GAME_MODES_CLASSIC;
+  if((R.v.mode==GAME_MODES_ENDLESS||R.v.mode==GAME_MODES_CHALLENGE)&&!a->endless_unlocked)R.v.mode=GAME_MODES_CLASSIC;
   if(R.v.mode==GAME_MODES_SPLICED_ENDLESS&&!a->spliced_endless_unlocked)R.v.mode=a->endless_unlocked?GAME_MODES_ENDLESS:GAME_MODES_CLASSIC;
   if (R.v.speed < RSET_SPEED_SLOW || R.v.speed > RSET_SPEED_TURBO) R.v.speed = RSET_SPEED_NORMAL;
   ui_push(&g_screen);

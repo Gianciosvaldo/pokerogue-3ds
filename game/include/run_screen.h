@@ -39,6 +39,7 @@
 
 typedef struct {
   int mode;               /* GAME_MODES_* chosen for the new run; zero-initialized configs remain Classic */
+  gc_challenge_set challenges; /* Challenge Mode's values (mode GAME_MODES_CHALLENGE only: set on the run before its starters); zero = none */
   const char* seed;       /* upstream's 24-character run seed; NULL = a random one from `entropy` */
   uint32_t entropy;       /* a new run's randomness (and the stand-in team's) */
   int starters[6];        /* species of the stand-in team (a developer's rundriver.txt: checked against the system data when `sys` is

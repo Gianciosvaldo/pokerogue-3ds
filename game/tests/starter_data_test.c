@@ -437,6 +437,78 @@ static void test_everything_unlocked(void) {
 }
 
 /* The known disagreement with upstream, on its own: a prevolution reached only through an evolved form with a form of its own. */
+/* Challenge Mode with Fresh Start: the list drops what the challenge excludes, and a one-species team is accepted exactly when game-core says its
+ * starter is available under the set and hard-valid (the party rule: at least one hard-valid member) */
+static void test_fresh_start_challenge(void) {
+  unlock_all(&S1);
+  static sm_entry plain[SS_MAX_ENTRIES], ch[SS_MAX_ENTRIES];
+  const int np = ss_list(&S1, plain, SS_MAX_ENTRIES, NULL);
+  gc_challenge_set fresh = {{0}};
+  fresh.value[CHALLENGES_FRESH_START] = 1;
+  ss_set_challenges(&fresh);
+  gc_system* V = ss_fresh_view(&S1, &fresh); /* what the host hands the screen: the dex as a new save shows it */
+  CHECK(V != NULL && V != &S1, "the view is a copy");
+  if (!V) return;
+  CHECK(V->dex[1].ivs[0] != S1.dex[1].ivs[0] || V->dex[1].caught_attr != S1.dex[1].caught_attr || V->starters[1].passive_attr == 0, "the view differs from the unlocked system");
+  for (int k = 0; k < gc_starter_cost_count; k++) {
+    const uint16_t id = gc_starter_costs[k].id;
+    const gc_dex_entry* d = &V->dex[id];
+    bool ivs = true;
+    for (int x = 0; x < 6; x++) ivs &= d->ivs[x] <= 15;
+    CHECK(ivs && V->starters[id].passive_attr == 0 && V->starters[id].value_reduction == 0 && (V->starters[id].ability_attr & ~3u) == 0 &&
+          (d->nature_attr & ~((1u << 1) | (1u << 7) | (1u << 13) | (1u << 19) | (1u << 25))) == 0 && V->starters[id].egg_moves == 0,
+          "species %u: the view is a new save's (ivs, passive, cost reduction, ability, natures, egg moves)", id);
+  }
+  const int nc = ss_list(V, ch, SS_MAX_ENTRIES, NULL);
+  CHECK(nc > 0 && nc <= np, "Fresh Start lists some of the starters (%d of %d)", nc, np);
+  int in_plain = 0, listed_total = 0, wrong = 0, ok_alone = 0;
+  for (int i = 0; i < nc; i++) {
+    bool found = false;
+    for (int k = 0; k < np && !found; k++) found = plain[k].species == ch[i].species;
+    in_plain += found;
+    const uint16_t sp = ch[i].species;
+    gc_starter t[6];
+    const char* why = NULL;
+    const bool team_ok = ss_team(V, GAME_MODES_CHALLENGE, &sp, 1, t, &why);
+    gc_starter one;
+    double cost;
+    const bool core_ok = ss_starter(V, sp, &one) && gc_starter_is_available_set(V, &fresh, &one, &cost, NULL) &&
+                         gc_challenge_starter_valid(&fresh, sp, one.form, false) && cost <= gc_starter_budget(GAME_MODES_CHALLENGE) + 1e-9;
+    if (team_ok != core_ok) wrong++;
+    ok_alone += team_ok;
+    CHECK(ss_challenge_pick_valid(V, sp, true) || !ss_challenge_pick_valid(V, sp, false), "species %u: hard-valid implies soft-valid", sp);
+    CHECK(ss_challenge_party_valid(V, &sp, 1) == ss_challenge_pick_valid(V, sp, false), "species %u: a party of one is valid when its member is", sp);
+    listed_total++;
+  }
+  CHECK(in_plain == nc, "every Fresh Start entry is also in the plain list (%d of %d)", in_plain, nc);
+  CHECK(wrong == 0, "ss_team and game-core agree on %d one-species Fresh Start teams (%d accepted, %d differ)", listed_total, ok_alone, wrong);
+  CHECK(ok_alone > 0, "some species start a Fresh Start run");
+  /* the species left out are refused by ss_team too */
+  int refused_left_out = 0, left_out = 0;
+  for (int k = 0; k < np; k++) {
+    bool found = false;
+    for (int i = 0; i < nc && !found; i++) found = ch[i].species == plain[k].species;
+    if (found) continue;
+    left_out++;
+    const uint16_t sp = plain[k].species;
+    gc_starter t[6];
+    const char* why = NULL;
+    refused_left_out += !ss_team(V, GAME_MODES_CHALLENGE, &sp, 1, t, &why) || ss_challenge_listed(sp);
+  }
+  CHECK(refused_left_out == left_out || left_out == 0, "the %d species Fresh Start leaves out", left_out);
+  /* a team of two valid species is a valid party; the empty party is not */
+  uint16_t pair[2];
+  int np2 = 0;
+  for (int i = 0; i < nc && np2 < 2; i++)
+    if (ss_challenge_pick_valid(V, ch[i].species, false)) pair[np2++] = ch[i].species;
+  if (np2 == 2) CHECK(ss_challenge_party_valid(V, pair, 2), "two valid members make a valid party");
+  CHECK(!ss_challenge_party_valid(V, pair, 0), "an empty party is not valid");
+  ss_set_challenges(NULL);
+  free(V);
+  CHECK(ss_challenge_listed(1) && ss_challenge_pick_valid(&S1, 1, false) && ss_list(&S1, ch, SS_MAX_ENTRIES, NULL) == np,
+        "with the challenges off again the list is as before");
+}
+
 static void test_prevolution_without_form_bit(void) {
   gc_system_init_defaults(&S1);
   const uint16_t litleo = 667, pyroar = 668;
@@ -1040,6 +1112,7 @@ int main(int argc, char** argv) {
   test_starter_nickname_file();
   test_new_save();
   test_everything_unlocked();
+  test_fresh_start_challenge();
   test_prevolution_without_form_bit();
   test_random_systems(systems);
   test_starter_form_table();

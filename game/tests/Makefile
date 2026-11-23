@@ -212,6 +212,22 @@ build/starter_ui_test: $(SUI_SRCS)
 starter_ui_test: build/starter_ui_test
 .PHONY: starter_ui_test
 
+# the challenge screen (source/challenge_screen.c) with a fake UI stack and drawing layer; make challenge_screen_test && build/challenge_screen_test
+CHS_SRCS := challenge_screen_test.c ../source/challenge_screen.c ../source/challenge_model.c $(CORE_SRCS)
+build/challenge_screen_test: $(CHS_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(CHS_SRCS) -lm -o $@
+challenge_screen_test: build/challenge_screen_test
+.PHONY: challenge_screen_test
+
+# the challenge screen's model (source/challenge_model.c) over real game-core; make challenge_model_test && build/challenge_model_test
+CHM_SRCS := challenge_model_test.c ../source/challenge_model.c $(CORE_SRCS)
+build/challenge_model_test: $(CHM_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(CHM_SRCS) -lm -o $@
+challenge_model_test: build/challenge_model_test
+.PHONY: challenge_model_test
+
 # the combat observer (source/combat_observer.c over custom-core's reducer) on literal event fixtures; make observer_test && build/observer_test
 OBSERVER_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(GC)/include -I$(RC)/include
 build/observer_test: observer_test.c $(OBS_SRCS)

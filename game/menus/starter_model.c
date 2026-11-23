@@ -112,10 +112,23 @@ double sm_value(const sm_model* m) {
 bool sm_can_add(const sm_model* m, uint16_t species) {
   const sm_entry* e = sm_find(m, species);
   if (!e || sm_in_party(m, species, NULL) || m->n_party >= SM_TEAM_MAX) return false;
+  if (m->pick_ok && !m->pick_ok(m->rnd_ctx, species, m->party, m->n_party)) return false; /* :1584 isValidForChallenge */
   return sm_value(m) + e->cost <= (double)m->budget; /* :1595 */
 }
 
-bool sm_lit(const sm_model* m, const sm_entry* e) { return (double)m->budget - sm_value(m) >= e->cost; /* :3065-3106 */ }
+bool sm_lit(const sm_model* m, const sm_entry* e) {
+  if ((double)m->budget - sm_value(m) < e->cost) return false; /* :3065-3106 */
+  /* a challenge's invalid species is greyed unless it is in the team already (:3112-3118) */
+  return !m->pick_ok || m->pick_ok(m->rnd_ctx, e->species, m->party, m->n_party) || sm_in_party(m, e->species, NULL);
+}
+
+void sm_set_challenge(sm_model* m, bool (*pick_ok)(void*, uint16_t, const uint16_t*, int), bool (*party_ok)(void*, const uint16_t*, int)) {
+  m->pick_ok = pick_ok;
+  m->party_ok = party_ok;
+}
+
+/* tryStart's first test (:3125 isPartyValid): a team, with a member valid for the challenges */
+static bool can_start(const sm_model* m) { return m->n_party > 0 && (!m->party_ok || m->party_ok(m->rnd_ctx, m->party, m->n_party)); }
 
 bool sm_add(sm_model* m, uint16_t species) {
   if (!sm_can_add(m, species)) return false;
@@ -384,7 +397,7 @@ sm_result sm_input(sm_model* m, mui_button b) {
   uint16_t random_pick = 0;
 
   if (b == MB_SUBMIT || b == MB_MENU) { /* tryStart(true) */
-    r = m->n_party == 0 ? SM_ERROR : SM_ASK_START;
+    r = !can_start(m) ? SM_ERROR : SM_ASK_START;
   } else if (b == MB_CANCEL) {
     if (m->n_party > 0) {
       sm_remove(m, m->n_party - 1);
@@ -397,7 +410,7 @@ sm_result sm_input(sm_model* m, mui_button b) {
   } else if (m->focus == SM_PARTY) {
     r = party_input(m, b);
   } else if (m->focus == SM_START) {
-    r = b == MB_ACTION ? (m->n_party == 0 ? SM_ERROR : SM_ASK_START) : start_input(m, b);
+    r = b == MB_ACTION ? (!can_start(m) ? SM_ERROR : SM_ASK_START) : start_input(m, b);
   } else if (m->focus == SM_RANDOM) {
     r = b == MB_ACTION ? randomize(m, &random_pick) : random_input(m, b);
   } else if (b == MB_ACTION) {
