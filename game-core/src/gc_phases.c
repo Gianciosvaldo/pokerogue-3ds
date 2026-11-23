@@ -422,6 +422,7 @@ static void post_battle_money(gc_run *run, bool victory)
     bt->wave_index = run->wave;
     bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
     bt->n_party[0] = run->n_party;
     for (int k = 0; k < run->n_party; k++) {
         pr_pokemon *p = &run->party[run->party_order[k]].b;

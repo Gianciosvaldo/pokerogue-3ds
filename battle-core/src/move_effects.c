@@ -1005,7 +1005,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         for (int type = 0; type < PR_TYPE_COUNT; type++) {
             bool have = false;
             for (int i = 0; i < n; i++) have |= current[i] == type;
-            if (!have && pr_type_chart_x2[attack_type][type] < 2) choices[count++] = (int8_t)type;
+            if (!have && pr_type_chart_multiplier(bt, attack_type, type) < 1) choices[count++] = (int8_t)type;
         }
         if (!count) return;
         int8_t type = choices[pr_battle_rand_seed_int(bt, count, 0)];

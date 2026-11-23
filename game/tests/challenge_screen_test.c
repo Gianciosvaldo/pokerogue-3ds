@@ -34,6 +34,8 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
   strcat(drawn, "|");
   return 0;
 }
+/* the locale has desc.<value> for Fresh Start and Passives, a single desc for Inverse Battle and Flip Stat */
+bool i18n_exists(const char* key) { return !strstr(key, "inverseBattle.desc.") && !strstr(key, "flipStat.desc."); }
 const char* i18n_t(char* out, int n, const char* key, ...) {
   snprintf(out, (size_t)n, "[%s]", key);
   return out;
@@ -63,6 +65,35 @@ int main(void) {
   CHECK(seen("[challenges:title]") && seen("[challenges:freshStart.name]") && seen("[challenges:freshStart.value.0]"), "title, row and its value are drawn");
   CHECK(seen("[challenges:noneSelected]") && !seen("[common:start]"), "None Selected until a challenge has a value");
   CHECK(seen("[challenges:freshStart.desc.0]"), "the description of the highlighted value");
+
+  /* the battle rules' rows: Inverse Battle, Flip Stat, Passives after Fresh Start (upstream's order); a challenge with one description text
+   * shows it at every value (getDescription's fallback) */
+  CHECK(seen("[challenges:inverseBattle.name]") && seen("[challenges:flipStat.name]") && seen("[challenges:passives.name]"), "the battle rule rows");
+  CHECK(strstr(drawn, "freshStart.name") < strstr(drawn, "inverseBattle.name") && strstr(drawn, "inverseBattle.name") < strstr(drawn, "flipStat.name") &&
+        strstr(drawn, "flipStat.name") < strstr(drawn, "passives.name"), "in upstream's order");
+  g_screen->input(g_screen, BTN_DOWN);
+  draw();
+  CHECK(seen("[challenges:inverseBattle.desc]") && !seen("inverseBattle.desc."), "Inverse Battle's single description");
+  g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(seen("[challenges:inverseBattle.value.1]") && seen("[challenges:inverseBattle.desc]") && seen("[common:start]"), "Inverse Battle on, the same description");
+  g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(seen("[challenges:inverseBattle.value.1]"), "Inverse Battle stops at On");
+  g_screen->input(g_screen, BTN_LEFT);
+  g_screen->input(g_screen, BTN_DOWN);
+  g_screen->input(g_screen, BTN_DOWN);
+  draw();
+  CHECK(seen("[challenges:passives.desc.0]"), "Passives has a description per value");
+  g_screen->input(g_screen, BTN_RIGHT);
+  g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(seen("[challenges:passives.value.2]") && seen("[challenges:passives.desc.2]"), "Passives goes to All");
+  g_screen->input(g_screen, BTN_LEFT);
+  g_screen->input(g_screen, BTN_LEFT);
+  g_screen->input(g_screen, BTN_DOWN);   /* back to Fresh Start (wraps) */
+  draw();
+  CHECK(seen("[challenges:freshStart.desc.0]") && seen("[challenges:noneSelected]"), "back on Fresh Start, nothing chosen");
 
   /* A with nothing chosen is the error sound, and nothing starts */
   g_screen->input(g_screen, BTN_ACTION);
@@ -99,10 +130,10 @@ int main(void) {
   CHECK(seen("[challenges:freshStart.value.2]") && seen("[common:start]"), "the last choice is shown again");
 
   /* touch: a tap on the row steps the value (wraps to 0 after the last), a tap on Start starts, a tap outside does nothing */
-  CHECK(g_screen->touch(g_screen, 160, 150), "a tap on the row");
+  CHECK(g_screen->touch(g_screen, 160, 104), "a tap on the row");
   draw();
   CHECK(seen("[challenges:freshStart.value.0]") && seen("[challenges:noneSelected]"), "after the last value a tap turns it off");
-  CHECK(g_screen->touch(g_screen, 160, 150), "tap again");
+  CHECK(g_screen->touch(g_screen, 160, 104), "tap again");
   draw();
   CHECK(seen("[challenges:freshStart.value.1]"), "and on");
   const int starts = n_start;

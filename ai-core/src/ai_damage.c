@@ -31,11 +31,9 @@ static void apply_allies(pr_battle *bt, const pr_pokemon *p, uint16_t cls, const
     }
 }
 
-static double type_mult(int atk, int def)
+static double type_mult(const pr_battle *bt, int atk, int def)
 {
-    if (atk == POKEMON_TYPE_UNKNOWN || def == POKEMON_TYPE_UNKNOWN) return 1;
-    if (atk < 0 || atk >= PR_TYPE_COUNT || def < 0 || def >= PR_TYPE_COUNT) return 1;
-    return pr_type_chart_x2[atk][def] / 2.0;
+    return pr_type_chart_multiplier(bt, atk, def);
 }
 
 /* getAttackTypeEffectiveness with useIllusion: the steps of battle-core's pr_get_attack_type_effectiveness_opts
@@ -58,7 +56,7 @@ double ai_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int mo
 
     double multi = 1;
     for (int i = 0; i < n; i++) {
-        double tm = type_mult(move_type, types[i]);
+        double tm = type_mult(bt, move_type, types[i]);
         if (source && source->hp > 0 && source->on_field && !source->switch_out_status && tm == 0) {
             if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
                 continue;
@@ -76,7 +74,7 @@ double ai_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int mo
     }
     if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
     if (bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
-        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
+        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(bt, move_type, POKEMON_TYPE_FLYING) == 2) {
         multi /= 2;
         if (!simulated && bt->engine) pr_queue_msg(bt, bt->engine, pr_msg0("weather:strongWindsEffectMessage"));
     }
