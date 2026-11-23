@@ -49,11 +49,25 @@ enum {
     RP_SAFARI,           /* the Safari Zone after a catch: the next Pokemon (and its four actions) or the way out; waits on the actions' screen */
     RP_WINSTRATE,        /* The Winstrate Challenge's MysteryEncounterRewardsPhase: doContinueEncounter, the next trainer or the end */
     RP_DARBY,            /* D'Arby the Gambler's stages (custom content): a = gc_darby_stage; waits on a MYSTERY screen, except the shop stage */
+    RP_JOBIN,            /* Jobin's duel stages (custom content): a = GC_JOBIN_STAGE_*, b = the stage's own argument; waits on a MYSTERY screen, except the give stage */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
 #define GC_DARBY_DECK 6
 typedef struct { uint16_t species; uint8_t form; } gc_darby_card;   /* one of D'Arby's cards, or the player's (gc_darby.c) */
+#define GC_JOBIN_POOL 11   /* BEETLE_POOL */
+/* Jobin's duel (gc_jobin.c). Not saved: a duel is never on a save point, and the punishment fight he starts keeps no save (in->at_save_point = false). */
+typedef struct {
+    bool active, rental, bluff, used_stand, caught, punish, half_money;
+    int8_t own;              /* the party's storage index of your own beetle, -1 for the loan */
+    int8_t tele;             /* the Speed King attack announced for the coming round (0 Superheated Horn, 1 Thermal Dash, 2 Bubbling Sap), -1 none */
+    uint8_t streak, round;   /* consecutive Stand Tricks; rounds played */
+    uint16_t jobin_species, you_species, bonus_species;
+    uint8_t you_form, you_shiny, you_variant, bonus_variant;
+    int16_t grip_you, grip_jobin, susp;
+    int8_t d_you, d_him, d_susp;   /* what the last round moved, after the caps */
+    pr_rng r, gen;           /* the duel's rolls; the loan's and the shiny beetle's */
+} gc_jobin_state;
 #define GC_DARBY_CHIP_ITEMS 24   /* the held items the sealed souls keep (three Pokemon) */
 #define GC_RQ_LEVELS 12
 #define GC_RQ_CAP 24
@@ -167,6 +181,7 @@ typedef struct {
              uint8_t vitamins_left, shops; pr_rng r; } darby;   /* D'Arby the Gambler's hand (gc_darby.c). Not saved, as the other encounters' middle states */
     /* D'Arby's chips (lorenzo 2026-11-18): the souls of an accepted loss, sealed with their held items until his rematch. Saved (gc_save.c "darby_chips").
      * battle: the rematch is being fought (his team holds them); taken: the chips the win's screens have answered */
+    gc_jobin_state jobin;   /* Jobin's beetle duel and the fight after it */
     struct { uint8_t n, n_items, taken; bool battle; uint8_t level[3]; gc_mon mon[3]; gc_item items[GC_DARBY_CHIP_ITEMS]; } chips;   /* level: the one each fought at (it comes back with it) */
     /* Weird Dream (gc_weird.c): the species onInit chose for each party position (party order), once, with the wave stream as it stood after that (the Pokemon are made from it each time they are
      * asked for: the process-wide BST ranges widen when a draw is short, so the choice itself is made once per encounter). Not saved: gc_weird_plan makes it again after a load */
@@ -643,6 +658,30 @@ void gc_darby_deal(gc_run *run);                                /* the six cards
 bool gc_darby_rematch_due(gc_run *run, int wave);               /* this eligible trainer wave is his (the chance, or the sure window) */
 bool gc_darby_build_rematch(gc_run *run);                       /* the wave's party becomes his team; false = it stays */
 void gc_darby_rematch_items(gc_run *run);                       /* enemy_items: the sealed souls hold their own items (gc_custom_team_items) */
+enum { GC_JOBIN_STAGE_ROUND, GC_JOBIN_STAGE_KEEP, GC_JOBIN_STAGE_CHARCOAL, GC_JOBIN_STAGE_GIVE };   /* RP_JOBIN's a */
+enum { GC_JOBIN_GIVE_OWN, GC_JOBIN_GIVE_RELIC, GC_JOBIN_GIVE_BONUS, GC_JOBIN_GIVE_END };             /* the give stage's b */
+/* the rules (pure: the tests read them) */
+int gc_jobin_pool_species(int i);
+bool gc_jobin_in_pool(int species);
+int gc_jobin_stand_suspicion(int streak);   /* the suspicion of the streak-th consecutive Stand Trick: 35, 50, 70, 70... */
+void gc_jobin_normal_delta(int player, int jobin, int *you, int *him, int *susp);   /* moves 0 Horn Lock, 1 Dig In, 2 Flank */
+void gc_jobin_king_delta(int king, int player, int *you, int *him, int *susp);      /* king 0 Horn, 1 Dash, 2 Sap; player 0..3 (3 = Stand Trick) */
+int gc_jobin_bluff_move(int king);
+void gc_jobin_round(gc_jobin_state *s, int player, int jobin, int king);            /* one round's meter changes (jobin: his normal move; king >= 0: his attack) */
+int gc_jobin_outcome(const gc_jobin_state *s);                                      /* 0 on, 1 you flipped, 2 he is, 3 both (rematch), 4 caught */
+const char *gc_jobin_move_name(int m);
+const char *gc_jobin_king_name(int k);
+int gc_jobin_roll_species(const gc_run *run);             /* the beetle Jobin draws on this wave */
+bool gc_jobin_pick_ok(const gc_run *run, int option, int idx);
+bool gc_jobin_own_available(const gc_run *run);
+void gc_jobin_setup_screen(gc_run *run);                  /* the first screen's options and args */
+void gc_jobin_execute(gc_run *run, int option, int member);
+bool gc_jobin_stage_start(gc_run *run, const gc_rphase *p);
+bool gc_jobin_stage_choose(gc_run *run, const gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
+bool gc_jobin_team(gc_custom_team *team);                 /* his four, checked */
+void gc_jobin_victory(gc_run *run);                       /* the punishment fight is won */
+double gc_jobin_take_money_multiplier(gc_run *run);       /* 0.5 once, for the prize money of the fight that was just won ("50% reduced prize money"), else 1 */
+bool gc_new_enemy_mon(gc_run *run, pr_rng *r, int species, int level, gc_mon *out);   /* new EnemyPokemon(species, level) on `r` (gc_gts.c) */
 void gc_darby_rematch_won(gc_run *run);                         /* the trainer victory of his rematch: one screen per chip, the achievement */
 void gc_mc_execute(gc_run *run, int option);                /* its option chosen: the fight starts (victory is gc_pillar_victory) */
 void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */

@@ -35,11 +35,13 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 164   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
+#define GC_ACHV_COUNT 166   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
                               * batch's "Defeat X" and "Flawless X" in pairs (ids stay under 192, where upstream's own start) */
 #define GC_ACHV_TWENTY_FACES 117
 #define GC_ACHV_DARBY 152   /* beating D'Arby the Gambler (Standard or All-In: a won hand or a caught cheat) */
 #define GC_ACHV_DARBY_REMATCH 153   /* beating D'Arby's rematch, the battle for the sealed souls (lorenzo 2026-11-18) */
+#define GC_ACHV_JOBIN 164          /* beating Jobin's beetle duel (lorenzo 2026-11-23) */
+#define GC_ACHV_JOBIN_PUNISH 165   /* beating his team after he caught you cheating */
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -84,6 +86,8 @@ void gc_achv_wave_reached(gc_system *sys, uint32_t wave);
 /* D'Arby the Gambler was beaten (a won hand, or his cheat caught), at either wager. */
 void gc_achv_darby_won(gc_system *sys);
 void gc_achv_darby_rematch_won(gc_system *sys);
+void gc_achv_jobin_won(gc_system *sys);
+void gc_achv_jobin_punish_won(gc_system *sys);
 void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats);
 
 /* Group C, the collection, reads the Pokedex of the profile itself (nothing to report): species caught, shinies owned, legendaries and

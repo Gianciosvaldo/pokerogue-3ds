@@ -158,6 +158,21 @@ int main(void)
   CHECK(next_is(GC_ACHV_DARBY, "Gambler's Downfall", "2 Egg Vouchers"), "and queues it with its reward");
   CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && ach_take_unlock() == -1, "told once");
 
+  /* Jobin: the duel won, then his team beaten after he caught the player cheating; each is told once on the next screen, with its reward */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(60, 'j');
+  ach_on_screen(&R, GC_SCREEN_MYSTERY, -1, true);
+  while (ach_take_unlock() >= 0) {}
+  CHECK(!ach_on_screen(&R, GC_SCREEN_MYSTERY, -1, true) && !gc_achv_unlocked(&S, GC_ACHV_JOBIN) && !gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH), "no win over Jobin, nothing");
+  gc_achv_jobin_won(&S);
+  CHECK(ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && gc_achv_unlocked(&S, GC_ACHV_JOBIN) && !gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH), "the duel won unlocks its achievement alone");
+  CHECK(next_is(GC_ACHV_JOBIN, "Not quite a lamborghini gallardo, but it will do", "1 Egg Voucher"), "and queues it with its reward");
+  gc_achv_jobin_punish_won(&S);
+  CHECK(ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH), "his team beaten unlocks the other");
+  CHECK(next_is(GC_ACHV_JOBIN_PUNISH, "cheated and got away with it", "2 Egg Vouchers"), "and queues it with its reward");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, -1, true) && ach_take_unlock() == -1, "told once");
+
   /* a win: solo (one Pokemon ever fielded), no ball, six that can evolve */
   gc_system_init_defaults(&S);
   ach_reset();

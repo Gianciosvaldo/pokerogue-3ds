@@ -47,7 +47,7 @@ int main(void)
     {
         assert(GC_JOJO_COUNT == 39 && GC_JOJO_CAESAR == 17 && GC_JOJO_GHIACCIO == 34 && GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO + 2 == GC_ACHV_JOJO3_FIRST &&
                GC_ACHV_DARBY == GC_ACHV_JOJO3_FIRST - 2 && GC_ACHV_DARBY_REMATCH == GC_ACHV_JOJO3_FIRST - 1 && GC_ACHV_FLAWLESS_FIRST == GC_ACHV_TWENTY_FACES + 1 &&
-               GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_COUNT == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO));
+               GC_ACHV_TWENTY_FACES == GC_ACHV_JOJO2_FIRST + 17 && GC_ACHV_COUNT == GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO) + 2 && GC_ACHV_JOBIN == GC_ACHV_COUNT - 2 && GC_ACHV_JOBIN_PUNISH == GC_ACHV_COUNT - 1);
         assert(GC_ACHV_COUNT <= 192);   /* upstream's own achievements use 192 and up in achievement_flags */
         assert(gc_achv_jojo_id(-1) == -1 && gc_achv_jojo_id(GC_JOJO_COUNT) == -1);
         for (int j = 0; j < GC_JOJO_COUNT; j++) {
@@ -231,6 +231,8 @@ int main(void)
         for (int id = 30; id < GC_ACHV_JOJO2_FIRST; id++) assert(gc_achv_order(pos++) == id);
         assert(gc_achv_order(pos++) == GC_ACHV_DARBY);   /* D'Arby's two, the only non-JoJo ones after 99 */
         assert(gc_achv_order(pos++) == GC_ACHV_DARBY_REMATCH);
+        assert(gc_achv_order(pos++) == GC_ACHV_JOBIN);   /* Jobin's two follow, in id order, after every id the third batch took */
+        assert(gc_achv_order(pos++) == GC_ACHV_JOBIN_PUNISH);
         assert(pos == GC_ACHV_COUNT);   /* the third batch is in the two JoJo blocks above */
     }
 
@@ -375,6 +377,33 @@ int main(void)
         gc_achv_darby_rematch_won(&S);
         eval(NULL);
         assert(vouchers() == before2 + 2);
+    }
+    /* Jobin's two (lorenzo 2026-11-23): his titles; the beetle duel won gives the normal JoJo reward (one Regular voucher), the team beaten after being caught the
+     * Flawless one (two); each once, and the counters are separate */
+    {
+        fresh();
+        assert(!strcmp(gc_achv_defs[GC_ACHV_JOBIN].name, "Not quite a lamborghini gallardo, but it will do") && !strcmp(gc_achv_defs[GC_ACHV_JOBIN_PUNISH].name, "cheated and got away with it"));
+        assert(gc_achv_defs[GC_ACHV_JOBIN].reward == gc_achv_defs[gc_achv_jojo_id(0)].reward && gc_achv_defs[GC_ACHV_JOBIN].arg == gc_achv_defs[gc_achv_jojo_id(0)].arg
+               && gc_achv_defs[GC_ACHV_JOBIN].n == gc_achv_defs[gc_achv_jojo_id(0)].n);
+        assert(gc_achv_defs[GC_ACHV_JOBIN_PUNISH].reward == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].reward && gc_achv_defs[GC_ACHV_JOBIN_PUNISH].arg == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].arg
+               && gc_achv_defs[GC_ACHV_JOBIN_PUNISH].n == gc_achv_defs[GC_ACHV_FLAWLESS_FIRST].n);
+        const uint32_t before = vouchers();
+        assert(!gc_achv_unlocked(&S, GC_ACHV_JOBIN) && !gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH));
+        gc_achv_jobin_won(&S);
+        gc_achv_jobin_won(NULL);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, GC_ACHV_JOBIN) && !gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH) && S.achv.jobin_wins == 1 && vouchers() == before + gc_achv_defs[GC_ACHV_JOBIN].n);
+        gc_achv_jobin_won(&S);
+        eval(NULL);
+        assert(vouchers() == before + gc_achv_defs[GC_ACHV_JOBIN].n);
+        const uint32_t before2 = vouchers();
+        gc_achv_jobin_punish_won(&S);
+        gc_achv_jobin_punish_won(NULL);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, GC_ACHV_JOBIN_PUNISH) && S.achv.jobin_punish_wins == 1 && vouchers() == before2 + gc_achv_defs[GC_ACHV_JOBIN_PUNISH].n);
+        gc_achv_jobin_punish_won(&S);
+        eval(NULL);
+        assert(vouchers() == before2 + gc_achv_defs[GC_ACHV_JOBIN_PUNISH].n);
     }
     /* waves: only the best is kept, and a lower wave never lowers it */
     {

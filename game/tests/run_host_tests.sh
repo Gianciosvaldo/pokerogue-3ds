@@ -40,6 +40,11 @@ done
 # Retain the first 150 scanner runs and extend their deterministic sequence.
 # Weighted wild movesets change run lengths; 150 no longer reaches release-list
 # Cancel. Keep that coverage assertion and every original case.
+# Jobin's beetle duel (custom, Bizarre only), forced from wave 5: the drum and the meters are asked for on an encounter scene, every duel ends once.
+# A bigger corpus finds a wild Shedinja (1 HP) that dies to Stealth Rock as it comes in and is then asked a command (run 32 of 100, wave 27); that is
+# battle-core's own and not Jobin's, so this one stays at 30.
+echo "== runtest (Jobin's duel forced from wave 5) 30"
+RUNTEST_JOBIN=1 RUNTEST_CUSTOM=strong build/runtest 30 0 || failed="$failed runtest-jobin"
 echo "== runtest (IV Scanner encounter prompt and assessment) 350"
 RUNTEST_SCANNER=1 build/runtest 350 0 || failed="$failed runtest-scanner"
 echo "== runtest (IV Scanner in the Safari Zone: forced from wave 5, asked once per Pokemon, the window with its own IVs, no RNG drawn) 60"

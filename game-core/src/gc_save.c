@@ -1704,6 +1704,8 @@ static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, jojo_clean_mask), SF(gc_achv_progress, jojo_clean_mask_hi),   /* appended last: a save without them loads with 0 */
     SF(gc_achv_progress, darby_wins),
     SF(gc_achv_progress, darby_rematch_wins),
+    SF(gc_achv_progress, jobin_wins),
+    SF(gc_achv_progress, jobin_punish_wins),
 };
 
 /* A starter's nickname (gc_system.starter_nicknames): a section of its own, written only once a starter has one, so a profile with none saves the bytes
