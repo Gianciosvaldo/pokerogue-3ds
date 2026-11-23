@@ -926,9 +926,10 @@ static void open_darby(int cursor)
  * party screen. The duel's own scene (the arena, the Grip and Suspicion bars) is the battle view's (bv_jobin_*); the lines are the core's events. */
 static int jobin_arg(const gc_screen* s, const char* name, int def)
 {
+  int value = def;
   for (int i = 0; i < s->n_me_args; i++)
-    if (s->me_args[i].name && !strcmp(s->me_args[i].name, name)) return (int)s->me_args[i].v;
-  return def;
+    if (s->me_args[i].name && !strcmp(s->me_args[i].name, name)) { value = (int)s->me_args[i].v; break; }   /* (not the Trainer's Test's own line, a fault site of check_mystery_ui_faults.py) */
+  return value;
 }
 
 static void open_jobin(int cursor)
