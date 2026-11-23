@@ -26,6 +26,7 @@
 #include "run_saves.h"
 #include "run_settings.h"
 #include "slot_screen.h"
+#include "starter_data.h"
 #include "starter_host.h"
 #include "football_screen.h"
 #include "system_data.h"
@@ -523,7 +524,7 @@ static void on_pokedex_exit(void* arg) {
 }
 
 static void show_pokedex(void) {
-  const pokedex_args a = {sysd_get(), on_pokedex_exit, NULL};
+  const pokedex_args a = {sysd_get(), ss_has_pokerus, on_pokedex_exit, NULL};
   pokedex_screen_open(&a);
 }
 

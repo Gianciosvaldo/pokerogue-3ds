@@ -32,6 +32,10 @@ static int checks, failed;
 static gc_system sys;
 static pdx_state P;
 static char names[9100][64];
+static unsigned prk[3];
+static char last_filt[128];
+static const char* name_of(uint16_t id) { return names[id]; }
+static bool pokerus_of(uint16_t id) { return id == prk[0] || id == prk[1] || id == prk[2]; }
 static char number_fmt[64] = "No. {{dexNo}}";
 static const char* const TYPE_FRAME[20] = {"normal", "fighting", "flying",   "poison", "ground", "rock",  "bug",  "ghost",  "steel", "fire",
                                            "water",  "grass",    "electric", "psychic", "ice",   "dragon", "dark", "fairy", "stellar", "unknown"};
@@ -66,8 +70,8 @@ static void run_fixture(const char* path) {
     failed++;
     return;
   }
-  static char line[4096];
-  int cases = 0, steps = 0, starters_seen = 0, modes[3] = {0, 0, 0};
+  static char line[16384];
+  int cases = 0, steps = 0, starters_seen = 0, modes[3] = {0, 0, 0}, filters = 0, empty_lists = 0, narrowed = 0;
   while (fgets(line, sizeof line, f)) {
     line[strcspn(line, "\n")] = 0;
     if (!strncmp(line, "LOC pokemonNumber ", 18)) {
@@ -93,6 +97,76 @@ static void run_fixture(const char* path) {
         sys.dex[id].seen_attr = seen;
         sys.dex[id].caught_attr = caught;
       }
+    } else if (!strncmp(line, "DX2 ", 4)) {
+      int id;
+      unsigned seen_count, caught_count, hatched, iv[6];
+      if (sscanf(line + 4, "%d %u %u %u %u %u %u %u %u %u", &id, &seen_count, &caught_count, &hatched, &iv[0], &iv[1], &iv[2], &iv[3], &iv[4], &iv[5]) == 10 &&
+          id > 0 && id <= GC_MAX_SPECIES_ID) {
+        sys.dex[id].seen_count = seen_count;
+        sys.dex[id].caught_count = caught_count;
+        sys.dex[id].hatched_count = hatched;
+        for (int k = 0; k < 6; k++) sys.dex[id].ivs[k] = (uint8_t)iv[k];
+      }
+    } else if (!strncmp(line, "SD ", 3)) {
+      int id, candy, passive, reduction, wins, ability;
+      if (sscanf(line + 3, "%d %d %d %d %d %d", &id, &candy, &passive, &reduction, &wins, &ability) == 6 && id > 0 && id <= GC_MAX_SPECIES_ID) {
+        sys.starters[id].candy_count = candy;
+        sys.starters[id].passive_attr = (uint32_t)passive;
+        sys.starters[id].value_reduction = (uint32_t)reduction;
+        sys.starters[id].classic_win_count = (uint16_t)wins;
+        sys.starters[id].ability_attr = (uint32_t)ability;
+      }
+    } else if (!strncmp(line, "PRK ", 4)) {
+      sscanf(line + 4, "%u %u %u", &prk[0], &prk[1], &prk[2]);
+    } else if (!strncmp(line, "FILT ", 5)) {
+      snprintf(last_filt, sizeof last_filt, "%.100s", line + 5);
+      unsigned v[15];
+      if (sscanf(line + 5, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9], &v[10], &v[11],
+                 &v[12], &v[13], &v[14]) == 15) {
+        pdf_filter f;
+        pdf_reset(&f);
+        f.gens = (uint16_t)v[0];
+        f.types = v[1];
+        f.caught = (uint8_t)v[2];
+        f.passive = (uint8_t)v[3];
+        f.reduction = (uint8_t)v[4];
+        f.starter = (uint8_t)v[5];
+        f.favorite = (uint8_t)v[6];
+        f.win = (uint8_t)v[7];
+        f.hidden_ability = (uint8_t)v[8];
+        f.seen = (uint8_t)v[9];
+        f.encountered = (uint8_t)v[10];
+        f.egg = (uint8_t)v[11];
+        f.pokerus = (uint8_t)v[12];
+        f.sort = (uint8_t)v[13];
+        f.descending = v[14] != 0;
+        P.name = name_of;
+        P.pokerus = pokerus_of;
+        pdx_apply_filter(&P, &f);
+        filters++;
+      }
+    } else if (!strncmp(line, "LIST ", 5)) {
+      int n, off = 0;
+      sscanf(line + 5, "%d %n", &n, &off);
+      CHECK(P.n == n, "filtered list of %d species, upstream %d (filter %s)", P.n, n, last_filt);
+      const char* at = line + 5 + off;
+      int i = 0;
+      bool same = P.n == n;
+      while (*at && i < n) {
+        char* end;
+        const long id = strtol(at, &end, 10);
+        if (end == at) break;
+        if (i >= P.n || P.ids[i] != id) {
+          same = false;
+          if (failed < 30) printf("FAIL: list position %d: ours %d upstream %ld (filter %s)\n", i, i < P.n ? P.ids[i] : -1, id, last_filt);
+          break;
+        }
+        at = end;
+        i++;
+      }
+      CHECK(same, "the filtered list matches (%d species)", n);
+      if (n == 0) empty_lists++;
+      if (n > 0 && n < 1084) narrowed++;
     } else if (!strncmp(line, "PREF ", 5)) {
       int id, form;
       if (sscanf(line + 5, "%d %d", &id, &form) == 2) {
@@ -112,8 +186,8 @@ static void run_fixture(const char* path) {
       int b, ok, cur, scroll, off = 0;
       char mode[8];
       sscanf(line + 4, "%d %d %d %d %7s %n", &b, &ok, &cur, &scroll, mode, &off);
-      pdx_mode m;
-      const bool r = pdx_input(&P, (pdx_button)b, &m);
+      pdx_mode m = PDX_GRID;
+      const bool r = b < 0 ? true : pdx_input(&P, (pdx_button)b, &m); /* -1: no press, the state after a filter */
       const int want = !strcmp(mode, "bar") ? PDX_FILTER_BAR : !strcmp(mode, "text") ? PDX_FILTER_TEXT : PDX_GRID;
       modes[m]++;
       char ours[1024];
@@ -127,7 +201,8 @@ static void run_fixture(const char* path) {
   }
   if (plen > 3 && !strcmp(path + plen - 3, ".gz")) pclose(f);
   else fclose(f);
-  printf("fixture: %d cases, %d presses (%d in the grid, %d into the filter bar, %d into the filter text)\n", cases, steps, modes[0], modes[1], modes[2]);
+  printf("fixture: %d cases, %d presses (%d in the grid, %d into the filter bar, %d into the filter text), %d filters (%d empty lists, %d narrowed)\n", cases, steps, modes[0], modes[1], modes[2],
+         filters, empty_lists, narrowed);
   CHECK(cases > 0 && steps > 0 && starters_seen == 1084, "the fixture is empty or incomplete (%d starters)", starters_seen);
 }
 

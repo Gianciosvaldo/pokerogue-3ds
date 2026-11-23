@@ -12,7 +12,9 @@
 #include <string.h>
 
 #include "gc/data.h"
+#include "i18n.h"
 #include "pokedex_assets.h"
+#include "pokedex_filter_menu.h"
 #include "pokedex_model.h"
 #include "pokedex_screen.h"
 #include "ui.h"
@@ -150,6 +152,26 @@ const char* i18n_t(char* out, int n, const char* key, ...) {
   } else snprintf(out, (size_t)n, "%s", key);
   return out;
 }
+/* the options overlay: the menu's rows and its callback, driven by the test */
+static const char* g_opt_labels[40];
+static char g_opt_text[40][64];
+static int g_opt_n, n_menus;
+static void (*g_opt_done)(int, void*);
+void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*on_done)(int idx, void* arg), void* arg) {
+  (void)can_cancel, (void)arg;
+  g_opt_n = n > 40 ? 40 : n;
+  for (int i = 0; i < g_opt_n; i++) {
+    snprintf(g_opt_text[i], sizeof g_opt_text[i], "%s", labels[i]);
+    g_opt_labels[i] = g_opt_text[i];
+  }
+  g_opt_done = on_done;
+  n_menus++;
+}
+const char* i18n_type_name(int type) {
+  static char buf[16];
+  snprintf(buf, sizeof buf, "Type%d", type);
+  return buf;
+}
 const char* i18n_species_name(int id) {
   static char buf[32];
   snprintf(buf, sizeof buf, "Species%d", id);
@@ -160,6 +182,8 @@ const char* i18n_species_name(int id) {
 
 static gc_system sys;
 static int one = 1;
+static bool pokerus_fake(uint16_t id) { return id == 4 || id == 16; }
+static const char* name_fake(uint16_t id) { return i18n_species_name(id); }
 static void exited(void* arg) { n_exit += *(int*)arg; }
 
 static void draw(int which) {
@@ -213,7 +237,7 @@ static void check_all(const pdx_state* m, int bob, const char* what) {
         CHECK(g_rects[i].y == ey && g_rects[i].h == 152.0f * 9 / (float)rows, "%s: the scroll handle at %.2f (%.2f tall), expected %.2f", what, g_rects[i].y, g_rects[i].h, ey);
         found++;
       }
-    CHECK(found == 1, "%s: one scroll handle (%d)", what, found);
+    CHECK(found == (rows > 9 ? 1 : 0), "%s: %d scroll handles for %d rows", what, found, rows);
   }
   const float cx = (float)(149 + (m->cursor % 9) * 18 - 1), cy = (float)(9 + 13 + (m->cursor / 9) * 17 + 1);
   const image_t* cur = image("images/ui/select_cursor");
@@ -245,7 +269,7 @@ int main(void) {
   pdx_state m;
   pdx_open(&m, &sys);
 
-  pokedex_args a = {&sys, exited, &one};
+  pokedex_args a = {&sys, pokerus_fake, exited, &one};
   pokedex_screen_open(&a);
   CHECK(g_top != NULL, "the screen is up");
   g_now = 0;
@@ -293,10 +317,12 @@ int main(void) {
     CHECK(n_labels == 0, "and shows no types");
   }
 
-  /* UP in the first row enters upstream's filter bar: not ported, nothing changes and no sound */
+  /* UP in the first row enters upstream's filter bar: the filter menu opens (the grid is as it was) */
   sel = n_select;
+  const int menus0 = n_menus;
   press(BTN_UP);
-  CHECK(n_select == sel, "UP in the first row plays nothing (the filter bar is not here)");
+  CHECK(n_select == sel + 1 && n_menus == menus0 + 1, "UP in the first row opens the filter menu");
+  g_opt_done(-2, NULL); /* cancelled: closed */
   check_all(&m, 0, "up in the first row");
 
   /* DOWN scrolls a row at a time past nine rows; the model is driven by the same presses */
@@ -325,7 +351,7 @@ int main(void) {
   pdx_select_cell(&m, 2 * 9 + 2);
   CHECK(n_select == sel + 1, "and plays the sound");
   check_all(&m, 0, "tap");
-  CHECK(!g_top->touch(g_top, 10, 10), "a tap left of the grid is not taken");
+  CHECK(!g_top->touch(g_top, 10, 100), "a tap left of the grid is not taken");
   CHECK(!g_top->touch(g_top, 149 + 9 * 18 + 2, 40), "nor one right of the nine columns");
 
   /* a tap on the hint "B: back" leaves; one on the other hint does not */
@@ -334,6 +360,163 @@ int main(void) {
     CHECK(!g_top->touch(g_top, 80, 224) && n_exit == ex, "a tap on the D-pad hint does nothing");
     CHECK(g_top->touch(g_top, 12, 224) && n_exit == ex + 1, "a tap on the B hint leaves");
     n_exit = 0;
+    pokedex_screen_open(&a);
+  }
+
+
+  /* ---- the filter menu: UP in the first row and a tap on the button open it; its rows change the filter and the list is rebuilt */
+  {
+    pdx_open(&m, &sys);
+    m.name = name_fake;
+    m.pokerus = pokerus_fake;
+    pokedex_screen_open(&a);
+    draw(1);
+    CHECK(find_at(12, 3) && !strcmp(find_at(12, 3)->text, "Filter"), "the filter button says Filter");
+    int menus = n_menus;
+    press(BTN_LEFT); /* LEFT at the first cell enters the text filters upstream: not ported, nothing opens */
+    CHECK(n_menus == menus, "LEFT at the edge opens nothing");
+    for (int k = 0; k < 3; k++) {
+      press(BTN_RIGHT);
+      pdx_input(&m, PDX_RIGHT, &mode);
+    }
+    sel = n_select;
+    press(BTN_UP);
+    CHECK(n_menus == menus + 1 && n_select == sel + 1, "UP in the first row opens the filter menu with the sound");
+    CHECK(g_opt_n == 16 && !strcmp(g_opt_labels[0], "Generation: all") && !strcmp(g_opt_labels[2], "Caught: all") && !strcmp(g_opt_labels[3], "Passive: Any") &&
+              !strcmp(g_opt_labels[5], "Starter: Any") && !strcmp(g_opt_labels[8], "Seen: Any") && !strcmp(g_opt_labels[12], "Sort by: Number") &&
+              !strcmp(g_opt_labels[14], "Reset") && !strcmp(g_opt_labels[15], "Done"),
+          "the top menu: %d rows, first '%s'", g_opt_n, g_opt_labels[0]);
+    /* Seen: Yes -> the list of seen species, the cursor on its first */
+    pdf_filter want;
+    pdf_reset(&want);
+    want.seen = PDF_ON;
+    g_opt_done(8, NULL);
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    CHECK(n_menus == menus + 2 && !strcmp(g_opt_labels[8], "Seen: Yes"), "a tri-state steps and the menu is shown again (%s)", g_opt_labels[8]);
+    CHECK(m.n < 1084 && m.n > 0, "the seen species are %d", m.n);
+    check_all(&m, 0, "seen only");
+    draw(1);
+    CHECK(find_at(12, 3) && !strcmp(find_at(12, 3)->text, "Filter (1)"), "the button counts the active column");
+    /* the cursor goes to the first species of a list, even when it was elsewhere */
+    g_opt_done(8, NULL); /* Seen: No */
+    want.seen = PDF_EXCLUDE;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "unseen only");
+    g_opt_done(8, NULL); /* Seen: Any */
+    pdf_reset(&want);
+    pdx_apply_filter(&m, &want);
+    check_all(&m, 0, "all again");
+    /* Generation: a check box list, the last generation cannot be cleared */
+    g_opt_done(0, NULL);
+    CHECK(g_opt_n == 10 && !strcmp(g_opt_labels[0], "[x] Gen 1") && !strcmp(g_opt_labels[9], "Back"), "the generation list");
+    for (int g = 1; g < 9; g++) g_opt_done(g, NULL); /* off: 2..9 */
+    CHECK(!strcmp(g_opt_labels[0], "[x] Gen 1") && !strcmp(g_opt_labels[1], "[ ] Gen 2"), "generations 2 to 9 are off");
+    g_opt_done(0, NULL); /* the last one stays on */
+    CHECK(!strcmp(g_opt_labels[0], "[x] Gen 1"), "the last generation stays on");
+    want.gens = 1;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "generation 1");
+    CHECK(m.n == 151 + 0 || m.n > 100, "generation 1 has %d species", m.n);
+    g_opt_done(9, NULL); /* Back */
+    CHECK(!strcmp(g_opt_labels[0], "Generation: 1 of 9"), "back to the top menu (%s)", g_opt_labels[0]);
+    /* Passive and Cost reduction step through the states they offer */
+    {
+      const char* const p[4] = {"Passive: Unlocked", "Passive: Can unlock now", "Passive: Locked", "Passive: Any"};
+      for (int k = 0; k < 4; k++) {
+        g_opt_done(3, NULL);
+        CHECK(!strcmp(g_opt_labels[3], p[k]), "passive step %d: '%s'", k, g_opt_labels[3]);
+      }
+      const char* const r[6] = {"Cost reduction: Yes", "Cost reduction: Bought once", "Cost reduction: Bought twice", "Cost reduction: Can unlock now", "Cost reduction: Locked", "Cost reduction: Any"};
+      for (int k = 0; k < 6; k++) {
+        g_opt_done(4, NULL);
+        CHECK(!strcmp(g_opt_labels[4], r[k]), "reduction step %d: '%s'", k, g_opt_labels[4]);
+      }
+    }
+    /* Caught lists five boxes, the fifth "Not caught"; the last box on stays on */
+    g_opt_done(2, NULL);
+    CHECK(g_opt_n == 6 && !strcmp(g_opt_labels[4], "[x] Not caught"), "the caught list has Not caught");
+    for (int k = 0; k < 4; k++) g_opt_done(k, NULL);
+    g_opt_done(4, NULL);
+    CHECK(!strcmp(g_opt_labels[0], "[ ] Epic shiny") && !strcmp(g_opt_labels[4], "[x] Not caught"), "only Not caught is on and it cannot be cleared");
+    for (int k = 0; k < 4; k++) g_opt_done(k, NULL);
+    CHECK(!strcmp(g_opt_labels[3], "[x] Normal"), "the others come back on");
+    g_opt_done(5, NULL);
+    /* Sort and order step; Reset clears everything */
+    g_opt_done(12, NULL);
+    want.sort = PDF_SORT_COST;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "sorted by cost");
+    CHECK(!strcmp(g_opt_labels[12], "Sort by: Cost"), "the sort steps to cost (%s)", g_opt_labels[12]);
+    for (int k = PDF_SORT_CANDY; k <= PDF_SORT_HATCHED; k++) {
+      g_opt_done(12, NULL);
+      want.sort = (uint8_t)k;
+      pdx_apply_filter(&m, &want);
+      m.cursor = 0;
+      char what[24];
+      snprintf(what, sizeof what, "sort %d", k);
+      check_all(&m, 0, what);
+    }
+    CHECK(!strcmp(g_opt_labels[12], "Sort by: Times hatched"), "the last sort is times hatched (%s)", g_opt_labels[12]);
+    g_opt_done(12, NULL); /* back to number */
+    want.sort = PDF_SORT_COST;
+    g_opt_done(12, NULL);
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    g_opt_done(13, NULL);
+    want.descending = true;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "descending");
+    CHECK(!strcmp(g_opt_labels[13], "Order: Descending"), "the order flips");
+    /* Pokerus: only the starters the screen was told have it (4 and 16) */
+    g_opt_done(11, NULL);
+    want.pokerus = PDF_ON;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "pokerus");
+    CHECK(m.n == 2, "two species have Pokerus (%d)", m.n);
+    /* an empty list: Pokerus on and the Starter filter off the list (No) leaves nothing, the screen says so and draws no icons, panel or cursor */
+    g_opt_done(5, NULL); /* Starter: Yes */
+    g_opt_done(5, NULL); /* Starter: No: the two are starters, so nothing fits */
+    want.starter = PDF_EXCLUDE;
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    CHECK(m.n == 0, "no starter lacks being a starter (%d)", m.n);
+    draw(1);
+    CHECK(n_icons == 0 && image("images/ui/select_cursor") == NULL && n_labels == 0, "an empty list draws no icon, cursor or type label");
+    CHECK(find_at(6, 141) == NULL && find_at(6, 128) == NULL, "and no panel");
+    {
+      int msg = 0;
+      for (int i = 0; i < n_drawn; i++)
+        if (!strcmp(g_drawn[i].text, "No species fit the filter.")) msg++;
+      CHECK(msg == 1, "it says so once (%d)", msg);
+    }
+    sel = n_select;
+    press(BTN_DOWN);
+    press(BTN_LEFT);
+    CHECK(n_select == sel + 1 || n_select == sel, "presses on an empty list do not crash");
+    /* Reset */
+    g_opt_done(14, NULL);
+    pdf_reset(&want);
+    pdx_apply_filter(&m, &want);
+    m.cursor = 0;
+    check_all(&m, 0, "reset");
+    CHECK(!strcmp(g_opt_labels[0], "Generation: all") && !strcmp(g_opt_labels[12], "Sort by: Number") && !strcmp(g_opt_labels[13], "Order: Ascending"), "Reset restores the defaults");
+    /* Done closes it: nothing is pushed again */
+    menus = n_menus;
+    g_opt_done(15, NULL);
+    CHECK(n_menus == menus, "Done closes the menu");
+    g_opt_done(-2, NULL); /* a cancel on the top menu closes it too */
+    CHECK(n_menus == menus, "so does a cancel");
+    /* the tap on the button */
+    sel = n_select;
+    CHECK(g_top->touch(g_top, 20, 8) && n_menus == menus + 1 && n_select == sel + 1, "a tap on the Filter button opens the menu");
+    g_opt_done(-2, NULL);
+    CHECK(!g_top->touch(g_top, 120, 8) && n_menus == menus + 1, "a tap beside the button opens nothing");
     pokedex_screen_open(&a);
   }
 
