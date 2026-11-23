@@ -372,11 +372,9 @@ static bool types_include(const int8_t *types, int n, int t)
     return false;
 }
 
-static double chart(int atk, int def)
+static double chart(const pr_battle *bt, int atk, int def)
 {
-    if (atk == POKEMON_TYPE_UNKNOWN || def == POKEMON_TYPE_UNKNOWN) return 1;
-    if (atk < 0 || atk >= PR_TYPE_COUNT || def < 0 || def >= PR_TYPE_COUNT) return 1;
-    return pr_type_chart_x2[atk][def] / 2.0;
+    return pr_type_chart_multiplier(bt, atk, def);
 }
 
 void pr_apply_type_chart_override(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move,
@@ -388,12 +386,12 @@ void pr_apply_type_chart_override(pr_battle *bt, const pr_pokemon *user, const p
         if (!pr_attr_is(a->cls, PR_AC_MoveTypeChartOverrideAttr)) continue;
         switch (a->cls) {
         case PR_AC_FreezeDryAttr:
-            if (types_include(types, ntypes, POKEMON_TYPE_WATER)) *mult *= 2 / chart(move_type, POKEMON_TYPE_WATER);
+            if (types_include(types, ntypes, POKEMON_TYPE_WATER)) *mult *= 2 / chart(bt, move_type, POKEMON_TYPE_WATER);
             break;
         case PR_AC_NihilLightAttr:
             if (move_type == POKEMON_TYPE_DRAGON && types_include(types, ntypes, POKEMON_TYPE_FAIRY)) {
                 double eff = 1;
-                for (int k = 0; k < ntypes; k++) eff *= types[k] == POKEMON_TYPE_FAIRY ? 1 : chart(move_type, types[k]);
+                for (int k = 0; k < ntypes; k++) eff *= types[k] == POKEMON_TYPE_FAIRY ? 1 : chart(bt, move_type, types[k]);
                 *mult = eff;
             }
             break;

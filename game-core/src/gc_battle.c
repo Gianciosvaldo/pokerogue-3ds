@@ -276,6 +276,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->game_mode = (int8_t)run->run.mode;
     bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
     bt->battle_type = (uint8_t)run->battle_type;
     bt->me_no_flee = gc_int(run)->me_no_flee;
     if (!restoring) {

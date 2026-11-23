@@ -50,6 +50,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,1,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,1,4,(1u<<9),0,0},
     [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
+    [GC_ME_JOBIN]                   = {GC_ME_GREAT, 20,140,1,0,0,0,0},   /* lorenzo's own (Bizarre runs, 2026-11-23): Great, waves 20..140, any biome, once per run; a loaned beetle covers a party without one of its own */
     [GC_ME_DARBY]                   = {GC_ME_ULTRA, 40,160,1,4,0,0,0},   /* lorenzo's own (Bizarre runs): waves 40..160 (the rematch needs trainer waves up to 172), any biome, a party of four, once per run */
 };
 
@@ -80,7 +81,7 @@ static bool biome_has_id(int b, int type)
     case GC_ME_TRAINING_SESSION: case GC_ME_DELIBIRDY: case GC_ME_A_TRAINERS_TEST:
     case GC_ME_TRASH_TO_TREASURE: case GC_ME_BERRIES_ABOUND: case GC_ME_CLOWNING_AROUND:
     case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS: case GC_ME_UNCOMMON_BREED:
-    case GC_ME_DARBY:
+    case GC_ME_DARBY: case GC_ME_JOBIN:
         return true; /* all biomes */
     case GC_ME_SLUMBERING_SNORLAX:
         return b == BIOME_ID_PLAINS || b == BIOME_ID_GRASS || b == BIOME_ID_TALL_GRASS;
@@ -170,6 +171,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     if (type == GC_ME_DANCING_LESSONS) return gc_dance_pick_ok(run, option, idx);
     if (type == GC_ME_DARBY) return gc_darby_pick_ok(run, option, idx);
+    if (type == GC_ME_JOBIN) return gc_jobin_pick_ok(run, option, idx);
     return false;
 }
 
@@ -548,6 +550,9 @@ static void setup_texts(gc_run *run)
     case GC_ME_DARBY:
         s->option_pick[GC_DARBY_STANDARD] = GC_PICK_MEMBER;   /* the Standard wager's one soul; All-In asks for its three after the choice */
         break;
+    case GC_ME_JOBIN:
+        gc_jobin_setup_screen(run);   /* option 0 asks for a beetle of the party (greyed out without one), the screen names Jobin's */
+        break;
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -650,7 +655,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND: case GC_ME_DELIBIRDY:
-    case GC_ME_BUG_TYPE_SUPERFAN: case GC_ME_DARBY:
+    case GC_ME_BUG_TYPE_SUPERFAN: case GC_ME_DARBY: case GC_ME_JOBIN:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -1440,6 +1445,11 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
     switch (type) {
     case GC_ME_PILLAR_MEN:
         gc_pillar_execute(run, option);
+        return true;
+
+    case GC_ME_JOBIN:
+        if (option == GC_JOBIN_OWN && !gc_jobin_pick_ok(run, option, b)) { *why = "no such Pokemon"; *ok = false; return false; }
+        gc_jobin_execute(run, option, option == GC_JOBIN_OWN ? b : -1);
         return true;
 
     case GC_ME_DARBY:

@@ -10,13 +10,18 @@
  *
  * Trace lines (whitespace separated):
  *   V 1 SEED N
- *   C i fresh budget                                   one case's Fresh Start value and getRunValueLimit()
+ *   C i fresh budget inverse flip passives                                  one case's Fresh Start value and getRunValueLimit()
  *   D species caught_hex nature ability passive reduction egg iv0..iv5     the profile entry the next lines read
  *   Q species form shiny variant female cost hard soft_valid   cost = getSpeciesStarterValue, hard = checkStarterValidForChallenge(.., soft = false),
  *                                                      soft_valid = the same with soft = true
  *   W species caught_hex nature ability passive reduction egg iv0..iv5     getStarterData(species) under the challenges
  *   B n before(c s0 s1 s2) | after                     a party of n, and the Phaser RNG around SelectStarterPhase.initBattle
  *   S species form shiny variant female ability nature passive tera iv0..iv5 m0 m1 m2 m3     the starter handed over (moves 0-padded)
+ *   T inverse m(-1,-1) ... m(18,18)                           getTypeDamageMultiplier(attack, defend) for -1..18 each (361 values), under Inverse Battle's value
+ *   E k e0..e17                                       party member k's getAttackTypeEffectiveness against the 18 types (no source)
+ *   P k passive                                       party member k's hasPassive()
+ *   F species form stat0..stat5                       member 0 fused with member 1 (that species and form): its calculateStats() stats
+ *   Y trainer boss passive wave hasPassive            an enemy Pokemon's hasPassive() (trainer slot set, bossSegments, its passive flag, the wave)
  *   M id species form level nature abilityIndex ability passive gender luck tera hp stat0..stat5 iv0..iv5 m0..m3   the Pokemon after the first
  *                                                      updatePartyForModifiers (the stats upstream recalculates when the first battle starts)
  * GC_CHALLENGE_N=400 GC_CHALLENGE_SEED=777 GC_CHALLENGE_OUT=/abs/trace.txt, Node 22. */
@@ -28,6 +33,9 @@ import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { activeOverrides } from "#app/overrides";
 import { speciesEggMoves } from "#balance/egg-moves";
 import { Challenges } from "#enums/challenges";
+import { getTypeDamageMultiplier } from "#data/type";
+import { EnemyPokemon } from "#field/pokemon";
+import { TrainerSlot } from "#enums/trainer-slot";
 import { GameModes } from "#enums/game-modes";
 import { SpeciesId } from "#enums/species-id";
 import { Pokemon } from "#field/pokemon";
@@ -67,7 +75,8 @@ it("native Challenge Mode starter rules", async () => {
   vi.spyOn(Pokemon.prototype, "updateInfo").mockResolvedValue(undefined as any);
 
   const lines: string[] = [`V 1 ${SEED} ${N}`];
-  const cover = { freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
+  let seenChart = 0;
+  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
   const FORM_SPECIES = [SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.PICHU, SpeciesId.ROTOM, SpeciesId.MELOETTA];
   const hex = (b: bigint) => b.toString(16);
 
@@ -77,8 +86,25 @@ it("native Challenge Mode starter rules", async () => {
     const fresh = i % 7 === 0 ? 0 : 1 + ((i + rnd(2)) % 2);
     scene.gameMode = getGameMode(GameModes.CHALLENGE);
     scene.gameMode.setChallengeValue(Challenges.FRESH_START, fresh);
+    // the battle rules: Inverse Battle and Flip Stat (0 or 1), Passives (0, 1 or 2)
+    const inverse = rnd(3) === 0 ? 1 : 0;
+    const flip = rnd(3) === 0 ? 1 : 0;
+    const passives = rnd(3);
+    scene.gameMode.setChallengeValue(Challenges.INVERSE_BATTLE, inverse);
+    scene.gameMode.setChallengeValue(Challenges.FLIP_STAT, flip);
+    scene.gameMode.setChallengeValue(Challenges.PASSIVES, passives);
     if (fresh) cover.freshCases++;
-    lines.push(`C ${i} ${fresh} ${getRunValueLimit()}`);
+    if (inverse) cover.inverse++;
+    if (flip) cover.flip++;
+    if (passives) cover.passives++;
+    lines.push(`C ${i} ${fresh} ${getRunValueLimit()} ${inverse} ${flip} ${passives}`);
+    // getTypeDamageMultiplier over the whole chart (UNKNOWN, the 18 types and Stellar), once for each Inverse Battle value
+    if (!(seenChart >> inverse & 1)) {
+      seenChart |= 1 << inverse;
+      const row: number[] = [];
+      for (let a = -1; a <= 18; a++) for (let d = -1; d <= 18; d++) row.push(getTypeDamageMultiplier(a, d));
+      lines.push(`T ${inverse} ${row.join(" ")}`);
+    }
 
     // profile queries: a random profile for a handful of starters
     for (let q = 0; q < 12; q++) {
@@ -194,10 +220,49 @@ it("native Challenge Mode starter rules", async () => {
       lines.push(
         `M ${p.id} ${p.species.speciesId} ${p.formIndex} ${p.level} ${p.nature} ${p.abilityIndex} ${p.getAbility(true).id} ${+!!p.passive} ${p.gender} ${p.luck} ${p.teraType} ${p.hp} ${p.stats.join(" ")} ${p.ivs.join(" ")} ${pm.join(" ")}`,
       );
+      // getAttackTypeEffectiveness of the member against each of the 18 types, and hasPassive() (the battle rules read the challenges)
+      lines.push(`E ${k} ${[...Array(18).keys()].map(t => p.getAttackTypeEffectiveness(t, { simulated: true })).join(" ")}`);
+      lines.push(`P ${k} ${+p.hasPassive()}`);
       if (fresh) {
         if (s.shiny) cover.shinyFresh++;
         if (p.ivs.join() !== given[k].ivs.join() || p.abilityIndex !== given[k].abilityIndex || p.passive !== given[k].passive) cover.moved++;
       }
+    }
+    // Flip Stat on a fusion: the first member fused with the second (calculateBaseStats flips both species' stats before averaging), then put back
+    if (n >= 2) {
+      const a: any = party[0];
+      const b: any = party[1];
+      const keep = { fs: a.fusionSpecies, ff: a.fusionFormIndex, stats: [...a.stats], hp: a.hp };
+      a.fusionSpecies = b.species;
+      a.fusionFormIndex = b.formIndex;
+      a.calculateStats();
+      lines.push(`F ${b.species.speciesId} ${b.formIndex} ${a.stats.join(" ")}`);
+      a.fusionSpecies = keep.fs;
+      a.fusionFormIndex = keep.ff;
+      a.stats = keep.stats;
+      a.hp = keep.hp;
+      if (flip) cover.flipFusion++;
+    }
+    // hasPassive() of an enemy Pokemon: wild or a trainer's, boss or not, with and without its passive, on a few waves (a Challenge Mode game's
+    // final boss is wave 200). The Pokemon is built once and its fields set; the battle is a stand-in with the wave and the Classic final check.
+    {
+      const enemy: any = new EnemyPokemon(speciesDataRegistry.getSpecies(SpeciesId.BULBASAUR), 20, TrainerSlot.NONE, false);
+      for (const trainer of [0, 1]) for (const boss of [0, 1]) for (const flag of [0, 1]) for (const wave of [5, 25, 200, 250]) {
+        enemy.trainerSlot = trainer ? TrainerSlot.TRAINER : TrainerSlot.NONE;
+        enemy.bossSegments = boss ? 2 : 0;
+        enemy.passive = !!flag;
+        scene.currentBattle = {
+          waveIndex: wave,
+          get isClassicFinalBoss() {
+            return scene.gameMode.isClassic && scene.gameMode.isWaveFinal(wave);
+          },
+        };
+        const has = enemy.hasPassive();
+        if (passives && has) cover.enemyPassive++;
+        lines.push(`Y ${trainer} ${boss} ${flag} ${wave} ${+has}`);
+      }
+      enemy.destroy?.();
+      scene.currentBattle = null;
     }
     for (const p of party) p.destroy?.();
     scene.party = [];
@@ -205,7 +270,7 @@ it("native Challenge Mode starter rules", async () => {
   lines.push("Z");
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
   console.log(
-    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
+    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
   );
-  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved).toBeGreaterThan(0);
+  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive).toBeGreaterThan(0);
 }, 900000);

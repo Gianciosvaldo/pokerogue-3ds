@@ -259,6 +259,13 @@ void bv_darby_deal(const bv_mon* mine, const bv_mon* his);
 void bv_darby_reveal(int k);
 void bv_darby_clear(void);
 bool bv_darby_table(void);
+/* Jobin's duel (custom encounter): the drum instead of the platforms with `mine` (the player's beetle, from the back) and `his`, both Grip bars and the
+ * Suspicion bar (percent, 0..100); set eases the bars to new values; king shows or hides the Speed King beside his beetle; end clears it all */
+void bv_jobin_start(const bv_mon* mine, const bv_mon* his, int grip_you, int grip_him, int susp);
+void bv_jobin_set(int grip_you, int grip_him, int susp);
+void bv_jobin_king(bool on);
+void bv_jobin_end(void);
+bool bv_jobin_on(void);
 /* Queues events (copied; text is copied too) and plays them; on_done runs after the last one. */
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 /* where BEV_MUSIC goes (the app's music is not the view's): a is the event's a */

@@ -76,8 +76,13 @@ typedef enum {
                           * text and the dream's end: a = the storage index in gc_run.party of the new Pokemon, b = the old Pokemon's species,
                           * c = its form, hp = its looks: bit 0 female, bit 1 shiny, bits 2 and 3 the variant; when it was a fusion also bits 4..17 the
                           * fusion species, 18..23 its form, 24..25 its gender + 1, bit 26 its shiny, bits 27 and 28 its variant. Presentation only */
+    GC_EV_JOBIN,         /* Jobin's beetle duel (gc_jobin.c), presentation only: a = your Grip, b = Jobin's Grip, c = the Suspicion (0..100 each), hp = what
+                          * happened in its low byte (GC_JOBIN_HUD_*: the duel starts, the meters moved, a Speed King attack is telegraphed, the duel is over)
+                          * and, for a telegraph, the attack above it (hp >> 8: 0 Superheated Horn, 1 Thermal Dash, 2 Bubbling Sap); for the end hp >> 8 is
+                          * 1 you lost (Jobin victorious), 2 you won (Jobin defeated), 0 caught cheating (neither pose) */
     GC_EV_COUNT,
 } gc_event_kind;
+enum { GC_JOBIN_HUD_START = 1, GC_JOBIN_HUD_UPDATE = 2, GC_JOBIN_HUD_TELEGRAPH = 3, GC_JOBIN_HUD_END = 4 };
 
 typedef struct {
     uint8_t kind;               /* gc_event_kind */
@@ -231,7 +236,15 @@ typedef struct {
  * me_args "pokemonName" = the soul, PR_ARG_POKEMON_NAME, and "partyFull" 0/1) */
 enum { GC_ME_STAGE_FIRST = 0, GC_ME_STAGE_TUTOR = 1, GC_ME_STAGE_SAFARI = 2, GC_ME_STAGE_ABILITY = 3,
        GC_ME_STAGE_DARBY_SOUL = 4, GC_ME_STAGE_DARBY_CARD = 5, GC_ME_STAGE_DARBY_ACCUSE = 6, GC_ME_STAGE_DARBY_VITAMIN = 7,
-       GC_ME_STAGE_DARBY_RETURN = 8 };
+       GC_ME_STAGE_DARBY_RETURN = 8,
+       GC_ME_STAGE_JOBIN_ROUND = 9, GC_ME_STAGE_JOBIN_KEEP = 10, GC_ME_STAGE_JOBIN_CHARCOAL = 11 };
+/* Jobin's beetle duel (gc_jobin.c): the first screen is 0 Use your own beetle (asks for a party member; greyed out without a pool beetle that is not the species
+ * Jobin drew), 1 Borrow one of his, 2 Walk away; me_args "jobinBeetle" (PR_ARG_POKEMON_NAME). GC_ME_STAGE_JOBIN_ROUND is one round: options 0..3 = Horn Lock,
+ * Dig In, Flank, Stand Trick; me_args "yourBeetle" and "jobinBeetle" (PR_ARG_POKEMON_NAME), "gripYou", "gripJobin", "suspicion" (0..100) and "telegraph" (the Speed
+ * King attack announced for this round: -1 none, 0 Superheated Horn, 1 Thermal Dash, 2 Bubbling Sap). GC_ME_STAGE_JOBIN_KEEP: a beetle he offers (the loan
+ * after a win with it, or the shiny one of a clean win): 0 = keep it (with six in the party it asks for the member it replaces), 1 = leave it; me_args "pokemonName",
+ * "partyFull", "bonus" (0 the loan, 1 the shiny one) and "variant" (0..2, the shiny one's star). GC_ME_STAGE_JOBIN_CHARCOAL: n_options 1, a party member for the Charcoal. */
+enum { GC_JOBIN_OWN = 0, GC_JOBIN_RENTAL = 1, GC_JOBIN_WALK_AWAY = 2 };
 int gc_superfan_tutor_move(const gc_run *run, int k);   /* the k-th (0..3) move the Bug-Type Superfan's tutor offers */
 enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
@@ -305,6 +318,7 @@ enum gc_mystery_type {
     GC_ME_UNCOMMON_BREED, GC_ME_GLOBAL_TRADE_SYSTEM, GC_ME_THE_EXPERT_POKEMON_BREEDER,
     GC_ME_PILLAR_MEN,   /* custom content only (gc/custom.h, pillar): not an upstream encounter */
     GC_ME_DARBY,        /* D'Arby the Gambler (Soul Poker): custom content only, Bizarre runs, lorenzo's spec */
+    GC_ME_JOBIN,        /* Jobin's beetle duel: custom content only, Bizarre runs, lorenzo's spec (2026-11-23) */
     GC_ME_COUNT
 };
 /* every encounter from here on is lorenzo's own and is offered only when the app's pillar hook says the run is a Bizarre one (gc/custom.h) */
@@ -609,6 +623,11 @@ bool gc_darby_table(const gc_run *run, int *party_index, int *species, int *form
 bool gc_darby_rematch_battle(const gc_run *run);
 /* the souls sealed in his chips (0..3), waiting for the rematch */
 int gc_darby_sealed(const gc_run *run);
+/* Jobin's duel for the app's HUD (custom content): the meters, the beetles and the telegraphed attack now; false when no duel is on. */
+typedef struct { int grip_you, grip_jobin, suspicion, telegraph, you_species, you_form, you_shiny, you_variant, jobin_species, you_index /* the party member, -1 a rental */; bool rental; } gc_jobin_view;
+bool gc_jobin_view_get(const gc_run *run, gc_jobin_view *v);
+/* the current trainer battle is Jobin's team (the fight after he catches you cheating): his sprite and name. Not saved: a save is never made in it. */
+bool gc_jobin_punish_battle(const gc_run *run);
 void gc_debug_force_mystery(int type, int min_wave);
 
 #endif

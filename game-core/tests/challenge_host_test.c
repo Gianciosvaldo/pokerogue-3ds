@@ -62,9 +62,23 @@ static void admission(void)
     CHECK(!run.run.has_challenges && gc_challenge_max(CHALLENGES_FRESH_START) == 2 && gc_challenge_max(CHALLENGES_SINGLE_TYPE) == 18);
     gc_challenge_set bad = fresh(3);
     CHECK(!gc_run_set_challenges(&run, &bad, &why) && !run.run.has_challenges);
-    gc_challenge_set inverse = fresh(0);
-    inverse.value[CHALLENGES_INVERSE_BATTLE] = 1;
-    CHECK(gc_challenge_set_valid(&inverse, NULL) && !gc_run_set_challenges(&run, &inverse, &why) && !run.run.has_challenges);
+    gc_challenge_set hardcore = fresh(0);
+    hardcore.value[CHALLENGES_HARDCORE] = 1;   /* not played yet */
+    CHECK(gc_challenge_set_valid(&hardcore, NULL) && !gc_run_set_challenges(&run, &hardcore, &why) && !run.run.has_challenges);
+    /* the battle rules are played: Inverse Battle, Flip Stat and Passives reach run-core's flags and the run's battle (run->bt computes the
+     * stats and passives of Pokemon made outside a battle) */
+    gc_challenge_set rules = fresh(0);
+    rules.value[CHALLENGES_INVERSE_BATTLE] = 1;
+    rules.value[CHALLENGES_FLIP_STAT] = 1;
+    rules.value[CHALLENGES_PASSIVES] = 2;
+    CHECK(gc_run_set_challenges(&run, &rules, &why) && !gc_challenges_unplayed(&run));
+    const uint32_t rule_bits = (1u << CHALLENGES_INVERSE_BATTLE) | (1u << CHALLENGES_FLIP_STAT) | (1u << CHALLENGES_PASSIVES);
+    CHECK(run.run.challenge_flags == rule_bits && run.run.challenge_passives == 2);
+    CHECK(run.bt.challenge_flags == rule_bits && run.bt.challenge_flags_known && run.bt.challenge_passives == 2);
+    rules.value[CHALLENGES_PASSIVES] = 1;
+    CHECK(gc_run_set_challenges(&run, &rules, &why) && run.run.challenge_passives == 1 && run.bt.challenge_passives == 1);
+    gc_challenge_set off = fresh(0);
+    CHECK(gc_run_set_challenges(&run, &off, &why) && run.bt.challenge_flags == 0 && run.bt.challenge_passives == 0);
     gc_challenge_set lower = fresh(0);
     lower.value[CHALLENGES_LOWER_STARTER_POINTS] = 1;   /* not in upstream's allChallenges: no value */
     CHECK(!gc_challenge_set_valid(&lower, NULL));
@@ -203,7 +217,7 @@ static void win(void)
     CHECK(sys.dex[1].ribbon_flags == (GC_RIBBON_CLASSIC | GC_RIBBON_FRESH_START));
     /* a win with a challenge that is not played is refused, and never saved */
     setup_win(&f1);
-    run.challenges.value[CHALLENGES_INVERSE_BATTLE] = 1;
+    run.challenges.value[CHALLENGES_HARDCORE] = 1;
     gc_challenge_sync(&run);
     before = sys;
     finish(true);
@@ -222,13 +236,29 @@ static void save(void)
     CHECK(loaded.run.mode == GAME_MODES_CHALLENGE && loaded.challenges.value[CHALLENGES_FRESH_START] == 2);
     CHECK(loaded.run.has_challenges && loaded.run.challenge_flags == (1u << CHALLENGES_FRESH_START) && loaded.run.challenge_fresh_start == 2);
     CHECK(loaded.load_dropped == 0);
+    {
+        gc_challenge_set r = fresh(1);
+        r.value[CHALLENGES_INVERSE_BATTLE] = 1;
+        r.value[CHALLENGES_FLIP_STAT] = 1;
+        r.value[CHALLENGES_PASSIVES] = 2;
+        setup_win(&r);
+        run.wave = 5;
+        size_t rn = gc_run_save(&run, mutated, sizeof mutated);
+        CHECK(rn > 0 && gc_run_load(&loaded, mutated, rn, &why));
+        CHECK(loaded.challenges.value[CHALLENGES_INVERSE_BATTLE] == 1 && loaded.challenges.value[CHALLENGES_FLIP_STAT] == 1 &&
+              loaded.challenges.value[CHALLENGES_PASSIVES] == 2 && loaded.run.challenge_passives == 2);
+        CHECK(loaded.bt.challenge_flags == loaded.run.challenge_flags && loaded.bt.challenge_passives == 2);
+        setup_win(&f2);
+        run.wave = 5;
+        n = gc_run_save(&run, saved, sizeof saved);
+    }
     /* the section is the Challenge Mode's alone: a Classic save has none, a Challenge one must have it */
     size_t at = section_at(saved, n, "challenges");
     CHECK(at != 0);
     /* a value above its maximum, a challenge this build does not play, and a section that lost its row are all refused */
     memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_FRESH_START] = 3; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));
-    memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_INVERSE_BATTLE] = 1; reseal(n);
+    memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_HARDCORE] = 1; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));
     memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_LOWER_STARTER_POINTS] = 1; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));

@@ -35,11 +35,13 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 166   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
-                              * batch's "Defeat X" and "Flawless X" in pairs (ids stay under 192, where upstream's own start) */
+#define GC_ACHV_COUNT 168   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
+                              * batch's "Defeat X" and "Flawless X" in pairs, Jobin's two, the fourth batch's pairs (ids stay under 192, where upstream's own start) */
 #define GC_ACHV_TWENTY_FACES 117
 #define GC_ACHV_DARBY 152   /* beating D'Arby the Gambler (Standard or All-In: a won hand or a caught cheat) */
 #define GC_ACHV_DARBY_REMATCH 153   /* beating D'Arby's rematch, the battle for the sealed souls (lorenzo 2026-11-18) */
+#define GC_ACHV_JOBIN 164          /* beating Jobin's beetle duel (lorenzo 2026-11-23) */
+#define GC_ACHV_JOBIN_PUNISH 165   /* beating his team after he caught you cheating */
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -55,10 +57,12 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
 
 /* The achievement of beating one challenger ("Defeat X"): ids 0..16 for the first 17 (the table index), then GC_ACHV_JOJO2_FIRST + (index - 17)
  * for the second batch, because the ids of the others (the sets, the runs, ...) were taken before it existed and a profile keeps them by id;
- * the third batch on (GC_JOJO_GHIACCIO..) takes GC_ACHV_JOJO3_FIRST + 2 * (index - GC_JOJO_GHIACCIO), its "Flawless X" the id after it.
+ * the third batch (GC_JOJO_GHIACCIO..GC_JOJO_TOORU) takes GC_ACHV_JOJO3_FIRST + 2 * (index - GC_JOJO_GHIACCIO), its "Flawless X" the id after it;
+ * the fourth batch (GC_JOJO_OKUYASU..) the same from GC_ACHV_JOJO4_FIRST, since Jobin's two took the ids right after the third (164, 165).
  * -1 for an index outside the table. */
 #define GC_ACHV_JOJO2_FIRST 100
 #define GC_ACHV_JOJO3_FIRST 154
+#define GC_ACHV_JOJO4_FIRST 166
 int gc_achv_jojo_id(int jojo);
 
 /* The achievement of beating one challenger with none of your Pokemon fainting in that battle ("Flawless X"): GC_ACHV_FLAWLESS_FIRST + the table
@@ -84,6 +88,8 @@ void gc_achv_wave_reached(gc_system *sys, uint32_t wave);
 /* D'Arby the Gambler was beaten (a won hand, or his cheat caught), at either wager. */
 void gc_achv_darby_won(gc_system *sys);
 void gc_achv_darby_rematch_won(gc_system *sys);
+void gc_achv_jobin_won(gc_system *sys);
+void gc_achv_jobin_punish_won(gc_system *sys);
 void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats);
 
 /* Group C, the collection, reads the Pokedex of the profile itself (nothing to report): species caught, shinies owned, legendaries and

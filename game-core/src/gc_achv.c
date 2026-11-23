@@ -190,6 +190,10 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Unscathed by the Sunlight's Ripple", "Defeat Jonathan Joestar without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Broke the Flow of Calamity", "Defeat Tooru.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"We Went Beyond the Logic of This World", "Defeat Tooru without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    /* 164..165: Jobin's beetle duel (lorenzo 2026-11-23): his titles; the rewards are the normal and the Flawless JoJo ones. The conditions' wording is the author's. */
+    {"Not quite a lamborghini gallardo, but it will do", "Beat Jobin in the beetle duel.", RUN, V(GC_VOUCHER_REGULAR, 1)},
+    {"cheated and got away with it", "Beat Jobin's team after he catches you cheating.", RUN, V(GC_VOUCHER_REGULAR, 2)},
+    /* 166..: the fourth batch (lorenzo 2026-11-23), after Jobin's two: "Defeat X" then "Flawless X" in table order (GC_ACHV_JOJO4_FIRST) */
     {"Not as Dumb as He Looks", "Defeat Okuyasu Nijimura.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"He Couldn't Erase a Single Thing", "Defeat Okuyasu Nijimura without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
 };
@@ -208,23 +212,38 @@ typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
 static uint64_t beaten_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32) & JOJO_VALID; }
 static uint64_t clean_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_clean_mask | (uint64_t)a->jojo_clean_mask_hi << 32) & JOJO_VALID; }
 
+/* the third and fourth batches: a "Defeat X" id and the "Flawless X" after it, per challenger; Jobin's two (164, 165) sit between the batches */
+static int pair_id(int jojo)
+{
+    return jojo >= GC_JOJO_OKUYASU ? GC_ACHV_JOJO4_FIRST + 2 * (jojo - GC_JOJO_OKUYASU) : GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+}
+
+/* the challenger whose pair holds an id of the third or fourth batch, or -1 */
+static int pair_of_id(int id)
+{
+    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_OKUYASU - GC_JOJO_GHIACCIO)) return GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
+    if (id >= GC_ACHV_JOJO4_FIRST && id < GC_ACHV_JOJO4_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU)) return GC_JOJO_OKUYASU + (id - GC_ACHV_JOJO4_FIRST) / 2;
+    return -1;
+}
+
 int gc_achv_jojo_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
-    if (jojo >= GC_JOJO_GHIACCIO) return GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+    if (jojo >= GC_JOJO_GHIACCIO) return pair_id(jojo);
     return jojo < GC_JOJO_CAESAR ? jojo : GC_ACHV_JOJO2_FIRST + (jojo - GC_JOJO_CAESAR);
 }
 
 int gc_achv_flawless_id(int jojo)
 {
     if (jojo < 0 || jojo >= GC_JOJO_COUNT) return -1;
-    return jojo >= GC_JOJO_GHIACCIO ? GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO) + 1 : GC_ACHV_FLAWLESS_FIRST + jojo;
+    return jojo >= GC_JOJO_GHIACCIO ? pair_id(jojo) + 1 : GC_ACHV_FLAWLESS_FIRST + jojo;
 }
 
 /* the challenger an achievement id is the "Flawless X" of, or -1 */
 static int flawless_of_id(int id)
 {
-    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2 : -1;
+    const int j = pair_of_id(id);
+    if (j >= 0) return id == pair_id(j) + 1 ? j : -1;
     return id >= GC_ACHV_FLAWLESS_FIRST && id < GC_ACHV_FLAWLESS_FIRST + GC_JOJO_GHIACCIO ? id - GC_ACHV_FLAWLESS_FIRST : -1;
 }
 
@@ -233,8 +252,8 @@ static int jojo_of_id(int id)
 {
     if (id >= 0 && id < GC_JOJO_CAESAR) return id;
     if (id >= GC_ACHV_JOJO2_FIRST && id < GC_ACHV_JOJO2_FIRST + (GC_JOJO_GHIACCIO - GC_JOJO_CAESAR)) return GC_JOJO_CAESAR + (id - GC_ACHV_JOJO2_FIRST);
-    if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_GHIACCIO)) return (id - GC_ACHV_JOJO3_FIRST) % 2 ? -1 : GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
-    return -1;
+    const int j = pair_of_id(id);
+    return j >= 0 && id == pair_id(j) ? j : -1;
 }
 
 int gc_achv_order(int pos)
@@ -450,6 +469,16 @@ void gc_achv_darby_rematch_won(gc_system *sys)
     if (sys) add_sat(&sys->achv.darby_rematch_wins, 1);
 }
 
+void gc_achv_jobin_won(gc_system *sys)
+{
+    if (sys) add_sat(&sys->achv.jobin_wins, 1);
+}
+
+void gc_achv_jobin_punish_won(gc_system *sys)
+{
+    if (sys) add_sat(&sys->achv.jobin_punish_wins, 1);
+}
+
 void gc_achv_run_won(gc_system *sys, bool bizarre, uint8_t feats)
 {
     if (!sys) return;
@@ -517,6 +546,8 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case GC_ACHV_GRAND_TOUR: h = regions_done(sys); n = GC_REGION_COUNT; break;
     case GC_ACHV_DARBY: h = a->darby_wins; n = 1; break;
     case GC_ACHV_DARBY_REMATCH: h = a->darby_rematch_wins; n = 1; break;
+    case GC_ACHV_JOBIN: h = a->jobin_wins; n = 1; break;
+    case GC_ACHV_JOBIN_PUNISH: h = a->jobin_punish_wins; n = 1; break;
     case 91: h = a->fb_wins; n = 1; break;
     case 92: h = a->fb_wins; n = 10; break;
     case 93: h = a->fb_wins; n = 50; break;

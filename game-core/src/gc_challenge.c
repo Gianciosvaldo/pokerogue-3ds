@@ -8,13 +8,15 @@
  * and an id, but are not in that list: a game mode never has them, setChallengeValue on them does nothing, and the title screen cannot offer
  * them. Here their values must be 0 (gc_challenge_max) so no run ever carries one.
  *
- * Ported (gc_challenge_played_mask): FRESH_START, with these hooks:
+ * Ported (gc_challenge_played_mask): INVERSE_BATTLE, FLIP_STAT and PASSIVES, which are battle rules (battle-core's pr_type_chart_multiplier,
+ * pr_calculate_stats and pr_has_passive read them from bt->challenge_flags and bt->challenge_passives, which gc_challenge_sync keeps on run->bt),
+ * and FRESH_START, with these hooks:
  *   STARTER_COST           the base cost, the profile's value reduction ignored                         gc_challenge_starter_cost
  *   STARTER_CHOICE         value 1: only the default starters and their evolutions                      gc_challenge_starter_valid
  *   STARTER_SELECT_MODIFY  the profile as a new save has it (getStarterData)                            gc_challenge_starter_view
  *   STARTER_MODIFY         the starter Pokemon as a new save has it                                     gc_challenge_modify_starter
  * and, for every challenge, the win's ribbons (ribbonAwarded, GameOverPhase.awardRibbons)               gc_challenge_ribbon_flags
- * Not ported yet (a run that sets one is refused by gc_run_set_challenges): the other eight.
+ * Not ported yet (a run that sets one is refused by gc_run_set_challenges): the other six.
  *
  * Checked against the pinned upstream by tests/challenge-starters.producer.test.ts (tools/challengestartersdiff.sh). */
 #include "internal.h"
@@ -41,7 +43,7 @@ int gc_challenge_max(int challenge)
 
 uint32_t gc_challenge_played_mask(void)
 {
-    return 1u << CHALLENGES_FRESH_START;
+    return (1u << CHALLENGES_FRESH_START) | (1u << CHALLENGES_INVERSE_BATTLE) | (1u << CHALLENGES_FLIP_STAT) | (1u << CHALLENGES_PASSIVES);
 }
 
 bool gc_challenge_set_valid(const gc_challenge_set *set, const char **why)
@@ -69,6 +71,12 @@ void gc_challenge_sync(gc_run *run)
     r->challenge_generation = set->value[CHALLENGES_SINGLE_GENERATION];
     r->challenge_type = set->value[CHALLENGES_SINGLE_TYPE];
     r->challenge_fresh_start = set->value[CHALLENGES_FRESH_START];
+    r->challenge_passives = set->value[CHALLENGES_PASSIVES];
+    /* the battle rules (Inverse Battle, Flip Stat, Passives) are read from the battle: run->bt computes the stats of Pokemon made outside a
+     * battle too (the starters, a Mystery Encounter's), so it carries them from here; a battle's setup sets them again */
+    run->bt.challenge_flags = r->mode == GAME_MODES_CHALLENGE ? r->challenge_flags : 0;
+    run->bt.challenge_flags_known = true;
+    run->bt.challenge_passives = r->mode == GAME_MODES_CHALLENGE ? r->challenge_passives : 0;
 }
 
 /* Whether the run has an active challenge whose rules game-core does not play yet. An active set nobody told game-core about (run.has_challenges

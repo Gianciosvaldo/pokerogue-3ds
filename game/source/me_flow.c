@@ -48,6 +48,7 @@ static const char* const NS[GC_ME_COUNT] = {
     [GC_ME_THE_EXPERT_POKEMON_BREEDER] = "theExpertPokemonBreeder",
     [GC_ME_PILLAR_MEN] = "pillarMen",
     [GC_ME_DARBY] = "darby",              /* lorenzo's own: D'Arby the Gambler, its dialogue compiled in (custom_texts.h) */
+    [GC_ME_JOBIN] = "jobin",              /* lorenzo's own: Jobin's beetle duel, its dialogue compiled in (custom_texts.h) */
 };
 
 /* The Pillar Men are lorenzo's own encounter (custom runs): no upstream locale file, so their texts are here. The three silhouettes are
@@ -234,6 +235,7 @@ static const struct {
   intro_cfg c[INTRO_MAX];
 } INTRO[] = {
     {GC_ME_DARK_DEAL, 2, {{'M', "dark_deal_scientist", 0, 0, 0, 0}, {'M', "dark_deal_porygon", 0, 0, 0, 0}}},
+    {GC_ME_JOBIN, 1, {{'T', "custom/jobin", 0, 0, 0, 0}}},   /* lorenzo's own sprite (sd-builder/extra-images/trainer/custom/jobin.png) */
     {GC_ME_DARBY, 1, {{'T', "custom/darby", 0, 0, 0, 0}}},   /* lorenzo's own sprite (sd-builder/extra-images/trainer/custom/darby.png) */
     {GC_ME_MYSTERIOUS_CHEST, 1, {{'M', "mysterious_chest_blue", 0, 8, 0, 0}}},
     {GC_ME_DEPARTMENT_STORE_SALE, 2, {{'M', "department_store_sale_lady", -20, 0, 0, 0}, {0, "", 30, 0, 0, 0}}},
@@ -305,19 +307,24 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
   return 0;
 }
 
-static int g_darby_pose;
+static int g_darby_pose, g_jobin_pose;
 void me_flow_set_darby_pose(int pose) { g_darby_pose = pose; }
+void me_flow_set_jobin_pose(int pose) { g_jobin_pose = pose; }
 
 int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max)
 {
   /* his result lines arrive after game-core has left the encounter (mystery_type back to -1): the pose says whose sprite this is */
-  const int type = g_darby_pose ? GC_ME_DARBY : run->mystery_type;
+  const int type = g_jobin_pose ? GC_ME_JOBIN : g_darby_pose ? GC_ME_DARBY : run->mystery_type;
   if (type == GC_ME_A_TRAINERS_TEST) return me_flow_trtest_sprites(run, 160, 164, out, max);
   if (type == GC_ME_PILLAR_MEN) return 0;   /* its silhouettes belong to the window */
   const int n = me_flow_intro_sprites(type, 160, 164, out, max);
   if (type == GC_ME_DARBY && n > 0 && g_darby_pose) {   /* the same bottom centre: the three PNGs are laid out so the table stays put */
     snprintf(out[0].alt, sizeof out[0].alt, "%s", out[0].key);
     snprintf(out[0].key, sizeof out[0].key, "images/trainer/custom/%s", g_darby_pose == 1 ? "darby_victorious" : "darby_defeated");
+  }
+  if (type == GC_ME_JOBIN && n > 0 && g_jobin_pose) {   /* the same place: jobin_victorious.png (the player lost) or jobin_defeated.png (the player won), jobin.png where one is missing */
+    snprintf(out[0].alt, sizeof out[0].alt, "%s", out[0].key);
+    snprintf(out[0].key, sizeof out[0].key, "images/trainer/custom/%s", g_jobin_pose == 1 ? "jobin_victorious" : "jobin_defeated");
   }
   return n;
 }
@@ -707,6 +714,8 @@ static void open_members(void)
   snprintf(a.query, sizeof a.query, "Choose a Pokemon.");
   const int stage = gc_run_screen(F.run)->me_stage;
   if (stage == GC_ME_STAGE_DARBY_SOUL) fmt("soul.query", NULL, 0, false, a.query, sizeof a.query);
+  if (stage == GC_ME_STAGE_JOBIN_CHARCOAL) fmt("charcoal.query", NULL, 0, false, a.query, sizeof a.query);
+  if (stage == GC_ME_STAGE_JOBIN_KEEP) fmt("keep.replace", NULL, 0, false, a.query, sizeof a.query);
   if (stage == GC_ME_STAGE_DARBY_CARD) {
     /* his six cards, named here: one message holds at most five tokens */
     static char cards[6 * 40];
@@ -738,7 +747,7 @@ static void open_members(void)
     a.options[a.n].ok = gc_mystery_member_ok(F.run, F.option, slot);
     a.n++;
   }
-  a.can_back = stage != GC_ME_STAGE_DARBY_SOUL && stage != GC_ME_STAGE_DARBY_CARD;   /* D'Arby's soul and card pickers are the whole screen */
+  a.can_back = stage != GC_ME_STAGE_DARBY_SOUL && stage != GC_ME_STAGE_DARBY_CARD && stage != GC_ME_STAGE_JOBIN_CHARCOAL;   /* D'Arby's soul and card pickers and Jobin's Charcoal are the whole screen */
   a.on_pick = on_member;
   a.on_back = on_member_back;
   if (!me_screen_open(&a)) finish(F.option, 0, 0);
@@ -913,9 +922,63 @@ static void open_darby(int cursor)
   if (!me_screen_open(&a)) finish(0, 0, 0);
 }
 
+/* Jobin's beetle duel after the first screen (custom content): one round (the four moves, the meters in the description), a beetle he offers (keep it or leave it), the Charcoal's
+ * party screen. The duel's own scene (the arena, the Grip and Suspicion bars) is the battle view's (bv_jobin_*); the lines are the core's events. */
+static int jobin_arg(const gc_screen* s, const char* name, int def)
+{
+  int value = def;
+  for (int i = 0; i < s->n_me_args; i++)
+    if (s->me_args[i].name && !strcmp(s->me_args[i].name, name)) { value = (int)s->me_args[i].v; break; }   /* (not the Trainer's Test's own line, a fault site of check_mystery_ui_faults.py) */
+  return value;
+}
+
+static void open_jobin(int cursor)
+{
+  const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage == GC_ME_STAGE_JOBIN_CHARCOAL) {
+    F.option = 0;
+    open_members();
+    return;
+  }
+  static me_args a; /* static, as the others: me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  if (s->me_stage == GC_ME_STAGE_JOBIN_ROUND) {
+    fmt("round.description", NULL, 0, false, a.description, sizeof a.description);
+    fmt("round.query", NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < 4; i++) {
+      char sub[48];
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      snprintf(sub, sizeof sub, "round.option.%d.label", i + 1);
+      fmt(sub, NULL, 0, false, o->label, sizeof o->label);
+      snprintf(sub, sizeof sub, "round.option.%d.tooltip", i + 1);
+      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+    }
+  } else {   /* GC_ME_STAGE_JOBIN_KEEP: the loaned beetle or the shiny one of a clean win */
+    const char* kind = jobin_arg(s, "bonus", 0) ? "keep.bonus" : "keep.loan";
+    char sub[64];
+    snprintf(sub, sizeof sub, "%s.query", kind);
+    fmt(sub, NULL, 0, false, a.query, sizeof a.query);
+    for (int i = 0; i < 2; i++) {
+      me_option* o = &a.options[a.n++];
+      o->ok = s->option_ok[i];
+      snprintf(sub, sizeof sub, "%s.option.%d.label", kind, i + 1);
+      fmt(sub, NULL, 0, false, o->label, sizeof o->label);
+      snprintf(sub, sizeof sub, "%s.option.%d.tooltip", kind, i + 1);
+      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+    }
+  }
+  a.cursor = cursor >= 0 && cursor < a.n ? cursor : 0;
+  a.can_back = false;
+  a.on_pick = on_option;
+  if (!me_screen_open(&a)) finish(0, 0, 0);
+}
+
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
+  if (s->me_stage >= GC_ME_STAGE_JOBIN_ROUND) { open_jobin(cursor); return; }
   if (s->me_stage >= GC_ME_STAGE_DARBY_SOUL) { open_darby(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_ABILITY) { open_ability(cursor); return; }
   if (s->me_stage == GC_ME_STAGE_TUTOR) { open_tutor(cursor); return; }
@@ -962,6 +1025,10 @@ static void open_question(int cursor)
     }
   if (F.type == GC_ME_A_TRAINERS_TEST) a.n_intro = me_flow_trtest_sprites(F.run, 160, 164, a.intro, ME_MAX_INTRO);
   else if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
+  if (F.type == GC_ME_JOBIN && a.n_intro > 0) {   /* the encounter screen shows jobin_screen.png (jobin.png where it is missing), as D'Arby's */
+    snprintf(a.intro[0].alt, sizeof a.intro[0].alt, "%s", a.intro[0].key);
+    snprintf(a.intro[0].key, sizeof a.intro[0].key, "images/trainer/custom/jobin_screen");
+  }
   if (F.type == GC_ME_DARBY && a.n_intro > 0) {   /* lorenzo 2026-11-17: the platform shows darby.png, the encounter screen his more expressive darby_screen.png (the platform one if it is missing) */
     snprintf(a.intro[0].alt, sizeof a.intro[0].alt, "%s", a.intro[0].key);
     snprintf(a.intro[0].key, sizeof a.intro[0].key, "images/trainer/custom/darby_screen");

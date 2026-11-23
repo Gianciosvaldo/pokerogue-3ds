@@ -28,6 +28,12 @@ bool me_flow_open(const gc_run* run, void (*on_choice)(const me_choice* c, void*
       c.option = i;
       break;
     }
+  if (s->mystery_type == GC_ME_JOBIN && s->me_stage == GC_ME_STAGE_JOBIN_ROUND) {
+    /* Jobin's rounds: every one of the four moves in turn (a fixed rotation, no game stream), so Stand Tricks happen, the bot is caught cheating
+     * now and then and his team is fought */
+    static unsigned rot;
+    c.option = (int)(((rot++ * 2654435761u) >> 16) % 4);
+  }
   if (s->option_pick[c.option]) {
     for (int i = 0; i < run->n_party; i++)
       if (gc_mystery_member_ok(run, c.option, i)) {
@@ -61,3 +67,4 @@ int me_flow_field_sprites(const gc_run* run, me_intro_sprite* out, int max) {
   return 1;
 }
 void me_flow_set_darby_pose(int pose) { (void)pose; }
+void me_flow_set_jobin_pose(int pose) { (void)pose; }

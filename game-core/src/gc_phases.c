@@ -37,6 +37,10 @@ void gc_queue_battle_end(gc_run *run)
         gc_me_win_rewards(run);
         return;
     }
+    if (in->jobin.punish) {   /* Jobin's team, after he caught the player cheating: his money (half) and the normal reward screen */
+        gc_jobin_victory(run);
+        return;
+    }
     if (in->pillar.active) {   /* the Pillar Men: handleMysteryEncounterVictory, no TrainerVictoryPhase */
         gc_pillar_victory(run);
         return;
@@ -422,6 +426,7 @@ static void post_battle_money(gc_run *run, bool victory)
     bt->wave_index = run->wave;
     bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->challenge_passives = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_passives : 0;
     bt->n_party[0] = run->n_party;
     for (int k = 0; k < run->n_party; k++) {
         pr_pokemon *p = &run->party[run->party_order[k]].b;
@@ -494,7 +499,7 @@ static void trainer_victory(gc_run *run)
 {
     const gc_trainer_config *c = gc_trainer_config_of(run->trainer_type);
     gc_rphase p = gc_rp(RP_MONEY_REWARD, 0, 0, 0);
-    p.d = c ? c->money_multiplier : 1;   /* config.moneyMultiplier */
+    p.d = (c ? c->money_multiplier : 1) * gc_jobin_take_money_multiplier(run);   /* config.moneyMultiplier; Jobin's punishment fight pays half */
     gc_rq_unshift(run, p);
     /* TrainerVictoryPhase's rewards: the config's modifierRewardFuncs, one ModifierRewardPhase each, in order, then the
      * boss voucher. Which items and which trainer has a voucher are reward-core's (pr_reward_trainer_victory_rewards,
@@ -919,6 +924,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_DARBY:
         return gc_darby_stage_start(run, p);
+    case RP_JOBIN:
+        return gc_jobin_stage_start(run, p);
     case RP_FG_KO:
         gc_fg_lose(run);
         return true;
@@ -1072,6 +1079,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         return gc_clown_post_choose(run, p, c, why, ok);
     case RP_DARBY:
         return gc_darby_stage_choose(run, p, c, why, ok);
+    case RP_JOBIN:
+        return gc_jobin_stage_choose(run, p, c, why, ok);
     case RP_CATCH:
         return gc_catch_choose(run, p, c, why, ok);
     default:

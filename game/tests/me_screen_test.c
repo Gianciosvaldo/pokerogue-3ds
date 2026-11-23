@@ -579,6 +579,80 @@ int main(void) {
   CHECK(n_got == 1 && got.option == 1 && got.b == 1, "darby: Protein on Eevee? %d %d", got.option, got.b);
   g_depth = n_got = 0;
 
+  /* Jobin's Gentleman's Bet (lorenzo 2026-11-23): the first screen (his encounter sprite, the three options, walk away says its line), then the round
+   * (four moves with their tooltips and the meters in the description), the keep question of a loan and of a clean win's shiny beetle, and the Charcoal
+   * (a party screen with its own query that cannot be backed out of) */
+  run_at(GC_ME_JOBIN, 3);
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(strstr(intro, "hollow drum") != NULL, "jobin intro: %s", intro);
+  CHECK(me_flow_open(&R, chosen, NULL), "jobin opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil >= 1 && !strcmp(g_sil_key[0], "images/trainer/custom/jobin_screen"), "jobin: the encounter screen draws his sprite: %d %s", n_sil, g_sil_key[0]);
+  CHECK(has_text(0, "Jobin's Gentleman's Bet") && has_text(0, "Will you take the bet?"), "jobin: title and query");
+  draw(1);
+  CHECK(has_text(1, "Use your own beetle") && has_text(1, "Borrow a beetle") && has_text(1, "Walk away") && !find_text(1, "{{"), "jobin: the three options");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && !strcmp(got.selected, "You leave Jobin to his beetles."), "jobin: walk away '%s'", got.selected);
+  {
+    me_intro_sprite fs[ME_MAX_INTRO];
+    CHECK(me_flow_intro_sprites(GC_ME_JOBIN, 160, 164, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, "images/trainer/custom/jobin"), "jobin: the platform keeps jobin.png: %s", fs[0].key);
+    const int type_was = R.mystery_type;
+    R.mystery_type = GC_ME_JOBIN;
+    static const char* const POSE[3] = {"images/trainer/custom/jobin", "images/trainer/custom/jobin_victorious", "images/trainer/custom/jobin_defeated"};
+    for (int pose = 1; pose < 3; pose++) {
+      me_flow_set_jobin_pose(pose);
+      CHECK(me_flow_field_sprites(&R, fs, ME_MAX_INTRO) == 1 && !strcmp(fs[0].key, POSE[pose]) && !strcmp(fs[0].alt, POSE[0]), "jobin pose %d: %s (alt %s)", pose, fs[0].key, fs[0].alt);
+    }
+    me_flow_set_jobin_pose(0);
+    R.mystery_type = type_was;
+  }
+  g_depth = n_got = 0;
+  run_at(GC_ME_JOBIN, 1);
+  R.screen.me_stage = GC_ME_STAGE_JOBIN_ROUND;
+  for (int i = 0; i < 4; i++) R.screen.option_ok[i] = true;
+  R.screen.me_args[0] = pr_arg_int("gripYou", 65);
+  R.screen.me_args[1] = pr_arg_int("gripJobin", 40);
+  R.screen.me_args[2] = pr_arg_int("suspicion", 35);
+  R.screen.n_me_args = 3;
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(!intro[0], "jobin stages have no intro");
+  CHECK(me_flow_open(&R, chosen, NULL), "jobin round opens");
+  draw(0);
+  CHECK(has_text(0, "Choose your move.") && has_text(0, "Grip: you 65%, Jobin 40%. Suspicion: 35%."), "jobin: the round's query and meters");
+  draw(1);
+  CHECK(has_text(1, "Horn Lock") && has_text(1, "Dig In") && has_text(1, "Flank") && has_text(1, "Stand Trick") && !find_text(1, "{{"), "jobin: the four moves");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 3 && !got.selected[0], "jobin: Stand Trick %d '%s'", got.option, got.selected);
+  g_depth = n_got = 0;
+  run_at(GC_ME_JOBIN, 1);
+  R.screen.me_stage = GC_ME_STAGE_JOBIN_KEEP;
+  for (int i = 0; i < 2; i++) R.screen.option_ok[i] = true;
+  R.screen.me_args[0] = pr_arg_int("bonus", 0);
+  R.screen.n_me_args = 1;
+  CHECK(me_flow_open(&R, chosen, NULL), "jobin keep opens");
+  draw(1);
+  CHECK(has_text(1, "Keep it") && has_text(1, "Give it back"), "jobin: the loan's two answers");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 1, "jobin: the second answer %d", got.option);
+  g_depth = n_got = 0;
+  run_at(GC_ME_JOBIN, 1);
+  R.screen.me_stage = GC_ME_STAGE_JOBIN_CHARCOAL;
+  R.screen.n_options = 1;
+  R.screen.option_ok[0] = true;
+  R.screen.option_pick[0] = GC_PICK_MEMBER;
+  CHECK(me_flow_open(&R, chosen, NULL), "jobin charcoal opens");
+  press(BTN_CANCEL);
+  CHECK(n_got == 0, "jobin: the Charcoal's party screen cannot be backed out of");
+  g_depth = n_got = 0;
+
   /* the Pillar Men: their own texts, three plain options, and three black silhouettes of the fighters on the top screen */
   run_at(GC_ME_PILLAR_MEN, 3);
   me_flow_intro(&R, intro, sizeof intro);
@@ -661,7 +735,7 @@ int main(void) {
                   (!strncmp(sp[i].key, "images/", 7) || !strcmp(sp[i].key, "items")),
               "sprite %d of encounter %d placed on the screen: %s %g %g", i, t, sp[i].key, sp[i].x, sp[i].y);
     }
-    CHECK(drawn == 25, "25 encounters draw an intro (24 upstream ones and D'Arby): %d", drawn);
+    CHECK(drawn == 26, "26 encounters draw an intro (24 upstream ones, D'Arby and Jobin): %d", drawn);
   }
 
   /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */

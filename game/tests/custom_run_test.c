@@ -466,7 +466,22 @@ static step_t step(void) {
     case GC_SCREEN_EVOLVE: c.kind = GC_CH_CANCEL; c.a = 1; break;
     case GC_SCREEN_REWARD: c.kind = GC_CH_SKIP; break;
     case GC_SCREEN_BIOME: c.kind = GC_CH_BIOME; break;
-    case GC_SCREEN_MYSTERY: c.kind = GC_CH_MYSTERY; c.b = 0; break;
+    case GC_SCREEN_MYSTERY: {
+      /* the first option the encounter allows (Jobin's first, his own beetle, is greyed out without one) and, where it asks for a party member,
+       * the first member it accepts */
+      c.kind = GC_CH_MYSTERY;
+      c.a = 0;
+      c.b = 0;
+      for (int i = 0; i < s->n_options; i++)
+        if (s->option_ok[i]) { c.a = (int16_t)i; break; }
+      if (s->option_pick[c.a] == GC_PICK_MEMBER) {
+        for (int m = 0; m < R->n_party; m++) {
+          c.b = (int16_t)m;
+          if (gc_run_choose(R, &c, &why)) { drain(); return STEP_OK; }
+        }
+      }
+      break;
+    }
     case GC_SCREEN_CHECK_SWITCH: c.kind = GC_CH_CONFIRM; c.a = 0; break;
     case GC_SCREEN_CUSTOM_OFFER:
       if (bot.stop_offer) return STEP_STOPPED;
@@ -2171,7 +2186,7 @@ static void test_pillar(void) {
   gc_custom_team t;
   CHECK(!h->pillar(NULL, R, 3, &t), "no fourth fighter");
   /* every encounter after the Pillar Men rides on the same hook: a Bizarre run is dealt them (D'Arby wants a party of four: a fourth member for the draw) */
-  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) > 0 && times_drawn_four(GC_ME_DARBY, 400) > 0, "a Bizarre run draws the Pillar Men and D'Arby");
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) > 0 && times_drawn_four(GC_ME_DARBY, 400) > 0 && times_drawn_four(GC_ME_JOBIN, 400) > 0, "a Bizarre run draws the Pillar Men, D'Arby and Jobin");
   R->battle_type = BATTLE_TYPE_WILD;
   CHECK(cr_save(slot_used, R) == RSV_SAVED, "a run with a Pillar Man dealt saves");
   char why[RSV_WHY_LEN];
@@ -2192,7 +2207,7 @@ static void test_classic_plain(void) {
   gc_custom_team t;
   memset(&t, 0, sizeof t);
   CHECK(!h->pillar(NULL, R, 0, &t), "and no Pillar Man hands in a team");
-  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) == 0 && times_drawn_four(GC_ME_DARBY, 400) == 0, "a plain Classic run is never dealt the Pillar Men or D'Arby");
+  CHECK(times_drawn(GC_ME_PILLAR_MEN, 400) == 0 && times_drawn_four(GC_ME_DARBY, 400) == 0 && times_drawn_four(GC_ME_JOBIN, 400) == 0, "a plain Classic run is never dealt the Pillar Men, D'Arby or Jobin");
   const gc_custom_encounter e = {.wave = 5, .biome = 14 /* Desert: Gyro's */, .kind = GC_ENC_TRAINER, .flags = GC_ENF_RANDOM_TRAINER, .level = 20, .species = 1};
   for (int i = 0; i < 400; i++) CHECK(!h->trainer(NULL, R, &e, &t), "an eligible trainer wave never becomes a JoJo trainer (%d)", i);
   CHECK(cr_stats_get()->jojo_waves == 0, "the roll was not even asked");
