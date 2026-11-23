@@ -667,6 +667,8 @@ int gc_jobin_stand_suspicion(int streak);   /* the suspicion of the streak-th co
 void gc_jobin_normal_delta(int player, int jobin, int *you, int *him, int *susp);   /* moves 0 Horn Lock, 1 Dig In, 2 Flank */
 void gc_jobin_king_delta(int king, int player, int *you, int *him, int *susp);      /* king 0 Horn, 1 Dash, 2 Sap; player 0..3 (3 = Stand Trick) */
 int gc_jobin_bluff_move(int king);
+int gc_jobin_anim_move(int move);   /* the MoveId whose animation plays for move 0 Horn Lock, 1 Dig In, 2 Flank, 3 Stand Trick (0: none) */
+int gc_jobin_anim_king(int king);   /* ... for the Speed King attack 0 Superheated Horn, 1 Thermal Dash, 2 Bubbling Sap */
 void gc_jobin_round(gc_jobin_state *s, int player, int jobin, int king);            /* one round's meter changes (jobin: his normal move; king >= 0: his attack) */
 int gc_jobin_outcome(const gc_jobin_state *s);                                      /* 0 on, 1 you flipped, 2 he is, 3 both (rematch), 4 caught */
 const char *gc_jobin_move_name(int m);

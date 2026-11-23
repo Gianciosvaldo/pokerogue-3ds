@@ -1007,6 +1007,15 @@ static bool handle_event(int i) {
         bv_jobin_start(&mine, &his, e->a, e->b, e->c);
       } else if (what == GC_JOBIN_HUD_UPDATE) {
         bv_jobin_set(e->a, e->b, e->c);
+      } else if (what == GC_JOBIN_HUD_MOVES) {
+        /* the round's two moves, one after the other, yours first (lorenzo 2026-11-23), before the bars move: a = your move's id, b = his (0: none) */
+        const int ids[2] = {e->a, e->b};
+        for (int k = 0; k < 2; k++) {
+          if (ids[k] <= 0) continue;
+          ba_preload_move(ids[k]);   /* reads the SD card: the first time only (the animation is kept until the wave ends) */
+          bv_event* ev = ev_new();
+          if (ev) *ev = (bv_event){.type = BEV_MOVE_ANIM, .battler = k == 0 ? 0 : 2, .target = k == 0 ? 2 : 0, .a = ids[k], .b = BA_MOVE};
+        }
       } else if (what == GC_JOBIN_HUD_TELEGRAPH) {
         /* the Speed King has no sprite (lorenzo 2026-11-23): the telegraph line says it */
       } else if (what == GC_JOBIN_HUD_END) {

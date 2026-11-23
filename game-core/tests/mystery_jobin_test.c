@@ -159,15 +159,20 @@ static bool choose(int a, int b)
 }
 
 /* the messages since the last drain, as one string of keys; every one of Jobin's waits for A */
+static int moves_n, moves_you, moves_him, update_seen;   /* the round's animation event: how many came, what they name; whether the meters already moved */
 static void drain(char *out, size_t n)
 {
     out[0] = 0;
+    moves_n = moves_you = moves_him = update_seen = 0;
     gc_event e;
-    while (gc_run_next_event(&run, &e))
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_JOBIN && (e.hp & 255) == GC_JOBIN_HUD_MOVES) { assert(!update_seen); moves_n++; moves_you = e.a; moves_him = e.b; }   /* the animations come before the meters move */
+        if (e.kind == GC_EV_JOBIN && (e.hp & 255) == GC_JOBIN_HUD_UPDATE) update_seen = true;
         if (e.kind == GC_EV_MESSAGE && e.msg.key) {
             if (strstr(e.msg.key, "jobin:")) assert(e.prompt);
             if (strlen(out) + strlen(e.msg.key) + 2 < n) { strcat(out, e.msg.key); strcat(out, "|"); }
         }
+    }
 }
 
 static const int BEETLES[4] = {SPECIES_ID_VENUSAUR, SPECIES_ID_HERACROSS, SPECIES_ID_LAPRAS, SPECIES_ID_PINSIR};
@@ -275,6 +280,17 @@ static void play_duel(duel_stats *st, bool stand, int fixed_move)
         assert(choose(move, 0));
         drain(keys, sizeof keys);
         st->rounds++;
+        /* the animations (lorenzo 2026-11-23), written out again here: exactly one event a round; yours is Horn Attack / Harden / Lunge (the Stand Trick: none),
+         * his is the powered attack's move in a Speed King round and a plain move's otherwise (never none) */
+        {
+            static const int PLAIN[3] = {MOVE_ID_HORN_ATTACK, MOVE_ID_HARDEN, MOVE_ID_LUNGE};
+            static const int POWERED[3] = {MOVE_ID_FLARE_BLITZ, MOVE_ID_FLAME_CHARGE, MOVE_ID_BURNING_BULWARK};
+            assert(moves_n == 1);
+            assert(moves_you == (move == 3 ? 0 : PLAIN[move]));
+            if (tele >= 0 && !bluff) assert(moves_him == POWERED[tele]);
+            else assert(moves_him == PLAIN[0] || moves_him == PLAIN[1] || moves_him == PLAIN[2]);
+            if (tele >= 0 && bluff) assert(moves_him == PLAIN[tele == 2 ? 0 : tele == 0 ? 2 : 1]);   /* a bluff plays the plain move that beats your counter */
+        }
         /* the flavour line names Jobin's action; the oracle's table gives the changes */
         int you = 0, him = 0, susp = 0;
         bool found = false;
