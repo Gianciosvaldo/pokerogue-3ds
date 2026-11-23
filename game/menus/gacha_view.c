@@ -109,7 +109,7 @@ void gv_draw_top(const gv_state* s) {
       menu_mon m;
       memset(&m, 0, sizeof m);
       m.species = s->featured;
-      menu_draw_icon_scaled(&m, cx + 146, 18 + 46 + 11, 0.5f, 0.5f, 1.0f);
+      menu_draw_icon_scaled(&m, cx + 146, GV_MACHINE_Y + 46 + 11, 0.5f, 0.5f, 1.0f); /* the plate moved down with the machine (GV_MACHINE_Y), the icon did not */
     }
   }
 
