@@ -28,8 +28,10 @@
  * The screen of the minigame is a MYSTERY screen with me_stage GC_ME_STAGE_SAFARI (options 0..3 as above, `slot` the cursor, enemy[0] the Pokemon); a catch queues RP_CATCH
  * (c = 3) and RP_SAFARI, which goes on from there once the player has answered the full-party prompt.
  *
- * Not ported: the Pokemon's and the trainer's animations and sounds, the IV Scanner's ScanIvsPhase, the VictoryPhase's pokemonDefeated count (this port keeps none), the Limited
- * Catch challenge's refusal of the catch. The minigame is not saved: the encounter's only save is its start. */
+ * The IV Scanner's ScanIvsPhase is the app's (game/source/run_screen.c scan_safari_ivs: a question per Pokemon, from `remainingCount` and enemy[0]; it draws no RNG, so nothing here).
+ *
+ * Not ported: the Pokemon's and the trainer's animations and sounds, the VictoryPhase's pokemonDefeated count (this port keeps none: it is a Game Stats item), the Limited
+ * Catch challenge's refusal of the catch. The minigame is not saved: the encounter's only save is the one at its first question (gc_run_can_save). */
 #include "internal.h"
 #include <math.h>
 #include <string.h>

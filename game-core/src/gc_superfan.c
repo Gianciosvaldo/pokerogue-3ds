@@ -20,7 +20,9 @@
  * Bug-type moves the winner may learn (one of each kind, randSeedInt on the option's stream), sets fillRemaining rewards and starts the fight (female trainer).
  * Each member is made on its own stream as Trainer.genPartyMember does (getRandomPartyMemberFunc with ignoreEvolution), the postProcess after the constructor.
  *
- * Not ported here: the Bug-type move tutor after the win, the intro sprites. */
+ * The Bug-type move tutor after the win is here too (gc_superfan_tutor_start/choose, GC_ME_STAGE_TUTOR: the four moves drawn above, one asks which member learns it).
+ *
+ * Not ported here: the intro sprites. */
 #include "internal.h"
 #include <math.h>
 #include <stdio.h>
