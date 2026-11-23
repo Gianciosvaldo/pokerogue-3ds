@@ -569,6 +569,7 @@ typedef struct pr_battle {
      * the move, the use mode); pr_run_start_of_battle_effects plays them once */
     struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
     uint8_t n_me_start;
+    bool catch_not_added;      /* applyChallenges(POKEMON_ADD_TO_PARTY) refuses a catch (Limited Catch): AttemptCapturePhase says battle:pokemonCaughtButChallenge */
     bool me_no_flee;           /* currentBattle.mysteryEncounter.fleeAllowed === false (an encounter's fight run as a wild battle): no running, no forcing the wild enemy out, no switching out of its own accord */
     uint16_t last_move;        /* currentBattle.lastMove, 0 = none */
     int8_t last_player_involved, last_enemy_involved;  /* -1 = undefined */
@@ -1059,6 +1060,10 @@ int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move);
 int pr_hidden_power_type(const pr_pokemon *u);
 /* getTypeDamageMultiplier: the single-type chart value (0, 0.5, 1, 2), reversed under Inverse Battle (bt->challenge_flags; bt may be NULL) */
 double pr_type_chart_multiplier(const pr_battle *bt, int atk, int def);
+/* applyChallenges(POKEMON_MOVE, move, valid) from a true holder: HardcoreChallenge.applyPokemonMove bars Revival Blessing (bt->challenge_flags;
+ * bt may be NULL). PokemonMove.isUsable asks it for the player's Pokemon, CallMoveAttrWithBanlist.isMoveAllowed for any user. MovePhase's
+ * checkValidity asks it from a FALSE holder, which Hardcore leaves alone, so that check never cancels a move and is not here. */
+bool pr_challenge_move_allowed(const pr_battle *bt, int move);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
 /* the same with simulated = false passed through (IgnoreTypeImmunityAbAttr, the Strong Winds message) */

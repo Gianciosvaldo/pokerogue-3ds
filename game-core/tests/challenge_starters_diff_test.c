@@ -12,6 +12,10 @@
  *    IVs, the four moves, and the RNG state afterwards.
  * And what reward-core reads of the challenges, through game-core's reward context: the Eviolite's and the Mini Black Hole's pool weights
  * (Fresh Start), then a Mint and a vitamin on the first member through gc_port_apply_reward (the stats Flip Stat recalculates).
+ * And the run rules of Limited Catch, Limited Support and Hardcore: the shop's status and items (run-core, as game-core's reward screen asks),
+ * the party heal and PREVENT_REVIVE, POKEMON_MOVE through battle-core's three readers (the challenge, PokemonMove.isUsable for the player's
+ * member, Copycat's isMoveAllowed), and POKEMON_ADD_TO_PARTY (gc_challenge_add_to_party_ok on the wave the enemy was met; in Teleporting
+ * Hijinks after its teleport, the flag gc_teleport.c sets, which mystery_teleport_test checks per option).
  * Usage: challenge_starters_diff_test <trace> */
 #include "../src/internal.h"
 #include <math.h>
@@ -24,6 +28,10 @@ static gc_system sys;
 static long checks, failures, cases, queries, members, fresh_cases, views_changed, soft_only;
 static long chart_values, effectiveness_values, passive_values, enemy_passives;
 static int inverse_v, flip_v, passives_v;   /* the case's Inverse Battle, Flip Stat and Passives values */
+static int catch_v, support_v, hardcore_v;  /* Limited Catch, Limited Support, Hardcore */
+static char exp_g[2][800], exp_h[40], exp_k[3][60], exp_a[3][60];
+static int got_g, got_k, got_a;
+static long shop_lists, shop_items, rule_values, move_values, add_values;
 static char exp_e[6][400], exp_p[6][40];
 static char exp_y[32][80];
 static char exp_f[200];
@@ -88,6 +96,9 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
     set.value[CHALLENGES_INVERSE_BATTLE] = (uint8_t)inverse_v;
     set.value[CHALLENGES_FLIP_STAT] = (uint8_t)flip_v;
     set.value[CHALLENGES_PASSIVES] = (uint8_t)passives_v;
+    set.value[CHALLENGES_LIMITED_CATCH] = (uint8_t)catch_v;
+    set.value[CHALLENGES_LIMITED_SUPPORT] = (uint8_t)support_v;
+    set.value[CHALLENGES_HARDCORE] = (uint8_t)hardcore_v;
     const char *why = NULL;
     CHECK(gc_run_set_challenges(&run, &set, &why), "case %d: gc_run_set_challenges refused Fresh Start %d, Inverse %d, Flip %d, Passives %d: %s", idx, fresh, inverse_v, flip_v, passives_v, why ? why : "");
     run.run.rng = before;
@@ -219,6 +230,76 @@ static void replay_party(int idx, int fresh, int n, pr_rng before, pr_rng after,
             reward_applies++;
         }
     }
+    /* the run rules */
+    for (int g = 0; g < got_g; g++) {
+        char line[800];
+        memcpy(line, exp_g[g], sizeof line);
+        char *gs = NULL;
+        strtok_r(line, " \n", &gs);   /* G */
+        const long wave = inum(&gs), base = inum(&gs), want_status = inum(&gs), want_n = inum(&gs);
+        const bool status = pr_run_get_shop_status(&run.run);
+        CHECK((long)status == want_status, "case %d (Limited Support %d): shop status %d, upstream %ld", idx, support_v, status, want_status);
+        pr_shop_option o[PR_SHOP_ITEM_COUNT_];
+        const int n_o = pr_run_get_player_shop_options(&run.run, (int)wave, (double)base, o);
+        CHECK(n_o == want_n, "case %d (Hardcore %d): wave %ld has %d shop items, upstream %ld", idx, hardcore_v, wave, n_o, want_n);
+        for (int i = 0; i < want_n && i < n_o; i++) {
+            const char *name = tok(&gs);
+            const double cost = num(&gs);
+            CHECK(!strcmp(name, pr_shop_item_name[o[i].item]) && cost == o[i].cost, "case %d (Hardcore %d): wave %ld shop item %d is %s for %.17g, upstream %s for %.17g", idx,
+                  hardcore_v, wave, i, pr_shop_item_name[o[i].item], o[i].cost, name, cost);
+            shop_items++;
+        }
+        CHECK(!run.run.unported, "case %d: the shop flagged the challenges unported (%#x)", idx, run.run.unported);
+        shop_lists++;
+    }
+    if (exp_h[0]) {
+        char line[40];
+        snprintf(line, sizeof line, "%s", exp_h);
+        char *hs = NULL;
+        strtok_r(line, " \n", &hs);   /* H */
+        const long heal = inum(&hs), prevent = inum(&hs);
+        CHECK((long)pr_run_get_party_heal_status(&run.run) == heal, "case %d (Limited Support %d): party heal %d, upstream %ld", idx, support_v, pr_run_get_party_heal_status(&run.run), heal);
+        CHECK((long)pr_run_prevent_revive(&run.run) == prevent, "case %d (Hardcore %d): prevent revive %d, upstream %ld", idx, hardcore_v, pr_run_prevent_revive(&run.run), prevent);
+        rule_values += 2;
+    }
+    const pr_attr *copycat = NULL;
+    for (unsigned i = 0; i < pr_moves[MOVE_ID_COPYCAT].nattr; i++)
+        if (pr_attrs[pr_moves[MOVE_ID_COPYCAT].attr0 + i].cls == PR_AC_CopyMoveAttr) copycat = &pr_attrs[pr_moves[MOVE_ID_COPYCAT].attr0 + i];
+    for (int k = 0; k < got_k && run.n_party > 0; k++) {
+        char line[60];
+        memcpy(line, exp_k[k], sizeof line);
+        char *ks = NULL;
+        strtok_r(line, " \n", &ks);   /* K */
+        const long move = inum(&ks), valid = inum(&ks), usable = inum(&ks), allowed = inum(&ks);
+        if (move <= 0 || move >= PR_MOVE_COUNT || !copycat) { FAIL("case %d: move %ld out of range (Copycat attr %p)", idx, move, (const void *)copycat); continue; }
+        set_battle(0);
+        CHECK((long)pr_challenge_move_allowed(&bt, (int)move) == valid, "case %d (Hardcore %d): move %ld valid %d, upstream %ld", idx, hardcore_v, move, pr_challenge_move_allowed(&bt, (int)move), valid);
+        pr_pokemon p = run.party[run.party_order[0]].b;
+        PR_MOVES(&p)[0] = (uint16_t)move;
+        pr_sync_moveset_aliases(&p);
+        pr_msg why_not = {0};
+        const bool got_usable = pr_move_usable(&bt, &p, 0, true, false, &why_not);
+        CHECK((long)got_usable == usable, "case %d (Hardcore %d): move %ld usable %d (%s), upstream %ld", idx, hardcore_v, move, got_usable, why_not.key ? why_not.key : "", usable);
+        bt.last_move = (int)move;
+        const bool got_allowed = pr_call_move_get(&bt, NULL, MOVE_ID_COPYCAT, copycat, &p, NULL) == move;
+        CHECK((long)got_allowed == allowed, "case %d (Hardcore %d): Copycat may call %ld: %d, upstream %ld", idx, hardcore_v, move, got_allowed, allowed);
+        move_values += 3;
+    }
+    for (int a = 0; a < got_a; a++) {
+        char line[60];
+        memcpy(line, exp_a[a], sizeof line);
+        char *as = NULL;
+        strtok_r(line, " \n", &as);   /* A */
+        const long met = inum(&as), me = inum(&as), option = inum(&as), valid = inum(&as);
+        const int wave = run.wave;
+        run.wave = (int)met;
+        gc_int(&run)->me_teleport_catch = me == 0 && option != 2;
+        const bool got = gc_challenge_add_to_party_ok(&run);
+        CHECK((long)got == valid, "case %d (Limited Catch %d): met on wave %ld, encounter %ld option %ld: added %d, upstream %ld", idx, catch_v, met, me, option, got, valid);
+        gc_int(&run)->me_teleport_catch = false;
+        run.wave = wave;
+        add_values++;
+    }
     cases++;
 }
 
@@ -254,6 +335,9 @@ int main(int argc, char **argv)
             got_y = 0;
             exp_f[0] = 0;
             exp_r[0] = exp_n[0] = exp_u[0] = 0;
+            exp_h[0] = 0;
+            got_g = got_k = got_a = 0;
+            catch_v = support_v = hardcore_v = 0;
             idx = (int)inum(&save);
             fresh = (int)inum(&save);
             const long budget = inum(&save);
@@ -345,6 +429,24 @@ int main(int argc, char **argv)
             snprintf(exp_n, sizeof exp_n, "N %s", save);
         } else if (!strcmp(kind, "U")) {
             snprintf(exp_u, sizeof exp_u, "U %s", save);
+        } else if (!strcmp(kind, "L")) {
+            catch_v = (int)inum(&save);
+            support_v = (int)inum(&save);
+            hardcore_v = (int)inum(&save);
+            set.value[CHALLENGES_LIMITED_CATCH] = (uint8_t)catch_v;
+            set.value[CHALLENGES_LIMITED_SUPPORT] = (uint8_t)support_v;
+            set.value[CHALLENGES_HARDCORE] = (uint8_t)hardcore_v;
+        } else if (!strcmp(kind, "G")) {
+            if (got_g < 2) snprintf(exp_g[got_g++], sizeof exp_g[0], "G %s", save);
+            else FAIL("case %d: more than two G lines", idx);
+        } else if (!strcmp(kind, "H")) {
+            snprintf(exp_h, sizeof exp_h, "H %s", save);
+        } else if (!strcmp(kind, "K")) {
+            if (got_k < 3) snprintf(exp_k[got_k++], sizeof exp_k[0], "K %s", save);
+            else FAIL("case %d: more than three K lines", idx);
+        } else if (!strcmp(kind, "A")) {
+            if (got_a < 3) snprintf(exp_a[got_a++], sizeof exp_a[0], "A %s", save);
+            else FAIL("case %d: more than three A lines", idx);
         } else if (!strcmp(kind, "Y")) {
             snprintf(exp_y[got_y++], sizeof exp_y[0], "Y %s", save);
         } else if (!strcmp(kind, "T")) {
@@ -369,8 +471,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "incomplete trace: %ld of %ld cases, end marker %d\n", cases, n_cases, saw_end);
         return 2;
     }
-    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld rewardWeights=%ld rewardApplies=%ld checks=%ld\n",
-           cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, reward_weights, reward_applies, checks);
+    printf("CHALLENGE-STARTERS cases=%ld fresh=%ld queries=%ld members=%ld softOnly=%ld viewsChanged=%ld chart=%ld effectiveness=%ld passives=%ld enemyPassives=%ld fusionStats=%ld rewardWeights=%ld rewardApplies=%ld shopLists=%ld shopItems=%ld ruleValues=%ld moveValues=%ld addValues=%ld checks=%ld\n",
+           cases, fresh_cases, queries, members, soft_only, views_changed, chart_values, effectiveness_values, passive_values, enemy_passives, fusion_stats, reward_weights, reward_applies,
+           shop_lists, shop_items, rule_values, move_values, add_values, checks);
     printf("TOTAL mismatches=%ld\n", failures);
     return failures ? 1 : 0;
 }

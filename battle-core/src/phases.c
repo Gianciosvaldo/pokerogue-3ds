@@ -584,7 +584,8 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
     if (caught) {
         add_fainted_enemy_score(bt, pokemon);
 
-        pr_show_text(bt, e, pr_msg1("battle:pokemonCaught", pr_arg_pokemon(bt, "pokemonName", pokemon)));
+        pr_show_text(bt, e, pr_msg1(bt->catch_not_added ? "battle:pokemonCaughtButChallenge" : "battle:pokemonCaught",
+                                    pr_arg_pokemon(bt, "pokemonName", pokemon)));
         unshift_new(bt, e, PH_VICTORY, b);
         pr_leave_field(bt, e, pokemon, true);
     } else {

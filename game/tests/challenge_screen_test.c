@@ -28,8 +28,16 @@ static float cursor_y;
 void ui_cursor(float x, float y) { (void)x; cursor_y = y; }
 text_opts text_defaults(void) { text_opts o; memset(&o, 0, sizeof o); return o; }
 static char drawn[4096];
+static float desc_y;   /* where the description was drawn, and the clip around it */
+static int n_clip, n_clip_off;
+static float clip_y, clip_h;
+void clip_rect(float x, float y, float w, float h) { (void)x, (void)w; clip_y = y; clip_h = h; n_clip++; }
+void clip_off(void) { n_clip_off++; }
+/* the fake measures every text as one 14 px line, Limited Support's "Both" description as six */
+float text_height(text_style st, const char* s, const text_opts* o) { (void)st, (void)o; return strstr(s, "limitedSupport.desc.3") ? 84 : 14; }
 float text_draw(text_style st, float x, float y, const char* s, const text_opts* o) {
-  (void)st, (void)x, (void)y, (void)o;
+  (void)st, (void)x, (void)o;
+  if (strstr(s, ".desc")) desc_y = y;
   strncat(drawn, s, sizeof drawn - strlen(drawn) - 2);
   strcat(drawn, "|");
   return 0;
@@ -81,8 +89,7 @@ int main(void) {
   draw();
   CHECK(seen("[challenges:inverseBattle.value.1]"), "Inverse Battle stops at On");
   g_screen->input(g_screen, BTN_LEFT);
-  g_screen->input(g_screen, BTN_DOWN);
-  g_screen->input(g_screen, BTN_DOWN);
+  for (int i = 0; i < 5; i++) g_screen->input(g_screen, BTN_DOWN);   /* Flip Stat, Limited Catch, Limited Support, Hardcore, Passives */
   draw();
   CHECK(seen("[challenges:passives.desc.0]"), "Passives has a description per value");
   g_screen->input(g_screen, BTN_RIGHT);
@@ -130,10 +137,10 @@ int main(void) {
   CHECK(seen("[challenges:freshStart.value.2]") && seen("[common:start]"), "the last choice is shown again");
 
   /* touch: a tap on the row steps the value (wraps to 0 after the last), a tap on Start starts, a tap outside does nothing */
-  CHECK(g_screen->touch(g_screen, 160, 104), "a tap on the row");
+  CHECK(g_screen->touch(g_screen, 160, 56), "a tap on the row");
   draw();
   CHECK(seen("[challenges:freshStart.value.0]") && seen("[challenges:noneSelected]"), "after the last value a tap turns it off");
-  CHECK(g_screen->touch(g_screen, 160, 104), "tap again");
+  CHECK(g_screen->touch(g_screen, 160, 56), "tap again");
   draw();
   CHECK(seen("[challenges:freshStart.value.1]"), "and on");
   const int starts = n_start;
@@ -142,6 +149,48 @@ int main(void) {
   open_with(NULL);
   const int errs = n_error;
   CHECK(g_screen->touch(g_screen, 160, 168) && n_error == errs + 1 && n_start == starts + 1, "a tap on None Selected is the error sound");
+
+  /* Limited Catch, Limited Support and Hardcore (PR 3): after Flip Stat and before Passives, upstream's order; Limited Support's four values */
+  open_with(NULL);
+  draw();
+  CHECK(seen("[challenges:limitedCatch.name]") && seen("[challenges:limitedSupport.name]") && seen("[challenges:hardcore.name]"), "the run rule rows");
+  CHECK(strstr(drawn, "flipStat.name") < strstr(drawn, "limitedCatch.name") && strstr(drawn, "limitedCatch.name") < strstr(drawn, "limitedSupport.name") &&
+        strstr(drawn, "limitedSupport.name") < strstr(drawn, "hardcore.name") && strstr(drawn, "hardcore.name") < strstr(drawn, "passives.name"),
+        "in upstream's order");
+  for (int i = 0; i < 4; i++) g_screen->input(g_screen, BTN_DOWN);   /* Fresh Start, Inverse, Flip, Limited Catch, Limited Support */
+  for (int v = 0; v <= 3; v++) {
+    char want[64];
+    draw();
+    snprintf(want, sizeof want, "[challenges:limitedSupport.value.%d]", v);
+    CHECK(seen(want), "Limited Support value %d", v);
+    snprintf(want, sizeof want, "[challenges:limitedSupport.desc.%d]", v);
+    CHECK(seen(want), "its description %d", v);
+    CHECK(n_clip > 0 && n_clip == n_clip_off && clip_y == 196 && clip_h == 40, "the description is clipped to its strip");
+    CHECK(desc_y == -39, "a description that fits does not move");
+    if (v < 3) g_screen->input(g_screen, BTN_RIGHT);
+  }
+  CHECK(!g_screen->input(g_screen, BTN_RIGHT) || seen("[challenges:limitedSupport.value.3]"), "3 is the last value");
+  /* "Both" is taller than the strip: still for 3.2 s, then up 49 px (84 - 35) over 3.2 s, held 5 s, back, 3.2 s at rest, again */
+  g_screen->update(g_screen, 3000);
+  draw();
+  CHECK(desc_y == -39, "still during the delay");
+  g_screen->update(g_screen, 1800);   /* 1.6 s into the 3.2 s scroll: halfway */
+  draw();
+  CHECK(desc_y > -39 - 24.6f && desc_y < -39 - 24.4f, "halfway up (%g)", desc_y);
+  g_screen->update(g_screen, 1600 + 4000);
+  draw();
+  CHECK(desc_y == -39 - 49, "held at the top (%g)", desc_y);
+  g_screen->update(g_screen, 1000 + 3200 + 1000);
+  draw();
+  CHECK(desc_y == -39, "back at rest (%g)", desc_y);
+  g_screen->input(g_screen, BTN_LEFT);   /* a new description starts from the top */
+  draw();
+  g_screen->input(g_screen, BTN_RIGHT);
+  draw();
+  CHECK(desc_y == -39, "a new description starts at rest");
+  CHECK(chm_desc_scroll(49, 3200 + 3200 + 5000 + 3200 + 3200 + 1600) > 24.4f && chm_desc_scroll(0, 9000) == 0 && chm_desc_scroll(-3, 9000) == 0,
+        "the tween repeats; no overflow, no scroll");
+  CHECK(chm_desc_scroll(200, 3200 + 4400) == 100, "a long overflow scrolls at 44 ms a pixel");
 
   printf("%d checks, %d failed\n", checks, failed);
   if (failed) return 1;

@@ -37,13 +37,12 @@ static const uint8_t *ban_bits(const char *json)
     return b->bits;
 }
 
-/* CallMoveAttrWithBanlist.isMoveAllowed: not NONE, not banned, implemented (challenges that
- * bar moves aren't modelled: classic mode has none) */
-static bool move_allowed(const char *invalid, int move)
+/* CallMoveAttrWithBanlist.isMoveAllowed: not NONE, not banned, implemented, then applyChallenges(POKEMON_MOVE) (Hardcore bars Revival Blessing) */
+static bool move_allowed(const pr_battle *bt, const char *invalid, int move)
 {
     if (move <= MOVE_ID_NONE || move >= PR_MOVE_COUNT) return false;
     if (ban_bits(invalid)[move >> 3] & (1u << (move & 7))) return false;
-    return !pr_moves[move].unimplemented;
+    return !pr_moves[move].unimplemented && pr_challenge_move_allowed(bt, move);
 }
 
 /* ---------------------------------------------------------------- RandomMovesetMoveAttr.selectedMove */
@@ -125,7 +124,7 @@ static int eligible_moves(pr_battle *bt, const char *invalid, bool include_party
     int n = 0;
     if (!include_party) {
         for (int k = 0; k < PR_N_MOVES(user); k++)
-            if (move_allowed(invalid, PR_MOVES(user)[k])) out[n++] = PR_MOVES(user)[k];
+            if (move_allowed(bt, invalid, PR_MOVES(user)[k])) out[n++] = PR_MOVES(user)[k];
         return n;
     }
     int side = user->is_player ? 0 : 1;
@@ -137,7 +136,7 @@ static int eligible_moves(pr_battle *bt, const char *invalid, bool include_party
         const pr_pokemon *m = bt->party[side][i];
         if (m->id == user->id) continue;
         for (int k = 0; k < PR_N_MOVES(m); k++)
-            if (move_allowed(invalid, PR_MOVES(m)[k])) out[n++] = PR_MOVES(m)[k];
+            if (move_allowed(bt, invalid, PR_MOVES(m)[k])) out[n++] = PR_MOVES(m)[k];
     }
     return n;
 }
@@ -163,14 +162,14 @@ int pr_call_move_get(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, co
             if (target && unknown) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
             called = tm ? tm->move : MOVE_ID_NONE;
         }
-        return move_allowed(x->invalidMoves, called) ? called : MOVE_ID_NONE;
+        return move_allowed(bt, x->invalidMoves, called) ? called : MOVE_ID_NONE;
     }
     case PR_AC_RandomMoveAttr: {                           /* Metronome: a fresh pick every call */
         const pr_attr_RandomMoveAttr *x = a->p;
         static uint16_t ids[PR_MOVE_COUNT];
         int n = 0;
         for (int m = 0; m < PR_MOVE_COUNT; m++)
-            if (move_allowed(x->invalidMoves, m)) ids[n++] = (uint16_t)m;
+            if (move_allowed(bt, x->invalidMoves, m)) ids[n++] = (uint16_t)m;
         int k = pr_battle_rand_seed_int(bt, n, 0);
         return n ? ids[k] : MOVE_ID_NONE;
     }

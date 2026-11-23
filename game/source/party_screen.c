@@ -378,6 +378,7 @@ void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*
   a.battler_count = 1;
   a.max_level = bt->max_exp_level;
   a.filter = mode == PARTY_REVIVAL_BLESSING ? filter_fainted : filter_non_fainted;
+  a.hardcore = mode == PARTY_RELEASE && (bt->challenge_flags & (1u << CHALLENGES_HARDCORE));
   static party_events ev;
   ev = (party_events){on_select, NULL, NULL, NULL, NULL, on_summary, NULL};
   ev.on_rename = on_rename;
@@ -439,6 +440,13 @@ static const char* filter_tera_shard(void* ctx,int slot) {
   (void)ctx;return gc_mon_can_use_tera_shard(&g_run->party[storage_at(slot)]) ? NULL : mui_t("partyUiHandler:anyEffect");
 }
 
+/* gameMode.hasChallenge(HARDCORE): PartyUiHandler.updateOptionsHardcore for a fainted member (party.c). Only on the screens whose
+ * answers game-core takes: the item, Splice and transfer screens, and the release prompt of a catch. The battle's switch screen and Check
+ * Team would offer Release alone, and game-core has no release there, so they keep their usual options (CHALLENGE-VALIDATION.md, PR 3). */
+static bool hardcore_run(const gc_run* run) {
+  return run && run->run.has_challenges && (run->run.challenge_flags & (1u << CHALLENGES_HARDCORE));
+}
+
 static void open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, bool tera_shard, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   const gc_run* run = (const gc_run*)gc_run_ptr;
   ps_set_run(run);
@@ -475,6 +483,7 @@ static void open_item(const void* gc_run_ptr, int pmode, bool target_move, int t
   a.mode = S.mode;
   a.battler_count = 1;
   a.in_reward_phase = true;
+  a.hardcore = hardcore_run(run);
   a.show_move_pp = target_move;
   if (S.mode == PARTY_TM_MODIFIER) a.filter = filter_tm;
   if (S.mode == PARTY_REMEMBER_MOVE_MODIFIER) a.filter = filter_remember;
@@ -574,6 +583,7 @@ void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor,
   a.battler_count = 1;
   a.in_reward_phase = true;
   a.filter = filter_fuse;
+  a.hardcore = hardcore_run(run);
   a.preserve_roster = true;
   a.allow_unsplice = Un.cb != NULL;
 
@@ -637,6 +647,7 @@ void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int 
   a.mode = PARTY_MODIFIER_TRANSFER;
   a.battler_count = 1;
   a.in_reward_phase = true;
+  a.hardcore = hardcore_run(run);
   static party_events ev;
   ev = (party_events){on_transfer_select, on_transfer_pick, on_discard_pick, NULL, NULL, on_summary, NULL};
   ev.on_rename = on_rename;

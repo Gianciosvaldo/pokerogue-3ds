@@ -129,3 +129,94 @@ first member through `gc_port_apply_reward` (applied or not, hp, the six stats).
 Plants (`tools/challengebattleplant.sh`): `rewards-without-challenges` (the old `ctx_base`), `rewards-stats-without-flip`,
 `rewards-fresh-pools-ignored`. reward-core's `minttest`/`vitamintest` self-tests: the Flip Stat refusal check became a check that the Mint and the
 vitamin apply with flipped stats.
+
+# Challenge Mode, part 3: Limited Catch, Limited Support, Hardcore
+
+The three are now in `gc_challenge_played_mask`: the challenge screen lists them (upstream's order: after Flip Stat, before Passives), a run takes
+them, and a save that holds them loads. Single Generation, Single Type and Moveset Randomizer are still refused.
+
+## What upstream does (8555c08, read and replayed)
+
+* **Limited Support** (value 1 no heal, 2 no shop, 3 both). `applyShop` keeps the shop only with value 1 (`gameMode.getShopStatus()`),
+  `applyPartyHeal` keeps the end-of-biome heal only with value 2. Without the heal, `SelectBiomePhase.setNextBiomeAndEnd` queues a
+  `SelectModifierPhase` with the current wave's fixed battle's `customModifierRewardSettings` where the `PartyHealPhase` was. No Classic fixed
+  battle at a wave X0 (only the Champion's, 190) sets any, so it is a plain reward screen; the X0 wave has no shop (`getPlayerShopModifierTypeOptionsForWave`
+  is empty there). `unshiftNew` keeps the order of its calls: the screen, then `SwitchBiomePhase`.
+* **Hardcore**. `SHOP_ITEM`: no item of the "revive" group (Revive, Max Revive, Sacred Ash) in the shop. `WAVE_REWARD`: none in the rewards
+  (reward-core, already). `PREVENT_REVIVE`: `PartyHealPhase` skips a fainted Pokemon entirely (no hp, status or PP; `playerTerasUsed` still resets),
+  a revive's select filter always says no effect (reward-core, already). `POKEMON_FUSION`: no fainted fusion (game-core, already). `POKEMON_MOVE`:
+  Revival Blessing is not valid. It is read in three places: `PokemonMove.isUsable` for the player's Pokemon (text `battle:moveCannotUseChallenge`),
+  `CallMoveAttrWithBanlist.isMoveAllowed` for any user (Metronome, Copycat, Mirror Move, Assist, Sleep Talk), and `MovePhase.checkValidity`. The last one
+  starts its holder at `false`, which Hardcore leaves alone (`if (isValid.value)`), so it never cancels a move: not ported, as it does nothing.
+  The party screen's `updateOptionsHardcore` for a fainted member.
+* **Limited Catch** (`applyPokemonAddToParty`): a catch joins the party only when the Pokemon's `metWave` (the wave it was made in, always the
+  current one here) is a biome's first (`% 10 === 1`), or the battle is Teleporting Hijinks' and its selected option is not `options[2]`.
+  Otherwise `AttemptCapturePhase` says `battle:pokemonCaughtButChallenge`, `setPokemonCaught` still runs, and the Pokemon is removed with no
+  party prompt. An encounter's `catchPokemon(.., isObtain)` always adds an obtain (the Salesman's).
+
+## Where it is ported
+
+| rule | file |
+|---|---|
+| shop status, shop items, party heal status, prevent revive | `run-core/src/shop.c` (disclosed run-core edit, with `include/pr/run.h`: the three bits, `challenge_limited_support`) |
+| the value on the run, the played mask, `gc_challenge_add_to_party_ok` | `game-core/src/gc_challenge.c` |
+| the no-heal reward screen, the heal that skips the fainted | `game-core/src/gc_phases.c` (`set_next_biome`, `party_heal`) |
+| the catch that does not join, the Safari Zone's text | `game-core/src/gc_catch.c`; the battle's text from `bt->catch_not_added`, set at the ball command (`gc_battle.c`) |
+| Teleporting Hijinks' exception | `gc_teleport.c` sets `me_teleport_catch` for the first two options; `gc_new_battle` clears it |
+| Revival Blessing | `battle-core`: `pr_challenge_move_allowed` (`damage.c`), read by `pr_move_usable` (`commands.c`) and `move_allowed` (`called_moves.c`) |
+| the fainted member's party options | `game/source/party_screen.c` sets `party_args.hardcore` (party.c already had `updateOptionsHardcore`) |
+| the challenge screen's description scroll (`updateDescriptionScroll`) | `game/source/challenge_screen.c`, `chm_desc_scroll` in `challenge_model.c` |
+
+## Differential
+
+`tools/challengestartersdiff.sh <upstream> 400 <seed>`: each case now also sets Limited Catch (0/1), Limited Support (0..3) and Hardcore (0/1) in
+the real Challenge game mode, and records `getShopStatus()` and `getPlayerShopModifierTypeOptionsForWave` (item and cost) on two waves, the
+`PARTY_HEAL` and `PREVENT_REVIVE` answers, Revival Blessing, Tackle and a random move through `applyChallenges(POKEMON_MOVE)`,
+`new PokemonMove(move).isUsable(member 0, true)` and Copycat's `isMoveAllowed`, and `applyChallenges(POKEMON_ADD_TO_PARTY)` for three enemies
+(met on a biome's first wave or not; no encounter, Teleporting Hijinks or Fight or Flight, each option).
+
+| seed | shop lists / items | heal + revive values | move values | add-to-party values | checks | TOTAL mismatches |
+|---|---|---|---|---|---|---|
+| 777 | 800 / 7355 | 800 | 3600 | 1200 | 178787 | 0 |
+| 9001 | 800 / 7706 | 800 | 3600 | 1200 | 178087 | 0 |
+| 4242 | 800 / 7646 | 800 | 3600 | 1200 | 176305 | 0 |
+| 31337 | 800 / 7478 | 800 | 3600 | 1200 | 179163 | 0 |
+
+Coverage on seed 777 (the producer's counters, each required above 0): 372 Hardcore shop lists, 406 closed shops, 205 cases with no heal,
+207 Revival Blessing refusals, 269 refused party adds, 71 teleport adds away from a first wave.
+
+The reward application differential (`tools/applydiff.sh`) no longer skips its Hardcore cases: on seed 777 (N 4000), 680 of the 2730 replayed
+cases are Challenge Mode with Hardcore, 0 mismatches (revives refused, Sacred Ash's no effect, the rest as in Classic).
+
+Plants (`tools/challengebattleplant.sh <trace>`, 26 in all, 0 missed): the 14 of parts 2 and the fix, and `shop-hardcore-keeps-revives`,
+`shop-hardcore-keeps-sacred-ash`, `shop-hardcore-outside-challenge`, `support-shop-open`, `support-heal-on-both`, `prevent-revive-off`,
+`support-not-synced`, `revival-blessing-allowed`, `usable-skips-challenge`, `copycat-skips-challenge`, `limited-catch-any-wave`,
+`limited-catch-no-teleport`.
+
+## Host tests
+
+* `challenge_host_test` `run_rules`: per Limited Support value the statuses, the shop on wave 12, and the queue after the biome's last wave
+  (heal or reward screen, then the biome switch; the X0 screen has no shop and leaves the hp alone); with and without Hardcore the shop of wave 199,
+  `PartyHealPhase` on a fainted and a hurt member, Revival Blessing for the player's and the enemy's Pokemon, and Copycat.
+* `catch_test limited`: a real throw on the first wave (kept), on wave 2 (refused, the text, the dex, no prompt even with a full party), after a
+  teleport (kept); an encounter's catch with c = 1 (obtain, kept), 2 (refused, no text) and 3 (refused, the challenge text).
+* `mystery_teleport_test`: the flag after options 0 and 1, not after 2, and cleared at the next wave.
+* `game/tests/party_item_test` `hardcore_cases`: a fainted member offers only Cancel on the Ether and Apply screens and only Release on a catch's
+  release prompt, with Hardcore; the usual options without it, and for the member that is not fainted.
+* `game/tests/challenge_screen_test`: the three rows in order, Limited Support's four values and descriptions, the description clip, and the
+  scroll's timeline (delay, halfway, hold, back, restart on a new description).
+* Host plants (`tools/challengehostplant.sh`, now also on `catch_test` and `mystery_teleport_test`): 23, 0 missed. By hand on the app (not in a
+  script): `party_screen.c` without the flag on the item screen or on the release prompt, and the challenge screen without the scroll, each made its
+  test fail.
+
+## Gaps
+
+* The battle's switch screen and Check Team keep their usual options for a fainted member under Hardcore. Upstream offers Release alone there, and
+  game-core has no release outside a catch's full-party prompt (Check Team hides Release in this port already).
+* The detuned faint cry under Hardcore (`faintCry`, audio) is not ported.
+* `PartyHealPhase` and the no-heal reward screen are host-tested on game-core's phases, not replayed against upstream's phases.
+* The game speed's effect on the description scroll is assumed to be the same as upstream's tween (the screen's update gets the scaled time).
+* With all ten challenges (part 4) the challenge window would be 12 rows and no longer fit above the description strip: part 4 needs a
+  scrolling list (upstream shows 9 rows and scrolls).
+* Nothing here was run on a 3DS or in Azahar.
+* run-core edits (disclosed, approved by lorenzo per PR): `include/pr/run.h`, `src/shop.c`.

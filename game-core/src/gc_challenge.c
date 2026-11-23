@@ -16,7 +16,13 @@
  *   STARTER_SELECT_MODIFY  the profile as a new save has it (getStarterData)                            gc_challenge_starter_view
  *   STARTER_MODIFY         the starter Pokemon as a new save has it                                     gc_challenge_modify_starter
  * and, for every challenge, the win's ribbons (ribbonAwarded, GameOverPhase.awardRibbons)               gc_challenge_ribbon_flags
- * Not ported yet (a run that sets one is refused by gc_run_set_challenges): the other six.
+ * and the run rules:
+ *   LIMITED_SUPPORT  SHOP (value 1 keeps the shop) and PARTY_HEAL (value 2 keeps the heal)        pr_run_get_shop_status, pr_run_get_party_heal_status
+ *   HARDCORE         SHOP_ITEM / WAVE_REWARD (no revive group), PREVENT_REVIVE (the party heal skips the fainted, revives do nothing),
+ *                    POKEMON_FUSION (no fainted fusion), POKEMON_MOVE (no Revival Blessing for the player: battle-core)
+ *   LIMITED_CATCH    POKEMON_ADD_TO_PARTY: a catch joins the party only on a biome's first wave (wave % 10 == 1) or after
+ *                    Teleporting Hijinks' teleport                                                gc_catch_start
+ * Not ported yet (a run that sets one is refused by gc_run_set_challenges): SINGLE_GENERATION, SINGLE_TYPE, MOVESET_RANDOMIZER.
  *
  * Checked against the pinned upstream by tests/challenge-starters.producer.test.ts (tools/challengestartersdiff.sh). */
 #include "internal.h"
@@ -43,7 +49,8 @@ int gc_challenge_max(int challenge)
 
 uint32_t gc_challenge_played_mask(void)
 {
-    return (1u << CHALLENGES_FRESH_START) | (1u << CHALLENGES_INVERSE_BATTLE) | (1u << CHALLENGES_FLIP_STAT) | (1u << CHALLENGES_PASSIVES);
+    return (1u << CHALLENGES_FRESH_START) | (1u << CHALLENGES_INVERSE_BATTLE) | (1u << CHALLENGES_FLIP_STAT) | (1u << CHALLENGES_PASSIVES)
+           | (1u << CHALLENGES_LIMITED_CATCH) | (1u << CHALLENGES_LIMITED_SUPPORT) | (1u << CHALLENGES_HARDCORE);
 }
 
 bool gc_challenge_set_valid(const gc_challenge_set *set, const char **why)
@@ -72,6 +79,7 @@ void gc_challenge_sync(gc_run *run)
     r->challenge_type = set->value[CHALLENGES_SINGLE_TYPE];
     r->challenge_fresh_start = set->value[CHALLENGES_FRESH_START];
     r->challenge_passives = set->value[CHALLENGES_PASSIVES];
+    r->challenge_limited_support = set->value[CHALLENGES_LIMITED_SUPPORT];
     /* the battle rules (Inverse Battle, Flip Stat, Passives) are read from the battle: run->bt computes the stats of Pokemon made outside a
      * battle too (the starters, a Mystery Encounter's), so it carries them from here; a battle's setup sets them again */
     run->bt.challenge_flags = r->mode == GAME_MODES_CHALLENGE ? r->challenge_flags : 0;
@@ -86,6 +94,14 @@ bool gc_challenges_unplayed(const gc_run *run)
     if (!run->run.has_challenges) return false;
     if (!run->run.challenge_flags) return true;
     return (run->run.challenge_flags & ~gc_challenge_played_mask()) != 0;
+}
+
+/* applyChallenges(POKEMON_ADD_TO_PARTY): LimitedCatchChallenge keeps a catch only when its metWave (the wave it was made in, the current
+ * one) is a biome's first (% 10 == 1) or the fight is Teleporting Hijinks' after its teleport */
+bool gc_challenge_add_to_party_ok(const gc_run *run)
+{
+    if (run->run.mode != GAME_MODES_CHALLENGE || !(run->run.challenge_flags & PR_CHALLENGE_LIMITED_CATCH)) return true;
+    return gc_int((gc_run *)run)->me_teleport_catch || run->wave % 10 == 1;
 }
 
 bool gc_run_set_challenges(gc_run *run, const gc_challenge_set *set, const char **why)

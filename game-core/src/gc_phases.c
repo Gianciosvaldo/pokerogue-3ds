@@ -663,7 +663,10 @@ static void set_next_biome(gc_run *run, int biome)
             run->money = pr_run_apply_money_interest(run->money, stacks, n);
             gc_ev_money(run, run->money - before);
         }
-        gc_rq_unshift(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));
+        /* applyChallenges(PARTY_HEAL): without the heal (Limited Support), a SelectModifierPhase with the current wave's fixed battle's
+         * customModifierRewardSettings; no Classic fixed battle at a wave X0 (only the Champion's, 190) sets any, so it is a plain one */
+        if (pr_run_get_party_heal_status(&run->run)) gc_rq_unshift(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));
+        else gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
     }
     gc_rq_unshift(run, gc_rp(RP_SWITCH_BIOME, biome, 0, 0));
 }
@@ -688,8 +691,10 @@ static void party_heal(gc_run *run)
 {
     run->bt.player_teras_used_known = true;
     run->bt.player_teras_used = 0;
+    const bool prevent_revive = pr_run_prevent_revive(&run->run);   /* applyChallenges(PREVENT_REVIVE): Hardcore skips the fainted */
     for (int i = 0; i < run->n_party; i++) {
         pr_pokemon *b = &run->party[i].b;
+        if (prevent_revive && b->hp <= 0) continue;
         b->hp = b->stats[0];
         b->status = STATUS_EFFECT_NONE;
         b->pending_status = STATUS_EFFECT_NONE;

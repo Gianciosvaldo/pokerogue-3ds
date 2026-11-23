@@ -127,6 +127,7 @@ static void teleport(gc_run *run, int primary)
         return;
     }
     run->run.rng = r;
+    gc_int(run)->me_teleport_catch = true;   /* Limited Catch lets this fight's catch join the party */
     fight(run, &boss, level, run->wave < 50 ? PR_ME_POST_TELEPORT_LOW : PR_ME_POST_TELEPORT_HIGH, NULL, 0, primary);
 }
 

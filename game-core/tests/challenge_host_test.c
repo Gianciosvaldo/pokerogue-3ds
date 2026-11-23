@@ -62,9 +62,9 @@ static void admission(void)
     CHECK(!run.run.has_challenges && gc_challenge_max(CHALLENGES_FRESH_START) == 2 && gc_challenge_max(CHALLENGES_SINGLE_TYPE) == 18);
     gc_challenge_set bad = fresh(3);
     CHECK(!gc_run_set_challenges(&run, &bad, &why) && !run.run.has_challenges);
-    gc_challenge_set hardcore = fresh(0);
-    hardcore.value[CHALLENGES_HARDCORE] = 1;   /* not played yet */
-    CHECK(gc_challenge_set_valid(&hardcore, NULL) && !gc_run_set_challenges(&run, &hardcore, &why) && !run.run.has_challenges);
+    gc_challenge_set unplayed = fresh(0);
+    unplayed.value[CHALLENGES_MOVESET_RANDOMIZER] = 1;   /* not played yet */
+    CHECK(gc_challenge_set_valid(&unplayed, NULL) && !gc_run_set_challenges(&run, &unplayed, &why) && !run.run.has_challenges);
     /* the battle rules are played: Inverse Battle, Flip Stat and Passives reach run-core's flags and the run's battle (run->bt computes the
      * stats and passives of Pokemon made outside a battle) */
     gc_challenge_set rules = fresh(0);
@@ -217,7 +217,7 @@ static void win(void)
     CHECK(sys.dex[1].ribbon_flags == (GC_RIBBON_CLASSIC | GC_RIBBON_FRESH_START));
     /* a win with a challenge that is not played is refused, and never saved */
     setup_win(&f1);
-    run.challenges.value[CHALLENGES_HARDCORE] = 1;
+    run.challenges.value[CHALLENGES_MOVESET_RANDOMIZER] = 1;
     gc_challenge_sync(&run);
     before = sys;
     finish(true);
@@ -258,7 +258,7 @@ static void save(void)
     /* a value above its maximum, a challenge this build does not play, and a section that lost its row are all refused */
     memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_FRESH_START] = 3; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));
-    memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_HARDCORE] = 1; reseal(n);
+    memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_MOVESET_RANDOMIZER] = 1; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));
     memcpy(mutated, saved, n); mutated[at + 18 + CHALLENGES_LOWER_STARTER_POINTS] = 1; reseal(n);
     CHECK(!gc_run_load(&loaded, mutated, n, &why));
@@ -271,6 +271,112 @@ static void save(void)
     CHECK(n > 0 && section_at(saved, n, "challenges") == 0 && gc_run_load(&loaded, saved, n, &why) && loaded.run.mode == GAME_MODES_CLASSIC && !loaded.run.has_challenges);
 }
 
+/* ---- the run rules of Limited Support, Hardcore and Limited Catch (game-core/CHALLENGE-VALIDATION.md, "PR 3") ---- */
+static gc_challenge_set only(int id, int v) { gc_challenge_set s; memset(&s, 0, sizeof s); s.value[id] = (uint8_t)v; return s; }
+static void two_starters(const gc_challenge_set *set)
+{
+    new_run(GAME_MODES_CHALLENGE);
+    unlock_natures();
+    const char *why;
+    CHECK(gc_run_set_challenges(&run, set, &why));
+    gc_starter st[2] = {bulbasaur(), bulbasaur()};
+    st[1].species = SPECIES_ID_CHARMANDER;
+    sys.dex[SPECIES_ID_CHARMANDER].nature_attr = 0x3FFFFFEu;
+    if (!gc_run_set_starters(&run, st, 2, &why)) fprintf(stderr, "starters: %s\n", why);
+    CHECK(run.n_party == 2);
+    run.sys = &sys;
+    gc_rq_clear(&run);
+}
+static int next_phase(void) { gc_rphase p; return gc_rq_next(&gc_int(&run)->rq, &p) ? p.type : -1; }
+static int shop_size(int wave)
+{
+    run.wave = wave;
+    gc_rphase p = gc_rp(RP_SELECT_MODIFIER, 0, 0, 0);
+    CHECK(!gc_phase_start(&run, &p) && run.screen.kind == GC_SCREEN_REWARD && run.screen.n_options > 0);
+    return run.screen.n_shop;
+}
+static bool has_shop_item(const pr_shop_option *o, int n, int item) { for (int i = 0; i < n; i++) if (o[i].item == item) return true; return false; }
+
+static void run_rules(void)
+{
+    /* Limited Support: 1 no heal (the shop stays), 2 no shop (the heal stays), 3 neither. Without the heal, the biome's last wave queues a
+     * plain reward screen where the PartyHealPhase was; the X0 wave has no shop */
+    for (int v = 0; v <= 3; v++) {
+        gc_challenge_set set = only(CHALLENGES_LIMITED_SUPPORT, v);
+        two_starters(&set);
+        const bool heal = v == 0 || v == 2, shop = v <= 1;
+        CHECK(run.run.challenge_limited_support == v);
+        CHECK(pr_run_get_party_heal_status(&run.run) == heal && pr_run_get_shop_status(&run.run) == shop);
+        CHECK((shop_size(12) > 0) == shop);
+        run.wave = 10;
+        run.party[0].b.hp = 1;
+        gc_rq_clear(&run);
+        gc_rphase p = gc_rp(RP_SELECT_BIOME, 0, 0, 0);
+        CHECK(gc_phase_start(&run, &p));
+        /* unshiftNew keeps the order of the calls: the heal (or the screen), then SwitchBiomePhase */
+        CHECK(next_phase() == (heal ? RP_PARTY_HEAL : RP_SELECT_MODIFIER));
+        CHECK(next_phase() == RP_SWITCH_BIOME);
+        CHECK(next_phase() == -1);
+        if (!heal) {
+            CHECK(shop_size(10) == 0);
+            CHECK(run.party[0].b.hp == 1);
+        }
+        /* a wave that is not a biome's last neither heals nor adds a screen */
+        run.wave = 12;
+        gc_rq_clear(&run);
+        p = gc_rp(RP_SELECT_BIOME, 0, 0, 0);
+        if (gc_phase_start(&run, &p)) {
+            CHECK(next_phase() == RP_SWITCH_BIOME);
+            CHECK(next_phase() == -1);
+        }
+    }
+
+    /* Hardcore: no revive group in the shop, the party heal leaves a fainted Pokemon fainted (and heals the rest), Revival Blessing is not
+     * usable by the player's Pokemon nor callable by any (CallMoveAttrWithBanlist.isMoveAllowed) */
+    for (int hardcore = 0; hardcore < 2; hardcore++) {
+        gc_challenge_set set = only(CHALLENGES_HARDCORE, hardcore);
+        two_starters(&set);
+        CHECK(pr_run_prevent_revive(&run.run) == (bool)hardcore);
+        pr_shop_option o[PR_SHOP_ITEM_COUNT_];
+        const int n = pr_run_get_player_shop_options(&run.run, 199, 1000, o);
+        CHECK(n > 0 && !run.run.unported);
+        CHECK(has_shop_item(o, n, PR_SHOP_REVIVE) == !hardcore && has_shop_item(o, n, PR_SHOP_MAX_REVIVE) == !hardcore
+              && has_shop_item(o, n, PR_SHOP_SACRED_ASH) == !hardcore && has_shop_item(o, n, PR_SHOP_POTION));
+        pr_pokemon *a = &run.party[0].b, *b = &run.party[1].b;
+        a->hp = 0;
+        a->status = STATUS_EFFECT_FAINT;
+        b->hp = 1;
+        b->status = STATUS_EFFECT_POISON;
+        PR_PP_USED(a)[0] = PR_PP_USED(b)[0] = 3;
+        pr_sync_moveset_aliases(a);
+        pr_sync_moveset_aliases(b);
+        gc_rphase heal = gc_rp(RP_PARTY_HEAL, 0, 0, 0);
+        run.bt.player_teras_used = 1;
+        CHECK(gc_phase_start(&run, &heal));
+        CHECK(run.bt.player_teras_used == 0);   /* playerTerasUsed resets either way */
+        CHECK(b->hp == b->stats[0] && b->status == STATUS_EFFECT_NONE && PR_PP_USED(b)[0] == 0);
+        if (hardcore) CHECK(a->hp == 0 && a->status == STATUS_EFFECT_FAINT && PR_PP_USED(a)[0] == 3);
+        else CHECK(a->hp == a->stats[0] && a->status == STATUS_EFFECT_NONE && PR_PP_USED(a)[0] == 0);
+
+        CHECK(pr_challenge_move_allowed(&run.bt, MOVE_ID_REVIVAL_BLESSING) == !hardcore && pr_challenge_move_allowed(&run.bt, MOVE_ID_TACKLE));
+        PR_MOVES(b)[0] = MOVE_ID_REVIVAL_BLESSING;
+        pr_sync_moveset_aliases(b);
+        pr_msg why = {0};
+        CHECK(pr_move_usable(&run.bt, b, 0, false, true, &why) == !hardcore);
+        if (hardcore) CHECK(why.key && !strcmp(why.key, "battle:moveCannotUseChallenge"));
+        b->is_player = false;   /* the enemy's Pokemon: PokemonMove.isUsable asks the challenge only for the player's */
+        CHECK(pr_move_usable(&run.bt, b, 0, false, true, &why));
+        b->is_player = true;
+        /* Copycat: the last move, unless the challenge bars it */
+        const pr_move *cc = &pr_moves[MOVE_ID_COPYCAT];
+        const pr_attr *copy = NULL;
+        for (unsigned i = 0; i < cc->nattr; i++) if (pr_attrs[cc->attr0 + i].cls == PR_AC_CopyMoveAttr) copy = &pr_attrs[cc->attr0 + i];
+        CHECK(copy);
+        run.bt.last_move = MOVE_ID_REVIVAL_BLESSING;
+        CHECK(pr_call_move_get(&run.bt, NULL, MOVE_ID_COPYCAT, copy, b, NULL) == (hardcore ? MOVE_ID_NONE : MOVE_ID_REVIVAL_BLESSING));
+    }
+}
+
 int main(void)
 {
     admission();
@@ -279,6 +385,7 @@ int main(void)
     ribbons();
     win();
     save();
+    run_rules();
     printf("Challenge host: %d checks passed\n", checks);
     return 0;
 }

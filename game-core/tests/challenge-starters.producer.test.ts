@@ -24,6 +24,14 @@
  *   Y trainer boss passive wave hasPassive            an enemy Pokemon's hasPassive() (trainer slot set, bossSegments, its passive flag, the wave)
  *   M id species form level nature abilityIndex ability passive gender luck tera hp stat0..stat5 iv0..iv5 m0..m3   the Pokemon after the first
  *                                                      updatePartyForModifiers (the stats upstream recalculates when the first battle starts)
+ *   R eviolite miniBlackHole / N nature minted hp stats / U stat boosted hp stats   the rewards (see the block)
+ *   L limitedCatch limitedSupport hardcore             the case's run rule values (after C)
+ *   G wave baseCost shopStatus n item1 cost1 ..        gameMode.getShopStatus() and getPlayerShopModifierTypeOptionsForWave(wave, baseCost) (SHOP, SHOP_ITEM)
+ *   H heal preventRevive                               applyChallenges(PARTY_HEAL, true) and applyChallenges(PREVENT_REVIVE, false)
+ *   K move valid usable allowed                        applyChallenges(POKEMON_MOVE, move, true), new PokemonMove(move).isUsable(member 0, true) and Copycat's
+ *                                                      CallMoveAttrWithBanlist.isMoveAllowed(move)
+ *   A metWave me option valid                          applyChallenges(POKEMON_ADD_TO_PARTY, enemy, true) for an enemy met on metWave, in a battle with no
+ *                                                      encounter (me -1), Teleporting Hijinks (0) or Fight or Flight (1), its option 0..2 selected
  * GC_CHALLENGE_N=400 GC_CHALLENGE_SEED=777 GC_CHALLENGE_OUT=/abs/trace.txt, Node 22. */
 import { BattleScene } from "#app/battle-scene";
 import { getGameMode } from "#app/game-mode";
@@ -36,7 +44,13 @@ import { Challenges } from "#enums/challenges";
 import { ModifierTier } from "#enums/modifier-tier";
 import { Unlockables } from "#enums/unlockables";
 import { modifierPool } from "#modifiers/modifier-pools";
-import { BaseStatBoosterModifierType, PokemonNatureChangeModifierType } from "#modifiers/modifier-type";
+import { BaseStatBoosterModifierType, getPlayerShopModifierTypeOptionsForWave, PokemonNatureChangeModifierType } from "#modifiers/modifier-type";
+import { allMoves } from "#data/data-lists";
+import { ChallengeType } from "#enums/challenge-type";
+import { MoveId } from "#enums/move-id";
+import { MysteryEncounterType } from "#enums/mystery-encounter-type";
+import { PokemonMove } from "#moves/pokemon-move";
+import { BooleanHolder } from "#utils/common";
 import { getTypeDamageMultiplier } from "#data/type";
 import { EnemyPokemon } from "#field/pokemon";
 import { TrainerSlot } from "#enums/trainer-slot";
@@ -46,7 +60,7 @@ import { Pokemon } from "#field/pokemon";
 import { SelectStarterPhase } from "#phases/select-starter-phase";
 import { GameManager } from "#test/framework/game-manager";
 import { getRunValueLimit, getStarterData } from "#ui/utils/starter-select-ui-utils";
-import { checkStarterValidForChallenge } from "#utils/challenge-utils";
+import { applyChallenges, checkStarterValidForChallenge } from "#utils/challenge-utils";
 import * as fs from "node:fs";
 import Phaser from "phaser";
 import { expect, it, vi } from "vitest";
@@ -80,7 +94,7 @@ it("native Challenge Mode starter rules", async () => {
 
   const lines: string[] = [`V 1 ${SEED} ${N}`];
   let seenChart = 0;
-  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshPools: 0, openPools: 0, flipRewards: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
+  const cover = { inverse: 0, flip: 0, flipFusion: 0, passives: 0, enemyPassive: 0, freshPools: 0, openPools: 0, flipRewards: 0, hardShops: 0, closedShops: 0, noHeals: 0, refusedMoves: 0, refusedAdds: 0, teleportAdds: 0, freshCases: 0, validHard: 0, invalidHard: 0, softOnly: 0, moved: 0, shinyFresh: 0, formReset: 0, eggRemoved: 0 };
   const FORM_SPECIES = [SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.PICHU, SpeciesId.ROTOM, SpeciesId.MELOETTA];
   const hex = (b: bigint) => b.toString(16);
 
@@ -102,6 +116,14 @@ it("native Challenge Mode starter rules", async () => {
     if (flip) cover.flip++;
     if (passives) cover.passives++;
     lines.push(`C ${i} ${fresh} ${getRunValueLimit()} ${inverse} ${flip} ${passives}`);
+    // the run rules: Limited Catch (0, 1), Limited Support (0..3), Hardcore (0, 1)
+    const limitedCatch = rnd(2);
+    const support = rnd(4);
+    const hardcore = rnd(2);
+    scene.gameMode.setChallengeValue(Challenges.LIMITED_CATCH, limitedCatch);
+    scene.gameMode.setChallengeValue(Challenges.LIMITED_SUPPORT, support);
+    scene.gameMode.setChallengeValue(Challenges.HARDCORE, hardcore);
+    lines.push(`L ${limitedCatch} ${support} ${hardcore}`);
     // getTypeDamageMultiplier over the whole chart (UNKNOWN, the 18 types and Stellar), once for each Inverse Battle value
     if (!(seenChart >> inverse & 1)) {
       seenChart |= 1 << inverse;
@@ -296,13 +318,67 @@ it("native Challenge Mode starter rules", async () => {
       if (flip && minted && boosted) cover.flipRewards++;
       scene.modifiers = [];
     }
+    // The run rules. SHOP and SHOP_ITEM on two waves (one late enough for every row), PARTY_HEAL and PREVENT_REVIVE, POKEMON_MOVE through its three
+    // readers, POKEMON_ADD_TO_PARTY for enemies met on a biome's first wave or not, in and out of an encounter
+    {
+      const itemName = (o: any) => o.type.localeKey.split(".").pop();
+      for (const wave of [1 + rnd(200), 150 + rnd(50)]) {
+        const baseCost = 100 * (1 + rnd(60));
+        const status = scene.gameMode.getShopStatus();
+        const opts = getPlayerShopModifierTypeOptionsForWave(wave, baseCost);
+        if (hardcore && opts.length) cover.hardShops++;
+        if (!status) cover.closedShops++;
+        lines.push(["G", wave, baseCost, +status, opts.length, ...opts.flatMap((o: any) => [itemName(o), o.cost])].join(" "));
+      }
+      const heal = new BooleanHolder(true);
+      applyChallenges(ChallengeType.PARTY_HEAL, heal);
+      const prevent = new BooleanHolder(false);
+      applyChallenges(ChallengeType.PREVENT_REVIVE, prevent);
+      if (!heal.value) cover.noHeals++;
+      lines.push(`H ${+heal.value} ${+prevent.value}`);
+      const copycat: any = allMoves[MoveId.COPYCAT].getAttrs("CopyMoveAttr")[0];
+      expect(copycat).toBeDefined();
+      for (const move of [MoveId.REVIVAL_BLESSING, MoveId.TACKLE, 1 + rnd(allMoves.length - 1)]) {
+        const valid = new BooleanHolder(true);
+        applyChallenges(ChallengeType.POKEMON_MOVE, move, valid);
+        const usable = new PokemonMove(move).isUsable(party[0], true)[0];
+        const allowed = copycat.isMoveAllowed(move);
+        if (!valid.value && !usable && !allowed) cover.refusedMoves++;
+        lines.push(`K ${move} ${+valid.value} ${+usable} ${+allowed}`);
+      }
+      const enemy: any = new EnemyPokemon(speciesDataRegistry.getSpecies(SpeciesId.CATERPIE), 5, TrainerSlot.NONE, false);
+      for (let k = 0; k < 3; k++) {
+        const metWave = k === 0 ? 1 + 10 * rnd(20) : 2 + rnd(198);
+        const me = rnd(3) - 1, option = rnd(3);
+        enemy.metWave = metWave;
+        const options = [{}, {}, {}];
+        scene.currentBattle =
+          me < 0
+            ? { waveIndex: metWave }
+            : {
+                waveIndex: metWave,
+                mysteryEncounter: {
+                  encounterType: me === 0 ? MysteryEncounterType.TELEPORTING_HIJINKS : MysteryEncounterType.FIGHT_OR_FLIGHT,
+                  options,
+                  selectedOption: options[option],
+                },
+              };
+        const add = new BooleanHolder(true);
+        applyChallenges(ChallengeType.POKEMON_ADD_TO_PARTY, enemy, add);
+        if (limitedCatch && !add.value) cover.refusedAdds++;
+        if (limitedCatch && add.value && metWave % 10 !== 1) cover.teleportAdds++;
+        lines.push(`A ${metWave} ${me} ${option} ${+add.value}`);
+      }
+      enemy.destroy?.();
+      scene.currentBattle = null;
+    }
     for (const p of party) p.destroy?.();
     scene.party = [];
   }
   lines.push("Z");
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
   console.log(
-    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} freshPools=${cover.freshPools} openPools=${cover.openPools} flipRewards=${cover.flipRewards} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
+    `CHALLENGE-STARTERS seed=${SEED} cases=${N} fresh=${cover.freshCases} hardValid=${cover.validHard} hardInvalid=${cover.invalidHard} inverse=${cover.inverse} flip=${cover.flip} flipFusion=${cover.flipFusion} passives=${cover.passives} enemyPassive=${cover.enemyPassive} freshPools=${cover.freshPools} openPools=${cover.openPools} flipRewards=${cover.flipRewards} hardShops=${cover.hardShops} closedShops=${cover.closedShops} noHeals=${cover.noHeals} refusedMoves=${cover.refusedMoves} refusedAdds=${cover.refusedAdds} teleportAdds=${cover.teleportAdds} softOnly=${cover.softOnly} changedByFresh=${cover.moved} shinyFresh=${cover.shinyFresh} formsReset=${cover.formReset} eggRemoved=${cover.eggRemoved}`,
   );
-  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive && cover.freshPools && cover.openPools && cover.flipRewards).toBeGreaterThan(0);
+  expect(cover.freshCases && cover.validHard && cover.invalidHard && cover.moved && cover.inverse && cover.flip && cover.flipFusion && cover.passives && cover.enemyPassive && cover.freshPools && cover.openPools && cover.flipRewards && cover.hardShops && cover.closedShops && cover.noHeals && cover.refusedMoves && cover.refusedAdds && cover.teleportAdds).toBeGreaterThan(0);
 }, 900000);

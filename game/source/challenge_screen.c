@@ -5,6 +5,7 @@
 
 #include "challenge_select.h"
 #include "i18n.h"
+#include "screen_clip.h"
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
@@ -14,7 +15,14 @@
 static struct {
   chsel_args a;
   chm_model m;
+  char desc_key[64];   /* the description on show, and how long (ms) it has been (its scroll restarts with a new one) */
+  float desc_ms;
 } C;
+
+static void cs_update(ui_screen* s, float dt) {
+  (void)s;
+  C.desc_ms += dt;
+}
 
 static bool cs_input(ui_screen* s, ui_button b) {
   (void)s;
@@ -88,11 +96,20 @@ static void cs_draw(ui_screen* s, rr_screen which) {
     if (!i18n_exists(key)) snprintf(key, sizeof key, "challenges:%s.desc", chm_key(id));
     i18n_t(text, sizeof text, key, NULL);
   } else {
-    text[0] = 0;
+    key[0] = text[0] = 0;
+  }
+  if (strcmp(key, C.desc_key)) {
+    snprintf(C.desc_key, sizeof C.desc_key, "%s", key);
+    C.desc_ms = 0;
   }
   text_opts help = text_defaults();
   help.wrap_w = 296;
-  text_draw(TS_WINDOW, 12, -39, text, &help);
+  /* a description taller than the strip (Limited Support's "Both") scrolls up and back inside it, as updateDescriptionScroll does; the
+   * strip's inside is canvas -44..-4 (physical 196..236) */
+  const float overflow = text_height(TS_WINDOW, text, &help) - 35;
+  clip_rect(6, 196, 308, 40);
+  text_draw(TS_WINDOW, 12, -39 - chm_desc_scroll(overflow, C.desc_ms), text, &help);
+  clip_off();
 }
 
 /* A tap on a challenge's row puts the cursor on it and steps its value; a tap on Start starts */
@@ -108,7 +125,7 @@ static bool cs_touch(ui_screen* s, float x, float y) {
   return true;
 }
 
-static ui_screen g_screen = {"challenge-select", UI_OVERLAY, NULL, NULL, NULL, cs_input, NULL, cs_draw, NULL, cs_touch};
+static ui_screen g_screen = {"challenge-select", UI_OVERLAY, NULL, NULL, NULL, cs_input, cs_update, cs_draw, NULL, cs_touch};
 
 void chsel_open(const chsel_args* a) {
   memset(&C, 0, sizeof C);

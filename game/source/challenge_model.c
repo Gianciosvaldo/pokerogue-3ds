@@ -40,6 +40,17 @@ void chm_init(chm_model* m, const gc_challenge_set* initial) {
   }
 }
 
+float chm_desc_scroll(float overflow, float t_ms) {
+  if (overflow <= 0 || t_ms <= 3200) return 0;
+  const float d = overflow * 44 > 3200 ? overflow * 44 : 3200, period = d + 5000 + d + 3200;
+  float t = t_ms - 3200;
+  t -= period * (float)(int)(t / period);
+  if (t < d) return overflow * t / d;              /* up */
+  if (t < d + 5000) return overflow;               /* hold */
+  if (t < d + 5000 + d) return overflow * (1 - (t - d - 5000) / d);   /* yoyo back */
+  return 0;                                        /* repeatDelay */
+}
+
 void chm_move(chm_model* m, int dir) {
   if (m->n <= 0) return;
   m->cursor = ((m->cursor + dir) % m->n + m->n) % m->n;

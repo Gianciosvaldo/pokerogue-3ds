@@ -157,6 +157,9 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
+    /* Limited Catch's exception (LimitedCatchChallenge.applyPokemonAddToParty isTeleporter): the fight of Teleporting Hijinks after its
+     * teleport (options 1 and 2, not the third). Not saved, for the same reason as fg */
+    bool me_teleport_catch;
     /* the encounter's EnemyPartyConfig.disableSwitch: no "Will you switch?" at the fight's start. Read and cleared by gc_me_begin_battle */
     bool me_no_switch;
     struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; uint8_t n_more, n_tiers; int8_t tiers[3]; pr_reward_option more[5]; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
@@ -231,6 +234,7 @@ int gc_form_ability(int species, const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
 /* ---- Challenge Mode (src/gc_challenge.c) ---- */
 void gc_challenge_sync(gc_run *run);                     /* run.has_challenges / challenge_flags / ... from run.challenges */
+bool gc_challenge_add_to_party_ok(const gc_run *run);    /* applyChallenges(POKEMON_ADD_TO_PARTY): Limited Catch */
 bool gc_challenges_unplayed(const gc_run *run);          /* an active challenge game-core does not play yet (or an active set nobody listed) */
 void gc_challenge_modify_starter(gc_run *run, gc_mon *m);   /* ChallengeType.STARTER_MODIFY */
 uint64_t gc_challenge_ribbon_flags(const gc_run *run);   /* GameOverPhase.awardRibbons: the flags to give the party's lines, 0 = none */
