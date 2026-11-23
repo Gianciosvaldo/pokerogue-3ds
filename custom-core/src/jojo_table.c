@@ -283,6 +283,16 @@ const cc_jojo_char cc_jojo_chars[] = {
         {563, 0, 0, 0, 0, {228, 220, 506, 261}, 1, {{"ATTACK_TYPE_BOOSTER", 7, 1}}}, /* Cofagrigus (Mummy), Spell Tag; Pursuit (P: no double damage on a switch-out), Pain Split, Hex, Will-O-Wisp */
         {491, 0, 0, 0, 0, {464, 399, 417, 188}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Darkrai (Bad Dreams), Black Glasses; Dark Void, Dark Pulse, Nasty Plot, Sludge Bomb */
     }, 0, {0}, 0},
+    /* Okuyasu (lorenzo 2026-11-22/23: species, moves, items, default abilities; Pancham's moves were "any fitting moves", Claude's pick;
+     * "white scarf" read as the Silk Scarf). Space, where trainers come one wave in 16 ("keep him in space"). */
+    {"okuyasu", "Okuyasu Nijimura", "I'm just dying to erase your goddamn existence", 25 /* Space */, -1, 6, {
+        {484, 0, 0, 0, 0, {460, 56, 414, 126}, 0, {{0}}}, /* Palkia; Spacial Rend, Hydro Pump, Earth Power, Fire Blast */
+        {992, 0, 0, 0, 0, {409, 528, 8, 484}, 0, {{0}}}, /* Iron Hands; Drain Punch, Wild Charge, Ice Punch, Heavy Slam */
+        {891, 0, 0, 0, 0, {370, 339, 8, 369}, 1, {{"EVIOLITE", -1, 1}}}, /* Kubfu, Eviolite; Close Combat, Bulk Up, Ice Punch, U-turn */
+        {674, 0, 0, 0, 0, {509, 282, 242, 575}, 1, {{"ATTACK_TYPE_BOOSTER", 16, 1}}}, /* Pancham, Black Glasses; Circle Throw, Knock Off, Crunch, Parting Shot */
+        {720, 0, 0, 0, 0, {593, 428, 409, 441}, 0, {{0}}}, /* Hoopa; Hyperspace Hole, Zen Headbutt, Drain Punch, Gunk Shot */
+        {143, 0, 0, 0, 0, {174, 34, 89, 242}, 2, {{"BERRY", 0, 1}, {"ATTACK_TYPE_BOOSTER", 0, 1}}}, /* Snorlax, Sitrus Berry, Silk Scarf; Curse, Body Slam, Earthquake, Crunch */
+    }, 0, {0}, 0},
 };
 
 const unsigned cc_jojo_count = sizeof cc_jojo_chars / sizeof *cc_jojo_chars;
