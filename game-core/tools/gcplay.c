@@ -498,6 +498,8 @@ typedef struct {
     char team[64];
     uint32_t apply_taken[N_APPLY_KEYS], apply_refused[N_APPLY_KEYS];   /* tallied_choose, per apply_keys */
     int saves;                  /* --save-test: save/load round trips */
+    int me_saves;               /* of them, at an encounter's first question */
+    uint32_t state;             /* a hash of where the run ended: money, the RNG, the party and its items (the same with or without the round trips) */
     uint32_t save_max;          /* the largest save, bytes */
 } soak_result;
 
@@ -548,6 +550,7 @@ static void soak_one(int index, int verbose, soak_result *r)
             if (!len) { r->status = 1; r->stuck_screen = 'W'; break; }
             if (len > r->save_max) r->save_max = (uint32_t)len;
             r->saves++;
+            if (run.screen.kind == GC_SCREEN_MYSTERY) r->me_saves++;
             memset(&run, 0xA5, sizeof run);
             if (!gc_run_load(&run, buf, len, &why) || run.load_dropped) {
                 if (verbose) printf("load failed: %s (dropped %d)\n", why, run.load_dropped);
@@ -566,6 +569,22 @@ static void soak_one(int index, int verbose, soak_result *r)
     }
     r->wave = run.wave;
     r->score = run.score;
+    {
+        uint32_t h = 2166136261u;
+#define MIX(x) do { h ^= (uint32_t)(x); h *= 16777619u; } while (0)
+        MIX((uint32_t)run.money); MIX(run.n_party); MIX(run.n_items); MIX(run.n_mystery_history);
+        for (size_t i = 0; i < sizeof run.run.rng; i++) MIX(((const unsigned char *)&run.run.rng)[i]);   /* the run's RNG as the last wave left it */
+        for (int i = 0; i < run.n_party; i++) {
+            const pr_pokemon *b = &run.party[i].b;
+            MIX(b->species); MIX(b->level); MIX(b->hp); MIX(b->nature); MIX(b->ability_index); MIX(b->fusion_species);
+            for (int k = 0; k < 6; k++) MIX(b->ivs[k]);
+            for (int k = 0; k < 4; k++) MIX(b->moves[k]);
+        }
+        for (int i = 0; i < run.n_items; i++) { for (const char *c = run.items[i].key ? run.items[i].key : ""; *c; c++) MIX(*c); MIX(run.items[i].stack); MIX(run.items[i].arg); }
+        for (int i = 0; i < run.n_mystery_history; i++) { MIX(run.mystery_history[i].type); MIX(run.mystery_history[i].wave); }
+#undef MIX
+        r->state = h;
+    }
     memcpy(r->stubs, run.stubs, sizeof r->stubs);
     memcpy(r->unported, run.unported, sizeof r->unported);
     memcpy(r->run_core, run.run_core_unported, sizeof r->run_core);
@@ -597,7 +616,8 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     int ended = 0, stuck = 0, crashed = 0, timed = 0, clears = 0;
     long turns = 0;
     int wave_hist[21] = {0};
-    long saves = 0;
+    long saves = 0, me_saves = 0;
+    uint32_t state_digest = 0;
     uint32_t save_max = 0, digest = 0;
     int running = 0, next = 0;
     struct { pid_t pid; int fd; int index; } slot[64];
@@ -652,6 +672,8 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
         clears += r->clear;
         turns += r->turns;
         saves += r->saves;
+        me_saves += r->me_saves;
+        { uint32_t h = r->state ^ (uint32_t)index * 2654435761u; state_digest ^= h * 16777619u; }
         if (r->save_max > save_max) save_max = r->save_max;
         {
             /* each run's outcome, mixed in whatever order the runs finish: the same number when the same runs
@@ -686,7 +708,8 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     printf("final wave: ");
     for (int i = 0; i <= 20; i++) if (wave_hist[i]) printf(" %d-%d:%d", i * 10, i * 10 + 9, wave_hist[i]);
     printf("\nruns' digest: %08x", digest);
-    if (save_test) printf("\nsave/load round trips: %ld (largest save %u bytes of %u)", saves, save_max, (unsigned)GC_SAVE_MAX);
+    printf("\nruns' state digest: %08x", state_digest);
+    if (save_test) printf("\nsave/load round trips: %ld, %ld of them at an encounter's first question (largest save %u bytes of %u)", saves, me_saves, save_max, (unsigned)GC_SAVE_MAX);
     printf("\n\nstand-ins (runs that used it, times):\n");
     for (int i = 0; i < GC_STUB_COUNT_; i++)
         if (stub_total[i]) printf("  %-50s %6u runs %9u\n", gc_stub_name[i], stub_runs[i], stub_total[i]);
@@ -791,8 +814,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
         else if (!strcmp(argv[i], "--save-test")) save_test = 1;
         else if (!strcmp(argv[i], "--ask-switch")) ask_switch = true;
+        else if (!strcmp(argv[i], "--force-mystery") && i + 1 < argc) gc_debug_force_mystery(atoi(argv[++i]), 3);
         else if (!strcmp(argv[i], "--locales") && i + 1 < argc) locales = argv[++i];
-        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose] [--save-test] [--ask-switch] [--locales DIR]\n", argv[0]); return 2; }
+        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose] [--save-test] [--ask-switch] [--force-mystery TYPE] [--locales DIR]\n", argv[0]); return 2; }
     }
     if (autos > 0) return soak(autos, first, jobs < 1 ? 1 : jobs, verbose, timeout);
     return play(seed, starters);

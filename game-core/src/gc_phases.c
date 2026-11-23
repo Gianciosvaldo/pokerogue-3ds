@@ -881,7 +881,22 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         s->kind = GC_SCREEN_MYSTERY;
         s->mystery_type = (int8_t)p->a;
         s->mystery_tier = (int8_t)p->b;
-        gc_mystery_setup_screen(run);
+        in->me_question = true;
+        if (in->me_loaded) {
+            /* the question's setup counts the stand-ins it uses (Fight or Flight's boss: not-ported counters), and the saved counters already hold that count from the
+             * first setup: the one a load makes again is not counted twice, so the loaded run's counters are the saved run's */
+            static uint32_t unported[GC_MAX_UNPORTED], stubs[16], rc_unported[8];
+            memcpy(unported, run->unported, sizeof unported);
+            memcpy(stubs, run->stubs, sizeof stubs);
+            memcpy(rc_unported, run->run_core_unported, sizeof rc_unported);
+            gc_mystery_setup_screen(run);
+            memcpy(run->unported, unported, sizeof unported);
+            memcpy(run->stubs, stubs, sizeof stubs);
+            memcpy(run->run_core_unported, rc_unported, sizeof rc_unported);
+            in->me_loaded = false;
+        } else {
+            gc_mystery_setup_screen(run);
+        }
         return false;
     }
     case RP_GAME_OVER: {
@@ -1046,7 +1061,11 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     case RP_MYSTERY:
     case RP_SAFARI:   /* the Safari Zone's four actions wait on the phase that summoned the Pokemon */
         if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
-        return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
+        {
+            const bool more = gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
+            if (*ok) gc_int(run)->me_question = false;   /* an answer ends the encounter's save point */
+            return more;
+        }
     case RP_ME_BEFORE_REWARDS:
         return gc_superfan_tutor_choose(run, c, why, ok);
     case RP_ME_POST:

@@ -109,6 +109,7 @@ static const gc_mon* command_mon(void){int field=G.run.screen.slot==1?1:0;const 
   for(int i=0;i<G.run.n_party;i++)if(&G.run.party[i].b==p)return &G.run.party[i];return NULL;}
 static void pump(void* arg);
 static void screen_step(void);
+static bool save_point(void);
 static void refresh_item_bars(void);
 static bool scan_safari_ivs(void);
 
@@ -1799,6 +1800,7 @@ static void mystery_screen(void) {
       return;
     }
   }
+  if (!save_point()) return;   /* upstream saves at an encounter's start: the question is the run's save point (written once the scene and the intro are still, then this step comes again) */
   if (G.run.screen.me_stage == GC_ME_STAGE_SAFARI && scan_safari_ivs()) return;   /* the scan, then the four actions (this step comes again) */
   G.me_stage = 3;
   if (!me_flow_open(&G.run, on_mystery_choice, NULL)) {

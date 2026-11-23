@@ -114,6 +114,8 @@ typedef struct {
     pr_rng undo_rng, undo_battle_rng;
     struct pr_turn_command undo_commands[2], undo_pre_commands[2];
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
+    bool me_question;           /* an encounter's first question is up and nothing has been chosen: its one save (gc_run_can_save), as upstream saves at the encounter's start */
+    bool me_loaded;             /* the run was loaded at an encounter's question and RP_MYSTERY has not set the screen up again yet: that setup's not-ported counts are already in the saved ones */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
      * key is the whole name (bit per GC_TNAME_*) */
     uint8_t name_ring, name_exact[3];

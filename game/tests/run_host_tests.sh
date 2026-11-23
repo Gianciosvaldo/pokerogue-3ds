@@ -82,5 +82,14 @@ echo "== runtest (custom runs dropped and continued from the custom slot) 100"
 RUNTEST_CUSTOM=strong RUNTEST_SAVE=resume build/runtest 100 0 || failed="$failed runtest-custom-resume"
 echo "== runtest (custom runs left through Save and Quit and continued from the custom slot) 100"
 RUNTEST_CUSTOM=strong RUNTEST_SAVE=quit build/runtest 100 0 || failed="$failed runtest-custom-quit"
+# An encounter's first question is a save point (upstream saves where the encounter starts): every upstream encounter is forced, one per run, and the question is
+# written like a battle's first command (the slot must hold the run before it is answered); every 4th save point the run is dropped and continued from its slot, the
+# question included. Fiery Fallout is left out of the cycle (its double battle begins in a single scene: a finding of its own).
+echo "== runtest (every encounter forced, saved at its question and continued from the slot) 300"
+RUNTEST_ME=cycle RUNTEST_SYS=1 RUNTEST_SAVE=resume build/runtest 300 0 || failed="$failed runtest-me-save"
+echo "== runtest (the same with Will you switch?) 300"
+RUNTEST_ASK_SWITCH=1 RUNTEST_ME=cycle RUNTEST_SYS=1 RUNTEST_SAVE=resume build/runtest 300 0 || failed="$failed runtest-me-save-ask-switch"
+echo "== runtest (the same in custom runs) 100"
+RUNTEST_CUSTOM=strong RUNTEST_ME=cycle RUNTEST_SAVE=resume build/runtest 100 0 || failed="$failed runtest-me-save-custom"
 if [ -n "$failed" ]; then echo "game/tests FAILED:$failed" >&2; exit 1; fi
 echo "game/tests: all passed"
