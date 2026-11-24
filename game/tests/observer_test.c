@@ -265,6 +265,33 @@ static void test_wave_boundary(void) {
   CHECK(r->history.turns[1].turn == 0 && r->history.turns[1].battle_seq == 2 && r->history.turns[1].wave == 2, "the next battle starts at turn 0");
 }
 
+/* Two battles in one wave (the Winstrate Challenge's fights, a mystery encounter's next trainer): the second starts again at turn 1 after a GC_EV_TRAINER
+ * with no GC_EV_WAVE; it is a battle of its own, not turns going backwards in the first one (that was refused: 42 batches in a seeded run) */
+static void test_second_battle_same_wave(void) {
+  begin(false);
+  pr_event a[] = {damage(0, PIKACHU, 40, 50, 10)};
+  gc_event q1[] = {gev(GC_EV_WAVE, 17, 0), gev(GC_EV_TRAINER, 1, 0), gev(GC_EV_TURN, 1, 0), gev(GC_EV_BATTLE, 0, 1)};
+  drain(q1, 4, a, 1);
+  gc_event q2[] = {gev(GC_EV_TURN, 3, 0), gev(GC_EV_BATTLE, 0, 1)};
+  drain(q2, 2, a, 1);
+  pr_event b[] = {damage(2, RATTATA, 20, 30, 10)};
+  gc_event q3[] = {gev(GC_EV_TRAINER, 2, 0), gev(GC_EV_TURN, 1, 0), gev(GC_EV_BATTLE, 0, 1)};   /* the next fight of the same wave */
+  drain(q3, 3, b, 1);
+  gc_event q4[] = {gev(GC_EV_TURN, 2, 0), gev(GC_EV_BATTLE, 0, 1)};
+  drain(q4, 2, b, 1);
+  const co_report* r = finish(false);
+  CHECK(r && r->stats.rejected == 0 && r->stats.loss_flagged == 0, "nothing refused: rejected %u, flagged %u", r ? r->stats.rejected : 99, r ? r->stats.loss_flagged : 99);
+  if (!r || r->history.n_turns != 4) { CHECK(0, "four turns expected, %d", r ? r->history.n_turns : -1); return; }
+  CHECK(r->history.turns[1].battle_seq == 1 && r->history.turns[1].turn == 3 && r->history.turns[2].battle_seq == 2 && r->history.turns[2].turn == 1
+        && r->history.turns[2].wave == 17 && r->history.turns[3].battle_seq == 2 && r->history.turns[3].turn == 2, "the second fight is battle 2 from turn 1");
+  /* an ordinary trainer wave: the trainer right after the wave is the same battle */
+  begin(false);
+  gc_event q5[] = {gev(GC_EV_WAVE, 20, 0), gev(GC_EV_TRAINER, 1, 0), gev(GC_EV_TURN, 1, 0), gev(GC_EV_BATTLE, 0, 1)};
+  drain(q5, 4, a, 1);
+  const co_report* r2 = finish(false);
+  CHECK(r2 && r2->history.n_turns == 1 && r2->history.turns[0].battle_seq == 1, "a trainer wave is one battle");
+}
+
 /* A replayed drain counts once; a drain that never arrived makes the next turn incomplete */
 static void test_replay_and_skip(void) {
   begin(false);
@@ -530,6 +557,7 @@ static void test_final_blow(void) {
 }
 
 int main(void) {
+  test_second_battle_same_wave();
   test_final_blow();
   test_battle_in_drains();
   test_switch_and_reused_position();
