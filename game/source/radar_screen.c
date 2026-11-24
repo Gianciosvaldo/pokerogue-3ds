@@ -537,7 +537,7 @@ static void draw_row(int list_index, float y) {
   line(46, y - 1, t, TS_WINDOW, 0);
   snprintf(t, sizeof t, "Wave %u, %s", (unsigned)n->source_wave, biome_text(n->source_biome, a, sizeof a));
   fit(t, sizeof t, TS_INSTRUCTIONS_TEXT, 170);
-  line(46, y + 15, t, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa8, 0xa8, 0xa8, 255));
+  line(46, y + 13, t, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa8, 0xa8, 0xa8, 255)); /* "Wave N, biome": 2 px up (lorenzo, 2026-11-23) */
   text_opts o = text_defaults();
   o.origin_x = 1.0f;
   o.color = n->life == CC_LIFE_STORED ? RR_RGBA(0xc8, 0xc8, 0xc8, 255) : RR_RGBA(0xe8, 0xe8, 0xa8, 255);

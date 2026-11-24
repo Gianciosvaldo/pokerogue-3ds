@@ -369,7 +369,7 @@ static void draw_stat(int i, float x, float y, const rh_mon* m) {
 /* The hints on the info page's bottom line: also what a tap on them presses */
 static const char* const INFO_HINTS[2] = {"A: Summary", "B: Back"};
 #define INFO_HINT_X 16
-#define INFO_HINT_Y 224
+#define INFO_HINT_Y 222 /* 2 px above the other screens' hints (lorenzo, 2026-11-23) */
 /* The Pokemon's block at the top (icon, name, nature, types) is 76 px tall: a tap on it goes on to the next Pokemon of the run */
 #define INFO_NAME_H 76
 #define IB_ICON_X 48 /* the icon is drawn at 2.0, a crisp doubling of the 32 px icon: centre x and top y */
