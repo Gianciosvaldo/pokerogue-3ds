@@ -18,7 +18,7 @@ static struct {
   bool uid_durable;
   uint32_t batch_id;      /* the last id used; every batch built takes one, accepted or not, so a refused one shows as a gap */
   uint32_t drain_no;      /* the last drain number taken in */
-  uint32_t battle_seq;    /* GC_EV_WAVE seen in this run */
+  uint32_t battle_seq;    /* battles seen in this run: a GC_EV_WAVE, or a GC_EV_TRAINER after a turn of the same wave */
   uint16_t wave;
   uint16_t turn;
   bool wave_ok, turn_ok;
@@ -242,6 +242,15 @@ void co_observe(uint32_t drain_no, const gc_event* q, int nq, const pr_event* be
         C.wave = C.wave_ok ? (uint16_t)e->a : 0;
         C.turn = 0; /* what happens before the first turn of a battle is turn 0 */
         C.turn_ok = true;
+        break;
+      case GC_EV_TRAINER:
+        /* a trainer comes out after this wave's battle already had a turn: another battle in the same wave (a mystery encounter's next fight, the
+         * Winstrates' five), which starts again at turn 1; without a battle of its own its turns would go backwards in the last one's and be refused */
+        if (C.turn > 0) {
+          C.battle_seq++;
+          C.turn = 0;
+          C.turn_ok = true;
+        }
         break;
       case GC_EV_TURN:
         C.turn_ok = e->a >= 0 && e->a <= 0xFFFF;

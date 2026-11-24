@@ -56,6 +56,7 @@ typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_
 #define GC_DARBY_DECK 6
 typedef struct { uint16_t species; uint8_t form; } gc_darby_card;   /* one of D'Arby's cards, or the player's (gc_darby.c) */
 #define GC_JOBIN_POOL 11   /* BEETLE_POOL */
+#define GC_JOBIN_PRE 10    /* the pool's earlier stages: the player's own beetle only */
 /* Jobin's duel (gc_jobin.c). Not saved: a duel is never on a save point, and the punishment fight he starts keeps no save (in->at_save_point = false). */
 typedef struct {
     bool active, rental, bluff, used_stand, caught, punish, half_money;
@@ -669,6 +670,7 @@ enum { GC_JOBIN_GIVE_OWN, GC_JOBIN_GIVE_RELIC, GC_JOBIN_GIVE_BONUS, GC_JOBIN_GIV
 /* the rules (pure: the tests read them) */
 int gc_jobin_pool_species(int i);
 bool gc_jobin_in_pool(int species);
+bool gc_jobin_own_species(int species);   /* a pool species or an earlier stage of one: may fight as the player's own beetle */
 int gc_jobin_stand_suspicion(int streak);   /* the suspicion of the streak-th consecutive Stand Trick: 35, 50, 70, 70... */
 void gc_jobin_normal_delta(int player, int jobin, int *you, int *him, int *susp);   /* moves 0 Horn Lock, 1 Dig In, 2 Flank */
 void gc_jobin_king_delta(int king, int player, int *you, int *him, int *susp);      /* king 0 Horn, 1 Dash, 2 Sap; player 0..3 (3 = Stand Trick) */
