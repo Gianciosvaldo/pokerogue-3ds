@@ -35,7 +35,7 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Science Has Its Limits", "Defeat Rudolf von Stroheim.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"The Pillar Men", "Defeat Kars, Wamuu and Esidisi.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Battle Tendency", "Defeat Joseph, Caesar, Kars, Wamuu, Esidisi and Stroheim.", J, V(GC_VOUCHER_PLUS, 1)},
-    {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse and Iggy.", J, V(GC_VOUCHER_PLUS, 1)},
+    {"Stardust Crusaders", "Defeat Jotaro, DIO, Polnareff, Kakyoin, Avdol, Vanilla Ice, Hol Horse, Iggy and D'Arby (at his game or in a fight).", J, V(GC_VOUCHER_PLUS, 1)},
     {"Diamond Is Unbreakable", "Defeat Koichi, Kira, Josuke, Rohan, Shigechi and Okuyasu.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Golden Wind", "Defeat Diavolo, Mista, Risotto, Giorno, Bruno, Abbacchio, Narancia, Ghiaccio and Prosciutto & Pesci.", J, V(GC_VOUCHER_PLUS, 1)},
     {"Stone Ocean", "Defeat Jolyne, Pucci and Weather Report.", J, V(GC_VOUCHER_REGULAR, 2)},
@@ -196,6 +196,9 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     /* 166..: the fourth batch (lorenzo 2026-11-23), after Jobin's two: "Defeat X" then "Flawless X" in table order (GC_ACHV_JOJO4_FIRST) */
     {"Not as Dumb as He Looks", "Defeat Okuyasu Nijimura.", J, V(GC_VOUCHER_REGULAR, 1)},
     {"He Couldn't Erase a Single Thing", "Defeat Okuyasu Nijimura without any of your Pokemon fainting in the battle.", J, V(GC_VOUCHER_REGULAR, 2)},
+    /* 168: the JoJolion Part set (lorenzo 2026-11-23: Tooru, Jobin and Josuke "Gappy" Higashikata; Gappy is not ported yet, so the set holds the two that
+     * are). Jobin counts when he is beaten at either of his two, like D'Arby. Name and reward follow the other Part sets; they are the author's. */
+    {"JoJolion", "Defeat Tooru, and beat Jobin in the beetle duel or in a fight.", J, V(GC_VOUCHER_PLUS, 1)},
 };
 #undef J
 #undef RUN
@@ -212,17 +215,21 @@ typedef char gc_jojo_count_fits_the_mask[GC_JOJO_COUNT <= 64 ? 1 : -1];
 static uint64_t beaten_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_beaten | (uint64_t)a->jojo_beaten_hi << 32) & JOJO_VALID; }
 static uint64_t clean_mask(const gc_achv_progress *a) { return ((uint64_t)a->jojo_clean_mask | (uint64_t)a->jojo_clean_mask_hi << 32) & JOJO_VALID; }
 
-/* the third and fourth batches: a "Defeat X" id and the "Flawless X" after it, per challenger; Jobin's two (164, 165) sit between the batches */
+/* the third, fourth and later batches: a "Defeat X" id and the "Flawless X" after it, per challenger. Jobin's two (164, 165) sit between the third batch
+ * and Okuyasu's pair (166, 167), and the JoJolion set (168) between Okuyasu's pair and the challengers after him (from 169). */
 static int pair_id(int jojo)
 {
-    return jojo >= GC_JOJO_OKUYASU ? GC_ACHV_JOJO4_FIRST + 2 * (jojo - GC_JOJO_OKUYASU) : GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+    if (jojo < GC_JOJO_OKUYASU) return GC_ACHV_JOJO3_FIRST + 2 * (jojo - GC_JOJO_GHIACCIO);
+    if (jojo == GC_JOJO_OKUYASU) return GC_ACHV_JOJO4_FIRST;
+    return GC_ACHV_JOJO5_FIRST + 2 * (jojo - GC_JOJO_OKUYASU - 1);
 }
 
 /* the challenger whose pair holds an id of the third or fourth batch, or -1 */
 static int pair_of_id(int id)
 {
     if (id >= GC_ACHV_JOJO3_FIRST && id < GC_ACHV_JOJO3_FIRST + 2 * (GC_JOJO_OKUYASU - GC_JOJO_GHIACCIO)) return GC_JOJO_GHIACCIO + (id - GC_ACHV_JOJO3_FIRST) / 2;
-    if (id >= GC_ACHV_JOJO4_FIRST && id < GC_ACHV_JOJO4_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU)) return GC_JOJO_OKUYASU + (id - GC_ACHV_JOJO4_FIRST) / 2;
+    if (id >= GC_ACHV_JOJO4_FIRST && id < GC_ACHV_JOJO4_FIRST + 2) return GC_JOJO_OKUYASU + (id - GC_ACHV_JOJO4_FIRST) / 2;
+    if (id >= GC_ACHV_JOJO5_FIRST && id < GC_ACHV_JOJO5_FIRST + 2 * (GC_JOJO_COUNT - GC_JOJO_OKUYASU - 1)) return GC_JOJO_OKUYASU + 1 + (id - GC_ACHV_JOJO5_FIRST) / 2;
     return -1;
 }
 
@@ -286,6 +293,8 @@ static const uint64_t SET_P5 = JB(GC_JOJO_DIAVOLO) | JB(GC_JOJO_MISTA) | JB(GC_J
                                JB(GC_JOJO_ABBACCHIO) | JB(GC_JOJO_NARANCIA) | JB(GC_JOJO_GHIACCIO) | JB(GC_JOJO_PROSCIUTTO);
 static const uint64_t SET_P6 = JB(GC_JOJO_JOLYNE) | JB(GC_JOJO_PUCCI) | JB(GC_JOJO_WEATHER);
 static const uint64_t SET_P7 = JB(GC_JOJO_VALENTINE) | JB(GC_JOJO_GYRO) | JB(GC_JOJO_JOHNNY) | JB(GC_JOJO_SANDMAN) | JB(GC_JOJO_DIEGO);
+/* JoJolion: Tooru is a challenger; Jobin and D'Arby are encounters, so they are one extra member each of their Part's set (see set_progress). */
+static const uint64_t SET_P8 = JB(GC_JOJO_TOORU);
 
 /* ---- the trainers: TrainerType values, the groups of pr_enums.h (Gym Leaders 200.., Elite Four 300.., Champions 350..) ---- */
 #define GYM_FIRST TRAINER_TYPE_BROCK
@@ -349,6 +358,10 @@ static uint32_t regions_done(const gc_system *sys)
     }
     return done;
 }
+
+/* D'Arby and Jobin each have two ways to be beaten (his game or a fight); either one counts as beating him for the Part sets (lorenzo 2026-11-23) */
+static bool darby_beaten(const gc_achv_progress *a) { return a->darby_wins > 0 || a->darby_rematch_wins > 0; }
+static bool jobin_beaten(const gc_achv_progress *a) { return a->jobin_wins > 0 || a->jobin_punish_wins > 0; }
 
 static int popcount64(uint64_t v)
 {
@@ -495,11 +508,12 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     switch (id) {
     case 17: h = (uint32_t)popcount64(jb & SET_PILLAR); n = 3; break;
     case 18: h = (uint32_t)popcount64(jb & SET_P2); n = (uint32_t)popcount64(SET_P2); break;
-    case 19: h = (uint32_t)popcount64(jb & SET_P3); n = (uint32_t)popcount64(SET_P3); break;
+    case 19: h = (uint32_t)popcount64(jb & SET_P3) + darby_beaten(a); n = (uint32_t)popcount64(SET_P3) + 1; break;   /* D'Arby is the ninth */
     case 20: h = (uint32_t)popcount64(jb & SET_P4); n = (uint32_t)popcount64(SET_P4); break;
     case 21: h = (uint32_t)popcount64(jb & SET_P5); n = (uint32_t)popcount64(SET_P5); break;
     case 22: h = (uint32_t)popcount64(jb & SET_P6); n = (uint32_t)popcount64(SET_P6); break;
     case 23: h = (uint32_t)popcount64(jb & SET_P7); n = (uint32_t)popcount64(SET_P7); break;
+    case GC_ACHV_JOJOLION: h = (uint32_t)popcount64(jb & SET_P8) + jobin_beaten(a); n = (uint32_t)popcount64(SET_P8) + 1; break;   /* Jobin is the second */
     case 24: h = (uint32_t)popcount64(jb); n = 5; break;
     case 25: h = (uint32_t)popcount64(jb); n = 10; break;
     case GC_ACHV_TWENTY_FACES: h = (uint32_t)popcount64(jb); n = 20; break;

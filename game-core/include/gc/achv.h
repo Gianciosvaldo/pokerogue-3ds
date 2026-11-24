@@ -35,13 +35,15 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 168   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
-                              * batch's "Defeat X" and "Flawless X" in pairs, Jobin's two, the fourth batch's pairs (ids stay under 192, where upstream's own start) */
+#define GC_ACHV_COUNT 169   /* 0..99 as first made, the 17 "Defeat X" of the second batch, Twenty Faces, the 34 "Flawless X", D'Arby's two, then the third
+                              * batch's "Defeat X" and "Flawless X" in pairs, Jobin's two, the fourth batch's pairs, the JoJolion set (ids stay under 192,
+                              * where upstream's own start) */
 #define GC_ACHV_TWENTY_FACES 117
 #define GC_ACHV_DARBY 152   /* beating D'Arby the Gambler (Standard or All-In: a won hand or a caught cheat) */
 #define GC_ACHV_DARBY_REMATCH 153   /* beating D'Arby's rematch, the battle for the sealed souls (lorenzo 2026-11-18) */
 #define GC_ACHV_JOBIN 164          /* beating Jobin's beetle duel (lorenzo 2026-11-23) */
 #define GC_ACHV_JOBIN_PUNISH 165   /* beating his team after he caught you cheating */
+#define GC_ACHV_JOJOLION 168       /* the JoJolion Part set: Tooru and Jobin (lorenzo 2026-11-23; Josuke "Gappy" Higashikata joins it when he is ported) */
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -63,6 +65,9 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
 #define GC_ACHV_JOJO2_FIRST 100
 #define GC_ACHV_JOJO3_FIRST 154
 #define GC_ACHV_JOJO4_FIRST 166
+/* The challengers after Okuyasu take their pairs from here, one id per achievement, in table order: 168 is the JoJolion set (a Part set holds ids
+ * of its own, not a character's), so the next pair starts at 169 and not at 168. */
+#define GC_ACHV_JOJO5_FIRST 169
 int gc_achv_jojo_id(int jojo);
 
 /* The achievement of beating one challenger with none of your Pokemon fainting in that battle ("Flawless X"): GC_ACHV_FLAWLESS_FIRST + the table
